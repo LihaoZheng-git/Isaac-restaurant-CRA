@@ -13,6 +13,13 @@ from pathlib import Path
 
 
 # ---------------------------------------------------------------------
+# Lighting exposure parameters
+# ---------------------------------------------------------------------
+
+CEILING_LIGHT_EXPOSURE = 4.0
+PENDANT_LIGHT_EXPOSURE = 2.0
+
+# ---------------------------------------------------------------------
 # Project paths
 # ---------------------------------------------------------------------
 
@@ -151,6 +158,52 @@ def wait_for_assets(
     )
 
 
+def configure_original_ceiling_lights(stage):
+    """Adjust the main ceiling and pendant lights."""
+
+    updated_ceiling_lights = 0
+    updated_pendant_lights = 0
+
+    for prim in stage.Traverse():
+        prim_path = str(prim.GetPath())
+
+        exposure_attribute = prim.GetAttribute(
+            "inputs:exposure"
+        )
+
+        if not exposure_attribute:
+            continue
+
+        if (
+            "/ClgLights_Front/" in prim_path
+            or "/ClgLights_Back/" in prim_path
+        ):
+            exposure_attribute.Set(
+                CEILING_LIGHT_EXPOSURE
+            )
+
+            updated_ceiling_lights += 1
+
+        elif (
+            "/assets_restaurant_pendants/"
+            in prim_path
+        ):
+            exposure_attribute.Set(
+                PENDANT_LIGHT_EXPOSURE
+            )
+
+            updated_pendant_lights += 1
+
+    print(
+        "Updated "
+        f"{updated_ceiling_lights} ceiling lights."
+    )
+
+    print(
+        "Updated "
+        f"{updated_pendant_lights} pendant lights."
+    )
+
 # ---------------------------------------------------------------------
 # Scene validation
 # ---------------------------------------------------------------------
@@ -208,6 +261,48 @@ def print_environment_size(
             "Warning: environment bounds could "
             "not be calculated."
         )
+
+
+def add_dark_zone_fill_lights(stage, Gf, UsdGeom, UsdLux):
+    """Add two RectLights to illuminate the dark restaurant regions."""
+
+    lights_root_path = "/World/Lighting/DarkZoneFillLights"
+    stage.DefinePrim(lights_root_path, "Xform")
+
+    light_positions = [
+        (2962, 1618, 500),
+        (3400, 2092, 495),
+    ]
+
+    for light_index, position in enumerate(light_positions, start=1):
+        light_path = (
+            f"{lights_root_path}/FillLight_{light_index:02d}"
+        )
+
+        rect_light = UsdLux.RectLight.Define(stage, light_path)
+
+        rect_light.CreateIntensityAttr(1.0)
+        rect_light.CreateExposureAttr(17.0)
+
+        rect_light.CreateWidthAttr(100.0)
+        rect_light.CreateHeightAttr(100.0)
+
+        rect_light.CreateColorAttr(Gf.Vec3f(1.0, 1.0, 1.0))
+        rect_light.CreateNormalizeAttr(False)
+        rect_light.CreateEnableColorTemperatureAttr(False)
+
+        light_xform = UsdGeom.Xformable(rect_light.GetPrim())
+
+        light_xform.AddTranslateOp(
+            precision=UsdGeom.XformOp.PrecisionDouble
+        ).Set(
+            Gf.Vec3d(*position)
+        )
+
+    print(
+        f"Added {len(light_positions)} dark-zone RectLights "
+        "with intensity 1.0 and exposure 17.0."
+    )
 
 
 # ---------------------------------------------------------------------
@@ -432,6 +527,16 @@ def main() -> None:
         wait_for_assets(
             simulation_app,
             stage_utils,
+        )
+
+
+        configure_original_ceiling_lights(stage)
+
+        add_dark_zone_fill_lights(
+            stage,
+            Gf,
+            UsdGeom,
+            UsdLux,
         )
 
         (
