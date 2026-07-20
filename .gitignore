@@ -219,3 +219,9 @@ __marimo__/
 
 # Local VS Code / Isaac Sim settings
 .vscode/
+
+# Machine-specific asset locations
+configs/asset_paths.local.json
+
+# Generated scene compositions
+scenes/generated/
