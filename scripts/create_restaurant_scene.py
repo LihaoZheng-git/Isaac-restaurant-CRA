@@ -16,7 +16,7 @@ from pathlib import Path
 # Lighting exposure parameters
 # ---------------------------------------------------------------------
 
-CEILING_LIGHT_EXPOSURE = 4.0
+CEILING_LIGHT_EXPOSURE = 3.0
 PENDANT_LIGHT_EXPOSURE = 2.0
 
 # ---------------------------------------------------------------------
@@ -264,44 +264,69 @@ def print_environment_size(
 
 
 def add_dark_zone_fill_lights(stage, Gf, UsdGeom, UsdLux):
-    """Add two RectLights to illuminate the dark restaurant regions."""
+    """Add RectLights for Dark Zones 1 and 2."""
 
     lights_root_path = "/World/Lighting/DarkZoneFillLights"
     stage.DefinePrim(lights_root_path, "Xform")
 
-    light_positions = [
-        (2962, 1618, 500),
-        (3400, 2092, 495),
-    ]
+    dark_zones = {
+        "DarkZone1": [
+            (2962, 1618, 500),
+            (3181, 1855, 500),
+            (3400, 2092, 495),
+        ],
+        "DarkZone2": [
+            (708, 2020, 500),
+            (187, 1600, 500),
+            (345, 1948, 500),
+            (485, 2163, 500),
+        ],
+    }
 
-    for light_index, position in enumerate(light_positions, start=1):
-        light_path = (
-            f"{lights_root_path}/FillLight_{light_index:02d}"
-        )
+    number_of_lights = 0
 
-        rect_light = UsdLux.RectLight.Define(stage, light_path)
+    for zone_name, light_positions in dark_zones.items():
+        zone_path = f"{lights_root_path}/{zone_name}"
+        stage.DefinePrim(zone_path, "Xform")
 
-        rect_light.CreateIntensityAttr(1.0)
-        rect_light.CreateExposureAttr(17.0)
+        for light_index, position in enumerate(
+            light_positions,
+            start=1,
+        ):
+            light_path = (
+                f"{zone_path}/FillLight_{light_index:02d}"
+            )
 
-        rect_light.CreateWidthAttr(100.0)
-        rect_light.CreateHeightAttr(100.0)
+            rect_light = UsdLux.RectLight.Define(stage, light_path)
 
-        rect_light.CreateColorAttr(Gf.Vec3f(1.0, 1.0, 1.0))
-        rect_light.CreateNormalizeAttr(False)
-        rect_light.CreateEnableColorTemperatureAttr(False)
+            # Same settings used for Dark Zone 1.
+            rect_light.CreateIntensityAttr(1.0)
+            rect_light.CreateExposureAttr(15.0)
 
-        light_xform = UsdGeom.Xformable(rect_light.GetPrim())
+            rect_light.CreateWidthAttr(100.0)
+            rect_light.CreateHeightAttr(100.0)
 
-        light_xform.AddTranslateOp(
-            precision=UsdGeom.XformOp.PrecisionDouble
-        ).Set(
-            Gf.Vec3d(*position)
-        )
+            rect_light.CreateColorAttr(
+                Gf.Vec3f(1.0, 1.0, 1.0)
+            )
+            rect_light.CreateNormalizeAttr(False)
+            rect_light.CreateEnableColorTemperatureAttr(False)
+
+            light_xform = UsdGeom.Xformable(
+                rect_light.GetPrim()
+            )
+
+            light_xform.AddTranslateOp(
+                precision=UsdGeom.XformOp.PrecisionDouble
+            ).Set(
+                Gf.Vec3d(*position)
+            )
+
+            number_of_lights += 1
 
     print(
-        f"Added {len(light_positions)} dark-zone RectLights "
-        "with intensity 1.0 and exposure 17.0."
+        f"Added {number_of_lights} dark-zone RectLights "
+        "with intensity 1.0 and exposure 15.0."
     )
 
 
