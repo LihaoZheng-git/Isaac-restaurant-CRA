@@ -19,7 +19,7 @@ from pxr import Usd, UsdGeom
 # Project paths
 # ---------------------------------------------------------------------
 
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 RESTAURANT_SCENE_PATH = (
     PROJECT_ROOT / "scenes" / "generated" / "restaurant_base.usda"

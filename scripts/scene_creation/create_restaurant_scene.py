@@ -23,7 +23,7 @@ PENDANT_LIGHT_EXPOSURE = 2.0
 # Project paths
 # ---------------------------------------------------------------------
 
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 CONFIG_PATH = (
     PROJECT_ROOT
