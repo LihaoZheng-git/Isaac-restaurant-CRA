@@ -41,8 +41,8 @@ NOVA_CARTER_ASSET_PATH = (
 )
 
 # The restaurant uses centimeters:
-# X = 866 cm
-# Y = 308 cm
+# X = 1172 cm
+# Y = 395 cm
 # Z = 10 cm
 ROBOT_POSITION = [1172.0, 395.0, 10.0]
 
