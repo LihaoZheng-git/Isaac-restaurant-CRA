@@ -1,14 +1,19 @@
-"""Build the CRA restaurant base scene in Isaac Sim 6.0.1.
+"""Build the meter-scale CRA restaurant base scene in Isaac Sim 6.0.1.
 
 The NVIDIA Restaurant Demo remains outside this repository. This script
 reads its location from configs/asset_paths.local.json and references the
 building and restaurant assemblies into a project-owned USD stage.
+
+The source assemblies are authored in centimeters, but the generated stage
+uses meters so meter-authored robots such as Nova Carter can be added without
+requiring a metric conversion inside the robot's instanced prim hierarchy.
 """
 
 from __future__ import annotations
 
 import json
 import math
+import traceback
 from pathlib import Path
 
 
@@ -18,6 +23,17 @@ from pathlib import Path
 
 CEILING_LIGHT_EXPOSURE = 3.0
 PENDANT_LIGHT_EXPOSURE = 2.0
+
+# ---------------------------------------------------------------------
+# Unit conversion
+# ---------------------------------------------------------------------
+
+STAGE_METERS_PER_UNIT = 1.0
+SOURCE_ASSET_METERS_PER_UNIT = 0.01
+EXPECTED_REFERENCE_SCALE = (
+    SOURCE_ASSET_METERS_PER_UNIT
+    / STAGE_METERS_PER_UNIT
+)
 
 # ---------------------------------------------------------------------
 # Project paths
@@ -35,7 +51,7 @@ OUTPUT_PATH = (
     PROJECT_ROOT
     / "scenes"
     / "generated"
-    / "restaurant_base.usda"
+    / "restaurant_base_meters.usda"
 )
 
 BUILDING_ASSEMBLY = (
@@ -208,11 +224,113 @@ def configure_original_ceiling_lights(stage):
 # Scene validation
 # ---------------------------------------------------------------------
 
+def get_units_resolve_scale(prim) -> tuple[float, float, float] | None:
+    """Return the Metrics Assembler scale authored on a reference prim."""
+
+    scale_attribute = prim.GetAttribute(
+        "xformOp:scale:unitsResolve"
+    )
+
+    if not scale_attribute:
+        return None
+
+    scale_value = scale_attribute.Get()
+
+    if scale_value is None:
+        return None
+
+    try:
+        return tuple(float(component) for component in scale_value)
+    except TypeError:
+        scalar_value = float(scale_value)
+        return (scalar_value, scalar_value, scalar_value)
+
+
+def ensure_reference_unit_conversion(
+    reference_prims,
+    Gf,
+    UsdGeom,
+) -> None:
+    """Author exactly one centimeter-to-meter corrective per asset.
+
+    Metrics Assembler automatically handles interactive drag-and-drop, but a
+    raw USD reference added by this script is not guaranteed to receive that
+    correction.  Reuse a correct existing ``unitsResolve`` operation when one
+    is present; otherwise author it explicitly on the reference root.
+    """
+
+    expected_scale = Gf.Vec3d(
+        EXPECTED_REFERENCE_SCALE,
+        EXPECTED_REFERENCE_SCALE,
+        EXPECTED_REFERENCE_SCALE,
+    )
+
+    for label, prim in reference_prims:
+        existing_scale = get_units_resolve_scale(prim)
+
+        if existing_scale is None:
+            scale_op = UsdGeom.Xformable(prim).AddScaleOp(
+                precision=UsdGeom.XformOp.PrecisionDouble,
+                opSuffix="unitsResolve",
+            )
+            scale_op.Set(expected_scale)
+            print(
+                f"{label}: authored explicit "
+                f"Scale:unitsResolve={tuple(expected_scale)}",
+                flush=True,
+            )
+        else:
+            print(
+                f"{label}: reusing existing "
+                f"Scale:unitsResolve={existing_scale}",
+                flush=True,
+            )
+
+
+def validate_reference_unit_conversion(reference_prims) -> None:
+    """Verify exactly one centimeter-to-meter corrective per asset."""
+
+    tolerance = 1e-6
+
+    for label, prim in reference_prims:
+        scale = get_units_resolve_scale(prim)
+
+        if scale is None:
+            raise RuntimeError(
+                f"{label} has no Scale:unitsResolve correction. "
+                "The explicit unit conversion was not authored; "
+                "the file was not saved."
+            )
+
+        if not all(
+            math.isclose(
+                component,
+                EXPECTED_REFERENCE_SCALE,
+                rel_tol=0.0,
+                abs_tol=tolerance,
+            )
+            for component in scale
+        ):
+            raise RuntimeError(
+                f"{label} has unexpected Scale:unitsResolve={scale}; "
+                f"expected ({EXPECTED_REFERENCE_SCALE}, "
+                f"{EXPECTED_REFERENCE_SCALE}, "
+                f"{EXPECTED_REFERENCE_SCALE}). "
+                "The file was not saved."
+            )
+
+        print(
+            f"{label} unit conversion: "
+            f"Scale:unitsResolve={scale}",
+            flush=True,
+        )
+
+
 def print_environment_size(
     stage,
     Usd,
     UsdGeom,
-) -> None:
+) -> tuple[float, float, float]:
     """Print the environment size as a simple scale check."""
 
     environment_prim = stage.GetPrimAtPath(
@@ -251,15 +369,31 @@ def print_environment_size(
     ):
         print(
             "Approximate environment size "
-            "(stage units): "
+            "(meters): "
             f"X={values[0]:.2f}, "
             f"Y={values[1]:.2f}, "
             f"Z={values[2]:.2f}"
         )
+
+        if max(values) > 200.0:
+            raise RuntimeError(
+                "The environment is unexpectedly larger than "
+                "200 meters. The centimeter-to-meter correction "
+                "may be missing; the file was not saved."
+            )
+
+        if max(values) < 1.0:
+            raise RuntimeError(
+                "The environment is unexpectedly smaller than "
+                "1 meter. The unit correction may have been "
+                "applied twice; the file was not saved."
+            )
+
+        return values
     else:
-        print(
-            "Warning: environment bounds could "
-            "not be calculated."
+        raise RuntimeError(
+            "Environment bounds could not be calculated; "
+            "the file was not saved."
         )
 
 
@@ -271,15 +405,15 @@ def add_dark_zone_fill_lights(stage, Gf, UsdGeom, UsdLux):
 
     dark_zones = {
         "DarkZone1": [
-            (2962, 1618, 500),
-            (3181, 1855, 500),
-            (3400, 2092, 495),
+            (29.62, 16.18, 5.00),
+            (31.81, 18.55, 5.00),
+            (34.00, 20.92, 4.95),
         ],
         "DarkZone2": [
-            (708, 2020, 500),
-            (187, 1600, 500),
-            (345, 1948, 500),
-            (485, 2163, 500),
+            (7.08, 20.20, 5.00),
+            (1.87, 16.00, 5.00),
+            (3.45, 19.48, 5.00),
+            (4.85, 21.63, 5.00),
         ],
     }
 
@@ -303,8 +437,8 @@ def add_dark_zone_fill_lights(stage, Gf, UsdGeom, UsdLux):
             rect_light.CreateIntensityAttr(1.0)
             rect_light.CreateExposureAttr(15.0)
 
-            rect_light.CreateWidthAttr(100.0)
-            rect_light.CreateHeightAttr(100.0)
+            rect_light.CreateWidthAttr(1.0)
+            rect_light.CreateHeightAttr(1.0)
 
             rect_light.CreateColorAttr(
                 Gf.Vec3f(1.0, 1.0, 1.0)
@@ -354,6 +488,11 @@ def main() -> None:
         }
     )
 
+    print(
+        "[checkpoint] SimulationApp created.",
+        flush=True,
+    )
+
     try:
         import isaacsim.core.experimental.utils.stage as stage_utils
 
@@ -366,6 +505,11 @@ def main() -> None:
             UsdPhysics,
         )
 
+        print(
+            "[checkpoint] Isaac Sim modules imported.",
+            flush=True,
+        )
+
         # -------------------------------------------------------------
         # Create the stage
         # -------------------------------------------------------------
@@ -374,14 +518,17 @@ def main() -> None:
             template="empty"
         )
 
-        # Both NVIDIA assemblies use centimeter coordinates.
-        #
-        # The building relies on USD's default 0.01 value, while the
-        # restaurant explicitly authors 0.01. Declaring the combined
-        # stage as centimeters prevents Metrics Assembler from adding
-        # a scale:unitsResolve transform only to the restaurant.
+        print(
+            "[checkpoint] Empty stage created.",
+            flush=True,
+        )
+
+        # The generated stage is meter-authored. This script explicitly adds
+        # one Scale:unitsResolve=0.01 correction to each centimeter-authored
+        # restaurant reference. Nova Carter is already authored in meters, so
+        # adding it later requires no unit correction.
         stage_utils.set_stage_units(
-            meters_per_unit=0.01,
+            meters_per_unit=STAGE_METERS_PER_UNIT,
             kilograms_per_unit=1.0,
         )
 
@@ -413,7 +560,8 @@ def main() -> None:
         # Reference the NVIDIA restaurant assemblies
         # -------------------------------------------------------------
 
-        # Native USD references preserve the authored coordinates.
+        # Native references keep the NVIDIA source files external. Their
+        # corrective scale is authored after the references finish loading.
         building_prim = stage.DefinePrim(
             "/World/Environment/BuildingShell",
             "Xform",
@@ -455,6 +603,11 @@ def main() -> None:
             raise RuntimeError(
                 "Could not create the restaurant reference."
             )
+
+        print(
+            "[checkpoint] Restaurant references added.",
+            flush=True,
+        )
 
         # -------------------------------------------------------------
         # Lighting
@@ -540,7 +693,7 @@ def main() -> None:
         )
 
         # Convert 9.81 meters per second squared into stage units.
-        # For a centimeter stage, this becomes 981 cm/s².
+        # In this meter stage, the authored value remains 9.81.
         physics_scene.CreateGravityMagnitudeAttr(
             9.81 / meters_per_unit
         )
@@ -554,6 +707,30 @@ def main() -> None:
             stage_utils,
         )
 
+        print(
+            "[checkpoint] Restaurant assets loaded.",
+            flush=True,
+        )
+
+        reference_prims = (
+            ("BuildingShell", building_prim),
+            ("Restaurant", restaurant_prim),
+        )
+
+        ensure_reference_unit_conversion(
+            reference_prims,
+            Gf,
+            UsdGeom,
+        )
+
+        validate_reference_unit_conversion(
+            reference_prims
+        )
+
+        print(
+            "[checkpoint] Unit conversion verified.",
+            flush=True,
+        )
 
         configure_original_ceiling_lights(stage)
 
@@ -612,12 +789,21 @@ def main() -> None:
 
         print(
             "The Isaac Sim window will stay open. "
-            "Close it to finish the script."
+            "Close it to finish the script.",
+            flush=True,
         )
 
         # Keep the GUI responsive until the window is closed.
         while simulation_app.is_running():
             simulation_app.update()
+
+    except BaseException:
+        print(
+            "\n[error] Restaurant scene generation failed:",
+            flush=True,
+        )
+        traceback.print_exc()
+        raise
 
     finally:
         if not simulation_app.is_exiting():
