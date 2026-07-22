@@ -225,3 +225,6 @@ configs/asset_paths.local.json
 
 # Generated scene compositions
 scenes/generated/
+
+# Generated test outputs
+outputs/
