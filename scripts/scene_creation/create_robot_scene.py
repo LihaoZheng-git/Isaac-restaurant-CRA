@@ -32,7 +32,7 @@ RESTAURANT_SCENE_PATH = (
     PROJECT_ROOT
     / "scenes"
     / "generated"
-    / "restaurant_base_meters.usda"
+    / "restaurant_base.usda"
 )
 
 OUTPUT_SCENE_PATH = (
@@ -153,7 +153,7 @@ def open_and_validate_restaurant(
             f"  Expected: {EXPECTED_METERS_PER_UNIT} m/unit\n"
             f"  Found:    {meters_per_unit} m/unit\n\n"
             "Do not add Nova Carter to the old 0.01 m/unit restaurant. "
-            "Regenerate restaurant_base_meters.usda first."
+            "Regenerate restaurant_base.usda first."
         )
 
     world_prim = stage.GetPrimAtPath("/World")
@@ -167,7 +167,7 @@ def open_and_validate_restaurant(
     if stage.GetPrimAtPath(ROBOT_PRIM_PATH).IsValid():
         raise RuntimeError(
             f"The base restaurant already contains {ROBOT_PRIM_PATH}. "
-            "Use a clean restaurant_base_meters.usda."
+            "Use a clean restaurant_base.usda."
         )
 
     print(

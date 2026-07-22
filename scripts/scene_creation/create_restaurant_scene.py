@@ -51,7 +51,7 @@ OUTPUT_PATH = (
     PROJECT_ROOT
     / "scenes"
     / "generated"
-    / "restaurant_base_meters.usda"
+    / "restaurant_base.usda"
 )
 
 BUILDING_ASSEMBLY = (
