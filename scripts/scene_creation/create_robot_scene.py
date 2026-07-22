@@ -53,6 +53,17 @@ FRONT_LEFT_HAWK_CAMERA_PATH = (
     "/World/Robot/chassis_link/sensors/front_hawk/left/camera_left"
 )
 
+# GUI viewport camera only. This is independent of Nova Carter's sensors.
+VIEWPORT_CAMERA_PATH = "/OmniverseKit_Persp"
+
+# Recovered from the Perspective camera Transform panel.
+INITIAL_VIEW_EYE = (4.70906, 4.53751, 2.03889)
+
+# Look target computed from the displayed XYZ rotation
+# (81.73998, 0.0, -95.11682) degrees. The target distance does not affect
+# the viewing direction; ten meters gives a convenient center of interest.
+INITIAL_VIEW_TARGET = (14.56589, 3.65490, 0.60223)
+
 
 # -----------------------------------------------------------------------------
 # Robot configuration
@@ -376,6 +387,28 @@ def save_robot_scene(stage) -> None:
     print(f"[checkpoint] Saved: {OUTPUT_SCENE_PATH}", flush=True)
 
 
+def set_initial_view(simulation_app, ViewportManager) -> None:
+    """Set the GUI Perspective camera without changing robot sensors."""
+
+    ViewportManager.set_camera(VIEWPORT_CAMERA_PATH)
+
+    viewport_camera = ViewportManager.get_camera()
+    ViewportManager.set_camera_view(
+        camera=viewport_camera,
+        eye=INITIAL_VIEW_EYE,
+        target=INITIAL_VIEW_TARGET,
+    )
+
+    # Render a few updates so the requested view is visible before entering
+    # the interactive inspection loop.
+    for _ in range(3):
+        simulation_app.update()
+
+    print("[checkpoint] Initial Perspective view configured.", flush=True)
+    print(f"  Eye:    {INITIAL_VIEW_EYE}", flush=True)
+    print(f"  Target: {INITIAL_VIEW_TARGET}", flush=True)
+
+
 # -----------------------------------------------------------------------------
 # Application entry point
 # -----------------------------------------------------------------------------
@@ -399,6 +432,7 @@ def main() -> None:
 
     try:
         import isaacsim.core.experimental.utils.stage as stage_utils
+        from isaacsim.core.rendering_manager import ViewportManager
         from pxr import Gf, UsdGeom
 
         print("\n" + "=" * 72, flush=True)
@@ -426,6 +460,7 @@ def main() -> None:
         )
 
         validate_robot_and_camera(stage, UsdGeom)
+        set_initial_view(simulation_app, ViewportManager)
         save_robot_scene(stage)
 
         print("\n" + "=" * 72, flush=True)
