@@ -11,7 +11,7 @@ import isaacsim.core.experimental.utils.stage as stage_utils
 
 
 DEFAULT_ROBOT_PRIM_PATH = "/World/Robot"
-EXPECTED_METERS_PER_UNIT = 0.01
+EXPECTED_METERS_PER_UNIT = 1.0
 UNIT_TOLERANCE = 1e-9
 
 
