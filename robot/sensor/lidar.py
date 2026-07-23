@@ -24,6 +24,10 @@ from isaacsim.sensors.experimental.rtx.generic_model_output import (
 
 
 from robot.config import ROBOT_PRIM_PATH
+from robot.sensor.lidar_geometry import (
+    filter_valid_points,
+    spherical_to_cartesian,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -138,35 +142,6 @@ def _is_coordinate_type(
         )
 
 
-def _spherical_to_cartesian(
-    azimuth_degrees: np.ndarray,
-    elevation_degrees: np.ndarray,
-    distance_meters: np.ndarray,
-) -> np.ndarray:
-    """Convert ISO 8855 spherical coordinates into XYZ coordinates.
-
-    The resulting sensor coordinate convention is:
-
-    - +X: forward
-    - +Y: left
-    - +Z: up
-    """
-
-    azimuth = np.deg2rad(azimuth_degrees)
-    elevation = np.deg2rad(elevation_degrees)
-
-    horizontal_distance = (
-        distance_meters * np.cos(elevation)
-    )
-
-    x = horizontal_distance * np.cos(azimuth)
-    y = horizontal_distance * np.sin(azimuth)
-    z = distance_meters * np.sin(elevation)
-
-    return np.column_stack((x, y, z)).astype(
-        np.float32,
-        copy=False,
-    )
 
 
 class NovaCarterLidar:
@@ -416,7 +391,7 @@ class NovaCarterLidar:
             #   x = azimuth in degrees
             #   y = elevation in degrees
             #   z = distance in meters
-            points = _spherical_to_cartesian(
+            points = spherical_to_cartesian(
                 azimuth_degrees=first,
                 elevation_degrees=second,
                 distance_meters=third,
@@ -429,22 +404,12 @@ class NovaCarterLidar:
             )
 
         if self.filter_invalid_points:
-            finite_mask = np.isfinite(points).all(axis=1)
-
-            # A point exactly at the sensor origin is normally an invalid
-            # or uninitialized return.
-            nonzero_mask = (
-                np.linalg.norm(points, axis=1) > 0.0
+            points = filter_valid_points(points)
+        else:
+            points = np.ascontiguousarray(
+                points,
+                dtype=np.float32,
             )
-
-            points = points[
-                finite_mask & nonzero_mask
-            ]
-
-        points = np.ascontiguousarray(
-            points,
-            dtype=np.float32,
-        )
 
         if points.shape[0] == 0:
             raise RuntimeError(
