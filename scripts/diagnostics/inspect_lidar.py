@@ -51,8 +51,6 @@ from isaacsim import SimulationApp
 # SimulationApp must exist before importing other Isaac Sim modules.
 simulation_app = SimulationApp({"headless": False})
 
-
-import omni.usd
 from pxr import Usd, UsdGeom
 
 from robot.scene.loader import load_robot_scene
