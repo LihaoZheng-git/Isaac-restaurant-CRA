@@ -13,8 +13,9 @@ from isaacsim.robot.experimental.wheeled_robots.robots import (
     WheeledRobot,
 )
 
+from robot.config import ROBOT_PRIM_PATH
 
-ROBOT_PRIM_PATH = "/World/Robot"
+
 LEFT_WHEEL_DOF = "joint_wheel_left"
 RIGHT_WHEEL_DOF = "joint_wheel_right"
 
