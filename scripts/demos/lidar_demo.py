@@ -71,6 +71,10 @@ from robot.sensor.lidar import (
     LidarFrameInfo,
     NovaCarterLidar,
 )
+from robot.runtime.simulation_loop import (
+    advance_playing_steps,
+    wait_until_playing,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -112,18 +116,10 @@ TRANSIENT_LIDAR_ERRORS = (
 
 
 def wait_for_user_to_press_play() -> bool:
-    """Wait until the Isaac Sim timeline is playing."""
+    """Wait until the user starts the timeline."""
 
-    print("\nThe scene is ready.")
-    print("Press Play in Isaac Sim to begin the test.")
-
-    while simulation_app.is_running():
-        simulation_app.update()
-
-        if app_utils.is_playing():
-            return True
-
-    return False
+    print("Press Play in the Isaac Sim GUI to begin.")
+    return wait_until_playing(simulation_app)
 
 
 def run_motion_steps(
@@ -139,20 +135,16 @@ def run_motion_steps(
         [linear_velocity, angular_velocity]
     )
 
-    completed_steps = 0
+    def apply_wheel_command() -> None:
+        controller.apply_wheel_velocities(
+            wheel_velocities
+        )
 
-    while (
-        completed_steps < physics_steps
-        and simulation_app.is_running()
-    ):
-        if app_utils.is_playing():
-            controller.apply_wheel_velocities(wheel_velocities)
-            simulation_app.update()
-            completed_steps += 1
-        else:
-            simulation_app.update()
-
-    return simulation_app.is_running()
+    return advance_playing_steps(
+        simulation_app,
+        physics_steps=physics_steps,
+        on_step=apply_wheel_command,
+    )
 
 
 def scan_key(frame_info: LidarFrameInfo) -> ScanKey:

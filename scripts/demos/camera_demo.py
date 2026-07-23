@@ -70,6 +70,10 @@ from PIL import Image
 from robot.control.differential_drive import NovaCarterController
 from robot.scene.loader import load_robot_scene
 from robot.sensor.camera import NovaCarterCamera
+from robot.runtime.simulation_loop import (
+    advance_playing_steps,
+    wait_until_playing,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -116,21 +120,10 @@ MAX_FIRST_FRAME_WAIT_STEPS = 300
 
 
 def wait_for_user_to_press_play() -> bool:
-    """Keep the GUI responsive until the user presses Play."""
+    """Wait until the user starts the timeline."""
 
-    print("\n" + "=" * 70)
-    print("READY FOR CAMERA AND MOTION TEST")
-    print("=" * 70)
     print("Press Play in the Isaac Sim GUI to begin.")
-    print("Leave the timeline playing until the test finishes.")
-
-    while (
-        simulation_app.is_running()
-        and not app_utils.is_playing()
-    ):
-        simulation_app.update()
-
-    return simulation_app.is_running()
+    return wait_until_playing(simulation_app)
 
 
 def convert_to_uint8(rgb: np.ndarray) -> np.ndarray:
@@ -213,21 +206,16 @@ def run_motion_steps(
         [linear_velocity, angular_velocity]
     )
 
-    completed_steps = 0
+    def apply_wheel_command() -> None:
+        controller.apply_wheel_velocities(
+            wheel_velocities
+        )
 
-    while (
-        completed_steps < physics_steps
-        and simulation_app.is_running()
-    ):
-        if app_utils.is_playing():
-            controller.apply_wheel_velocities(wheel_velocities)
-            simulation_app.update()
-            completed_steps += 1
-        else:
-            # Keep the GUI responsive if the timeline is temporarily paused.
-            simulation_app.update()
-
-    return simulation_app.is_running()
+    return advance_playing_steps(
+        simulation_app,
+        physics_steps=physics_steps,
+        on_step=apply_wheel_command,
+    )
 
 
 def wait_for_first_rgb_frame(

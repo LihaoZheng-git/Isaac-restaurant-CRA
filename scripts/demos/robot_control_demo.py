@@ -29,6 +29,10 @@ from isaacsim.core.simulation_manager import SimulationManager
 
 from robot.control.differential_drive import NovaCarterController
 from robot.scene.loader import load_robot_scene
+from robot.runtime.simulation_loop import (
+    advance_playing_steps,
+    wait_until_playing,
+)
 
 
 
@@ -43,20 +47,10 @@ FINAL_STOP_STEPS = 60
 
 
 def wait_for_user_to_press_play() -> bool:
-    """Keep the GUI responsive until the user starts the timeline."""
+    """Wait until the user starts the timeline."""
 
-    print("\n" + "=" * 70)
-    print("READY FOR MOTION TEST")
-    print("=" * 70)
     print("Press Play in the Isaac Sim GUI to begin.")
-
-    while (
-        simulation_app.is_running()
-        and not app_utils.is_playing()
-    ):
-        simulation_app.update()
-
-    return simulation_app.is_running()
+    return wait_until_playing(simulation_app)
 
 
 def run_motion_phase(
@@ -86,19 +80,16 @@ def run_motion_phase(
     print(f"Physics steps: {physics_steps}")
     print("-" * 70)
 
-    completed_steps = 0
+    def apply_wheel_command() -> None:
+        controller.apply_wheel_velocities(
+            wheel_velocities
+        )
 
-    while (
-        completed_steps < physics_steps
-        and simulation_app.is_running()
-    ):
-        if app_utils.is_playing():
-            controller.apply_wheel_velocities(wheel_velocities)
-            completed_steps += 1
-
-        simulation_app.update()
-
-    return simulation_app.is_running()
+    return advance_playing_steps(
+        simulation_app,
+        physics_steps=physics_steps,
+        on_step=apply_wheel_command,
+    )
 
 
 def main() -> None:
