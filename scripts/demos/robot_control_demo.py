@@ -1,4 +1,4 @@
-"""Test basic Nova Carter movement inside the restaurant."""
+"""DEMO basic Nova Carter movement inside the restaurant."""
 
 import sys
 from pathlib import Path
@@ -96,7 +96,7 @@ def main() -> None:
     """Load the robot scene and run the movement test."""
 
     print("\n" + "=" * 70)
-    print("NOVA CARTER MOTION TEST")
+    print("NOVA CARTER MOTION DEMO")
     print("=" * 70)
 
     load_robot_scene(
@@ -149,7 +149,7 @@ def main() -> None:
     app_utils.stop()
 
     print("\n" + "=" * 70)
-    print("MOTION TEST COMPLETED")
+    print("MOTION DEMO COMPLETED")
     print("=" * 70)
     print("Nova Carter moved forward, stopped, turned, and stopped.")
     print("The GUI will remain open for inspection.")
@@ -164,7 +164,7 @@ if __name__ == "__main__":
         main()
     except Exception as error:
         print("\n" + "=" * 70)
-        print("ERROR DURING ROBOT MOTION TEST")
+        print("ERROR DURING ROBOT MOTION DEMO")
         print("=" * 70)
         print(error)
     finally:

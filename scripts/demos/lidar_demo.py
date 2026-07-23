@@ -1,6 +1,6 @@
-"""Test Nova Carter motion and PandarXT-32 LiDAR capture.
+"""Demo Nova Carter motion and PandarXT-32 LiDAR capture.
 
-The test loads restaurant_robot.usda, waits for the user to press Play,
+The Demo loads restaurant_robot.usda, waits for the user to press Play,
 captures a stationary point cloud, moves Nova Carter forward while capturing
 additional scans, and captures one final scan after stopping.
 
@@ -11,7 +11,7 @@ Each scan is saved as:
 
 Run from the project root:
 
-    python -u scripts/test/test_lidar.py
+    python -u scripts/demos/lidar_demo.py
 """
 
 import sys
@@ -102,7 +102,7 @@ TOP_DOWN_RANGE_METERS = 8.0
 OUTPUT_DIRECTORY = (
     PROJECT_ROOT
     / "outputs"
-    / "lidar_test"
+    / "lidar_demo"
     / datetime.now().strftime("%Y%m%d_%H%M%S")
 )
 
@@ -509,7 +509,7 @@ def main() -> None:
     """Run the complete robot-motion and LiDAR-capture test."""
 
     print("\n" + "=" * 70)
-    print("NOVA CARTER LIDAR AND MOTION TEST")
+    print("NOVA CARTER LIDAR AND MOTION DEMO")
     print("=" * 70)
 
     loaded_scene = load_robot_scene(
@@ -660,7 +660,7 @@ def main() -> None:
     saved_scan_count = len(saved_files) // 2
 
     print("\n" + "=" * 70)
-    print("LIDAR AND MOTION TEST COMPLETED")
+    print("LIDAR AND MOTION DEMO COMPLETED")
     print("=" * 70)
     print(f"LiDAR prim:        {final_info.lidar_prim_path}")
     print(f"Coordinate type:   {final_info.source_coordinate_type}")
@@ -690,7 +690,7 @@ if __name__ == "__main__":
 
     except Exception as error:
         print("\n" + "=" * 70)
-        print("ERROR DURING LIDAR AND MOTION TEST")
+        print("ERROR DURING LIDAR AND MOTION DEMO")
         print("=" * 70)
         print(error)
         traceback.print_exc()

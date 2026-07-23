@@ -22,12 +22,12 @@ WHEEL_RADIUS_METERS = 0.14
 WHEEL_BASE_METERS = 0.4132
 
 PANDAR_XT32_LIDAR_PRIM_PATH = (
-    "/World/Robot/chassis_link/sensors/XT_32/"
-    "PandarXT_32_10hz"
+    f"{ROBOT_PRIM_PATH}/chassis_link/sensors/"
+    "XT_32/PandarXT_32_10hz"
 )
 
 FRONT_HAWK_LEFT_CAMERA_PRIM_PATH = (
-    "/World/Robot/chassis_link/sensors/"
+    f"{ROBOT_PRIM_PATH}/chassis_link/sensors/"
     "front_hawk/left/camera_left"
 )
 

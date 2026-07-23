@@ -1,6 +1,6 @@
-"""Test Nova Carter motion and RGB-camera capture in the restaurant.
+"""Demo Nova Carter motion and RGB-camera capture in the restaurant.
 
-The test:
+The Demo:
 
 1. Loads the meter-based restaurant_robot.usda scene.
 2. Initializes Nova Carter's differential-drive controller.
@@ -14,7 +14,7 @@ The test:
 
 Run from the project root:
 
-    python -u scripts/test/test_camera.py
+    python -u scripts/demos/camera_demo.py
 """
 
 import sys
@@ -87,7 +87,7 @@ RUN_TIMESTAMP = datetime.now().strftime("%Y%m%d_%H%M%S")
 OUTPUT_DIRECTORY = (
     PROJECT_ROOT
     / "outputs"
-    / "camera_test"
+    / "camera_demo"
     / RUN_TIMESTAMP
 )
 
@@ -334,7 +334,7 @@ def main() -> None:
     """Run the complete robot-motion and camera-capture test."""
 
     print("\n" + "=" * 70)
-    print("NOVA CARTER CAMERA AND MOTION TEST")
+    print("NOVA CARTER CAMERA AND MOTION DEMO")
     print("=" * 70)
 
     loaded_scene = load_robot_scene(
@@ -452,7 +452,7 @@ def main() -> None:
     frame_info = camera.get_frame_info()
 
     print("\n" + "=" * 70)
-    print("CAMERA AND MOTION TEST COMPLETED")
+    print("CAMERA AND MOTION DEMO COMPLETED")
     print("=" * 70)
     print(f"Camera prim:       {frame_info.camera_prim_path}")
     print(
@@ -481,7 +481,7 @@ if __name__ == "__main__":
 
     except Exception as error:
         print("\n" + "=" * 70)
-        print("ERROR DURING CAMERA AND MOTION TEST")
+        print("ERROR DURING CAMERA AND MOTION DEMO")
         print("=" * 70)
         print(error)
         traceback.print_exc()
