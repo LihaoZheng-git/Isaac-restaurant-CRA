@@ -1,36 +1,36 @@
 """Test basic Nova Carter movement inside the restaurant."""
 
-from pathlib import Path
-
-from isaacsim import SimulationApp
-
-
-# Isaac Sim must start before modules that import Isaac Sim APIs.
-simulation_app = SimulationApp({"headless": False})
-
-
-import isaacsim.core.experimental.utils.app as app_utils
-from isaacsim.core.simulation_manager import SimulationManager
-
-
 import sys
 from pathlib import Path
+
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
+
+from robot.config import (
+    PHYSICS_DEVICE,
+    PHYSICS_DT,
+    ROBOT_PRIM_PATH,
+    ROBOT_SCENE_PATH,
+)
+
+
+from isaacsim import SimulationApp
+
+
+simulation_app = SimulationApp({"headless": False})
+
+
+import isaacsim.core.experimental.utils.app as app_utils
+from isaacsim.core.simulation_manager import SimulationManager
+
 from robot.control.differential_drive import NovaCarterController
 from robot.scene.loader import load_robot_scene
 
-ROBOT_SCENE_PATH = (
-    PROJECT_ROOT / "scenes" / "generated" / "restaurant_robot.usda"
-)
-ROBOT_PRIM_PATH = "/World/Robot"
 
-PHYSICS_DT = 1.0 / 60.0
-PHYSICS_DEVICE = "cpu"
 
 FORWARD_SPEED = 0.15
 TURN_SPEED = 0.50

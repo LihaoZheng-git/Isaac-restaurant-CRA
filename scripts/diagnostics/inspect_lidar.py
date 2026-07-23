@@ -39,6 +39,11 @@ PROJECT_ROOT = find_project_root()
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
+from robot.config import (
+    EXPECTED_METERS_PER_UNIT,
+    ROBOT_PRIM_PATH,
+    ROBOT_SCENE_PATH,
+)
 
 from isaacsim import SimulationApp
 
@@ -53,14 +58,7 @@ from pxr import Usd, UsdGeom
 from robot.scene.loader import load_robot_scene
 
 
-ROBOT_SCENE_PATH = (
-    PROJECT_ROOT
-    / "scenes"
-    / "generated"
-    / "restaurant_robot.usda"
-)
 
-ROBOT_PRIM_PATH = "/World/Robot"
 
 LIDAR_NAME_TERMS = (
     "lidar",
@@ -481,7 +479,7 @@ def main() -> None:
         scene_path=ROBOT_SCENE_PATH,
         simulation_app=simulation_app,
         robot_prim_path=ROBOT_PRIM_PATH,
-        expected_meters_per_unit=1.0,
+        expected_meters_per_unit=EXPECTED_METERS_PER_UNIT,
     )
 
     print_variant_selections(loaded_scene.robot_prim)

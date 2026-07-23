@@ -28,6 +28,12 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 
+from robot.config import (
+    EXPECTED_METERS_PER_UNIT,
+    ROBOT_PRIM_PATH,
+    ROBOT_SCENE_PATH,
+)
+
 # SimulationApp must be created before importing other Isaac Sim modules.
 from isaacsim import SimulationApp
 
@@ -45,14 +51,6 @@ from isaacsim.core.rendering_manager import ViewportManager
 from robot.scene.loader import load_robot_scene
 
 
-ROBOT_SCENE_PATH = (
-    PROJECT_ROOT
-    / "scenes"
-    / "generated"
-    / "restaurant_robot.usda"
-)
-
-ROBOT_PRIM_PATH = "/World/Robot"
 
 INITIAL_VIEW_POSITION = [
     4.70906,
@@ -108,7 +106,7 @@ def main() -> None:
         scene_path=ROBOT_SCENE_PATH,
         simulation_app=simulation_app,
         robot_prim_path=ROBOT_PRIM_PATH,
-        expected_meters_per_unit=1.0,
+        expected_meters_per_unit=EXPECTED_METERS_PER_UNIT,
     )
 
     set_initial_view()
