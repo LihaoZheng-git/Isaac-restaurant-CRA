@@ -1,0 +1,1 @@
+"""Robot scene loading and validation."""
