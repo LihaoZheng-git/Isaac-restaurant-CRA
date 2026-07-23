@@ -20,13 +20,13 @@ from isaacsim.sensors.experimental.rtx import CameraSensor, RtxCamera
 from pxr import Usd, UsdGeom
 
 
-from robot.config import ROBOT_PRIM_PATH
-
-
-FRONT_HAWK_LEFT_CAMERA_PATH = (
-    f"{ROBOT_PRIM_PATH}/chassis_link/sensors/"
-    "front_hawk/left/camera_left"
+from robot.config import (
+    FRONT_HAWK_LEFT_CAMERA_PRIM_PATH,
+    ROBOT_PRIM_PATH,
 )
+
+
+FRONT_HAWK_LEFT_CAMERA_PATH = FRONT_HAWK_LEFT_CAMERA_PRIM_PATH
 
 FRONT_HAWK_RIGHT_CAMERA_PATH = (
     f"{ROBOT_PRIM_PATH}/chassis_link/sensors/"

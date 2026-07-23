@@ -23,7 +23,10 @@ from isaacsim.sensors.experimental.rtx.generic_model_output import (
 )
 
 
-from robot.config import ROBOT_PRIM_PATH
+from robot.config import (
+    PANDAR_XT32_LIDAR_PRIM_PATH,
+    ROBOT_PRIM_PATH,
+)
 from robot.sensor.lidar_geometry import (
     filter_valid_points,
     spherical_to_cartesian,
@@ -34,10 +37,6 @@ from robot.sensor.lidar_geometry import (
 # Nova Carter LiDAR prim paths
 # ---------------------------------------------------------------------------
 
-PANDAR_XT32_LIDAR_PRIM_PATH = (
-    f"{ROBOT_PRIM_PATH}/chassis_link/sensors/"
-    "XT_32/PandarXT_32_10hz"
-)
 
 FRONT_RPLIDAR_PRIM_PATH = (
     f"{ROBOT_PRIM_PATH}/chassis_link/sensors/front_RPLidar/RPLidar_S2E"

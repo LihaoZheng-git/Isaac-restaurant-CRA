@@ -13,15 +13,14 @@ from isaacsim.robot.experimental.wheeled_robots.robots import (
     WheeledRobot,
 )
 
-from robot.config import ROBOT_PRIM_PATH
+from robot.config import (
+    LEFT_WHEEL_DOF,
+    RIGHT_WHEEL_DOF,
+    ROBOT_PRIM_PATH,
+    WHEEL_BASE_METERS,
+    WHEEL_RADIUS_METERS,
+)
 
-
-LEFT_WHEEL_DOF = "joint_wheel_left"
-RIGHT_WHEEL_DOF = "joint_wheel_right"
-
-# Measured from the composed Nova Carter asset in restaurant_robot.usda.
-WHEEL_RADIUS_METERS = 0.14
-WHEEL_BASE_METERS = 0.4132
 
 
 @dataclass(frozen=True)
