@@ -1,6 +1,6 @@
-"""Test Nova Carter motion and PandarXT-32 LiDAR capture.
+"""Demo Nova Carter motion and PandarXT-32 LiDAR capture.
 
-The test loads restaurant_robot.usda, waits for the user to press Play,
+The Demo loads restaurant_robot.usda, waits for the user to press Play,
 captures a stationary point cloud, moves Nova Carter forward while capturing
 additional scans, and captures one final scan after stopping.
 
@@ -11,7 +11,7 @@ Each scan is saved as:
 
 Run from the project root:
 
-    python -u scripts/test/test_lidar.py
+    python -u scripts/demos/lidar_demo.py
 """
 
 import sys
@@ -46,6 +46,15 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 
+
+from robot.config import (
+    EXPECTED_METERS_PER_UNIT,
+    PHYSICS_DEVICE,
+    PHYSICS_DT,
+    ROBOT_PRIM_PATH,
+    ROBOT_SCENE_PATH,
+)
+
 from isaacsim import SimulationApp
 
 
@@ -56,11 +65,15 @@ simulation_app = SimulationApp({"headless": False})
 import isaacsim.core.experimental.utils.app as app_utils
 from isaacsim.core.simulation_manager import SimulationManager
 
-from robot.controller import NovaCarterController
-from robot.loader import load_robot_scene
+from robot.control.differential_drive import NovaCarterController
+from robot.scene.loader import load_robot_scene
 from robot.sensor.lidar import (
     LidarFrameInfo,
     NovaCarterLidar,
+)
+from robot.runtime.simulation_loop import (
+    advance_playing_steps,
+    wait_until_playing,
 )
 
 
@@ -68,17 +81,6 @@ from robot.sensor.lidar import (
 # Scene and simulation configuration
 # ---------------------------------------------------------------------------
 
-ROBOT_SCENE_PATH = (
-    PROJECT_ROOT
-    / "scenes"
-    / "generated"
-    / "restaurant_robot.usda"
-)
-
-ROBOT_PRIM_PATH = "/World/Robot"
-
-PHYSICS_DT = 1.0 / 60.0
-PHYSICS_DEVICE = "cpu"
 
 SETTLE_STEPS = 60
 
@@ -100,7 +102,7 @@ TOP_DOWN_RANGE_METERS = 8.0
 OUTPUT_DIRECTORY = (
     PROJECT_ROOT
     / "outputs"
-    / "lidar_test"
+    / "lidar_demo"
     / datetime.now().strftime("%Y%m%d_%H%M%S")
 )
 
@@ -114,18 +116,10 @@ TRANSIENT_LIDAR_ERRORS = (
 
 
 def wait_for_user_to_press_play() -> bool:
-    """Wait until the Isaac Sim timeline is playing."""
+    """Wait until the user starts the timeline."""
 
-    print("\nThe scene is ready.")
-    print("Press Play in Isaac Sim to begin the test.")
-
-    while simulation_app.is_running():
-        simulation_app.update()
-
-        if app_utils.is_playing():
-            return True
-
-    return False
+    print("Press Play in the Isaac Sim GUI to begin.")
+    return wait_until_playing(simulation_app)
 
 
 def run_motion_steps(
@@ -141,20 +135,16 @@ def run_motion_steps(
         [linear_velocity, angular_velocity]
     )
 
-    completed_steps = 0
+    def apply_wheel_command() -> None:
+        controller.apply_wheel_velocities(
+            wheel_velocities
+        )
 
-    while (
-        completed_steps < physics_steps
-        and simulation_app.is_running()
-    ):
-        if app_utils.is_playing():
-            controller.apply_wheel_velocities(wheel_velocities)
-            simulation_app.update()
-            completed_steps += 1
-        else:
-            simulation_app.update()
-
-    return simulation_app.is_running()
+    return advance_playing_steps(
+        simulation_app,
+        physics_steps=physics_steps,
+        on_step=apply_wheel_command,
+    )
 
 
 def scan_key(frame_info: LidarFrameInfo) -> ScanKey:
@@ -519,14 +509,14 @@ def main() -> None:
     """Run the complete robot-motion and LiDAR-capture test."""
 
     print("\n" + "=" * 70)
-    print("NOVA CARTER LIDAR AND MOTION TEST")
+    print("NOVA CARTER LIDAR AND MOTION DEMO")
     print("=" * 70)
 
     loaded_scene = load_robot_scene(
         scene_path=ROBOT_SCENE_PATH,
         simulation_app=simulation_app,
         robot_prim_path=ROBOT_PRIM_PATH,
-        expected_meters_per_unit=1.0,
+        expected_meters_per_unit=EXPECTED_METERS_PER_UNIT,
     )
 
     print(
@@ -670,7 +660,7 @@ def main() -> None:
     saved_scan_count = len(saved_files) // 2
 
     print("\n" + "=" * 70)
-    print("LIDAR AND MOTION TEST COMPLETED")
+    print("LIDAR AND MOTION DEMO COMPLETED")
     print("=" * 70)
     print(f"LiDAR prim:        {final_info.lidar_prim_path}")
     print(f"Coordinate type:   {final_info.source_coordinate_type}")
@@ -700,7 +690,7 @@ if __name__ == "__main__":
 
     except Exception as error:
         print("\n" + "=" * 70)
-        print("ERROR DURING LIDAR AND MOTION TEST")
+        print("ERROR DURING LIDAR AND MOTION DEMO")
         print("=" * 70)
         print(error)
         traceback.print_exc()

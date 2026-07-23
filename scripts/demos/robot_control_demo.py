@@ -1,36 +1,40 @@
-"""Test basic Nova Carter movement inside the restaurant."""
-
-from pathlib import Path
-
-from isaacsim import SimulationApp
-
-
-# Isaac Sim must start before modules that import Isaac Sim APIs.
-simulation_app = SimulationApp({"headless": False})
-
-
-import isaacsim.core.experimental.utils.app as app_utils
-from isaacsim.core.simulation_manager import SimulationManager
-
+"""DEMO basic Nova Carter movement inside the restaurant."""
 
 import sys
 from pathlib import Path
+
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from robot.controller import NovaCarterController
-from robot.loader import load_robot_scene
 
-ROBOT_SCENE_PATH = (
-    PROJECT_ROOT / "scenes" / "generated" / "restaurant_robot.usda"
+from robot.config import (
+    PHYSICS_DEVICE,
+    PHYSICS_DT,
+    ROBOT_PRIM_PATH,
+    ROBOT_SCENE_PATH,
 )
-ROBOT_PRIM_PATH = "/World/Robot"
 
-PHYSICS_DT = 1.0 / 60.0
-PHYSICS_DEVICE = "cpu"
+
+from isaacsim import SimulationApp
+
+
+simulation_app = SimulationApp({"headless": False})
+
+
+import isaacsim.core.experimental.utils.app as app_utils
+from isaacsim.core.simulation_manager import SimulationManager
+
+from robot.control.differential_drive import NovaCarterController
+from robot.scene.loader import load_robot_scene
+from robot.runtime.simulation_loop import (
+    advance_playing_steps,
+    wait_until_playing,
+)
+
+
 
 FORWARD_SPEED = 0.15
 TURN_SPEED = 0.50
@@ -43,20 +47,10 @@ FINAL_STOP_STEPS = 60
 
 
 def wait_for_user_to_press_play() -> bool:
-    """Keep the GUI responsive until the user starts the timeline."""
+    """Wait until the user starts the timeline."""
 
-    print("\n" + "=" * 70)
-    print("READY FOR MOTION TEST")
-    print("=" * 70)
     print("Press Play in the Isaac Sim GUI to begin.")
-
-    while (
-        simulation_app.is_running()
-        and not app_utils.is_playing()
-    ):
-        simulation_app.update()
-
-    return simulation_app.is_running()
+    return wait_until_playing(simulation_app)
 
 
 def run_motion_phase(
@@ -86,26 +80,23 @@ def run_motion_phase(
     print(f"Physics steps: {physics_steps}")
     print("-" * 70)
 
-    completed_steps = 0
+    def apply_wheel_command() -> None:
+        controller.apply_wheel_velocities(
+            wheel_velocities
+        )
 
-    while (
-        completed_steps < physics_steps
-        and simulation_app.is_running()
-    ):
-        if app_utils.is_playing():
-            controller.apply_wheel_velocities(wheel_velocities)
-            completed_steps += 1
-
-        simulation_app.update()
-
-    return simulation_app.is_running()
+    return advance_playing_steps(
+        simulation_app,
+        physics_steps=physics_steps,
+        on_step=apply_wheel_command,
+    )
 
 
 def main() -> None:
     """Load the robot scene and run the movement test."""
 
     print("\n" + "=" * 70)
-    print("NOVA CARTER MOTION TEST")
+    print("NOVA CARTER MOTION DEMO")
     print("=" * 70)
 
     load_robot_scene(
@@ -158,7 +149,7 @@ def main() -> None:
     app_utils.stop()
 
     print("\n" + "=" * 70)
-    print("MOTION TEST COMPLETED")
+    print("MOTION DEMO COMPLETED")
     print("=" * 70)
     print("Nova Carter moved forward, stopped, turned, and stopped.")
     print("The GUI will remain open for inspection.")
@@ -173,7 +164,7 @@ if __name__ == "__main__":
         main()
     except Exception as error:
         print("\n" + "=" * 70)
-        print("ERROR DURING ROBOT MOTION TEST")
+        print("ERROR DURING ROBOT MOTION DEMO")
         print("=" * 70)
         print(error)
     finally:

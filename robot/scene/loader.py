@@ -9,9 +9,11 @@ from typing import Any
 
 import isaacsim.core.experimental.utils.stage as stage_utils
 
+from robot.config import (
+    EXPECTED_METERS_PER_UNIT,
+    ROBOT_PRIM_PATH,
+)
 
-DEFAULT_ROBOT_PRIM_PATH = "/World/Robot"
-EXPECTED_METERS_PER_UNIT = 1.0
 UNIT_TOLERANCE = 1e-9
 
 
@@ -74,7 +76,7 @@ def load_robot_scene(
     scene_path: str | Path,
     simulation_app: Any,
     *,
-    robot_prim_path: str = DEFAULT_ROBOT_PRIM_PATH,
+    robot_prim_path: str = ROBOT_PRIM_PATH,
     expected_meters_per_unit: float = EXPECTED_METERS_PER_UNIT,
 ) -> LoadedRobotScene:
     """Open a USD scene and validate its units and robot prim."""

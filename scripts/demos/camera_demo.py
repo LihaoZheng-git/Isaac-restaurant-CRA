@@ -1,6 +1,6 @@
-"""Test Nova Carter motion and RGB-camera capture in the restaurant.
+"""Demo Nova Carter motion and RGB-camera capture in the restaurant.
 
-The test:
+The Demo:
 
 1. Loads the meter-based restaurant_robot.usda scene.
 2. Initializes Nova Carter's differential-drive controller.
@@ -14,7 +14,7 @@ The test:
 
 Run from the project root:
 
-    python -u scripts/test/test_camera.py
+    python -u scripts/demos/camera_demo.py
 """
 
 import sys
@@ -46,6 +46,15 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 
+from robot.config import (
+    EXPECTED_METERS_PER_UNIT,
+    PHYSICS_DEVICE,
+    PHYSICS_DT,
+    ROBOT_PRIM_PATH,
+    ROBOT_SCENE_PATH,
+)
+
+
 from isaacsim import SimulationApp
 
 
@@ -58,23 +67,19 @@ import isaacsim.core.experimental.utils.app as app_utils
 from isaacsim.core.simulation_manager import SimulationManager
 from PIL import Image
 
-from robot.controller import NovaCarterController
-from robot.loader import load_robot_scene
+from robot.control.differential_drive import NovaCarterController
+from robot.scene.loader import load_robot_scene
 from robot.sensor.camera import NovaCarterCamera
+from robot.runtime.simulation_loop import (
+    advance_playing_steps,
+    wait_until_playing,
+)
 
 
 # ---------------------------------------------------------------------------
 # Paths
 # ---------------------------------------------------------------------------
 
-ROBOT_SCENE_PATH = (
-    PROJECT_ROOT
-    / "scenes"
-    / "generated"
-    / "restaurant_robot.usda"
-)
-
-ROBOT_PRIM_PATH = "/World/Robot"
 
 # Create a new directory for every run so older frames are not overwritten.
 RUN_TIMESTAMP = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -82,7 +87,7 @@ RUN_TIMESTAMP = datetime.now().strftime("%Y%m%d_%H%M%S")
 OUTPUT_DIRECTORY = (
     PROJECT_ROOT
     / "outputs"
-    / "camera_test"
+    / "camera_demo"
     / RUN_TIMESTAMP
 )
 
@@ -91,8 +96,7 @@ OUTPUT_DIRECTORY = (
 # Simulation configuration
 # ---------------------------------------------------------------------------
 
-PHYSICS_DT = 1.0 / 60.0
-PHYSICS_DEVICE = "cpu"
+
 
 FORWARD_SPEED = 0.15
 ANGULAR_SPEED = 0.0
@@ -116,21 +120,10 @@ MAX_FIRST_FRAME_WAIT_STEPS = 300
 
 
 def wait_for_user_to_press_play() -> bool:
-    """Keep the GUI responsive until the user presses Play."""
+    """Wait until the user starts the timeline."""
 
-    print("\n" + "=" * 70)
-    print("READY FOR CAMERA AND MOTION TEST")
-    print("=" * 70)
     print("Press Play in the Isaac Sim GUI to begin.")
-    print("Leave the timeline playing until the test finishes.")
-
-    while (
-        simulation_app.is_running()
-        and not app_utils.is_playing()
-    ):
-        simulation_app.update()
-
-    return simulation_app.is_running()
+    return wait_until_playing(simulation_app)
 
 
 def convert_to_uint8(rgb: np.ndarray) -> np.ndarray:
@@ -213,21 +206,16 @@ def run_motion_steps(
         [linear_velocity, angular_velocity]
     )
 
-    completed_steps = 0
+    def apply_wheel_command() -> None:
+        controller.apply_wheel_velocities(
+            wheel_velocities
+        )
 
-    while (
-        completed_steps < physics_steps
-        and simulation_app.is_running()
-    ):
-        if app_utils.is_playing():
-            controller.apply_wheel_velocities(wheel_velocities)
-            simulation_app.update()
-            completed_steps += 1
-        else:
-            # Keep the GUI responsive if the timeline is temporarily paused.
-            simulation_app.update()
-
-    return simulation_app.is_running()
+    return advance_playing_steps(
+        simulation_app,
+        physics_steps=physics_steps,
+        on_step=apply_wheel_command,
+    )
 
 
 def wait_for_first_rgb_frame(
@@ -346,14 +334,14 @@ def main() -> None:
     """Run the complete robot-motion and camera-capture test."""
 
     print("\n" + "=" * 70)
-    print("NOVA CARTER CAMERA AND MOTION TEST")
+    print("NOVA CARTER CAMERA AND MOTION DEMO")
     print("=" * 70)
 
     loaded_scene = load_robot_scene(
         scene_path=ROBOT_SCENE_PATH,
         simulation_app=simulation_app,
         robot_prim_path=ROBOT_PRIM_PATH,
-        expected_meters_per_unit=1.0,
+        expected_meters_per_unit=EXPECTED_METERS_PER_UNIT,
     )
 
     print(
@@ -464,7 +452,7 @@ def main() -> None:
     frame_info = camera.get_frame_info()
 
     print("\n" + "=" * 70)
-    print("CAMERA AND MOTION TEST COMPLETED")
+    print("CAMERA AND MOTION DEMO COMPLETED")
     print("=" * 70)
     print(f"Camera prim:       {frame_info.camera_prim_path}")
     print(
@@ -493,7 +481,7 @@ if __name__ == "__main__":
 
     except Exception as error:
         print("\n" + "=" * 70)
-        print("ERROR DURING CAMERA AND MOTION TEST")
+        print("ERROR DURING CAMERA AND MOTION DEMO")
         print("=" * 70)
         print(error)
         traceback.print_exc()

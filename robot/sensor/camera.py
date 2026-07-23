@@ -20,20 +20,21 @@ from isaacsim.sensors.experimental.rtx import CameraSensor, RtxCamera
 from pxr import Usd, UsdGeom
 
 
-DEFAULT_ROBOT_PRIM_PATH = "/World/Robot"
-
-FRONT_HAWK_LEFT_CAMERA_PATH = (
-    "/World/Robot/chassis_link/sensors/"
-    "front_hawk/left/camera_left"
+from robot.config import (
+    FRONT_HAWK_LEFT_CAMERA_PRIM_PATH,
+    ROBOT_PRIM_PATH,
 )
 
+
+FRONT_HAWK_LEFT_CAMERA_PATH = FRONT_HAWK_LEFT_CAMERA_PRIM_PATH
+
 FRONT_HAWK_RIGHT_CAMERA_PATH = (
-    "/World/Robot/chassis_link/sensors/"
+    f"{ROBOT_PRIM_PATH}/chassis_link/sensors/"
     "front_hawk/right/camera_right"
 )
 
 FRONT_OWL_CAMERA_PATH = (
-    "/World/Robot/chassis_link/sensors/front_owl/camera"
+    f"{ROBOT_PRIM_PATH}/chassis_link/sensors/front_owl/camera"
 )
 
 CAMERA_PRIM_PATHS = {
@@ -60,7 +61,7 @@ class CameraFrameInfo:
 
 
 def find_camera_prim_paths(
-    robot_prim_path: str = DEFAULT_ROBOT_PRIM_PATH,
+    robot_prim_path: str = ROBOT_PRIM_PATH,
 ) -> list[str]:
     """Return all USD Camera prim paths below the robot."""
 
