@@ -50,7 +50,7 @@ simulation_app = SimulationApp({"headless": False})
 import omni.usd
 from pxr import Usd, UsdGeom
 
-from robot.loader import load_robot_scene
+from robot.scene.loader import load_robot_scene
 
 
 ROBOT_SCENE_PATH = (

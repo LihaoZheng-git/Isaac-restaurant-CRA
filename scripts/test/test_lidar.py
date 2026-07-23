@@ -56,8 +56,8 @@ simulation_app = SimulationApp({"headless": False})
 import isaacsim.core.experimental.utils.app as app_utils
 from isaacsim.core.simulation_manager import SimulationManager
 
-from robot.controller import NovaCarterController
-from robot.loader import load_robot_scene
+from robot.control.differential_drive import NovaCarterController
+from robot.scene.loader import load_robot_scene
 from robot.sensor.lidar import (
     LidarFrameInfo,
     NovaCarterLidar,

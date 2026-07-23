@@ -42,7 +42,7 @@ simulation_app = SimulationApp(
 # These imports must remain after SimulationApp is instantiated.
 from isaacsim.core.rendering_manager import ViewportManager
 
-from robot.loader import load_robot_scene
+from robot.scene.loader import load_robot_scene
 
 
 ROBOT_SCENE_PATH = (

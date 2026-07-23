@@ -21,8 +21,8 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from robot.controller import NovaCarterController
-from robot.loader import load_robot_scene
+from robot.control.differential_drive import NovaCarterController
+from robot.scene.loader import load_robot_scene
 
 ROBOT_SCENE_PATH = (
     PROJECT_ROOT / "scenes" / "generated" / "restaurant_robot.usda"

@@ -58,8 +58,8 @@ import isaacsim.core.experimental.utils.app as app_utils
 from isaacsim.core.simulation_manager import SimulationManager
 from PIL import Image
 
-from robot.controller import NovaCarterController
-from robot.loader import load_robot_scene
+from robot.control.differential_drive import NovaCarterController
+from robot.scene.loader import load_robot_scene
 from robot.sensor.camera import NovaCarterCamera
 
 
