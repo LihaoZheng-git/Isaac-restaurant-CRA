@@ -71,3 +71,117 @@ def filter_valid_points(points: np.ndarray) -> np.ndarray:
         point_array[finite_mask & nonzero_mask],
         dtype=np.float32,
     )
+
+
+def transform_points(
+    points_source_frame: np.ndarray,
+    target_from_source_transform: np.ndarray,
+) -> np.ndarray:
+    """Transform an XYZ point cloud between coordinate frames.
+
+    The transform follows the column-vector convention:
+
+        point_target = target_from_source_transform @ point_source
+
+    For the LiDAR integration, this will be used as:
+
+        points_robot = transform_points(
+            points_sensor,
+            robot_from_sensor_transform,
+        )
+
+    Args:
+        points_source_frame:
+            Point cloud with shape ``(N, 3)``.
+        target_from_source_transform:
+            Rigid homogeneous transformation matrix with shape ``(4, 4)``.
+
+    Returns:
+        A contiguous ``float32`` point cloud with shape ``(N, 3)``
+        expressed in the target coordinate frame.
+    """
+
+    points = np.asarray(
+        points_source_frame,
+        dtype=np.float64,
+    )
+
+    transform = np.asarray(
+        target_from_source_transform,
+        dtype=np.float64,
+    )
+
+    if points.ndim != 2 or points.shape[1] != 3:
+        raise ValueError(
+            "Source points must have shape (N, 3), "
+            f"received {points.shape}."
+        )
+
+    if transform.shape != (4, 4):
+        raise ValueError(
+            "The coordinate transform must have shape (4, 4), "
+            f"received {transform.shape}."
+        )
+
+    if not np.isfinite(points).all():
+        raise ValueError(
+            "Source points must contain only finite values."
+        )
+
+    if not np.isfinite(transform).all():
+        raise ValueError(
+            "The coordinate transform must contain only finite values."
+        )
+
+    expected_last_row = np.array(
+        [0.0, 0.0, 0.0, 1.0],
+        dtype=np.float64,
+    )
+
+    if not np.allclose(
+        transform[3],
+        expected_last_row,
+        atol=1e-8,
+        rtol=0.0,
+    ):
+        raise ValueError(
+            "The coordinate transform must be a homogeneous matrix "
+            "with final row [0, 0, 0, 1]."
+        )
+
+    rotation = transform[:3, :3]
+    translation = transform[:3, 3]
+
+    if not np.allclose(
+        rotation.T @ rotation,
+        np.eye(3),
+        atol=1e-6,
+        rtol=1e-6,
+    ):
+        raise ValueError(
+            "The transform rotation must be orthonormal."
+        )
+
+    rotation_determinant = float(
+        np.linalg.det(rotation)
+    )
+
+    if not np.isclose(
+        rotation_determinant,
+        1.0,
+        atol=1e-6,
+        rtol=1e-6,
+    ):
+        raise ValueError(
+            "The transform rotation must have determinant +1."
+        )
+
+    transformed_points = (
+        points @ rotation.T
+        + translation
+    )
+
+    return np.ascontiguousarray(
+        transformed_points,
+        dtype=np.float32,
+    )
