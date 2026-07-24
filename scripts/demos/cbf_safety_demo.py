@@ -1,22 +1,50 @@
-"""Validate the CBF LiDAR perception pipeline without robot motion.
+"""Validate the LiDAR-based CBF safety pipeline in three stages.
 
-This demo:
+This demo loads the restaurant scene, creates a temporary static obstacle
+ahead of Nova Carter, and validates the complete perception-to-control
+pipeline.
 
-1. Loads the restaurant robot scene.
-2. Creates a temporary static obstacle ahead of Nova Carter.
-3. Keeps the robot stationary.
-4. Captures one PandarXT-32 scan.
-5. Transforms the scan into the chassis frame.
-6. Extracts obstacle points.
-7. Prints a detailed coordinate-frame report.
+Stage A -- LiDAR perception and coordinate frames:
+
+1. Keeps the robot stationary.
+2. Captures a PandarXT-32 LiDAR scan.
+3. Transforms the point cloud from the sensor frame to the chassis frame.
+4. Removes irrelevant points and extracts nearby obstacle points.
+5. Validates the test obstacle inside the forward-center corridor.
+6. Reports coordinate transforms, height filtering, and obstacle geometry.
+
+Stage B -- stationary CBF dry run:
+
+1. Passes the detected obstacle points to the CBF safety filter.
+2. Evaluates a nominal straight-line command without moving the robot.
+3. Reports the safe command, barrier value, admissible velocity interval,
+   intervention state, constraint feasibility, and emergency-stop state.
+
+Stage C -- controlled motion test:
+
+1. Commands the robot to drive straight toward the test obstacle.
+2. Processes new LiDAR frames while the robot moves.
+3. Recomputes the obstacle points and CBF-safe velocity for every new scan.
+4. Applies the latest safe command while the LiDAR data remains fresh.
+5. Demonstrates progressive CBF intervention near the safety boundary.
+6. Stops automatically when the filtered velocity reaches the configured
+   threshold, the LiDAR becomes stale, obstacle detection fails, the CBF
+   becomes infeasible, or the maximum test duration is reached.
+
+The test obstacle is authored only in the USD session layer and does not
+modify the saved restaurant scene. This baseline CBF changes only linear
+velocity; the Stage C nominal angular velocity is zero.
 
 Run from the project root:
 
     python -u scripts/demos/cbf_safety_demo.py
+
+Press Play in Isaac Sim when requested.
 """
 
 import sys
 import traceback
+import math
 from pathlib import Path
 
 
@@ -120,6 +148,19 @@ CBF_ALPHA = 1.0
 NOMINAL_LINEAR_VELOCITY = 0.20
 NOMINAL_ANGULAR_VELOCITY = 0.0
 
+MOTION_START_DELAY_STEPS = 120
+MOTION_TEST_DURATION_SECONDS = 8.0
+MAXIMUM_STALE_SCAN_SECONDS = 0.25
+STOP_SPEED_THRESHOLD = 0.01
+
+MAXIMUM_MOTION_STEPS = math.ceil(
+    MOTION_TEST_DURATION_SECONDS / PHYSICS_DT
+)
+
+MAXIMUM_STALE_SCAN_STEPS = math.ceil(
+    MAXIMUM_STALE_SCAN_SECONDS / PHYSICS_DT
+)
+
 
 def get_prim_world_transform(
     stage: Usd.Stage,
@@ -144,6 +185,34 @@ def get_prim_world_transform(
     return xformable.ComputeLocalToWorldTransform(
         Usd.TimeCode.Default()
     )
+
+def get_nearest_center_distance(
+    obstacle_points: np.ndarray,
+) -> float:
+    """Return the nearest obstacle inside the forward-center corridor."""
+
+    center_mask = (
+        (obstacle_points[:, 0] > 0.0)
+        & (
+            np.abs(obstacle_points[:, 1])
+            <= CENTER_CORRIDOR_HALF_WIDTH
+        )
+    )
+
+    center_points = obstacle_points[center_mask]
+
+    if center_points.shape[0] == 0:
+        return math.inf
+
+    return float(
+        np.min(
+            np.linalg.norm(
+                center_points,
+                axis=1,
+            )
+        )
+    )
+
 
 
 def create_test_obstacle(
@@ -284,6 +353,212 @@ def estimate_floor_height_in_robot_frame(
     )
 
     return float(ground_point_robot[2])
+
+
+def run_cbf_motion_test(
+    *,
+    lidar: NovaCarterLidar,
+    controller: NovaCarterController,
+    safety_filter: CBFSafetyFilter,
+    detection_config: ObstacleDetectionConfig,
+    robot_from_lidar: np.ndarray,
+    initial_obstacle_points: np.ndarray,
+    initial_result: CBFResult,
+    initial_frame_info: LidarFrameInfo,
+) -> None:
+    """Move forward while applying commands from new LiDAR scans."""
+
+    latest_result = initial_result
+    latest_frame_id = initial_frame_info.sensor_frame_id
+
+    steps_since_new_scan = 0
+    completed_steps = 0
+    received_scan_count = 0
+
+    intervention_seen = initial_result.intervention_active
+    minimum_center_distance = get_nearest_center_distance(
+        initial_obstacle_points
+    )
+
+    termination_reason = "Maximum test duration reached."
+
+    print("\n" + "=" * 70)
+    print("CBF STAGE C CONTROLLED MOTION TEST")
+    print("=" * 70)
+    print(f"Nominal velocity: {NOMINAL_LINEAR_VELOCITY:.3f} m/s")
+    print(f"Maximum duration: {MOTION_TEST_DURATION_SECONDS:.1f} s")
+    print(
+        "Maximum LiDAR age: "
+        f"{MAXIMUM_STALE_SCAN_SECONDS:.2f} s"
+    )
+    print(
+        "Automatic stop threshold: "
+        f"{STOP_SPEED_THRESHOLD:.3f} m/s"
+    )
+    print("\nLive scan results:")
+
+    while (
+        completed_steps < MAXIMUM_MOTION_STEPS
+        and simulation_app.is_running()
+    ):
+        if not app_utils.is_playing():
+            controller.stop()
+            simulation_app.update()
+            continue
+
+        steps_since_new_scan += 1
+
+        try:
+            points_sensor_frame = lidar.get_point_cloud()
+            current_frame_info = lidar.get_frame_info()
+        except RuntimeError as error:
+            is_transient_error = any(
+                message in str(error)
+                for message in TRANSIENT_LIDAR_ERRORS
+            )
+
+            if not is_transient_error:
+                raise
+        else:
+            is_new_frame = (
+                current_frame_info.sensor_frame_id
+                != latest_frame_id
+            )
+
+            if is_new_frame:
+                points_robot_frame = transform_points(
+                    points_sensor_frame,
+                    robot_from_lidar,
+                )
+
+                obstacle_points = detect_obstacle_points(
+                    points_robot_frame,
+                    detection_config,
+                )
+
+                if obstacle_points.shape[0] == 0:
+                    termination_reason = (
+                        "No obstacle points were detected. "
+                        "Fail-closed stop applied."
+                    )
+                    break
+
+                latest_result = safety_filter.filter_command(
+                    nominal_linear_velocity=(
+                        NOMINAL_LINEAR_VELOCITY
+                    ),
+                    nominal_angular_velocity=(
+                        NOMINAL_ANGULAR_VELOCITY
+                    ),
+                    obstacle_points_xy=obstacle_points,
+                )
+
+                latest_frame_id = (
+                    current_frame_info.sensor_frame_id
+                )
+                steps_since_new_scan = 0
+                received_scan_count += 1
+
+                center_distance = (
+                    get_nearest_center_distance(
+                        obstacle_points
+                    )
+                )
+
+                minimum_center_distance = min(
+                    minimum_center_distance,
+                    center_distance,
+                )
+
+                intervention_seen = (
+                    intervention_seen
+                    or latest_result.intervention_active
+                )
+
+                center_text = (
+                    f"{center_distance:.3f}"
+                    if math.isfinite(center_distance)
+                    else "none"
+                )
+
+                print(
+                    f"  frame={latest_frame_id:<4} "
+                    f"center={center_text:>5} m  "
+                    f"safe_v={latest_result.safe_linear_velocity:.3f} "
+                    f"max_v={latest_result.admissible_linear_velocity_maximum:.3f} "
+                    f"intervention={latest_result.intervention_active}"
+                )
+
+        if (
+            steps_since_new_scan
+            >= MAXIMUM_STALE_SCAN_STEPS
+        ):
+            termination_reason = (
+                "LiDAR data became stale. "
+                "Fail-closed stop applied."
+            )
+            break
+
+        if latest_result.obstacle_count == 0:
+            termination_reason = (
+                "The CBF received no obstacle points. "
+                "Fail-closed stop applied."
+            )
+            break
+
+        if (
+            not latest_result.constraint_feasible
+            or latest_result.emergency_stop_active
+        ):
+            termination_reason = (
+                "The CBF requested an emergency stop."
+            )
+            break
+
+        if (
+            latest_result.intervention_active
+            and latest_result.safe_linear_velocity
+            <= STOP_SPEED_THRESHOLD
+        ):
+            termination_reason = (
+                "Filtered velocity reached the automatic "
+                "stop threshold."
+            )
+            break
+
+        controller.apply_command(
+            latest_result.safe_linear_velocity,
+            latest_result.safe_angular_velocity,
+        )
+
+        simulation_app.update()
+        completed_steps += 1
+
+    controller.stop()
+    app_utils.update_app(steps=5)
+
+    print("\n" + "=" * 70)
+    print("CBF STAGE C RESULT")
+    print("=" * 70)
+    print(f"Reason: {termination_reason}")
+    print(f"Completed physics steps: {completed_steps}")
+    print(f"New LiDAR frames:        {received_scan_count}")
+    print(f"Intervention observed:   {intervention_seen}")
+
+    if math.isfinite(minimum_center_distance):
+        print(
+            "Minimum center distance: "
+            f"{minimum_center_distance:.4f} m"
+        )
+    else:
+        print("Minimum center distance: unavailable")
+
+    print(
+        "Final filtered velocity: "
+        f"{latest_result.safe_linear_velocity:.4f} m/s"
+    )
+    print(f"Emergency stop: {latest_result.emergency_stop_active}")
+    print("=" * 70)
 
 
 def wait_for_first_scan(
@@ -753,6 +1028,30 @@ def main() -> None:
     print_cbf_dry_run_report(
         result=cbf_result,
         config=cbf_config,
+    )
+
+    print(
+        "\nStage C motion begins after "
+        f"{MOTION_START_DELAY_STEPS * PHYSICS_DT:.1f} "
+        "simulation seconds..."
+    )
+
+    if not advance_playing_steps(
+        simulation_app,
+        physics_steps=MOTION_START_DELAY_STEPS,
+        on_step=controller.stop,
+    ):
+        return
+
+    run_cbf_motion_test(
+        lidar=lidar,
+        controller=controller,
+        safety_filter=safety_filter,
+        detection_config=detection_config,
+        robot_from_lidar=robot_from_lidar,
+        initial_obstacle_points=obstacle_points,
+        initial_result=cbf_result,
+        initial_frame_info=frame_info,
     )
 
     controller.stop()
