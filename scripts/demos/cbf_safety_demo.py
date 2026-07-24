@@ -58,6 +58,11 @@ from robot.safety.obstacle_detection import (
     ObstacleDetectionConfig,
     detect_obstacle_points,
 )
+from robot.safety.cbf_filter import (
+    CBFConfig,
+    CBFResult,
+    CBFSafetyFilter,
+)
 from robot.scene.loader import load_robot_scene
 from robot.scene.transforms import (
     compute_relative_prim_transform,
@@ -106,6 +111,14 @@ Z_PERCENTILES = (
     99,
     100,
 )
+
+CENTER_CORRIDOR_HALF_WIDTH = 0.35
+
+CBF_SAFETY_RADIUS = 0.80
+CBF_ALPHA = 1.0
+
+NOMINAL_LINEAR_VELOCITY = 0.20
+NOMINAL_ANGULAR_VELOCITY = 0.0
 
 
 def get_prim_world_transform(
@@ -324,6 +337,73 @@ def wait_for_first_scan(
         f"{MAXIMUM_SCAN_WAIT_STEPS} rendered updates."
         f"{detail}"
     )
+
+def print_cbf_dry_run_report(
+    result: CBFResult,
+    config: CBFConfig,
+) -> None:
+    """Print the result of evaluating the CBF without moving the robot."""
+
+    clearance = result.minimum_obstacle_distance - config.safety_radius
+
+    print()
+    print("=" * 70)
+    print("CBF STAGE B DRY-RUN REPORT")
+    print("=" * 70)
+
+    print("\nCBF configuration:")
+    print(f"  Safety radius: {config.safety_radius:.3f} m")
+    print(f"  Alpha:         {config.alpha:.3f}")
+
+    print("\nNominal command:")
+    print(f"  Linear velocity:  {result.nominal_linear_velocity:.3f} m/s")
+    print(f"  Angular velocity: {result.nominal_angular_velocity:.3f} rad/s")
+
+    print("\nFiltered command:")
+    print(f"  Linear velocity:  {result.safe_linear_velocity:.3f} m/s")
+    print(f"  Angular velocity: {result.safe_angular_velocity:.3f} rad/s")
+
+    print("\nObstacle information:")
+    print(f"  Obstacle count:          {result.obstacle_count}")
+    print(
+        "  Minimum distance:       "
+        f"{result.minimum_obstacle_distance:.4f} m"
+    )
+    print(f"  Safety-radius clearance: {clearance:.4f} m")
+    print(
+        "  Minimum barrier value:  "
+        f"{result.minimum_barrier_value:.4f}"
+    )
+
+    print("\nAdmissible linear-velocity interval:")
+    print(
+        f"  [{result.admissible_linear_velocity_minimum:.4f}, "
+        f"{result.admissible_linear_velocity_maximum:.4f}] m/s"
+    )
+
+    print("\nFilter status:")
+    print(f"  Constraint feasible: {result.constraint_feasible}")
+    print(f"  Intervention active: {result.intervention_active}")
+    print(f"  Emergency stop:      {result.emergency_stop_active}")
+
+    print("\nInterpretation:")
+
+    if result.obstacle_count == 0:
+        print("  [WARNING] The CBF received no obstacle points.")
+    elif not result.constraint_feasible:
+        print("  [WARNING] The CBF constraints are infeasible.")
+    elif result.emergency_stop_active:
+        print("  [WARNING] The filter requested an emergency stop.")
+    elif result.intervention_active:
+        print("  [INFO] The CBF modified the nominal command.")
+        print("  Inspect the admissible velocity and obstacle geometry.")
+    else:
+        print("  [PASS] The nominal command is currently considered safe.")
+        print("  The CBF passed it through without modification.")
+
+    print("\nThe command above is diagnostic only.")
+    print("The robot will remain stationary during Stage B.")
+    print("=" * 70)
 
 
 def print_validation_report(
@@ -653,6 +733,26 @@ def main() -> None:
         frame_info=frame_info,
         floor_height_robot=floor_height_robot,
         scan_wait_steps=scan_wait_steps,
+    )
+
+    cbf_config = CBFConfig(
+        safety_radius=CBF_SAFETY_RADIUS,
+        alpha=CBF_ALPHA,
+        minimum_linear_velocity=0.0,
+        maximum_linear_velocity=controller.config.max_linear_speed,
+    )
+
+    safety_filter = CBFSafetyFilter(cbf_config)
+
+    cbf_result = safety_filter.filter_command(
+        nominal_linear_velocity=NOMINAL_LINEAR_VELOCITY,
+        nominal_angular_velocity=NOMINAL_ANGULAR_VELOCITY,
+        obstacle_points_xy=obstacle_points,
+    )
+
+    print_cbf_dry_run_report(
+        result=cbf_result,
+        config=cbf_config,
     )
 
     controller.stop()
