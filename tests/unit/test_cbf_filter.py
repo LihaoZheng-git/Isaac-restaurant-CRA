@@ -188,3 +188,127 @@ def test_invalid_cbf_configuration_is_rejected(
             safety_radius=safety_radius,
             alpha=alpha,
         )
+
+
+def test_omitted_velocities_equal_explicit_zero_velocities() -> None:
+    safety_filter = make_filter()
+    points = np.array([[1.0, 0.0], [1.5, 0.2]])
+
+    omitted_result = safety_filter.filter_command(
+        nominal_linear_velocity=0.25,
+        nominal_angular_velocity=0.1,
+        obstacle_points_xy=points,
+    )
+
+    zero_result = safety_filter.filter_command(
+        nominal_linear_velocity=0.25,
+        nominal_angular_velocity=0.1,
+        obstacle_points_xy=points,
+        obstacle_velocities_xy=np.zeros_like(points),
+    )
+
+    assert omitted_result == zero_result
+
+
+def test_approaching_obstacle_reduces_velocity_earlier() -> None:
+    safety_filter = make_filter()
+
+    result = safety_filter.filter_command(
+        nominal_linear_velocity=0.25,
+        nominal_angular_velocity=0.0,
+        obstacle_points_xy=np.array([[1.0, 0.0]]),
+        obstacle_velocities_xy=np.array([[-0.1, 0.0]]),
+    )
+
+    barrier = 1.0**2 - 0.8**2
+    expected_limit = (
+        2.0 * 1.0 * -0.1 + barrier
+    ) / (2.0 * 1.0)
+
+    assert result.safe_linear_velocity == pytest.approx(
+        expected_limit
+    )
+    assert result.safe_linear_velocity == pytest.approx(0.08)
+    assert result.intervention_active
+    assert result.constraint_feasible
+    assert not result.emergency_stop_active
+
+
+def test_receding_obstacle_allows_more_forward_motion() -> None:
+    safety_filter = make_filter()
+    points = np.array([[1.0, 0.0]])
+
+    stationary_result = safety_filter.filter_command(
+        nominal_linear_velocity=0.25,
+        nominal_angular_velocity=0.0,
+        obstacle_points_xy=points,
+    )
+
+    receding_result = safety_filter.filter_command(
+        nominal_linear_velocity=0.25,
+        nominal_angular_velocity=0.0,
+        obstacle_points_xy=points,
+        obstacle_velocities_xy=np.array([[0.1, 0.0]]),
+    )
+
+    assert (
+        receding_result.admissible_linear_velocity_maximum
+        > stationary_result.admissible_linear_velocity_maximum
+    )
+    assert receding_result.safe_linear_velocity == pytest.approx(0.25)
+    assert not receding_result.intervention_active
+
+
+def test_approaching_lateral_obstacle_can_be_infeasible() -> None:
+    safety_filter = make_filter()
+
+    result = safety_filter.filter_command(
+        nominal_linear_velocity=0.2,
+        nominal_angular_velocity=0.0,
+        obstacle_points_xy=np.array([[0.0, 0.9]]),
+        obstacle_velocities_xy=np.array([[0.0, -0.2]]),
+    )
+
+    assert not result.constraint_feasible
+    assert result.safe_linear_velocity == pytest.approx(0.0)
+    assert result.intervention_active
+    assert result.emergency_stop_active
+
+
+def test_mismatched_obstacle_velocity_shape_is_rejected() -> None:
+    safety_filter = make_filter()
+
+    with pytest.raises(ValueError, match="same shape"):
+        safety_filter.filter_command(
+            nominal_linear_velocity=0.2,
+            nominal_angular_velocity=0.0,
+            obstacle_points_xy=np.zeros((2, 2)),
+            obstacle_velocities_xy=np.zeros((1, 2)),
+        )
+
+
+def test_nonfinite_obstacle_velocity_is_rejected() -> None:
+    safety_filter = make_filter()
+
+    with pytest.raises(ValueError, match="finite"):
+        safety_filter.filter_command(
+            nominal_linear_velocity=0.2,
+            nominal_angular_velocity=0.0,
+            obstacle_points_xy=np.array([[1.0, 0.0]]),
+            obstacle_velocities_xy=np.array([[np.nan, 0.0]]),
+        )
+
+
+def test_explicit_empty_obstacle_velocities_are_valid() -> None:
+    safety_filter = make_filter()
+
+    result = safety_filter.filter_command(
+        nominal_linear_velocity=0.2,
+        nominal_angular_velocity=0.0,
+        obstacle_points_xy=np.empty((0, 2)),
+        obstacle_velocities_xy=np.empty((0, 2)),
+    )
+
+    assert result.obstacle_count == 0
+    assert result.safe_linear_velocity == pytest.approx(0.2)
+    assert result.constraint_feasible
