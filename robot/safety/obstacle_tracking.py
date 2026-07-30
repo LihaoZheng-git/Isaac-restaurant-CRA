@@ -28,6 +28,7 @@ class ObstacleTrackerConfig:
     minimum_cluster_points: int = 2
     maximum_association_distance: float = 0.50
     velocity_smoothing_factor: float = 0.50
+    stationary_speed_threshold: float = 0.0
     maximum_missed_updates: int = 3
     minimum_time_delta: float = 1e-6
 
@@ -76,6 +77,18 @@ class ObstacleTrackerConfig:
         ):
             raise ValueError(
                 "velocity_smoothing_factor must be in (0, 1]."
+            )
+
+        if not math.isfinite(
+            self.stationary_speed_threshold
+        ):
+            raise ValueError(
+                "stationary_speed_threshold must be finite."
+            )
+
+        if self.stationary_speed_threshold < 0.0:
+            raise ValueError(
+                "stationary_speed_threshold cannot be negative."
             )
 
         if (
@@ -502,6 +515,22 @@ class ObstacleTracker:
                 smoothing * measured_velocity
                 + (1.0 - smoothing)
                 * previous_track.velocity_world_xy
+            )
+
+        estimated_speed = float(
+            np.linalg.norm(filtered_velocity)
+        )
+
+        if (
+            estimated_speed
+            <= self.config.stationary_speed_threshold
+        ):
+            # Small centroid changes commonly come from angular binning,
+            # changing visible surfaces, and pose/scan timing differences.
+            # Treat them as stationary when the caller enables a deadband.
+            filtered_velocity = np.zeros(
+                2,
+                dtype=np.float64,
             )
 
         return _TrackState(

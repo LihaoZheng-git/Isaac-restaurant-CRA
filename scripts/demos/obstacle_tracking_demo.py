@@ -133,6 +133,7 @@ TRACKER_CLUSTER_RADIUS = 0.35
 TRACKER_MINIMUM_CLUSTER_POINTS = 2
 TRACKER_MAXIMUM_ASSOCIATION_DISTANCE = 0.60
 TRACKER_VELOCITY_SMOOTHING_FACTOR = 0.35
+TRACKER_STATIONARY_SPEED_THRESHOLD = 0.20
 TRACKER_MAXIMUM_MISSED_UPDATES = 3
 
 SETTLE_STEPS = 60
@@ -731,6 +732,10 @@ def run_tracking_experiment(
         "Post-stop observation: "
         f"{POST_STOP_OBSERVATION_SECONDS:.2f} s"
     )
+    print(
+        "Stationary-speed deadband: "
+        f"{TRACKER_STATIONARY_SPEED_THRESHOLD:.3f} m/s"
+    )
     print("\nLive status:")
 
     while (
@@ -1177,6 +1182,9 @@ def main() -> None:
             ),
             velocity_smoothing_factor=(
                 TRACKER_VELOCITY_SMOOTHING_FACTOR
+            ),
+            stationary_speed_threshold=(
+                TRACKER_STATIONARY_SPEED_THRESHOLD
             ),
             maximum_missed_updates=(
                 TRACKER_MAXIMUM_MISSED_UPDATES

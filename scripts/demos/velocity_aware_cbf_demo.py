@@ -1,4 +1,4 @@
-"""Compare static and velocity-aware CBFs against a crossing obstacle.
+"""Compare static, oracle, and tracked velocity-aware CBF behavior.
 
 This controlled Isaac Sim demo uses a session-only visual cube as a moving
 obstacle. The proxy does not have a physics collider: it is intended to test
@@ -9,11 +9,15 @@ Scenario:
 1. Nova Carter starts near world position (26.50, 5.00).
 2. Its nominal waypoint is at approximately (29.00, 5.00).
 3. A proxy obstacle moves at fixed X=28.20 from Y=7.00 to Y=4.00.
-4. Static and velocity-aware CBFs evaluate the same LiDAR observations.
+4. Static, oracle velocity-aware, and tracked velocity-aware CBFs evaluate
+   the same LiDAR observations and nominal command.
 5. Known proxy velocity is assigned only to LiDAR points associated with the
-   proxy; background points remain stationary.
-6. The velocity-aware command controls the robot.
-7. The demo compares intervention timing and reports safety and route metrics.
+   proxy for the oracle comparison.
+6. ``ObstacleTracker`` independently estimates velocities from scan history.
+7. The oracle velocity-aware command controls the robot.
+8. The tracked result remains diagnostic and cannot affect robot motion.
+9. The demo compares velocity estimates, safe commands, intervention timing,
+   safety separation, and route completion.
 
 Expected first-run behavior:
 
@@ -25,9 +29,8 @@ Expected first-run behavior:
         -> robot continues to the waypoint
 
 The proxy trajectory and ground-truth association are experimental
-infrastructure. Known proxy velocity is intentionally used as an oracle input
-to isolate and validate the velocity-aware CBF mathematics. Velocity estimation
-from sensor history belongs in a later tracking module.
+infrastructure. Ground truth is used only by the oracle filter and evaluation
+report. It is never passed into ``ObstacleTracker``.
 
 Run from the project root:
 
@@ -107,6 +110,12 @@ from robot.safety.obstacle_detection import (
     ObstacleDetectionConfig,
     detect_obstacle_points,
 )
+from robot.safety.obstacle_tracking import (
+    ObstacleTracker,
+    ObstacleTrackerConfig,
+    ObstacleTrackingResult,
+    TrackedObstacle,
+)
 from robot.scene.loader import load_robot_scene
 from robot.scene.transforms import (
     compute_relative_prim_transform,
@@ -148,6 +157,10 @@ OBSTACLE_END_Y_WORLD = 4.00
 # proxy center at that time. The 0.30 m proxy width leaves about 0.89 m to its
 # nearest face, providing a controlled approach to the 0.80 m safety radius.
 OBSTACLE_SPEED_METERS_PER_SECOND = 0.60
+OBSTACLE_TRAJECTORY_DURATION_SECONDS = (
+    OBSTACLE_START_Y_WORLD
+    - OBSTACLE_END_Y_WORLD
+) / OBSTACLE_SPEED_METERS_PER_SECOND
 
 OBSTACLE_DIMENSIONS = (
     0.30,
@@ -168,6 +181,19 @@ CBF_ALPHA = 1.0
 GROUND_TRUTH_ABORT_DISTANCE = 0.70
 
 PROXY_ASSOCIATION_RADIUS = 0.60
+
+TRACKER_CLUSTER_RADIUS = 0.35
+TRACKER_MINIMUM_CLUSTER_POINTS = 2
+TRACKER_MAXIMUM_ASSOCIATION_DISTANCE = 0.60
+TRACKER_VELOCITY_SMOOTHING_FACTOR = 0.35
+TRACKER_STATIONARY_SPEED_THRESHOLD = 0.20
+TRACKER_MAXIMUM_MISSED_UPDATES = 3
+
+MINIMUM_TRACKED_PROXY_ESTIMATES = 10
+MAXIMUM_MEDIAN_TRACKED_VELOCITY_ERROR = 0.25
+MAXIMUM_MEDIAN_ACTIVE_COMMAND_DIFFERENCE = 0.05
+MAXIMUM_INTERVENTION_TIME_DIFFERENCE_SECONDS = 0.50
+MAXIMUM_TRACK_ID_SWITCHES = 2
 
 SETTLE_STEPS = 60
 MOTION_START_DELAY_STEPS = 120
@@ -571,12 +597,10 @@ def obstacle_velocity_world_at_time(
 ) -> np.ndarray:
     """Return the proxy's deterministic planar world-frame velocity."""
 
-    trajectory_duration = (
-        OBSTACLE_START_Y_WORLD
-        - OBSTACLE_END_Y_WORLD
-    ) / OBSTACLE_SPEED_METERS_PER_SECOND
-
-    if elapsed_seconds >= trajectory_duration:
+    if (
+        elapsed_seconds
+        >= OBSTACLE_TRAJECTORY_DURATION_SECONDS
+    ):
         return np.zeros(2, dtype=np.float64)
 
     return np.array(
@@ -719,6 +743,50 @@ def proxy_association_error(
     return float(
         np.min(errors)
     )
+
+
+def find_proxy_track(
+    tracking_result: ObstacleTrackingResult,
+    *,
+    robot_pose: RobotPose2D,
+    obstacle_position_world: np.ndarray,
+) -> tuple[TrackedObstacle | None, float]:
+    """Find the current track nearest the known proxy center.
+
+    This is evaluation-only association. The proxy center is never passed
+    into ``ObstacleTracker`` or the tracked CBF.
+    """
+
+    if not tracking_result.tracked_obstacles:
+        return None, math.inf
+
+    expected_center = obstacle_center_in_robot_frame(
+        robot_pose,
+        obstacle_position_world,
+    )
+
+    best_track: TrackedObstacle | None = None
+    best_error = math.inf
+
+    for obstacle in tracking_result.tracked_obstacles:
+        centroid_robot = np.asarray(
+            obstacle.centroid_robot_xy,
+            dtype=np.float64,
+        )
+        error = float(
+            np.linalg.norm(
+                centroid_robot - expected_center
+            )
+        )
+
+        if error < best_error:
+            best_track = obstacle
+            best_error = error
+
+    if best_error > PROXY_ASSOCIATION_RADIUS:
+        return None, best_error
+
+    return best_track, best_error
 
 
 def wait_for_first_scan(
@@ -912,7 +980,7 @@ def print_initial_report(
         f"{static_cbf_result.emergency_stop_active}"
     )
 
-    print("\nVelocity-aware CBF result:")
+    print("\nOracle velocity-aware CBF result:")
     print(
         "  Safe velocity: "
         f"{velocity_cbf_result.safe_linear_velocity:.3f} m/s"
@@ -932,7 +1000,8 @@ def print_initial_report(
 
     print(
         "\nThe robot and proxy remained stationary during this report; "
-        "the velocity-aware result uses the proxy's upcoming velocity."
+        "the oracle result uses the proxy's upcoming velocity. "
+        "The tracker starts from fresh scan history in Stage C."
     )
     print("=" * 70)
 
@@ -946,9 +1015,12 @@ def print_live_status(
     ground_truth_distance: float,
     proxy_error: float,
     velocity_point_count: int,
+    tracker_proxy_track: TrackedObstacle | None,
+    tracker_velocity_error: float,
     nominal_command: WaypointCommand,
     static_cbf_result: CBFResult,
-    velocity_cbf_result: CBFResult,
+    oracle_cbf_result: CBFResult,
+    tracked_cbf_result: CBFResult,
 ) -> None:
     """Print one compact dynamic-experiment status line."""
 
@@ -956,6 +1028,17 @@ def print_live_status(
         proxy_error
         <= PROXY_ASSOCIATION_RADIUS
     )
+
+    if tracker_proxy_track is None:
+        track_id_text = "none"
+        estimated_velocity_y_text = "none"
+    else:
+        track_id_text = str(
+            tracker_proxy_track.track_id
+        )
+        estimated_velocity_y_text = (
+            f"{tracker_proxy_track.velocity_world_xy[1]:.3f}"
+        )
 
     print(
         f"  step={completed_steps:<4} "
@@ -965,14 +1048,19 @@ def print_live_status(
         f"goal_d={nominal_command.distance_to_waypoint:.3f} "
         f"gt_d={ground_truth_distance:.3f} "
         f"lidar_d="
-        f"{format_distance(velocity_cbf_result.minimum_obstacle_distance):>5} "
+        f"{format_distance(oracle_cbf_result.minimum_obstacle_distance):>5} "
         f"proxy={str(proxy_detected):<5} "
-        f"vel_pts={velocity_point_count:<3} "
+        f"oracle_pts={velocity_point_count:<3} "
+        f"track={track_id_text:<4} "
+        f"v_est_y={estimated_velocity_y_text:>6} "
+        f"v_err={format_distance(tracker_velocity_error):>5} "
         f"v_nom={nominal_command.linear_velocity:.3f} "
         f"v_static={static_cbf_result.safe_linear_velocity:.3f} "
-        f"v_velocity={velocity_cbf_result.safe_linear_velocity:.3f} "
+        f"v_oracle={oracle_cbf_result.safe_linear_velocity:.3f} "
+        f"v_tracked={tracked_cbf_result.safe_linear_velocity:.3f} "
         f"static_i={static_cbf_result.intervention_active} "
-        f"velocity_i={velocity_cbf_result.intervention_active}"
+        f"oracle_i={oracle_cbf_result.intervention_active} "
+        f"tracked_i={tracked_cbf_result.intervention_active}"
     )
 
 
@@ -989,6 +1077,7 @@ def run_dynamic_obstacle_experiment(
     robot_controller: NovaCarterController,
     waypoint_controller: WaypointController,
     safety_filter: CBFSafetyFilter,
+    obstacle_tracker: ObstacleTracker,
     detection_config: ObstacleDetectionConfig,
     robot_from_lidar: np.ndarray,
     initial_obstacle_points: np.ndarray,
@@ -998,7 +1087,7 @@ def run_dynamic_obstacle_experiment(
     initial_static_cbf_result: CBFResult,
     initial_cbf_result: CBFResult,
 ) -> None:
-    """Run the robot under velocity-aware CBF with static comparison."""
+    """Apply oracle CBF while evaluating tracked CBF diagnostically."""
 
     completed_steps = 0
     received_scan_count = 0
@@ -1032,6 +1121,19 @@ def run_dynamic_obstacle_experiment(
         initial_static_cbf_result
     )
     latest_cbf_result = initial_cbf_result
+    latest_tracked_obstacle_velocities = (
+        np.zeros_like(
+            initial_obstacle_points,
+            dtype=np.float64,
+        )
+    )
+    latest_tracked_cbf_result = (
+        initial_static_cbf_result
+    )
+    latest_tracker_proxy_track: (
+        TrackedObstacle | None
+    ) = None
+    latest_tracker_velocity_error = math.inf
 
     latest_proxy_error = proxy_association_error(
         latest_obstacle_points,
@@ -1047,6 +1149,7 @@ def run_dynamic_obstacle_experiment(
     previous_static_intervention = (
         initial_static_cbf_result.intervention_active
     )
+    previous_tracked_intervention = False
 
     intervention_seen = (
         initial_cbf_result.intervention_active
@@ -1054,7 +1157,9 @@ def run_dynamic_obstacle_experiment(
     static_intervention_seen = (
         initial_static_cbf_result.intervention_active
     )
+    tracked_intervention_seen = False
     intervention_release_seen = False
+    tracked_intervention_release_seen = False
 
     first_intervention_step: int | None = (
         0 if intervention_seen else None
@@ -1062,7 +1167,18 @@ def run_dynamic_obstacle_experiment(
     first_static_intervention_step: int | None = (
         0 if static_intervention_seen else None
     )
+    first_tracked_intervention_step: int | None = None
     first_release_step: int | None = None
+    first_tracked_release_step: int | None = None
+
+    tracker_proxy_frame_count = 0
+    tracker_proxy_track_id_switches = 0
+    previous_tracker_proxy_track_id: int | None = None
+    tracker_infeasible_step_count = 0
+
+    tracked_velocity_errors: list[float] = []
+    active_command_differences: list[float] = []
+    background_track_speeds: list[float] = []
 
     proxy_detection_seen = (
         latest_proxy_error
@@ -1103,8 +1219,14 @@ def run_dynamic_obstacle_experiment(
         "CBF safety radius:   "
         f"{safety_filter.config.safety_radius:.3f} m"
     )
-    print("Applied controller:  velocity-aware CBF")
-    print("Comparison filter:   static CBF (diagnostic only)")
+    print(
+        "Tracker deadband:    "
+        f"{TRACKER_STATIONARY_SPEED_THRESHOLD:.3f} m/s"
+    )
+    print("Applied controller:  oracle velocity-aware CBF")
+    print("Diagnostic filter 1: static CBF")
+    print("Diagnostic filter 2: tracked velocity-aware CBF")
+    print("Tracker ground truth: evaluation only")
     print(
         "Ground-truth abort:  "
         f"{GROUND_TRUTH_ABORT_DISTANCE:.3f} m"
@@ -1225,6 +1347,113 @@ def run_dynamic_obstacle_experiment(
                     elapsed_seconds=elapsed_seconds,
                 )
 
+                tracking_result = (
+                    obstacle_tracker.update(
+                        latest_obstacle_points,
+                        robot_position_world_xy=np.array(
+                            [
+                                latest_pose.x,
+                                latest_pose.y,
+                            ],
+                            dtype=np.float64,
+                        ),
+                        robot_yaw=latest_pose.yaw,
+                        timestamp_seconds=(
+                            current_frame_info
+                            .sensor_timestamp_nanoseconds
+                            * 1e-9
+                        ),
+                    )
+                )
+                latest_tracked_obstacle_velocities = (
+                    tracking_result
+                    .point_velocities_robot_xy
+                )
+
+                (
+                    latest_tracker_proxy_track,
+                    _,
+                ) = find_proxy_track(
+                    tracking_result,
+                    robot_pose=latest_pose,
+                    obstacle_position_world=(
+                        obstacle_position_world
+                    ),
+                )
+
+                latest_tracker_velocity_error = (
+                    math.inf
+                )
+
+                if latest_tracker_proxy_track is not None:
+                    tracker_proxy_frame_count += 1
+
+                    current_track_id = (
+                        latest_tracker_proxy_track
+                        .track_id
+                    )
+
+                    if (
+                        previous_tracker_proxy_track_id
+                        is not None
+                        and current_track_id
+                        != previous_tracker_proxy_track_id
+                    ):
+                        tracker_proxy_track_id_switches += 1
+
+                    previous_tracker_proxy_track_id = (
+                        current_track_id
+                    )
+
+                    estimated_velocity_world = np.asarray(
+                        latest_tracker_proxy_track
+                        .velocity_world_xy,
+                        dtype=np.float64,
+                    )
+                    expected_velocity_world = (
+                        obstacle_velocity_world_at_time(
+                            elapsed_seconds
+                        )
+                    )
+                    latest_tracker_velocity_error = float(
+                        np.linalg.norm(
+                            estimated_velocity_world
+                            - expected_velocity_world
+                        )
+                    )
+
+                    if (
+                        elapsed_seconds >= 0.20
+                        and elapsed_seconds
+                        < (
+                            OBSTACLE_TRAJECTORY_DURATION_SECONDS
+                        )
+                        and (
+                            latest_tracker_proxy_track
+                            .observation_count
+                            >= 2
+                        )
+                    ):
+                        tracked_velocity_errors.append(
+                            latest_tracker_velocity_error
+                        )
+
+                    for tracked_obstacle in (
+                        tracking_result.tracked_obstacles
+                    ):
+                        if (
+                            tracked_obstacle.track_id
+                            == current_track_id
+                        ):
+                            continue
+
+                        background_track_speeds.append(
+                            math.hypot(
+                                *tracked_obstacle
+                                .velocity_world_xy
+                            )
+                        )
+
                 minimum_proxy_error = min(
                     minimum_proxy_error,
                     latest_proxy_error,
@@ -1247,9 +1476,8 @@ def run_dynamic_obstacle_experiment(
             )
             break
 
-        # Both filters receive the same positions and nominal command.
-        # The static result is diagnostic only. The applied filter additionally
-        # receives oracle velocity for proxy-associated points.
+        # All filters receive the same positions and nominal command. Only the
+        # oracle result is applied to the robot during this validation stage.
         latest_static_cbf_result = (
             safety_filter.filter_command(
                 nominal_linear_velocity=(
@@ -1280,6 +1508,53 @@ def run_dynamic_obstacle_experiment(
                 ),
             )
         )
+
+        latest_tracked_cbf_result = (
+            safety_filter.filter_command(
+                nominal_linear_velocity=(
+                    latest_nominal_command.linear_velocity
+                ),
+                nominal_angular_velocity=(
+                    latest_nominal_command.angular_velocity
+                ),
+                obstacle_points_xy=(
+                    latest_obstacle_points
+                ),
+                obstacle_velocities_xy=(
+                    latest_tracked_obstacle_velocities
+                ),
+            )
+        )
+
+        if (
+            not latest_tracked_cbf_result.constraint_feasible
+            or (
+                latest_tracked_cbf_result
+                .emergency_stop_active
+            )
+        ):
+            tracker_infeasible_step_count += 1
+
+        if (
+            elapsed_seconds
+            < OBSTACLE_TRAJECTORY_DURATION_SECONDS
+            and (
+                latest_cbf_result.intervention_active
+                or (
+                    latest_tracked_cbf_result
+                    .intervention_active
+                )
+            )
+        ):
+            active_command_differences.append(
+                abs(
+                    latest_cbf_result.safe_linear_velocity
+                    - (
+                        latest_tracked_cbf_result
+                        .safe_linear_velocity
+                    )
+                )
+            )
 
         ground_truth_distance = (
             distance_to_obstacle_surface(
@@ -1321,6 +1596,15 @@ def run_dynamic_obstacle_experiment(
                 completed_steps
             )
 
+        if (
+            latest_tracked_cbf_result.intervention_active
+            and not tracked_intervention_seen
+        ):
+            tracked_intervention_seen = True
+            first_tracked_intervention_step = (
+                completed_steps
+            )
+
         intervention_released_now = (
             intervention_seen
             and previous_intervention
@@ -1334,6 +1618,23 @@ def run_dynamic_obstacle_experiment(
 
             if first_release_step is None:
                 first_release_step = (
+                    completed_steps
+                )
+
+        tracked_intervention_released_now = (
+            tracked_intervention_seen
+            and previous_tracked_intervention
+            and not (
+                latest_tracked_cbf_result
+                .intervention_active
+            )
+        )
+
+        if tracked_intervention_released_now:
+            tracked_intervention_release_seen = True
+
+            if first_tracked_release_step is None:
+                first_tracked_release_step = (
                     completed_steps
                 )
 
@@ -1384,6 +1685,10 @@ def run_dynamic_obstacle_experiment(
                 latest_static_cbf_result.intervention_active
                 != previous_static_intervention
             )
+            or (
+                latest_tracked_cbf_result.intervention_active
+                != previous_tracked_intervention
+            )
             or proxy_crossed_now
             or proxy_finished_now
             or emergency_stop
@@ -1405,13 +1710,22 @@ def run_dynamic_obstacle_experiment(
                 velocity_point_count=(
                     latest_velocity_point_count
                 ),
+                tracker_proxy_track=(
+                    latest_tracker_proxy_track
+                ),
+                tracker_velocity_error=(
+                    latest_tracker_velocity_error
+                ),
                 nominal_command=(
                     latest_nominal_command
                 ),
                 static_cbf_result=(
                     latest_static_cbf_result
                 ),
-                velocity_cbf_result=latest_cbf_result,
+                oracle_cbf_result=latest_cbf_result,
+                tracked_cbf_result=(
+                    latest_tracked_cbf_result
+                ),
             )
 
         if emergency_stop:
@@ -1439,6 +1753,9 @@ def run_dynamic_obstacle_experiment(
         previous_static_intervention = (
             latest_static_cbf_result.intervention_active
         )
+        previous_tracked_intervention = (
+            latest_tracked_cbf_result.intervention_active
+        )
 
         simulation_app.update()
         completed_steps += 1
@@ -1454,6 +1771,79 @@ def run_dynamic_obstacle_experiment(
             )
         )
 
+    median_tracked_velocity_error = (
+        float(np.median(tracked_velocity_errors))
+        if tracked_velocity_errors
+        else math.inf
+    )
+    median_active_command_difference = (
+        float(np.median(active_command_differences))
+        if active_command_differences
+        else math.inf
+    )
+    maximum_active_command_difference = (
+        max(active_command_differences)
+        if active_command_differences
+        else math.inf
+    )
+    median_background_track_speed = (
+        float(np.median(background_track_speeds))
+        if background_track_speeds
+        else math.inf
+    )
+
+    if (
+        first_intervention_step is not None
+        and first_tracked_intervention_step is not None
+    ):
+        intervention_time_difference = (
+            abs(
+                first_tracked_intervention_step
+                - first_intervention_step
+            )
+            * PHYSICS_DT
+        )
+    else:
+        intervention_time_difference = math.inf
+
+    enough_tracked_estimates = (
+        len(tracked_velocity_errors)
+        >= MINIMUM_TRACKED_PROXY_ESTIMATES
+    )
+    tracked_velocity_accuracy_passed = (
+        median_tracked_velocity_error
+        <= MAXIMUM_MEDIAN_TRACKED_VELOCITY_ERROR
+    )
+    command_agreement_passed = (
+        median_active_command_difference
+        <= MAXIMUM_MEDIAN_ACTIVE_COMMAND_DIFFERENCE
+    )
+    intervention_timing_passed = (
+        intervention_time_difference
+        <= MAXIMUM_INTERVENTION_TIME_DIFFERENCE_SECONDS
+    )
+    tracker_identity_passed = (
+        tracker_proxy_track_id_switches
+        <= MAXIMUM_TRACK_ID_SWITCHES
+    )
+    tracked_sequence_passed = (
+        tracked_intervention_seen
+        and tracked_intervention_release_seen
+    )
+    tracked_feasibility_passed = (
+        tracker_infeasible_step_count == 0
+    )
+
+    tracker_diagnostic_passed = (
+        enough_tracked_estimates
+        and tracked_velocity_accuracy_passed
+        and command_agreement_passed
+        and intervention_timing_passed
+        and tracker_identity_passed
+        and tracked_sequence_passed
+        and tracked_feasibility_passed
+    )
+
     print("\n" + "=" * 70)
     print("VELOCITY-AWARE CBF COMPARISON RESULT")
     print("=" * 70)
@@ -1466,24 +1856,40 @@ def run_dynamic_obstacle_experiment(
         f"{proxy_detection_seen}"
     )
     print(
-        "Velocity-aware intervention seen: "
+        "Oracle intervention seen:        "
         f"{intervention_seen}"
     )
     print(
-        "Velocity-aware release seen:      "
+        "Oracle release seen:             "
         f"{intervention_release_seen}"
     )
     print(
-        "Static intervention seen:         "
+        "Tracked intervention seen:       "
+        f"{tracked_intervention_seen}"
+    )
+    print(
+        "Tracked release seen:            "
+        f"{tracked_intervention_release_seen}"
+    )
+    print(
+        "Static intervention seen:        "
         f"{static_intervention_seen}"
     )
 
     if first_intervention_step is None:
-        print("First velocity-aware intervention: none")
+        print("First oracle intervention step:   none")
     else:
         print(
-            "First velocity-aware intervention: "
+            "First oracle intervention step:   "
             f"{first_intervention_step}"
+        )
+
+    if first_tracked_intervention_step is None:
+        print("First tracked intervention step:  none")
+    else:
+        print(
+            "First tracked intervention step:  "
+            f"{first_tracked_intervention_step}"
         )
 
     if first_static_intervention_step is None:
@@ -1504,16 +1910,24 @@ def run_dynamic_obstacle_experiment(
     )
 
     print(
-        "Velocity-aware intervened earlier: "
+        "Oracle intervened before static:  "
         f"{velocity_intervened_earlier}"
     )
 
     if first_release_step is None:
-        print("First release step:       none")
+        print("First oracle release step:        none")
     else:
         print(
-            "First release step:       "
+            "First oracle release step:        "
             f"{first_release_step}"
+        )
+
+    if first_tracked_release_step is None:
+        print("First tracked release step:       none")
+    else:
+        print(
+            "First tracked release step:       "
+            f"{first_tracked_release_step}"
         )
 
     print(
@@ -1537,6 +1951,78 @@ def run_dynamic_obstacle_experiment(
         f"{waypoint_controller.route_complete}"
     )
 
+    print("\nTracker diagnostic:")
+    print(
+        "  Proxy-track frames:             "
+        f"{tracker_proxy_frame_count}"
+    )
+    print(
+        "  Moving velocity estimates:      "
+        f"{len(tracked_velocity_errors)}"
+    )
+    print(
+        "  Proxy track-ID switches:        "
+        f"{tracker_proxy_track_id_switches}"
+    )
+    print(
+        "  Median proxy velocity error:    "
+        f"{format_distance(median_tracked_velocity_error)} m/s"
+    )
+    print(
+        "  Median background-track speed:  "
+        f"{format_distance(median_background_track_speed)} m/s"
+    )
+    print(
+        "  Median active command difference:"
+        f" {format_distance(median_active_command_difference)} m/s"
+    )
+    print(
+        "  Maximum active command difference:"
+        f" {format_distance(maximum_active_command_difference)} m/s"
+    )
+    print(
+        "  Intervention-time difference:   "
+        f"{format_distance(intervention_time_difference)} s"
+    )
+    print(
+        "  Tracked-CBF infeasible steps:   "
+        f"{tracker_infeasible_step_count}"
+    )
+
+    print("\nTracker checks:")
+    print(
+        "  Enough velocity estimates: "
+        f"{enough_tracked_estimates}"
+    )
+    print(
+        "  Velocity accuracy:         "
+        f"{tracked_velocity_accuracy_passed}"
+    )
+    print(
+        "  Safe-command agreement:    "
+        f"{command_agreement_passed}"
+    )
+    print(
+        "  Intervention timing:       "
+        f"{intervention_timing_passed}"
+    )
+    print(
+        "  Track identity stable:     "
+        f"{tracker_identity_passed}"
+    )
+    print(
+        "  Intervention/release seen: "
+        f"{tracked_sequence_passed}"
+    )
+    print(
+        "  Tracked constraints feasible:"
+        f" {tracked_feasibility_passed}"
+    )
+    print(
+        "  Tracker diagnostic passed: "
+        f"{tracker_diagnostic_passed}"
+    )
+
     print("\nFinal robot pose:")
     print(f"  x:   {latest_pose.x:.4f} m")
     print(f"  y:   {latest_pose.y:.4f} m")
@@ -1549,7 +2035,7 @@ def run_dynamic_obstacle_experiment(
 
     if safety_boundary_violated:
         print(
-            "  [FAIL] The velocity-aware CBF did not "
+            "  [FAIL] The applied oracle CBF did not "
             "maintain the ground-truth safety radius against the "
             "moving obstacle."
         )
@@ -1558,18 +2044,30 @@ def run_dynamic_obstacle_experiment(
         and intervention_seen
         and intervention_release_seen
         and velocity_intervened_earlier
+        and tracker_diagnostic_passed
     ):
         print(
-            "  [PASS] The velocity-aware CBF intervened before the "
-            "static comparison, released after the proxy cleared, "
-            "and completed the route."
+            "  [PASS] Oracle control completed safely, and the tracked "
+            "CBF matched its velocity, command, intervention, and "
+            "release behavior closely enough for tracked-control testing."
+        )
+    elif (
+        waypoint_controller.route_complete
+        and intervention_seen
+        and intervention_release_seen
+        and velocity_intervened_earlier
+    ):
+        print(
+            "  [ORACLE PASS / TRACKER REVIEW] Applied oracle control "
+            "completed safely, but one or more tracker diagnostics did "
+            "not pass. Do not switch control sources yet."
         )
     elif (
         intervention_seen
         and not waypoint_controller.route_complete
     ):
         print(
-            "  [PARTIAL] The velocity-aware CBF intervened safely, "
+            "  [PARTIAL] The applied oracle CBF intervened safely, "
             "but the route "
             "did not complete. Inspect the termination reason."
         )
@@ -1754,6 +2252,27 @@ def main() -> None:
         )
     )
 
+    obstacle_tracker = ObstacleTracker(
+        ObstacleTrackerConfig(
+            cluster_radius=TRACKER_CLUSTER_RADIUS,
+            minimum_cluster_points=(
+                TRACKER_MINIMUM_CLUSTER_POINTS
+            ),
+            maximum_association_distance=(
+                TRACKER_MAXIMUM_ASSOCIATION_DISTANCE
+            ),
+            velocity_smoothing_factor=(
+                TRACKER_VELOCITY_SMOOTHING_FACTOR
+            ),
+            stationary_speed_threshold=(
+                TRACKER_STATIONARY_SPEED_THRESHOLD
+            ),
+            maximum_missed_updates=(
+                TRACKER_MAXIMUM_MISSED_UPDATES
+            ),
+        )
+    )
+
     initial_nominal_command = (
         waypoint_controller.compute_command(
             initial_pose
@@ -1859,6 +2378,7 @@ def main() -> None:
             waypoint_controller
         ),
         safety_filter=safety_filter,
+        obstacle_tracker=obstacle_tracker,
         detection_config=detection_config,
         robot_from_lidar=robot_from_lidar,
         initial_obstacle_points=(

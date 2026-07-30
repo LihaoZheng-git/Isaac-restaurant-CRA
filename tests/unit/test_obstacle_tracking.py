@@ -277,6 +277,81 @@ def test_velocity_measurements_are_smoothed() -> None:
     )
 
 
+def test_stationary_speed_threshold_suppresses_small_jitter() -> None:
+    tracker = ObstacleTracker(
+        ObstacleTrackerConfig(
+            stationary_speed_threshold=0.20
+        )
+    )
+
+    tracker.update(
+        make_cluster((1.0, 0.0)),
+        robot_position_world_xy=np.array([0.0, 0.0]),
+        robot_yaw=0.0,
+        timestamp_seconds=0.0,
+    )
+    result = tracker.update(
+        make_cluster((1.01, 0.0)),
+        robot_position_world_xy=np.array([0.0, 0.0]),
+        robot_yaw=0.0,
+        timestamp_seconds=0.1,
+    )
+
+    # The measured centroid speed is 0.10 m/s, so the configured
+    # 0.20 m/s deadband should classify it as stationary.
+    np.testing.assert_allclose(
+        result.tracked_obstacles[0].velocity_world_xy,
+        [0.0, 0.0],
+        atol=1e-12,
+    )
+    np.testing.assert_allclose(
+        result.point_velocities_robot_xy,
+        np.zeros((4, 2)),
+        atol=1e-12,
+    )
+
+
+def test_stationary_speed_threshold_preserves_clear_motion() -> None:
+    tracker = ObstacleTracker(
+        ObstacleTrackerConfig(
+            stationary_speed_threshold=0.20
+        )
+    )
+
+    tracker.update(
+        make_cluster((1.0, 0.0)),
+        robot_position_world_xy=np.array([0.0, 0.0]),
+        robot_yaw=0.0,
+        timestamp_seconds=0.0,
+    )
+    result = tracker.update(
+        make_cluster((1.0, -0.06)),
+        robot_position_world_xy=np.array([0.0, 0.0]),
+        robot_yaw=0.0,
+        timestamp_seconds=0.1,
+    )
+
+    # The proxy-like motion is 0.60 m/s and must remain available to
+    # the velocity-aware CBF.
+    np.testing.assert_allclose(
+        result.tracked_obstacles[0].velocity_world_xy,
+        [0.0, -0.6],
+        atol=1e-12,
+    )
+    np.testing.assert_allclose(
+        result.point_velocities_robot_xy,
+        np.tile([0.0, -0.6], (4, 1)),
+        atol=1e-12,
+    )
+
+
+def test_negative_stationary_speed_threshold_is_rejected() -> None:
+    with pytest.raises(ValueError, match="cannot be negative"):
+        ObstacleTrackerConfig(
+            stationary_speed_threshold=-0.01
+        )
+
+
 def test_multiple_clusters_keep_identity_when_input_order_changes() -> None:
     tracker = ObstacleTracker()
 
