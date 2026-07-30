@@ -110,17 +110,33 @@ class CBFSafetyFilter:
         nominal_linear_velocity: float,
         nominal_angular_velocity: float,
         obstacle_points_xy: np.ndarray,
+        obstacle_velocities_xy: np.ndarray | None = None,
     ) -> CBFResult:
         """Return the closest admissible linear-velocity command.
 
-        For every obstacle point ``(x, y)``, the barrier function is:
+        Obstacle positions and velocities must be expressed using the robot
+        base-frame axes:
+
+            +X forward
+            +Y left
+
+        ``obstacle_velocities_xy`` describes each obstacle's physical
+        velocity resolved into the current robot base-frame axes. It is not
+        an already-relative velocity. When it is omitted, every obstacle is
+        assumed to be stationary.
+
+        For obstacle position ``p = (x, y)`` and obstacle velocity
+        ``v_o = (v_ox, v_oy)``, the barrier function is:
 
             h = x**2 + y**2 - safety_radius**2
 
-        Assuming a stationary obstacle and translational robot velocity,
-        the CBF condition is:
+        Under the robot's commanded forward velocity ``v``:
 
-            -2 * x * v + alpha * h >= 0
+            h_dot = 2 * (x * v_ox + y * v_oy) - 2 * x * v
+
+        Therefore, the CBF condition is:
+
+            h_dot + alpha * h >= 0
 
         This produces an upper velocity bound for obstacles ahead and a
         lower velocity bound for obstacles behind. Projecting the nominal
@@ -140,6 +156,10 @@ class CBFSafetyFilter:
         points = self._validate_obstacle_points(
             obstacle_points_xy
         )
+        velocities = self._validate_obstacle_velocities(
+            obstacle_velocities_xy,
+            expected_shape=points.shape,
+        )
 
         obstacle_count = int(points.shape[0])
 
@@ -157,9 +177,7 @@ class CBFSafetyFilter:
         )
 
         minimum_obstacle_distance = float(np.min(distances))
-        minimum_barrier_value = float(
-            np.min(barrier_values)
-        )
+        minimum_barrier_value = float(np.min(barrier_values))
 
         lower_bound = self.config.minimum_linear_velocity
         upper_bound = self.config.maximum_linear_velocity
@@ -167,18 +185,33 @@ class CBFSafetyFilter:
         lateral_constraint_infeasible = False
         tolerance = self.config.numerical_tolerance
 
-        for point, barrier_value in zip(
+        for point, obstacle_velocity, barrier_value in zip(
             points,
+            velocities,
             barrier_values,
             strict=True,
         ):
             x_position = float(point[0])
+            y_position = float(point[1])
+
+            obstacle_velocity_x = float(obstacle_velocity[0])
+            obstacle_velocity_y = float(obstacle_velocity[1])
+
             barrier = float(barrier_value)
+
+            obstacle_motion_term = 2.0 * (
+                x_position * obstacle_velocity_x
+                + y_position * obstacle_velocity_y
+            )
+
+            velocity_independent_term = (
+                obstacle_motion_term
+                + self.config.alpha * barrier
+            )
 
             if x_position > tolerance:
                 velocity_limit = (
-                    self.config.alpha
-                    * barrier
+                    velocity_independent_term
                     / (2.0 * x_position)
                 )
                 upper_bound = min(
@@ -188,8 +221,7 @@ class CBFSafetyFilter:
 
             elif x_position < -tolerance:
                 velocity_limit = (
-                    self.config.alpha
-                    * barrier
+                    velocity_independent_term
                     / (2.0 * x_position)
                 )
                 lower_bound = max(
@@ -197,9 +229,12 @@ class CBFSafetyFilter:
                     velocity_limit,
                 )
 
-            elif barrier < -tolerance:
-                # Pure forward/reverse motion cannot immediately increase
-                # the distance to an obstacle exactly beside the robot.
+            elif velocity_independent_term < -tolerance:
+                # When x is approximately zero, forward or reverse robot
+                # motion cannot immediately affect the barrier derivative.
+                # If obstacle motion is already violating the CBF condition,
+                # this simplified controller cannot produce a feasible
+                # linear-velocity command.
                 lateral_constraint_infeasible = True
 
         constraint_feasible = (
@@ -226,9 +261,8 @@ class CBFSafetyFilter:
             emergency_stop_active = False
 
         else:
-            # Zero is guaranteed to be within the configured actuator
-            # limits. Stopping is the safest available fallback when the
-            # constraints cannot be satisfied by this simple model.
+            # Stopping is the safest available fallback when this simple
+            # translational model cannot satisfy all constraints.
             safe_linear = 0.0
             emergency_stop_active = True
 
@@ -333,3 +367,36 @@ class CBFSafetyFilter:
             )
 
         return points
+
+    @staticmethod
+    def _validate_obstacle_velocities(
+        obstacle_velocities_xy: np.ndarray | None,
+        *,
+        expected_shape: tuple[int, int],
+    ) -> np.ndarray:
+        """Return validated obstacle velocities or stationary defaults."""
+
+        if obstacle_velocities_xy is None:
+            return np.zeros(
+                expected_shape,
+                dtype=np.float64,
+            )
+
+        velocities = np.asarray(
+            obstacle_velocities_xy,
+            dtype=np.float64,
+        )
+
+        if velocities.shape != expected_shape:
+            raise ValueError(
+                "obstacle_velocities_xy must have the same shape as "
+                f"obstacle_points_xy, expected {expected_shape}, "
+                f"received {velocities.shape}."
+            )
+
+        if not np.isfinite(velocities).all():
+            raise ValueError(
+                "obstacle_velocities_xy must contain only finite values."
+            )
+
+        return velocities
