@@ -134,6 +134,7 @@ TRACKER_MINIMUM_CLUSTER_POINTS = 2
 TRACKER_MAXIMUM_ASSOCIATION_DISTANCE = 0.60
 TRACKER_VELOCITY_SMOOTHING_FACTOR = 0.35
 TRACKER_STATIONARY_SPEED_THRESHOLD = 0.20
+TRACKER_MINIMUM_CONSECUTIVE_MOTION_UPDATES = 3
 TRACKER_MAXIMUM_MISSED_UPDATES = 3
 
 SETTLE_STEPS = 60
@@ -736,6 +737,10 @@ def run_tracking_experiment(
         "Stationary-speed deadband: "
         f"{TRACKER_STATIONARY_SPEED_THRESHOLD:.3f} m/s"
     )
+    print(
+        "Motion confirmation: "
+        f"{TRACKER_MINIMUM_CONSECUTIVE_MOTION_UPDATES} scans"
+    )
     print("\nLive status:")
 
     while (
@@ -887,7 +892,13 @@ def run_tracking_experiment(
                 elapsed_seconds >= 0.20
                 and elapsed_seconds
                 < TRAJECTORY_DURATION_SECONDS
-                and proxy_track.observation_count >= 2
+                and (
+                    proxy_track.observation_count
+                    >= (
+                        TRACKER_MINIMUM_CONSECUTIVE_MOTION_UPDATES
+                        + 1
+                    )
+                )
             )
 
             if moving_evaluation_active:
@@ -1185,6 +1196,9 @@ def main() -> None:
             ),
             stationary_speed_threshold=(
                 TRACKER_STATIONARY_SPEED_THRESHOLD
+            ),
+            minimum_consecutive_motion_updates=(
+                TRACKER_MINIMUM_CONSECUTIVE_MOTION_UPDATES
             ),
             maximum_missed_updates=(
                 TRACKER_MAXIMUM_MISSED_UPDATES

@@ -187,6 +187,7 @@ TRACKER_MINIMUM_CLUSTER_POINTS = 2
 TRACKER_MAXIMUM_ASSOCIATION_DISTANCE = 0.60
 TRACKER_VELOCITY_SMOOTHING_FACTOR = 0.35
 TRACKER_STATIONARY_SPEED_THRESHOLD = 0.20
+TRACKER_MINIMUM_CONSECUTIVE_MOTION_UPDATES = 3
 TRACKER_MAXIMUM_MISSED_UPDATES = 3
 
 MINIMUM_TRACKED_PROXY_ESTIMATES = 10
@@ -1223,6 +1224,10 @@ def run_dynamic_obstacle_experiment(
         "Tracker deadband:    "
         f"{TRACKER_STATIONARY_SPEED_THRESHOLD:.3f} m/s"
     )
+    print(
+        "Motion confirmation: "
+        f"{TRACKER_MINIMUM_CONSECUTIVE_MOTION_UPDATES} scans"
+    )
     print("Applied controller:  oracle velocity-aware CBF")
     print("Diagnostic filter 1: static CBF")
     print("Diagnostic filter 2: tracked velocity-aware CBF")
@@ -1431,7 +1436,10 @@ def run_dynamic_obstacle_experiment(
                         and (
                             latest_tracker_proxy_track
                             .observation_count
-                            >= 2
+                            >= (
+                                TRACKER_MINIMUM_CONSECUTIVE_MOTION_UPDATES
+                                + 1
+                            )
                         )
                     ):
                         tracked_velocity_errors.append(
@@ -1791,6 +1799,11 @@ def run_dynamic_obstacle_experiment(
         if background_track_speeds
         else math.inf
     )
+    maximum_background_track_speed = (
+        max(background_track_speeds)
+        if background_track_speeds
+        else math.inf
+    )
 
     if (
         first_intervention_step is not None
@@ -1971,6 +1984,10 @@ def run_dynamic_obstacle_experiment(
     print(
         "  Median background-track speed:  "
         f"{format_distance(median_background_track_speed)} m/s"
+    )
+    print(
+        "  Maximum background-track speed: "
+        f"{format_distance(maximum_background_track_speed)} m/s"
     )
     print(
         "  Median active command difference:"
@@ -2266,6 +2283,9 @@ def main() -> None:
             ),
             stationary_speed_threshold=(
                 TRACKER_STATIONARY_SPEED_THRESHOLD
+            ),
+            minimum_consecutive_motion_updates=(
+                TRACKER_MINIMUM_CONSECUTIVE_MOTION_UPDATES
             ),
             maximum_missed_updates=(
                 TRACKER_MAXIMUM_MISSED_UPDATES

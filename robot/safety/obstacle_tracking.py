@@ -10,6 +10,9 @@ velocity. This compensates for robot translation and rotation. Estimated
 physical obstacle velocities are then resolved back into the current robot
 base-frame axes for direct use by ``CBFSafetyFilter``.
 
+Optional stationary-speed and consecutive-motion gates prevent short centroid
+jumps from being interpreted as physical obstacle motion.
+
 The tracker must be updated once per new LiDAR frame, using the LiDAR sensor
 timestamp rather than once per physics step.
 """
@@ -29,6 +32,7 @@ class ObstacleTrackerConfig:
     maximum_association_distance: float = 0.50
     velocity_smoothing_factor: float = 0.50
     stationary_speed_threshold: float = 0.0
+    minimum_consecutive_motion_updates: int = 1
     maximum_missed_updates: int = 3
     minimum_time_delta: float = 1e-6
 
@@ -92,6 +96,27 @@ class ObstacleTrackerConfig:
             )
 
         if (
+            not isinstance(
+                self.minimum_consecutive_motion_updates,
+                int,
+            )
+            or isinstance(
+                self.minimum_consecutive_motion_updates,
+                bool,
+            )
+        ):
+            raise TypeError(
+                "minimum_consecutive_motion_updates must be "
+                "an integer."
+            )
+
+        if self.minimum_consecutive_motion_updates <= 0:
+            raise ValueError(
+                "minimum_consecutive_motion_updates must be "
+                "greater than zero."
+            )
+
+        if (
             not isinstance(self.maximum_missed_updates, int)
             or isinstance(self.maximum_missed_updates, bool)
         ):
@@ -139,6 +164,9 @@ class _TrackState:
     track_id: int
     centroid_world_xy: np.ndarray
     velocity_world_xy: np.ndarray
+    filtered_velocity_world_xy: np.ndarray
+    measured_velocity_world_xy: np.ndarray
+    consecutive_motion_updates: int
     last_observation_timestamp: float
     observation_count: int
     missed_updates: int
@@ -385,6 +413,7 @@ class ObstacleTracker:
                 <= self.config.maximum_missed_updates
             ):
                 track.missed_updates = missed_updates
+                track.consecutive_motion_updates = 0
                 next_tracks[track_id] = track
 
         self._tracks = next_tracks
@@ -469,6 +498,15 @@ class ObstacleTracker:
                 2,
                 dtype=np.float64,
             ),
+            filtered_velocity_world_xy=np.zeros(
+                2,
+                dtype=np.float64,
+            ),
+            measured_velocity_world_xy=np.zeros(
+                2,
+                dtype=np.float64,
+            ),
+            consecutive_motion_updates=0,
             last_observation_timestamp=(
                 timestamp_seconds
             ),
@@ -514,24 +552,61 @@ class ObstacleTracker:
             filtered_velocity = (
                 smoothing * measured_velocity
                 + (1.0 - smoothing)
-                * previous_track.velocity_world_xy
+                * previous_track.filtered_velocity_world_xy
             )
 
-        estimated_speed = float(
-            np.linalg.norm(filtered_velocity)
+        measured_speed = float(
+            np.linalg.norm(measured_velocity)
+        )
+        previous_measured_speed = float(
+            np.linalg.norm(
+                previous_track.measured_velocity_world_xy
+            )
         )
 
         if (
-            estimated_speed
+            measured_speed
             <= self.config.stationary_speed_threshold
         ):
-            # Small centroid changes commonly come from angular binning,
-            # changing visible surfaces, and pose/scan timing differences.
-            # Treat them as stationary when the caller enables a deadband.
-            filtered_velocity = np.zeros(
+            consecutive_motion_updates = 0
+            published_velocity = np.zeros(
                 2,
                 dtype=np.float64,
             )
+        else:
+            direction_is_consistent = (
+                previous_measured_speed
+                <= self.config.stationary_speed_threshold
+                or float(
+                    np.dot(
+                        measured_velocity,
+                        previous_track.measured_velocity_world_xy,
+                    )
+                )
+                > 0.0
+            )
+
+            if direction_is_consistent:
+                consecutive_motion_updates = (
+                    previous_track.consecutive_motion_updates
+                    + 1
+                )
+            else:
+                consecutive_motion_updates = 1
+
+            if (
+                consecutive_motion_updates
+                >= (
+                    self.config
+                    .minimum_consecutive_motion_updates
+                )
+            ):
+                published_velocity = filtered_velocity
+            else:
+                published_velocity = np.zeros(
+                    2,
+                    dtype=np.float64,
+                )
 
         return _TrackState(
             track_id=previous_track.track_id,
@@ -541,9 +616,22 @@ class ObstacleTracker:
                 copy=True,
             ),
             velocity_world_xy=np.array(
+                published_velocity,
+                dtype=np.float64,
+                copy=True,
+            ),
+            filtered_velocity_world_xy=np.array(
                 filtered_velocity,
                 dtype=np.float64,
                 copy=True,
+            ),
+            measured_velocity_world_xy=np.array(
+                measured_velocity,
+                dtype=np.float64,
+                copy=True,
+            ),
+            consecutive_motion_updates=(
+                consecutive_motion_updates
             ),
             last_observation_timestamp=(
                 timestamp_seconds

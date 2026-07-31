@@ -345,10 +345,225 @@ def test_stationary_speed_threshold_preserves_clear_motion() -> None:
     )
 
 
+def test_motion_requires_configured_consecutive_updates() -> None:
+    tracker = ObstacleTracker(
+        ObstacleTrackerConfig(
+            velocity_smoothing_factor=1.0,
+            stationary_speed_threshold=0.20,
+            minimum_consecutive_motion_updates=3,
+        )
+    )
+
+    tracker.update(
+        make_cluster((1.0, 0.0)),
+        robot_position_world_xy=np.array([0.0, 0.0]),
+        robot_yaw=0.0,
+        timestamp_seconds=0.0,
+    )
+
+    for update_index in range(1, 3):
+        result = tracker.update(
+            make_cluster(
+                (1.0, -0.06 * update_index)
+            ),
+            robot_position_world_xy=np.array([0.0, 0.0]),
+            robot_yaw=0.0,
+            timestamp_seconds=0.1 * update_index,
+        )
+        np.testing.assert_allclose(
+            result.tracked_obstacles[0].velocity_world_xy,
+            [0.0, 0.0],
+            atol=1e-12,
+        )
+
+    confirmed_result = tracker.update(
+        make_cluster((1.0, -0.18)),
+        robot_position_world_xy=np.array([0.0, 0.0]),
+        robot_yaw=0.0,
+        timestamp_seconds=0.3,
+    )
+
+    np.testing.assert_allclose(
+        (
+            confirmed_result.tracked_obstacles[0]
+            .velocity_world_xy
+        ),
+        [0.0, -0.6],
+        atol=1e-12,
+    )
+
+
+def test_reversing_centroid_outliers_are_not_confirmed() -> None:
+    tracker = ObstacleTracker(
+        ObstacleTrackerConfig(
+            velocity_smoothing_factor=1.0,
+            stationary_speed_threshold=0.20,
+            minimum_consecutive_motion_updates=3,
+        )
+    )
+
+    tracker.update(
+        make_cluster((1.0, 0.0)),
+        robot_position_world_xy=np.array([0.0, 0.0]),
+        robot_yaw=0.0,
+        timestamp_seconds=0.0,
+    )
+
+    alternating_centers = (
+        (1.0, 0.06),
+        (1.0, 0.0),
+        (1.0, 0.06),
+        (1.0, 0.0),
+    )
+
+    for update_index, center in enumerate(
+        alternating_centers,
+        start=1,
+    ):
+        result = tracker.update(
+            make_cluster(center),
+            robot_position_world_xy=np.array([0.0, 0.0]),
+            robot_yaw=0.0,
+            timestamp_seconds=0.1 * update_index,
+        )
+        np.testing.assert_allclose(
+            result.tracked_obstacles[0].velocity_world_xy,
+            [0.0, 0.0],
+            atol=1e-12,
+        )
+
+
+def test_single_centroid_jump_does_not_leave_velocity_tail() -> None:
+    tracker = ObstacleTracker(
+        ObstacleTrackerConfig(
+            velocity_smoothing_factor=0.35,
+            stationary_speed_threshold=0.20,
+            minimum_consecutive_motion_updates=3,
+        )
+    )
+
+    tracker.update(
+        make_cluster((1.0, 0.0)),
+        robot_position_world_xy=np.array([0.0, 0.0]),
+        robot_yaw=0.0,
+        timestamp_seconds=0.0,
+    )
+
+    jump_result = tracker.update(
+        make_cluster((1.3, 0.0)),
+        robot_position_world_xy=np.array([0.0, 0.0]),
+        robot_yaw=0.0,
+        timestamp_seconds=0.1,
+    )
+    np.testing.assert_allclose(
+        jump_result.tracked_obstacles[0].velocity_world_xy,
+        [0.0, 0.0],
+        atol=1e-12,
+    )
+
+    for update_index in range(2, 6):
+        result = tracker.update(
+            make_cluster((1.3, 0.0)),
+            robot_position_world_xy=np.array([0.0, 0.0]),
+            robot_yaw=0.0,
+            timestamp_seconds=0.1 * update_index,
+        )
+        np.testing.assert_allclose(
+            result.tracked_obstacles[0].velocity_world_xy,
+            [0.0, 0.0],
+            atol=1e-12,
+        )
+
+
+def test_missed_observation_resets_motion_confirmation() -> None:
+    tracker = ObstacleTracker(
+        ObstacleTrackerConfig(
+            velocity_smoothing_factor=1.0,
+            stationary_speed_threshold=0.20,
+            minimum_consecutive_motion_updates=3,
+        )
+    )
+
+    tracker.update(
+        make_cluster((1.0, 0.0)),
+        robot_position_world_xy=np.array([0.0, 0.0]),
+        robot_yaw=0.0,
+        timestamp_seconds=0.0,
+    )
+    tracker.update(
+        make_cluster((1.06, 0.0)),
+        robot_position_world_xy=np.array([0.0, 0.0]),
+        robot_yaw=0.0,
+        timestamp_seconds=0.1,
+    )
+    tracker.update(
+        np.empty((0, 2)),
+        robot_position_world_xy=np.array([0.0, 0.0]),
+        robot_yaw=0.0,
+        timestamp_seconds=0.2,
+    )
+
+    for update_index, x_position in (
+        (3, 1.18),
+        (4, 1.24),
+    ):
+        result = tracker.update(
+            make_cluster((x_position, 0.0)),
+            robot_position_world_xy=np.array([0.0, 0.0]),
+            robot_yaw=0.0,
+            timestamp_seconds=0.1 * update_index,
+        )
+        np.testing.assert_allclose(
+            result.tracked_obstacles[0].velocity_world_xy,
+            [0.0, 0.0],
+            atol=1e-12,
+        )
+
+    confirmed_result = tracker.update(
+        make_cluster((1.30, 0.0)),
+        robot_position_world_xy=np.array([0.0, 0.0]),
+        robot_yaw=0.0,
+        timestamp_seconds=0.5,
+    )
+    np.testing.assert_allclose(
+        (
+            confirmed_result.tracked_obstacles[0]
+            .velocity_world_xy
+        ),
+        [0.6, 0.0],
+        atol=1e-12,
+    )
+
+
 def test_negative_stationary_speed_threshold_is_rejected() -> None:
     with pytest.raises(ValueError, match="cannot be negative"):
         ObstacleTrackerConfig(
             stationary_speed_threshold=-0.01
+        )
+
+
+@pytest.mark.parametrize(
+    "invalid_value",
+    [0, -1],
+)
+def test_invalid_minimum_motion_updates_are_rejected(
+    invalid_value: int,
+) -> None:
+    with pytest.raises(
+        ValueError,
+        match="must be greater than zero",
+    ):
+        ObstacleTrackerConfig(
+            minimum_consecutive_motion_updates=(
+                invalid_value
+            )
+        )
+
+
+def test_boolean_minimum_motion_updates_are_rejected() -> None:
+    with pytest.raises(TypeError, match="must be an integer"):
+        ObstacleTrackerConfig(
+            minimum_consecutive_motion_updates=True
         )
 
 
