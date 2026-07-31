@@ -1,4 +1,4 @@
-"""Compare static, oracle, and tracked velocity-aware CBF behavior.
+"""Validate LiDAR-tracked velocity-aware CBF control.
 
 This controlled Isaac Sim demo uses a session-only visual cube as a moving
 obstacle. The proxy does not have a physics collider: it is intended to test
@@ -14,8 +14,8 @@ Scenario:
 5. Known proxy velocity is assigned only to LiDAR points associated with the
    proxy for the oracle comparison.
 6. ``ObstacleTracker`` independently estimates velocities from scan history.
-7. The oracle velocity-aware command controls the robot.
-8. The tracked result remains diagnostic and cannot affect robot motion.
+7. The tracked velocity-aware command controls the robot.
+8. The oracle and static results remain diagnostic and cannot affect motion.
 9. The demo compares velocity estimates, safe commands, intervention timing,
    safety separation, and route completion.
 
@@ -29,8 +29,9 @@ Expected first-run behavior:
         -> robot continues to the waypoint
 
 The proxy trajectory and ground-truth association are experimental
-infrastructure. Ground truth is used only by the oracle filter and evaluation
-report. It is never passed into ``ObstacleTracker``.
+infrastructure. Ground truth is used only by the diagnostic oracle filter,
+the evaluation report, and an experiment-level abort guard. It is never
+passed into ``ObstacleTracker`` or the applied tracked controller.
 
 Run from the project root:
 
@@ -1002,7 +1003,7 @@ def print_initial_report(
     print(
         "\nThe robot and proxy remained stationary during this report; "
         "the oracle result uses the proxy's upcoming velocity. "
-        "The tracker starts from fresh scan history in Stage C."
+        "The tracker starts from fresh scan history in Stage D."
     )
     print("=" * 70)
 
@@ -1088,7 +1089,7 @@ def run_dynamic_obstacle_experiment(
     initial_static_cbf_result: CBFResult,
     initial_cbf_result: CBFResult,
 ) -> None:
-    """Apply oracle CBF while evaluating tracked CBF diagnostically."""
+    """Apply tracked CBF while retaining oracle and static diagnostics."""
 
     completed_steps = 0
     received_scan_count = 0
@@ -1206,7 +1207,7 @@ def run_dynamic_obstacle_experiment(
     )
 
     print("\n" + "=" * 70)
-    print("VELOCITY-AWARE CBF STAGE C - CLOSED-LOOP EXPERIMENT")
+    print("VELOCITY-AWARE CBF STAGE D - TRACKED CONTROL")
     print("=" * 70)
     print(
         "Robot nominal speed: "
@@ -1228,10 +1229,13 @@ def run_dynamic_obstacle_experiment(
         "Motion confirmation: "
         f"{TRACKER_MINIMUM_CONSECUTIVE_MOTION_UPDATES} scans"
     )
-    print("Applied controller:  oracle velocity-aware CBF")
+    print("Applied controller:  tracked velocity-aware CBF")
     print("Diagnostic filter 1: static CBF")
-    print("Diagnostic filter 2: tracked velocity-aware CBF")
-    print("Tracker ground truth: evaluation only")
+    print("Diagnostic filter 2: oracle velocity-aware CBF")
+    print("Tracker input:       LiDAR history + robot pose")
+    print("Oracle ground truth: diagnostic only")
+    print("Control ground truth: none")
+    print("Abort ground truth:  safety monitor only")
     print(
         "Ground-truth abort:  "
         f"{GROUND_TRUTH_ABORT_DISTANCE:.3f} m"
@@ -1485,7 +1489,7 @@ def run_dynamic_obstacle_experiment(
             break
 
         # All filters receive the same positions and nominal command. Only the
-        # oracle result is applied to the robot during this validation stage.
+        # LiDAR-tracked result is applied to the robot during Stage D.
         latest_static_cbf_result = (
             safety_filter.filter_command(
                 nominal_linear_velocity=(
@@ -1577,7 +1581,10 @@ def run_dynamic_obstacle_experiment(
         )
         minimum_lidar_distance = min(
             minimum_lidar_distance,
-            latest_cbf_result.minimum_obstacle_distance,
+            (
+                latest_tracked_cbf_result
+                .minimum_obstacle_distance
+            ),
         )
 
         if (
@@ -1672,8 +1679,14 @@ def run_dynamic_obstacle_experiment(
             )
 
         emergency_stop = (
-            not latest_cbf_result.constraint_feasible
-            or latest_cbf_result.emergency_stop_active
+            not (
+                latest_tracked_cbf_result
+                .constraint_feasible
+            )
+            or (
+                latest_tracked_cbf_result
+                .emergency_stop_active
+            )
         )
 
         ground_truth_abort = (
@@ -1738,7 +1751,7 @@ def run_dynamic_obstacle_experiment(
 
         if emergency_stop:
             termination_reason = (
-                "The velocity-aware CBF constraints became "
+                "The tracked velocity-aware CBF constraints became "
                 "infeasible. Emergency stop applied."
             )
             break
@@ -1751,8 +1764,8 @@ def run_dynamic_obstacle_experiment(
             break
 
         robot_controller.apply_command(
-            latest_cbf_result.safe_linear_velocity,
-            latest_cbf_result.safe_angular_velocity,
+            latest_tracked_cbf_result.safe_linear_velocity,
+            latest_tracked_cbf_result.safe_angular_velocity,
         )
 
         previous_intervention = (
@@ -1843,6 +1856,10 @@ def run_dynamic_obstacle_experiment(
         tracked_intervention_seen
         and tracked_intervention_release_seen
     )
+    oracle_sequence_passed = (
+        intervention_seen
+        and intervention_release_seen
+    )
     tracked_feasibility_passed = (
         tracker_infeasible_step_count == 0
     )
@@ -1854,11 +1871,12 @@ def run_dynamic_obstacle_experiment(
         and intervention_timing_passed
         and tracker_identity_passed
         and tracked_sequence_passed
+        and oracle_sequence_passed
         and tracked_feasibility_passed
     )
 
     print("\n" + "=" * 70)
-    print("VELOCITY-AWARE CBF COMPARISON RESULT")
+    print("VELOCITY-AWARE CBF STAGE D RESULT")
     print("=" * 70)
     print(f"Reason: {termination_reason}")
     print(f"Completed physics steps: {completed_steps}")
@@ -1921,10 +1939,22 @@ def run_dynamic_obstacle_experiment(
             < first_static_intervention_step
         )
     )
+    tracked_intervened_earlier = (
+        first_tracked_intervention_step is not None
+        and (
+            first_static_intervention_step is None
+            or first_tracked_intervention_step
+            < first_static_intervention_step
+        )
+    )
 
     print(
         "Oracle intervened before static:  "
         f"{velocity_intervened_earlier}"
+    )
+    print(
+        "Tracked intervened before static: "
+        f"{tracked_intervened_earlier}"
     )
 
     if first_release_step is None:
@@ -2032,6 +2062,10 @@ def run_dynamic_obstacle_experiment(
         f"{tracked_sequence_passed}"
     )
     print(
+        "  Oracle comparison sequence:"
+        f" {oracle_sequence_passed}"
+    )
+    print(
         "  Tracked constraints feasible:"
         f" {tracked_feasibility_passed}"
     )
@@ -2052,40 +2086,44 @@ def run_dynamic_obstacle_experiment(
 
     if safety_boundary_violated:
         print(
-            "  [FAIL] The applied oracle CBF did not "
+            "  [FAIL] The applied tracked CBF did not "
             "maintain the ground-truth safety radius against the "
             "moving obstacle."
         )
+    elif not tracked_feasibility_passed:
+        print(
+            "  [FAIL] The applied tracked CBF produced an "
+            "infeasible constraint and triggered the emergency stop."
+        )
     elif (
         waypoint_controller.route_complete
-        and intervention_seen
-        and intervention_release_seen
-        and velocity_intervened_earlier
+        and tracked_intervention_seen
+        and tracked_intervention_release_seen
+        and tracked_intervened_earlier
         and tracker_diagnostic_passed
     ):
         print(
-            "  [PASS] Oracle control completed safely, and the tracked "
-            "CBF matched its velocity, command, intervention, and "
-            "release behavior closely enough for tracked-control testing."
+            "  [PASS] LiDAR-tracked velocity-aware CBF control "
+            "intervened, released, and completed the route safely. "
+            "Its behavior remained close to the diagnostic oracle."
         )
     elif (
         waypoint_controller.route_complete
-        and intervention_seen
-        and intervention_release_seen
-        and velocity_intervened_earlier
+        and tracked_intervention_seen
+        and tracked_intervention_release_seen
+        and tracked_intervened_earlier
     ):
         print(
-            "  [ORACLE PASS / TRACKER REVIEW] Applied oracle control "
-            "completed safely, but one or more tracker diagnostics did "
-            "not pass. Do not switch control sources yet."
+            "  [CONTROL PASS / COMPARISON REVIEW] Applied tracked "
+            "control completed safely, but one or more oracle-comparison "
+            "diagnostics did not pass."
         )
     elif (
-        intervention_seen
+        tracked_intervention_seen
         and not waypoint_controller.route_complete
     ):
         print(
-            "  [PARTIAL] The applied oracle CBF intervened safely, "
-            "but the route "
+            "  [PARTIAL] The applied tracked CBF intervened, but the route "
             "did not complete. Inspect the termination reason."
         )
     elif waypoint_controller.route_complete:
