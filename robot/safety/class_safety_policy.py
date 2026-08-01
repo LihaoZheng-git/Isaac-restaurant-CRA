@@ -1,15 +1,16 @@
-"""Fixed semantic-class policy for the PSF class-aware CBF baseline.
+"""Semantic risk policy for the Risk-Aware PSF/LGF CBF baseline.
 
-This module converts a semantic obstacle label into the two values needed by
-the later Poisson safety-function pipeline:
+The production JSON configuration assigns a normalized risk to each semantic
+class and maps that risk to a Laplace boundary-flux magnitude through one
+global monotone linear map:
 
-* a normalized class risk in ``[0, 1]``;
-* a positive boundary-flux magnitude.
+    semantic class -> risk -> boundary flux
 
-The configuration stores flux as a positive magnitude for readability.  The
-``boundary_flux`` property returns its negative signed value because the PSF
-boundary condition uses negative flux to point the guidance field away from
-an obstacle.
+This makes the relationship used by the risk-aware baseline explicit and
+prevents independently configured risk and flux values from disagreeing.
+The materialized class parameters retain both values for efficient grid
+rasterization. Negative signed flux is consumed by the normal-only Laplace
+guidance field; the Poisson safety function is solved independently.
 """
 
 import json
@@ -26,7 +27,7 @@ from robot.safety.semantic_obstacle import (
 )
 
 
-SUPPORTED_SCHEMA_VERSION = 1
+SUPPORTED_SCHEMA_VERSION = 2
 
 
 def _validated_real(
@@ -47,8 +48,50 @@ def _validated_real(
 
 
 @dataclass(frozen=True)
+class LinearRiskFluxMapping:
+    """Monotone linear map from normalized risk to flux magnitude."""
+
+    minimum_magnitude: float
+    maximum_magnitude: float
+
+    def __post_init__(self) -> None:
+        minimum = _validated_real(
+            self.minimum_magnitude,
+            name="minimum_magnitude",
+        )
+        maximum = _validated_real(
+            self.maximum_magnitude,
+            name="maximum_magnitude",
+        )
+
+        if minimum <= 0.0:
+            raise ValueError(
+                "minimum_magnitude must be greater than zero."
+            )
+        if maximum < minimum:
+            raise ValueError(
+                "maximum_magnitude cannot be smaller than "
+                "minimum_magnitude."
+            )
+
+        object.__setattr__(self, "minimum_magnitude", minimum)
+        object.__setattr__(self, "maximum_magnitude", maximum)
+
+    def magnitude_for_risk(self, risk: float) -> float:
+        """Return the flux magnitude corresponding to one risk value."""
+
+        normalized_risk = _validated_real(risk, name="risk")
+        if not 0.0 <= normalized_risk <= 1.0:
+            raise ValueError("risk must be in [0, 1].")
+
+        return self.minimum_magnitude + normalized_risk * (
+            self.maximum_magnitude - self.minimum_magnitude
+        )
+
+
+@dataclass(frozen=True)
 class ClassSafetyParameters:
-    """Fixed PSF parameters assigned to one semantic class."""
+    """Materialized risk-aware parameters for one semantic class."""
 
     risk: float
     boundary_flux_magnitude: float
@@ -76,7 +119,7 @@ class ClassSafetyParameters:
 
     @property
     def boundary_flux(self) -> float:
-        """Return the signed PSF boundary flux for this class."""
+        """Return the signed Laplace boundary flux for this class."""
 
         return -self.boundary_flux_magnitude
 
@@ -89,6 +132,7 @@ class ClassSafetyPolicy:
         class_parameters: Mapping[str, ClassSafetyParameters],
         *,
         unknown_class: str = "unknown",
+        risk_flux_mapping: LinearRiskFluxMapping | None = None,
     ) -> None:
         if not isinstance(class_parameters, Mapping):
             raise TypeError("class_parameters must be a mapping.")
@@ -122,11 +166,22 @@ class ClassSafetyPolicy:
             raise ValueError(
                 "unknown_class must have an entry in class_parameters."
             )
+        if (
+            risk_flux_mapping is not None
+            and not isinstance(
+                risk_flux_mapping,
+                LinearRiskFluxMapping,
+            )
+        ):
+            raise TypeError(
+                "risk_flux_mapping must be a LinearRiskFluxMapping."
+            )
 
         self._class_parameters = MappingProxyType(
             normalized_parameters
         )
         self._unknown_class = normalized_unknown
+        self._risk_flux_mapping = risk_flux_mapping
 
     @property
     def class_parameters(
@@ -147,6 +202,14 @@ class ClassSafetyPolicy:
         """Return the class used when a requested label is not configured."""
 
         return self._unknown_class
+
+    @property
+    def risk_flux_mapping(
+        self,
+    ) -> LinearRiskFluxMapping | None:
+        """Return the production risk-to-flux map, when configured."""
+
+        return self._risk_flux_mapping
 
     def parameters_for(
         self,
@@ -213,6 +276,35 @@ class ClassSafetyPolicy:
         if not isinstance(raw_classes, dict):
             raise TypeError("classes must be an object.")
 
+        raw_mapping = raw_config.get("risk_flux_mapping")
+        if not isinstance(raw_mapping, dict):
+            raise TypeError("risk_flux_mapping must be an object.")
+        required_mapping_fields = {
+            "type",
+            "minimum_magnitude",
+            "maximum_magnitude",
+        }
+        actual_mapping_fields = set(raw_mapping)
+        if actual_mapping_fields != required_mapping_fields:
+            missing = sorted(
+                required_mapping_fields - actual_mapping_fields
+            )
+            unexpected = sorted(
+                actual_mapping_fields - required_mapping_fields
+            )
+            raise ValueError(
+                "Invalid risk_flux_mapping fields: "
+                f"missing={missing}, unexpected={unexpected}."
+            )
+        if raw_mapping["type"] != "linear":
+            raise ValueError(
+                "risk_flux_mapping type must be 'linear'."
+            )
+        risk_flux_mapping = LinearRiskFluxMapping(
+            minimum_magnitude=raw_mapping["minimum_magnitude"],
+            maximum_magnitude=raw_mapping["maximum_magnitude"],
+        )
+
         class_parameters: dict[str, ClassSafetyParameters] = {}
         for semantic_class, raw_parameters in raw_classes.items():
             if not isinstance(semantic_class, str):
@@ -222,10 +314,7 @@ class ClassSafetyPolicy:
                     f"Parameters for '{semantic_class}' must be an object."
                 )
 
-            required_fields = {
-                "risk",
-                "boundary_flux_magnitude",
-            }
+            required_fields = {"risk"}
             actual_fields = set(raw_parameters)
             if actual_fields != required_fields:
                 missing = sorted(required_fields - actual_fields)
@@ -235,14 +324,19 @@ class ClassSafetyPolicy:
                     f"missing={missing}, unexpected={unexpected}."
                 )
 
+            risk = _validated_real(
+                raw_parameters["risk"],
+                name=f"risk for '{semantic_class}'",
+            )
             class_parameters[semantic_class] = ClassSafetyParameters(
-                risk=raw_parameters["risk"],
-                boundary_flux_magnitude=raw_parameters[
-                    "boundary_flux_magnitude"
-                ],
+                risk=risk,
+                boundary_flux_magnitude=(
+                    risk_flux_mapping.magnitude_for_risk(risk)
+                ),
             )
 
         return cls(
             class_parameters,
             unknown_class=unknown_class,
+            risk_flux_mapping=risk_flux_mapping,
         )

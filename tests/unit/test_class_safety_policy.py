@@ -5,6 +5,7 @@ import pytest
 from robot.safety.class_safety_policy import (
     ClassSafetyParameters,
     ClassSafetyPolicy,
+    LinearRiskFluxMapping,
 )
 from robot.safety.obstacle_tracking import TrackedObstacle
 from robot.safety.semantic_obstacle import SemanticObstacle
@@ -14,24 +15,25 @@ def default_config() -> dict[str, object]:
     """Return a small deterministic class-policy configuration."""
 
     return {
-        "schema_version": 1,
+        "schema_version": 2,
         "unknown_class": "unknown",
+        "risk_flux_mapping": {
+            "type": "linear",
+            "minimum_magnitude": 1.0,
+            "maximum_magnitude": 6.0,
+        },
         "classes": {
             "unknown": {
                 "risk": 1.0,
-                "boundary_flux_magnitude": 6.0,
             },
             "wall": {
                 "risk": 0.0,
-                "boundary_flux_magnitude": 1.0,
             },
             "chair": {
                 "risk": 0.4,
-                "boundary_flux_magnitude": 3.0,
             },
             "person": {
                 "risk": 1.0,
-                "boundary_flux_magnitude": 6.0,
             },
         },
     }
@@ -84,6 +86,17 @@ def test_parameters_return_negative_signed_boundary_flux() -> None:
     assert parameters.boundary_flux == pytest.approx(-3.0)
 
 
+def test_linear_mapping_reproduces_expected_fluxes() -> None:
+    mapping = LinearRiskFluxMapping(
+        minimum_magnitude=1.0,
+        maximum_magnitude=6.0,
+    )
+
+    assert mapping.magnitude_for_risk(0.0) == pytest.approx(1.0)
+    assert mapping.magnitude_for_risk(0.4) == pytest.approx(3.0)
+    assert mapping.magnitude_for_risk(1.0) == pytest.approx(6.0)
+
+
 def test_policy_loads_expected_class_ordering(tmp_path) -> None:
     policy = ClassSafetyPolicy.from_json(
         write_config(tmp_path, default_config())
@@ -105,6 +118,9 @@ def test_policy_loads_expected_class_ordering(tmp_path) -> None:
         "unknown",
         "wall",
     )
+    assert policy.risk_flux_mapping is not None
+    assert policy.risk_flux_mapping.minimum_magnitude == pytest.approx(1.0)
+    assert policy.risk_flux_mapping.maximum_magnitude == pytest.approx(6.0)
 
 
 def test_lookup_normalizes_class_name(tmp_path) -> None:
@@ -220,7 +236,7 @@ def test_duplicate_normalized_class_is_rejected() -> None:
 
 def test_wrong_schema_version_is_rejected(tmp_path) -> None:
     config = default_config()
-    config["schema_version"] = 2
+    config["schema_version"] = 1
 
     with pytest.raises(ValueError, match="schema_version"):
         ClassSafetyPolicy.from_json(write_config(tmp_path, config))
@@ -229,10 +245,36 @@ def test_wrong_schema_version_is_rejected(tmp_path) -> None:
 def test_missing_class_field_is_rejected(tmp_path) -> None:
     config = default_config()
     classes = config["classes"]
-    classes["chair"] = {"risk": 0.4}
+    classes["chair"] = {}
 
     with pytest.raises(ValueError, match="missing"):
         ClassSafetyPolicy.from_json(write_config(tmp_path, config))
+
+
+def test_legacy_independent_flux_field_is_rejected(tmp_path) -> None:
+    config = default_config()
+    classes = config["classes"]
+    classes["chair"] = {
+        "risk": 0.4,
+        "boundary_flux_magnitude": 3.0,
+    }
+
+    with pytest.raises(ValueError, match="unexpected"):
+        ClassSafetyPolicy.from_json(write_config(tmp_path, config))
+
+
+@pytest.mark.parametrize(
+    "mapping_values",
+    (
+        {"minimum_magnitude": 0.0, "maximum_magnitude": 6.0},
+        {"minimum_magnitude": 7.0, "maximum_magnitude": 6.0},
+    ),
+)
+def test_invalid_risk_flux_mapping_is_rejected(
+    mapping_values: dict[str, float],
+) -> None:
+    with pytest.raises(ValueError):
+        LinearRiskFluxMapping(**mapping_values)
 
 
 def test_non_semantic_obstacle_is_rejected(tmp_path) -> None:
