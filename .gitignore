@@ -228,3 +228,5 @@ scenes/generated/
 
 # Generated test outputs
 outputs/
+
+.pytest_tmp/

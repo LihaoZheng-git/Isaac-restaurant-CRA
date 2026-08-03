@@ -1,1 +1,0 @@
-{"schema_version": 2, "unknown_class": "unknown", "risk_flux_mapping": {"type": "linear", "minimum_magnitude": 1.0, "maximum_magnitude": 6.0}, "classes": {"unknown": {"risk": 1.0}, "wall": {"risk": 0.0}, "chair": {"risk": 0.4, "boundary_flux_magnitude": 3.0}, "person": {"risk": 1.0}}}

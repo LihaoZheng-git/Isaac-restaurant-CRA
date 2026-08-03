@@ -1,4 +1,4 @@
-"""Semantic harmonic guidance field on a local occupancy grid.
+"""Normal-flux guidance field for the Risk-Aware PSF/LGF CBF baseline.
 
 Each vector component solves the Laplace equation in free space:
 
@@ -10,18 +10,25 @@ Here ``n`` points from free space into the obstacle and the configured
 boundary flux ``b`` is negative, so the resulting vector points away from
 the obstacle. The outer grid boundary and occupied cells are fixed at zero.
 
+This solver intentionally implements only obstacle-normal boundary flux. It
+does not implement Safe-SAGE's additional tangential Dirichlet interface for
+social passing behavior. Keeping that distinction explicit preserves this
+module as a reproducible risk-aware baseline.
+
 Array convention follows ``LocalOccupancyGrid``: rows increase with
 robot-frame ``+Y`` and columns increase with robot-frame ``+X``.
 """
 
 import math
 from dataclasses import dataclass
-from numbers import Real
 
 import numpy as np
 
 from robot.safety.local_occupancy_grid import LocalOccupancyGrid
-
+from robot.safety.vector_laplace_solver import (
+    VectorLaplaceSolverConfig,
+    solve_vector_laplace_dirichlet,
+)
 
 _NEIGHBOR_OFFSETS = (
     (-1, -1),
@@ -35,94 +42,9 @@ _NEIGHBOR_OFFSETS = (
 )
 
 
-def _validated_real(
-    value: object,
-    *,
-    name: str,
-) -> float:
-    """Return a finite real value while rejecting booleans and strings."""
-
-    if isinstance(value, bool) or not isinstance(value, Real):
-        raise TypeError(f"{name} must be a real number.")
-
-    result = float(value)
-    if not math.isfinite(result):
-        raise ValueError(f"{name} must be finite.")
-
-    return result
-
-
-def _validated_positive_integer(
-    value: object,
-    *,
-    name: str,
-) -> int:
-    """Return a strictly positive integer."""
-
-    if isinstance(value, bool) or not isinstance(value, int):
-        raise TypeError(f"{name} must be an integer.")
-    if value <= 0:
-        raise ValueError(f"{name} must be greater than zero.")
-
-    return value
-
-
 @dataclass(frozen=True)
-class LaplaceGuidanceFieldConfig:
-    """Numerical settings for the vector Laplace solve."""
-
-    convergence_tolerance: float = 1e-6
-    maximum_iterations: int = 20_000
-    residual_check_interval: int = 10
-    relaxation_factor: float = 1.7
-
-    def __post_init__(self) -> None:
-        tolerance = _validated_real(
-            self.convergence_tolerance,
-            name="convergence_tolerance",
-        )
-        maximum_iterations = _validated_positive_integer(
-            self.maximum_iterations,
-            name="maximum_iterations",
-        )
-        check_interval = _validated_positive_integer(
-            self.residual_check_interval,
-            name="residual_check_interval",
-        )
-        relaxation_factor = _validated_real(
-            self.relaxation_factor,
-            name="relaxation_factor",
-        )
-
-        if tolerance <= 0.0:
-            raise ValueError(
-                "convergence_tolerance must be greater than zero."
-            )
-        if not 0.0 < relaxation_factor < 2.0:
-            raise ValueError(
-                "relaxation_factor must be in the open interval (0, 2)."
-            )
-
-        object.__setattr__(
-            self,
-            "convergence_tolerance",
-            tolerance,
-        )
-        object.__setattr__(
-            self,
-            "maximum_iterations",
-            maximum_iterations,
-        )
-        object.__setattr__(
-            self,
-            "residual_check_interval",
-            check_interval,
-        )
-        object.__setattr__(
-            self,
-            "relaxation_factor",
-            relaxation_factor,
-        )
+class LaplaceGuidanceFieldConfig(VectorLaplaceSolverConfig):
+    """Public numerical settings for the normal-only LGF baseline."""
 
 
 @dataclass(frozen=True)
@@ -211,7 +133,6 @@ def solve_laplace_guidance_field(
     fixed_mask = _outer_boundary_mask(occupancy_grid.shape)
     fixed_mask |= occupancy_grid.occupied_mask
     fixed_mask |= obstacle_interface_mask
-    solution_mask = ~fixed_mask
 
     vectors = np.zeros(
         occupancy_grid.shape + (2,),
@@ -221,82 +142,22 @@ def solve_laplace_guidance_field(
         obstacle_interface_mask
     ]
 
-    if not np.any(solution_mask):
-        return _make_result(
-            vectors,
-            fixed_mask,
-            obstacle_interface_mask,
-            obstacle_normals,
-            iteration_count=0,
-            maximum_residual=0.0,
-            resolution=occupancy_grid.config.resolution,
-        )
-
-    maximum_residual = math.inf
     resolution = occupancy_grid.config.resolution
-    interior_solution_mask = solution_mask[1:-1, 1:-1]
-    interior_rows, interior_columns = np.indices(
-        interior_solution_mask.shape
+    harmonic_result = solve_vector_laplace_dirichlet(
+        vectors,
+        fixed_mask,
+        resolution=resolution,
+        config=solver_config,
     )
-    red_mask = interior_solution_mask & (
-        (interior_rows + interior_columns) % 2 == 0
-    )
-    black_mask = interior_solution_mask & ~red_mask
-    color_masks = (red_mask, black_mask)
 
-    for iteration_count in range(
-        1,
-        solver_config.maximum_iterations + 1,
-    ):
-        for color_mask in color_masks:
-            neighbor_sum = (
-                vectors[:-2, 1:-1, :]
-                + vectors[2:, 1:-1, :]
-                + vectors[1:-1, :-2, :]
-                + vectors[1:-1, 2:, :]
-            )
-            candidate_vectors = 0.25 * neighbor_sum
-            interior_vectors = vectors[1:-1, 1:-1, :]
-            interior_vectors[color_mask] += (
-                solver_config.relaxation_factor
-                * (
-                    candidate_vectors[color_mask]
-                    - interior_vectors[color_mask]
-                )
-            )
-
-        should_check_residual = (
-            iteration_count == 1
-            or iteration_count
-            % solver_config.residual_check_interval
-            == 0
-            or iteration_count
-            == solver_config.maximum_iterations
-        )
-        if not should_check_residual:
-            continue
-
-        maximum_residual = _maximum_laplace_residual(
-            vectors,
-            solution_mask=solution_mask,
-            resolution=resolution,
-        )
-        if maximum_residual <= solver_config.convergence_tolerance:
-            return _make_result(
-                vectors,
-                fixed_mask,
-                obstacle_interface_mask,
-                obstacle_normals,
-                iteration_count=iteration_count,
-                maximum_residual=maximum_residual,
-                resolution=resolution,
-            )
-
-    raise RuntimeError(
-        "Laplace guidance-field solver did not converge after "
-        f"{solver_config.maximum_iterations} iterations; maximum "
-        f"residual={maximum_residual:.6e}, tolerance="
-        f"{solver_config.convergence_tolerance:.6e}."
+    return _make_result(
+        harmonic_result.vectors,
+        fixed_mask,
+        obstacle_interface_mask,
+        obstacle_normals,
+        iteration_count=harmonic_result.iteration_count,
+        maximum_residual=harmonic_result.maximum_residual,
+        resolution=resolution,
     )
 
 
@@ -415,31 +276,6 @@ def _outer_boundary_mask(
         boundary_mask[:, -1] = True
 
     return boundary_mask
-
-
-def _maximum_laplace_residual(
-    vectors: np.ndarray,
-    *,
-    solution_mask: np.ndarray,
-    resolution: float,
-) -> float:
-    """Return the maximum absolute component-wise Laplace residual."""
-
-    laplacian = (
-        vectors[:-2, 1:-1, :]
-        + vectors[2:, 1:-1, :]
-        + vectors[1:-1, :-2, :]
-        + vectors[1:-1, 2:, :]
-        - 4.0 * vectors[1:-1, 1:-1, :]
-    ) / resolution**2
-    interior_solution_mask = solution_mask[1:-1, 1:-1]
-
-    if not np.any(interior_solution_mask):
-        return 0.0
-
-    return float(
-        np.max(np.abs(laplacian[interior_solution_mask]))
-    )
 
 
 def _make_result(

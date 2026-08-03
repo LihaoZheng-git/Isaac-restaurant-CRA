@@ -35,6 +35,9 @@ from robot.safety.safe_sage_guidance_policy import (
     SafeSAGEGuidancePolicy,
 )
 from robot.safety.semantic_obstacle import SemanticObstacle
+from robot.safety.vector_laplace_solver import (
+    solve_vector_laplace_dirichlet,
+)
 
 _NEIGHBOR_OFFSETS = (
     (-1, -1),
@@ -199,15 +202,15 @@ def solve_tangential_laplace_guidance_field(
         tangential_interface_mask
     ]
 
-    vectors, iteration_count, maximum_residual = _solve_harmonic_vectors(
+    harmonic_result = solve_vector_laplace_dirichlet(
         vectors,
-        fixed_mask=fixed_mask,
+        fixed_mask,
         resolution=occupancy_grid.config.resolution,
         config=solver_config,
     )
 
     return _make_result(
-        vectors,
+        harmonic_result.vectors,
         fixed_mask=fixed_mask,
         obstacle_interface_mask=obstacle_interface_mask,
         obstacle_normals=obstacle_normals,
@@ -215,8 +218,8 @@ def solve_tangential_laplace_guidance_field(
         tangential_normals=tangential_normals,
         tangential_boundary_vectors=tangential_boundary_vectors,
         component_labels=component_labels,
-        iteration_count=iteration_count,
-        maximum_residual=maximum_residual,
+        iteration_count=harmonic_result.iteration_count,
+        maximum_residual=harmonic_result.maximum_residual,
         resolution=occupancy_grid.config.resolution,
         buffer_radius=solver_config.tangential_buffer_radius,
     )
@@ -613,90 +616,6 @@ def _outer_boundary_mask(shape: tuple[int, int]) -> np.ndarray:
         boundary_mask[:, -1] = True
 
     return boundary_mask
-
-
-def _solve_harmonic_vectors(
-    vectors: np.ndarray,
-    *,
-    fixed_mask: np.ndarray,
-    resolution: float,
-    config: TangentialLaplaceGuidanceFieldConfig,
-) -> tuple[np.ndarray, int, float]:
-    """Harmonically extend fixed vector data through remaining cells."""
-
-    solution_mask = ~fixed_mask
-    if not np.any(solution_mask):
-        return vectors, 0, 0.0
-
-    maximum_residual = math.inf
-    interior_solution_mask = solution_mask[1:-1, 1:-1]
-    interior_rows, interior_columns = np.indices(
-        interior_solution_mask.shape
-    )
-    red_mask = interior_solution_mask & (
-        (interior_rows + interior_columns) % 2 == 0
-    )
-    black_mask = interior_solution_mask & ~red_mask
-
-    for iteration_count in range(1, config.maximum_iterations + 1):
-        for color_mask in (red_mask, black_mask):
-            neighbor_sum = (
-                vectors[:-2, 1:-1, :]
-                + vectors[2:, 1:-1, :]
-                + vectors[1:-1, :-2, :]
-                + vectors[1:-1, 2:, :]
-            )
-            candidates = 0.25 * neighbor_sum
-            interior_vectors = vectors[1:-1, 1:-1, :]
-            interior_vectors[color_mask] += config.relaxation_factor * (
-                candidates[color_mask] - interior_vectors[color_mask]
-            )
-
-        should_check = (
-            iteration_count == 1
-            or iteration_count % config.residual_check_interval == 0
-            or iteration_count == config.maximum_iterations
-        )
-        if not should_check:
-            continue
-
-        maximum_residual = _maximum_laplace_residual(
-            vectors,
-            solution_mask=solution_mask,
-            resolution=resolution,
-        )
-        if maximum_residual <= config.convergence_tolerance:
-            return vectors, iteration_count, maximum_residual
-
-    raise RuntimeError(
-        "Tangential Laplace guidance-field solver did not converge after "
-        f"{config.maximum_iterations} iterations; maximum residual="
-        f"{maximum_residual:.6e}, tolerance="
-        f"{config.convergence_tolerance:.6e}."
-    )
-
-
-def _maximum_laplace_residual(
-    vectors: np.ndarray,
-    *,
-    solution_mask: np.ndarray,
-    resolution: float,
-) -> float:
-    """Return the maximum absolute component-wise Laplace residual."""
-
-    laplacian = (
-        vectors[:-2, 1:-1, :]
-        + vectors[2:, 1:-1, :]
-        + vectors[1:-1, :-2, :]
-        + vectors[1:-1, 2:, :]
-        - 4.0 * vectors[1:-1, 1:-1, :]
-    ) / resolution**2
-    interior_solution_mask = solution_mask[1:-1, 1:-1]
-
-    if not np.any(interior_solution_mask):
-        return 0.0
-
-    return float(np.max(np.abs(laplacian[interior_solution_mask])))
 
 
 def _make_result(
