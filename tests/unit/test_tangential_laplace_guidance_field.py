@@ -257,6 +257,42 @@ def test_left_and_right_fields_reverse_tangential_direction() -> None:
     )
 
 
+def test_tangential_guidance_propagates_into_free_space() -> None:
+    left = solve_single_obstacle(
+        policy=make_guidance_policy(chair_side=PassingSide.LEFT)
+    )
+    right = solve_single_obstacle(
+        policy=make_guidance_policy(chair_side=PassingSide.RIGHT)
+    )
+
+    # This point lies two cells outside the fixed tangential interface.
+    # Its nonzero lateral component therefore comes from the harmonic solve,
+    # not directly from a prescribed boundary value.
+    assert not left.dirichlet_boundary_mask[8, 3]
+    left_vector = left.vector_at_cell(8, 3)
+    right_vector = right.vector_at_cell(8, 3)
+
+    assert left_vector[1] > 0.0
+    assert right_vector[1] < 0.0
+    assert left_vector[0] == pytest.approx(right_vector[0], abs=1e-12)
+    assert left_vector[1] == pytest.approx(-right_vector[1], abs=1e-12)
+
+
+def test_tangential_boundary_is_perpendicular_with_requested_strength() -> None:
+    result = solve_single_obstacle(
+        policy=make_guidance_policy(chair_strength=0.75)
+    )
+    mask = result.tangential_interface_mask
+    normals = result.tangential_normals_robot_xy[mask]
+    vectors = result.tangential_boundary_vectors_robot_xy[mask]
+
+    dot_products = np.sum(normals * vectors, axis=1)
+    magnitudes = np.linalg.norm(vectors, axis=1)
+
+    np.testing.assert_allclose(dot_products, 0.0, atol=1e-12)
+    np.testing.assert_allclose(magnitudes, 0.75, atol=1e-12)
+
+
 def test_larger_strength_increases_tangential_magnitude() -> None:
     weak = solve_single_obstacle(
         policy=make_guidance_policy(chair_strength=0.5)
@@ -270,6 +306,38 @@ def test_larger_strength_increases_tangential_magnitude() -> None:
 
     assert weak_magnitude == pytest.approx(0.5)
     assert strong_magnitude == pytest.approx(1.5)
+
+
+def test_classes_prescribe_independent_normal_and_tangential_strengths() -> None:
+    chair = make_semantic_obstacle(2, "chair")
+    person = make_semantic_obstacle(8, "person")
+    grid = make_grid(
+        size=29,
+        points=np.array([[8.5, 14.5], [20.5, 14.5]]),
+        track_ids=np.array([2, 8]),
+        semantics=(chair, person),
+    )
+    result = solve_tangential_laplace_guidance_field(
+        grid,
+        guidance_policy=make_guidance_policy(),
+        semantic_obstacles=(chair, person),
+        config=make_config(),
+    )
+
+    # The two obstacles have identical one-cell geometry. Their normal and
+    # tangential boundary magnitudes differ only because their classes do.
+    assert np.linalg.norm(result.vector_at_cell(14, 7)) == pytest.approx(
+        3.0
+    )
+    assert np.linalg.norm(result.vector_at_cell(14, 19)) == pytest.approx(
+        6.0
+    )
+    assert np.linalg.norm(result.vector_at_cell(14, 5)) == pytest.approx(
+        0.75
+    )
+    assert np.linalg.norm(result.vector_at_cell(14, 17)) == pytest.approx(
+        1.25
+    )
 
 
 def test_zero_strength_recovers_normal_only_solution() -> None:
@@ -300,6 +368,18 @@ def test_zero_strength_recovers_normal_only_solution() -> None:
         rtol=0.0,
         atol=1e-12,
     )
+
+
+def test_repeated_solve_is_exactly_deterministic() -> None:
+    first = solve_single_obstacle()
+    second = solve_single_obstacle()
+
+    np.testing.assert_array_equal(
+        first.vectors_robot_xy,
+        second.vectors_robot_xy,
+    )
+    assert first.iteration_count == second.iteration_count
+    assert first.maximum_residual == second.maximum_residual
 
 
 def test_unlabeled_track_uses_unknown_parameters() -> None:
