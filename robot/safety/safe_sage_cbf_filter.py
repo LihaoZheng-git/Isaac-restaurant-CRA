@@ -230,26 +230,16 @@ class SafeSAGECBFSafetyFilter:
             query_yaw,
             yaw_slice_count=h_full.yaw_slice_count,
         )
-        sampled_safety = float(
-            _sample_periodic_field(
-                h_full.values,
-                query_position=query_position,
-                grid=reference_grid,
-                lower_yaw=lower_yaw,
-                upper_yaw=upper_yaw,
-                yaw_weight=yaw_weight,
-            )
-        )
-        sampled_spatial_gradient = np.asarray(
-            _sample_periodic_field(
-                h_full.spatial_gradients_robot_xy,
-                query_position=query_position,
-                grid=reference_grid,
-                lower_yaw=lower_yaw,
-                upper_yaw=upper_yaw,
-                yaw_weight=yaw_weight,
-            ),
-            dtype=np.float64,
+        (
+            sampled_safety,
+            sampled_spatial_gradient,
+        ) = _sample_periodic_scalar_and_spatial_gradient(
+            h_full.values,
+            query_position=query_position,
+            grid=reference_grid,
+            lower_yaw=lower_yaw,
+            upper_yaw=upper_yaw,
+            yaw_weight=yaw_weight,
         )
         sampled_yaw_derivative = float(
             _sample_periodic_field(
@@ -685,6 +675,45 @@ def _sample_periodic_field(
     return (1.0 - yaw_weight) * lower_value + yaw_weight * upper_value
 
 
+def _sample_periodic_scalar_and_spatial_gradient(
+    values: np.ndarray,
+    *,
+    query_position: np.ndarray,
+    grid,
+    lower_yaw: int,
+    upper_yaw: int,
+    yaw_weight: float,
+) -> tuple[float, np.ndarray]:
+    """Sample one scalar field and differentiate that same interpolant."""
+
+    lower_value, lower_gradient = (
+        _bilinear_sample_scalar_with_gradient(
+            values[lower_yaw],
+            point_grid_xy=query_position,
+            grid=grid,
+        )
+    )
+    upper_value, upper_gradient = (
+        _bilinear_sample_scalar_with_gradient(
+            values[upper_yaw],
+            point_grid_xy=query_position,
+            grid=grid,
+        )
+    )
+    sampled_value = (
+        (1.0 - yaw_weight) * lower_value
+        + yaw_weight * upper_value
+    )
+    sampled_gradient = (
+        (1.0 - yaw_weight) * lower_gradient
+        + yaw_weight * upper_gradient
+    )
+    return float(sampled_value), np.asarray(
+        sampled_gradient,
+        dtype=np.float64,
+    )
+
+
 def _bilinear_sample_cell_centers(
     values: np.ndarray,
     *,
@@ -692,6 +721,88 @@ def _bilinear_sample_cell_centers(
     grid,
 ) -> np.ndarray | float:
     """Bilinearly sample scalar or vector data at grid-cell centers."""
+
+    (
+        row_zero,
+        row_one,
+        column_zero,
+        column_one,
+        row_fraction,
+        column_fraction,
+    ) = _bilinear_coordinates(point_grid_xy, grid=grid)
+
+    lower_value = (
+        (1.0 - column_fraction) * values[row_zero, column_zero]
+        + column_fraction * values[row_zero, column_one]
+    )
+    upper_value = (
+        (1.0 - column_fraction) * values[row_one, column_zero]
+        + column_fraction * values[row_one, column_one]
+    )
+    return (
+        (1.0 - row_fraction) * lower_value
+        + row_fraction * upper_value
+    )
+
+
+def _bilinear_sample_scalar_with_gradient(
+    values: np.ndarray,
+    *,
+    point_grid_xy: np.ndarray,
+    grid,
+) -> tuple[float, np.ndarray]:
+    """Return a scalar value and exact gradient of its bilinear patch."""
+
+    if values.ndim != 2:
+        raise ValueError("Bilinear scalar sampling requires a 2D array.")
+    (
+        row_zero,
+        row_one,
+        column_zero,
+        column_one,
+        row_fraction,
+        column_fraction,
+    ) = _bilinear_coordinates(point_grid_xy, grid=grid)
+
+    value_00 = float(values[row_zero, column_zero])
+    value_01 = float(values[row_zero, column_one])
+    value_10 = float(values[row_one, column_zero])
+    value_11 = float(values[row_one, column_one])
+
+    lower_value = (
+        (1.0 - column_fraction) * value_00
+        + column_fraction * value_01
+    )
+    upper_value = (
+        (1.0 - column_fraction) * value_10
+        + column_fraction * value_11
+    )
+    sampled_value = (
+        (1.0 - row_fraction) * lower_value
+        + row_fraction * upper_value
+    )
+
+    resolution = grid.config.resolution
+    derivative_x = (
+        (1.0 - row_fraction) * (value_01 - value_00)
+        + row_fraction * (value_11 - value_10)
+    ) / resolution
+    derivative_y = (
+        (1.0 - column_fraction) * (value_10 - value_00)
+        + column_fraction * (value_11 - value_01)
+    ) / resolution
+    return float(sampled_value), np.array(
+        [derivative_x, derivative_y],
+        dtype=np.float64,
+    )
+
+
+def _bilinear_coordinates(
+    point_grid_xy: np.ndarray,
+    *,
+    grid,
+) -> tuple[int, int, int, int, float, float]:
+    """Return checked cell-center interpolation indices and fractions."""
 
     config = grid.config
     column_position = (
@@ -724,20 +835,13 @@ def _bilinear_sample_cell_centers(
     column_zero = int(math.floor(column_position))
     row_one = min(row_zero + 1, config.row_count - 1)
     column_one = min(column_zero + 1, config.column_count - 1)
-    row_fraction = row_position - row_zero
-    column_fraction = column_position - column_zero
-
-    lower_value = (
-        (1.0 - column_fraction) * values[row_zero, column_zero]
-        + column_fraction * values[row_zero, column_one]
-    )
-    upper_value = (
-        (1.0 - column_fraction) * values[row_one, column_zero]
-        + column_fraction * values[row_one, column_one]
-    )
     return (
-        (1.0 - row_fraction) * lower_value
-        + row_fraction * upper_value
+        row_zero,
+        row_one,
+        column_zero,
+        column_one,
+        row_position - row_zero,
+        column_position - column_zero,
     )
 
 

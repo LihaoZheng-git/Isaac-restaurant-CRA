@@ -84,14 +84,27 @@ def make_fields(
         for index in range(yaw_slice_count)
     )
     shape = (yaw_slice_count,) + grids[0].shape
+    grid_config = grids[0].config
+    x_centers = grid_config.minimum_x + (
+        np.arange(grid_config.column_count, dtype=np.float64) + 0.5
+    ) * grid_config.resolution
+    y_centers = grid_config.minimum_y + (
+        np.arange(grid_config.row_count, dtype=np.float64) + 0.5
+    ) * grid_config.resolution
+    spatial_offsets = (
+        gradient[0] * x_centers[np.newaxis, :]
+        + gradient[1] * y_centers[:, np.newaxis]
+    )
     if per_yaw_safety_values is None:
-        values = np.full(shape, safety_value, dtype=np.float64)
+        values = np.empty(shape, dtype=np.float64)
+        for yaw_index in range(yaw_slice_count):
+            values[yaw_index] = safety_value + spatial_offsets
     else:
         if len(per_yaw_safety_values) != yaw_slice_count:
             raise ValueError("per_yaw_safety_values length mismatch")
         values = np.empty(shape, dtype=np.float64)
         for yaw_index, value in enumerate(per_yaw_safety_values):
-            values[yaw_index] = value
+            values[yaw_index] = value + spatial_offsets
 
     spatial_gradients = np.empty(shape + (2,), dtype=np.float64)
     spatial_gradients[..., 0] = gradient[0]
@@ -187,6 +200,32 @@ def test_spatial_gradient_reduces_forward_velocity() -> None:
     assert result.safe_angular_velocity == pytest.approx(0.4)
     assert result.cbf_margin == pytest.approx(0.0)
     assert result.intervention_active
+
+
+def test_filter_differentiates_the_sampled_safety_interpolant() -> None:
+    configuration_space, h_full = make_fields(
+        safety_value=0.2,
+        gradient=(-2.0, 0.0, 0.0),
+    )
+    inconsistent_h_full = replace(
+        h_full,
+        spatial_gradients_robot_xy=np.zeros_like(
+            h_full.spatial_gradients_robot_xy
+        ),
+    )
+
+    result = make_filter().filter_command(
+        0.3,
+        0.0,
+        query_position_grid_xy=np.array([0.0, 0.0]),
+        query_yaw_radians=0.0,
+        configuration_space=configuration_space,
+        h_full=inconsistent_h_full,
+    )
+
+    assert result.sampled_safety_value == pytest.approx(0.2)
+    assert result.sampled_gradient[0] == pytest.approx(-2.0)
+    assert result.safe_linear_velocity == pytest.approx(0.1)
 
 
 def test_yaw_gradient_directly_changes_angular_velocity() -> None:

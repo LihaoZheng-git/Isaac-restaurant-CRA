@@ -35,6 +35,14 @@ Stage C - stationary full-state CBF evaluation:
 4. Project the nominal command onto the actuator-limited safe set.
 5. Print the filtered command and complete inequality diagnostics.
 
+Stage C2 - stationary forward counterfactual sweep:
+
+1. Reuse the same static ``h_full`` field and nominal command.
+2. Evaluate hypothetical robot positions at fixed increments along ``+X``.
+3. Stop at the first yaw-specific configuration-space boundary.
+4. Verify that a feasible intervention occurs before that boundary and that
+   every preceding safe command satisfies the full-state CBF inequality.
+
 The obstacle is static, so ``h_t`` is explicitly zero. No nominal or
 filtered command is sent to the wheels; the robot remains stationary during
 all three stages. Camera/YOLO labels, temporal field estimation, and
@@ -240,6 +248,9 @@ CBF_GAMMA = 1.0
 CBF_LINEAR_VELOCITY_WEIGHT = 1.0
 CBF_ANGULAR_VELOCITY_WEIGHT = 1.0
 STATIC_TEMPORAL_SAFETY_DERIVATIVE = 0.0
+
+FORWARD_PROBE_SPACING = 0.05
+FORWARD_PROBE_MAXIMUM_X = 1.50
 
 CURRENT_CONFIGURATION_POSITION_GRID_XY = np.array(
     [0.0, 0.0],
@@ -847,6 +858,7 @@ def print_stage_c_report(
     print("SAFE-SAGE H_FULL STAGE C - STATIONARY FULL-STATE CBF")
     print("=" * 70)
 
+
     print("\nLocal field query:")
     print(
         "  Position (x, y):              "
@@ -977,6 +989,176 @@ def print_stage_c_report(
             "  The nominal command was safe in this snapshot and passed "
             "through unchanged; it was not applied to the wheels."
         )
+    print("=" * 70)
+
+
+def evaluate_forward_counterfactuals(
+    *,
+    safety_filter: SafeSAGECBFSafetyFilter,
+    nominal_command: WaypointCommand,
+    pipeline: SafeSAGEFieldPipelineResult,
+) -> tuple[SafeSAGECBFResult, ...]:
+    """Evaluate virtual forward poses until the first unsafe boundary."""
+
+    probe_results: list[SafeSAGECBFResult] = []
+    probe_count = int(
+        math.floor(
+            FORWARD_PROBE_MAXIMUM_X / FORWARD_PROBE_SPACING
+        )
+    ) + 1
+
+    for probe_index in range(probe_count):
+        probe_x = probe_index * FORWARD_PROBE_SPACING
+        result = safety_filter.filter_command(
+            nominal_command.linear_velocity,
+            nominal_command.angular_velocity,
+            query_position_grid_xy=np.array(
+                [probe_x, 0.0],
+                dtype=np.float64,
+            ),
+            query_yaw_radians=CURRENT_CONFIGURATION_YAW_RADIANS,
+            configuration_space=pipeline.configuration_space,
+            h_full=pipeline.h_full,
+            temporal_safety_derivative=(
+                STATIC_TEMPORAL_SAFETY_DERIVATIVE
+            ),
+        )
+        probe_results.append(result)
+        if result.query_on_unsafe_boundary:
+            break
+
+    return tuple(probe_results)
+
+
+def print_forward_probe_report(
+    *,
+    probe_results: tuple[SafeSAGECBFResult, ...],
+) -> None:
+    """Print and validate the stationary forward safety transition."""
+
+    if not probe_results:
+        raise RuntimeError("The forward counterfactual sweep is empty.")
+
+    boundary_result = next(
+        (
+            result
+            for result in probe_results
+            if result.query_on_unsafe_boundary
+        ),
+        None,
+    )
+    safe_results = tuple(
+        result
+        for result in probe_results
+        if not result.emergency_stop_active
+    )
+    intervention_results = tuple(
+        result
+        for result in safe_results
+        if result.intervention_active
+    )
+    first_intervention = (
+        intervention_results[0]
+        if intervention_results
+        else None
+    )
+
+    all_safe_constraints_valid = bool(safe_results) and all(
+        result.constraint_feasible
+        and result.constraint_satisfied
+        and result.cbf_margin >= -1e-9
+        for result in safe_results
+    )
+    boundary_found = boundary_result is not None
+    boundary_stopped = (
+        boundary_result is not None
+        and boundary_result.emergency_stop_active
+        and boundary_result.safe_linear_velocity == 0.0
+        and boundary_result.safe_angular_velocity == 0.0
+        and boundary_result.emergency_reason
+        == "unsafe_configuration_boundary"
+    )
+    intervention_before_boundary = (
+        first_intervention is not None
+        and boundary_result is not None
+        and first_intervention.query_position_grid_xy[0]
+        < boundary_result.query_position_grid_xy[0]
+    )
+    accepted = (
+        all_safe_constraints_valid
+        and boundary_found
+        and boundary_stopped
+        and intervention_before_boundary
+    )
+
+    print("\n" + "=" * 70)
+    print("SAFE-SAGE H_FULL STAGE C2 - STATIONARY FORWARD PROBE")
+    print("=" * 70)
+    print(
+        "\nThe following positions are counterfactual field queries; "
+        "the robot did not move."
+    )
+    print(
+        "\n     x        h       dh/dx    v_safe    w_safe     margin  "
+        "status"
+    )
+    print("  " + "-" * 66)
+
+    for result in probe_results:
+        if result.query_on_unsafe_boundary:
+            status = "BOUNDARY STOP"
+        elif result.intervention_active:
+            status = "INTERVENE"
+        else:
+            status = "PASS"
+
+        print(
+            f"  {result.query_position_grid_xy[0]:6.2f}  "
+            f"{result.sampled_safety_value:8.4f}  "
+            f"{result.sampled_gradient[0]:9.4f}  "
+            f"{result.safe_linear_velocity:8.4f}  "
+            f"{result.safe_angular_velocity:8.4f}  "
+            f"{result.cbf_margin:9.2e}  "
+            f"{status}"
+        )
+
+    print("\nTransition checks:")
+    print(f"  Safe probes evaluated:         {len(safe_results)}")
+    print(
+        "  All safe constraints valid:   "
+        f"{all_safe_constraints_valid}"
+    )
+    print(f"  Intervention observed:         {bool(intervention_results)}")
+    if first_intervention is not None:
+        print(
+            "  First intervention at x:      "
+            f"{first_intervention.query_position_grid_xy[0]:.3f} m"
+        )
+    print(f"  Unsafe boundary found:         {boundary_found}")
+    if boundary_result is not None:
+        print(
+            "  First boundary at x:          "
+            f"{boundary_result.query_position_grid_xy[0]:.3f} m"
+        )
+    print(f"  Boundary produced stop:        {boundary_stopped}")
+    print(
+        "  Intervention before boundary: "
+        f"{intervention_before_boundary}"
+    )
+
+    print("\nInterpretation:")
+    if accepted:
+        print(
+            "  [PASS] The static full-state filter intervened before the "
+            "yaw-specific collision boundary, maintained every feasible "
+            "CBF constraint, and stopped at the boundary."
+        )
+    else:
+        print(
+            "  [WARNING] The expected pass/intervene/stop transition was "
+            "not fully observed. Do not enable closed-loop motion yet."
+        )
+    print("  Every row above was diagnostic; no wheel command was applied.")
     print("=" * 70)
 
 
@@ -1196,6 +1378,11 @@ def main() -> None:
             STATIC_TEMPORAL_SAFETY_DERIVATIVE
         ),
     )
+    forward_probe_results = evaluate_forward_counterfactuals(
+        safety_filter=safety_filter,
+        nominal_command=nominal_command,
+        pipeline=pipeline,
+    )
 
     robot_controller.stop()
     app_utils.update_app(steps=5)
@@ -1224,6 +1411,9 @@ def main() -> None:
         initial_pose=stationary_reference_pose,
         final_pose=final_pose,
     )
+    print_forward_probe_report(
+        probe_results=forward_probe_results,
+    )
 
     robot_controller.stop()
     app_utils.update_app(steps=5)
@@ -1233,6 +1423,7 @@ def main() -> None:
     print("  - Nova Carter remains at approximately (26.5, 5.0).")
     print("  - One blue cube remains directly ahead of the robot.")
     print("  - The wheels never receive the printed nominal or safe command.")
+    print("  - Stage C2 positions are virtual; the robot does not follow them.")
     print("  - No bypass motion is expected in this stationary validation.")
     print("\nThe GUI will remain open for inspection.")
     print("Close the Isaac Sim window when finished.")
