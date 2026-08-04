@@ -1,15 +1,19 @@
-"""Finite-difference Poisson safety function on a local occupancy grid.
+"""Poisson safety function for the Risk-Aware PSF/LGF CBF baseline.
 
 The scalar safety function solves
 
     Laplacian(h) = f,    f < 0
 
 inside the free grid cells, with ``h = 0`` on occupied cells and the outer
-grid boundary. The discrete maximum principle then gives positive values in
-the free interior and zero values at unsafe boundaries.
+grid boundary. The forcing may be one constant negative scalar or a spatially
+varying negative field. The discrete maximum principle then gives positive
+values in the free interior and zero values at unsafe boundaries.
 
-Semantic boundary flux is intentionally not used here. It belongs to the
-separate Laplace guidance-field equation implemented in the next module.
+The forcing is intentionally independent of semantic risk in this baseline.
+Semantic risk is mapped to boundary flux in the separate Laplace guidance
+field, and the scalar and vector fields meet in the CBF constraint. This is
+the construction used by the Risk-Aware PSF/LGF method; it should not be
+described as the complete Safe-SAGE field-synthesis pipeline.
 """
 
 import math
@@ -113,8 +117,9 @@ class PoissonSafetyFunctionResult:
     dirichlet_boundary_mask: np.ndarray
     iteration_count: int
     maximum_residual: float
-    forcing: float
+    forcing: float | None
     resolution: float
+    forcing_field: np.ndarray | None = None
 
     @property
     def shape(self) -> tuple[int, int]:
@@ -161,11 +166,15 @@ class PoissonSafetyFunctionResult:
 def solve_poisson_safety_function(
     occupancy_grid: LocalOccupancyGrid,
     config: PoissonSafetyFunctionConfig | None = None,
+    *,
+    forcing_field: np.ndarray | None = None,
 ) -> PoissonSafetyFunctionResult:
     """Solve the scalar Poisson safety function using Jacobi iteration.
 
     The outermost row and column are fixed at zero. Occupied cells are also
     fixed at zero. All remaining cells use a standard five-point Laplacian.
+    When ``forcing_field`` is omitted, ``config.forcing`` is used uniformly.
+    A supplied forcing field must match the grid and be strictly negative.
 
     Raises:
         RuntimeError:
@@ -180,6 +189,15 @@ def solve_poisson_safety_function(
     if not isinstance(solver_config, PoissonSafetyFunctionConfig):
         raise TypeError("config must be a PoissonSafetyFunctionConfig.")
 
+    resolved_forcing = _resolve_forcing_field(
+        occupancy_grid,
+        scalar_forcing=solver_config.forcing,
+        forcing_field=forcing_field,
+    )
+    scalar_forcing = (
+        solver_config.forcing if forcing_field is None else None
+    )
+
     boundary_mask = _dirichlet_boundary_mask(occupancy_grid)
     solution_mask = ~boundary_mask
     values = np.zeros(occupancy_grid.shape, dtype=np.float64)
@@ -190,12 +208,15 @@ def solve_poisson_safety_function(
             boundary_mask,
             iteration_count=0,
             maximum_residual=0.0,
-            config=solver_config,
+            scalar_forcing=scalar_forcing,
+            forcing_field=(
+                None if forcing_field is None else resolved_forcing
+            ),
             resolution=occupancy_grid.config.resolution,
         )
 
     resolution = occupancy_grid.config.resolution
-    source_term = -solver_config.forcing * resolution**2
+    source_term = -resolved_forcing[1:-1, 1:-1] * resolution**2
     maximum_residual = math.inf
 
     for iteration_count in range(
@@ -233,7 +254,7 @@ def solve_poisson_safety_function(
         maximum_residual = _maximum_poisson_residual(
             values,
             solution_mask=solution_mask,
-            forcing=solver_config.forcing,
+            forcing_field=resolved_forcing,
             resolution=resolution,
         )
         if maximum_residual <= solver_config.convergence_tolerance:
@@ -242,7 +263,10 @@ def solve_poisson_safety_function(
                 boundary_mask,
                 iteration_count=iteration_count,
                 maximum_residual=maximum_residual,
-                config=solver_config,
+                scalar_forcing=scalar_forcing,
+                forcing_field=(
+                    None if forcing_field is None else resolved_forcing
+                ),
                 resolution=resolution,
             )
 
@@ -275,11 +299,48 @@ def _dirichlet_boundary_mask(
     return boundary_mask
 
 
+def _resolve_forcing_field(
+    occupancy_grid: LocalOccupancyGrid,
+    *,
+    scalar_forcing: float,
+    forcing_field: np.ndarray | None,
+) -> np.ndarray:
+    """Return a validated negative forcing value for every grid cell."""
+
+    if forcing_field is None:
+        return np.full(
+            occupancy_grid.shape,
+            scalar_forcing,
+            dtype=np.float64,
+        )
+    if not isinstance(forcing_field, np.ndarray):
+        raise TypeError("forcing_field must be a numpy array.")
+    if forcing_field.shape != occupancy_grid.shape:
+        raise ValueError(
+            "forcing_field shape must match the occupancy grid."
+        )
+
+    resolved = np.array(
+        forcing_field,
+        dtype=np.float64,
+        copy=True,
+        order="C",
+    )
+    if not np.isfinite(resolved).all():
+        raise ValueError("forcing_field values must be finite.")
+    if np.any(resolved >= 0.0):
+        raise ValueError(
+            "forcing_field values must be strictly negative."
+        )
+
+    return resolved
+
+
 def _maximum_poisson_residual(
     values: np.ndarray,
     *,
     solution_mask: np.ndarray,
-    forcing: float,
+    forcing_field: np.ndarray,
     resolution: float,
 ) -> float:
     """Return the maximum absolute five-point-equation residual."""
@@ -291,7 +352,9 @@ def _maximum_poisson_residual(
         + values[1:-1, 2:]
         - 4.0 * values[1:-1, 1:-1]
     ) / resolution**2
-    residuals = np.abs(laplacian - forcing)
+    residuals = np.abs(
+        laplacian - forcing_field[1:-1, 1:-1]
+    )
     interior_solution_mask = solution_mask[1:-1, 1:-1]
 
     if not np.any(interior_solution_mask):
@@ -306,7 +369,8 @@ def _make_result(
     *,
     iteration_count: int,
     maximum_residual: float,
-    config: PoissonSafetyFunctionConfig,
+    scalar_forcing: float | None,
+    forcing_field: np.ndarray | None,
     resolution: float,
 ) -> PoissonSafetyFunctionResult:
     """Freeze solution arrays and construct a result object."""
@@ -316,6 +380,13 @@ def _make_result(
         boundary_mask,
         dtype=bool,
     )
+    frozen_forcing_field = None
+    if forcing_field is not None:
+        frozen_forcing_field = np.ascontiguousarray(
+            forcing_field,
+            dtype=np.float64,
+        )
+        frozen_forcing_field.setflags(write=False)
     values.setflags(write=False)
     boundary_mask.setflags(write=False)
 
@@ -324,6 +395,7 @@ def _make_result(
         dirichlet_boundary_mask=boundary_mask,
         iteration_count=iteration_count,
         maximum_residual=float(maximum_residual),
-        forcing=config.forcing,
+        forcing=scalar_forcing,
         resolution=float(resolution),
+        forcing_field=frozen_forcing_field,
     )
