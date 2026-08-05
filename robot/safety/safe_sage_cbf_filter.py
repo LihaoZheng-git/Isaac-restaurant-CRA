@@ -260,9 +260,15 @@ class SafeSAGECBFSafetyFilter:
             dtype=np.float64,
         )
 
-        active_yaw_slices = [lower_yaw]
-        if yaw_weight > self.config.numerical_tolerance:
-            active_yaw_slices.append(upper_yaw)
+        tolerance = self.config.numerical_tolerance
+        if yaw_weight < 0.5 - tolerance:
+            active_yaw_slices = (lower_yaw,)
+        elif yaw_weight > 0.5 + tolerance:
+            active_yaw_slices = (upper_yaw,)
+        else:
+            # At the exact nearest-slice tie, either discrete orientation
+            # being unsafe is sufficient for a conservative stop.
+            active_yaw_slices = (lower_yaw, upper_yaw)
         query_on_boundary = any(
             bool(
                 h_full.dirichlet_boundary_masks[
@@ -308,7 +314,6 @@ class SafeSAGECBFSafetyFilter:
                 reason="unsafe_configuration_boundary",
             )
 
-        tolerance = self.config.numerical_tolerance
         if sampled_safety < -tolerance:
             return self._emergency_result(
                 nominal_linear,

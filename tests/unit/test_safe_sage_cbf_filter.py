@@ -325,6 +325,42 @@ def test_unsafe_yaw_slice_triggers_conservative_emergency_stop() -> None:
     assert result.emergency_reason == "unsafe_configuration_boundary"
 
 
+def test_tiny_yaw_does_not_activate_distant_neighbor_boundary() -> None:
+    result = apply_filter(
+        make_filter(),
+        nominal_linear=0.2,
+        query_yaw=0.01,
+        safety_value=0.2,
+        gradient=(-1.0, 0.0, 0.0),
+        unsafe_yaw_indices=(3,),
+    )
+
+    assert result.lower_yaw_slice == 2
+    assert result.upper_yaw_slice == 3
+    assert result.yaw_interpolation_weight < 0.5
+    assert not result.query_on_unsafe_boundary
+    assert not result.emergency_stop_active
+    assert result.constraint_satisfied
+
+
+def test_nearest_unsafe_yaw_slice_triggers_boundary_stop() -> None:
+    result = apply_filter(
+        make_filter(),
+        nominal_linear=0.2,
+        query_yaw=0.40 * np.pi,
+        safety_value=0.2,
+        gradient=(-1.0, 0.0, 0.0),
+        unsafe_yaw_indices=(3,),
+    )
+
+    assert result.lower_yaw_slice == 2
+    assert result.upper_yaw_slice == 3
+    assert result.yaw_interpolation_weight > 0.5
+    assert result.query_on_unsafe_boundary
+    assert result.emergency_stop_active
+    assert result.emergency_reason == "unsafe_configuration_boundary"
+
+
 def test_infeasible_constraint_triggers_emergency_stop() -> None:
     result = apply_filter(
         make_filter(),
