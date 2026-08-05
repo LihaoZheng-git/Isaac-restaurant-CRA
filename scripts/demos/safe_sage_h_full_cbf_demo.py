@@ -140,10 +140,10 @@ from robot.safety.safe_sage_configuration_space import (
     RectangularRobotFootprint,
     SafeSAGEConfigurationSpaceConfig,
 )
-from robot.safety.safe_sage_differential_drive_interface import (
-    SafeSAGEDifferentialDriveConfig,
-    SafeSAGEDifferentialDriveResult,
-    SafeSAGEDifferentialDriveSafetyFilter,
+from robot.safety.safe_sage_unicycle_cbf_filter import (
+    SafeSAGEUnicycleCBFConfig,
+    SafeSAGEUnicycleCBFFilter,
+    SafeSAGEUnicycleCBFResult,
     shift_rectangular_footprint_to_lookahead,
 )
 from robot.safety.safe_sage_field_pipeline import (
@@ -252,14 +252,14 @@ H_FULL_POISSON_CONVERGENCE_TOLERANCE = 1e-6
 CBF_GAMMA = 1.0
 CBF_LINEAR_VELOCITY_WEIGHT = 1.0
 CBF_ANGULAR_VELOCITY_WEIGHT = 1.0
-DIFFERENTIAL_DRIVE_LOOKAHEAD_DISTANCE = 0.10
+UNICYCLE_LOOKAHEAD_DISTANCE = 0.10
 STATIC_TEMPORAL_SAFETY_DERIVATIVE = 0.0
 
 FORWARD_PROBE_SPACING = 0.05
 FORWARD_PROBE_MAXIMUM_X = 1.50
 
 CURRENT_LOOKAHEAD_POSITION_GRID_XY = np.array(
-    [DIFFERENTIAL_DRIVE_LOOKAHEAD_DISTANCE, 0.0],
+    [UNICYCLE_LOOKAHEAD_DISTANCE, 0.0],
     dtype=np.float64,
 )
 CURRENT_CONFIGURATION_YAW_RADIANS = 0.0
@@ -672,7 +672,7 @@ def print_stage_a_report(
     print("\nEquivalent look-ahead-referenced footprint:")
     print(
         "  Look-ahead distance:          "
-        f"{DIFFERENTIAL_DRIVE_LOOKAHEAD_DISTANCE:.6f} m"
+        f"{UNICYCLE_LOOKAHEAD_DISTANCE:.6f} m"
     )
     print(f"  Front extent (+X):            {footprint.front_extent:.6f} m")
     print(f"  Rear extent (-X):             {footprint.rear_extent:.6f} m")
@@ -827,7 +827,7 @@ def print_stage_b_report(
 def print_stage_c_report(
     *,
     nominal_command: WaypointCommand,
-    filter_result: SafeSAGEDifferentialDriveResult,
+    filter_result: SafeSAGEUnicycleCBFResult,
     initial_pose: RobotPose2D,
     final_pose: RobotPose2D,
 ) -> None:
@@ -872,9 +872,16 @@ def print_stage_c_report(
     guidance_x, guidance_y = filter_result.sampled_guidance_grid_xy
 
     print("\n" + "=" * 70)
-    print("SAFE-SAGE H_FULL STAGE C - PAPER FILTER AND DRIVE INTERFACE")
+    print("SAFE-SAGE H_FULL STAGE C - UNICYCLE CONTROL INTERFACE")
     print("=" * 70)
 
+    print("\nControl model:")
+    print("  Chassis state:                (x, y, psi)")
+    print("  Executable input:             (v, omega)")
+    print(
+        "  Look-ahead distance:          "
+        f"{UNICYCLE_LOOKAHEAD_DISTANCE:.3f} m"
+    )
 
     print("\nLook-ahead field query:")
     print(
@@ -994,7 +1001,7 @@ def print_stage_c_report(
     if accepted:
         print(
             "  [PASS] The measured yaw-dependent geometry, semantic "
-            "LGF/h_full fields, paper constraint, and differential-drive "
+            "LGF/h_full fields, paper constraint, and unicycle control "
             "interface produced a valid stationary safe command."
         )
     else:
@@ -1017,13 +1024,13 @@ def print_stage_c_report(
 
 def evaluate_forward_counterfactuals(
     *,
-    safety_filter: SafeSAGEDifferentialDriveSafetyFilter,
+    safety_filter: SafeSAGEUnicycleCBFFilter,
     nominal_command: WaypointCommand,
     pipeline: SafeSAGEFieldPipelineResult,
-) -> tuple[SafeSAGEDifferentialDriveResult, ...]:
+) -> tuple[SafeSAGEUnicycleCBFResult, ...]:
     """Evaluate virtual forward poses until the first unsafe boundary."""
 
-    probe_results: list[SafeSAGEDifferentialDriveResult] = []
+    probe_results: list[SafeSAGEUnicycleCBFResult] = []
     probe_count = math.floor(
         FORWARD_PROBE_MAXIMUM_X / FORWARD_PROBE_SPACING
     ) + 1
@@ -1036,7 +1043,7 @@ def evaluate_forward_counterfactuals(
             query_position_grid_xy=np.array(
                 [
                     probe_x
-                    + DIFFERENTIAL_DRIVE_LOOKAHEAD_DISTANCE,
+                    + UNICYCLE_LOOKAHEAD_DISTANCE,
                     0.0,
                 ],
                 dtype=np.float64,
@@ -1058,7 +1065,7 @@ def evaluate_forward_counterfactuals(
 
 def print_forward_probe_report(
     *,
-    probe_results: tuple[SafeSAGEDifferentialDriveResult, ...],
+    probe_results: tuple[SafeSAGEUnicycleCBFResult, ...],
 ) -> None:
     """Print and validate the stationary forward safety transition."""
 
@@ -1216,7 +1223,7 @@ def main() -> None:
     )
     footprint = shift_rectangular_footprint_to_lookahead(
         measured_footprint,
-        lookahead_distance=DIFFERENTIAL_DRIVE_LOOKAHEAD_DISTANCE,
+        lookahead_distance=UNICYCLE_LOOKAHEAD_DISTANCE,
     )
     field_pipeline_config = create_field_pipeline_config(footprint)
 
@@ -1397,11 +1404,11 @@ def main() -> None:
             angular_velocity_weight=CBF_ANGULAR_VELOCITY_WEIGHT,
         )
     )
-    safety_filter = SafeSAGEDifferentialDriveSafetyFilter(
+    safety_filter = SafeSAGEUnicycleCBFFilter(
         paper_filter,
-        SafeSAGEDifferentialDriveConfig(
+        SafeSAGEUnicycleCBFConfig(
             lookahead_distance=(
-                DIFFERENTIAL_DRIVE_LOOKAHEAD_DISTANCE
+                UNICYCLE_LOOKAHEAD_DISTANCE
             ),
             minimum_linear_velocity=0.0,
             maximum_linear_velocity=(
