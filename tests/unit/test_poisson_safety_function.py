@@ -145,6 +145,47 @@ def test_solution_scales_linearly_with_forcing() -> None:
     )
 
 
+def test_spatial_forcing_field_is_used_without_mutating_input() -> None:
+    grid = make_grid(size=5)
+    forcing_field = np.full(grid.shape, -1.0, dtype=np.float64)
+    forcing_field[2, 2] = -2.0
+
+    result = solve_poisson_safety_function(
+        grid,
+        PoissonSafetyFunctionConfig(
+            convergence_tolerance=1e-10,
+            residual_check_interval=1,
+        ),
+        forcing_field=forcing_field,
+    )
+
+    assert forcing_field.flags.writeable
+    assert result.forcing is None
+    assert result.forcing_field is not None
+    np.testing.assert_array_equal(result.forcing_field, forcing_field)
+    assert not result.forcing_field.flags.writeable
+    assert result.values[2, 2] > result.values[1, 1]
+
+
+@pytest.mark.parametrize(
+    "forcing_field",
+    [
+        np.zeros((5, 5), dtype=np.float64),
+        np.full((5, 5), 1.0, dtype=np.float64),
+        np.full((5, 5), np.nan, dtype=np.float64),
+        np.full((4, 5), -1.0, dtype=np.float64),
+    ],
+)
+def test_invalid_spatial_forcing_field_is_rejected(
+    forcing_field: np.ndarray,
+) -> None:
+    with pytest.raises(ValueError):
+        solve_poisson_safety_function(
+            make_grid(size=5),
+            forcing_field=forcing_field,
+        )
+
+
 def test_all_cells_on_boundary_returns_without_iteration() -> None:
     result = solve_poisson_safety_function(make_grid(size=2))
 
