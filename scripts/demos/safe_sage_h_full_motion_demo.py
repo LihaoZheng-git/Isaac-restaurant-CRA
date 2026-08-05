@@ -64,6 +64,7 @@ from isaacsim.core.simulation_manager import SimulationManager
 from pxr import Usd
 
 from robot.control.differential_drive import NovaCarterController
+from robot.control.unicycle_model import lookahead_state
 from robot.navigation.waypoint_controller import (
     RobotPose2D,
     WaypointCommand,
@@ -90,11 +91,10 @@ from robot.safety.safe_sage_cbf_filter import (
 from robot.safety.safe_sage_configuration_space import (
     RectangularRobotFootprint,
 )
-from robot.safety.safe_sage_differential_drive_interface import (
-    SafeSAGEDifferentialDriveConfig,
-    SafeSAGEDifferentialDriveResult,
-    SafeSAGEDifferentialDriveSafetyFilter,
-    lookahead_position_grid_xy,
+from robot.safety.safe_sage_unicycle_cbf_filter import (
+    SafeSAGEUnicycleCBFConfig,
+    SafeSAGEUnicycleCBFFilter,
+    SafeSAGEUnicycleCBFResult,
     shift_rectangular_footprint_to_lookahead,
 )
 from robot.safety.safe_sage_field_pipeline import (
@@ -168,7 +168,7 @@ class MotionResult:
     received_scan_count: int
     initial_pose: RobotPose2D
     final_pose: RobotPose2D
-    final_filter_result: SafeSAGEDifferentialDriveResult
+    final_filter_result: SafeSAGEUnicycleCBFResult
     intervention_seen: bool
     first_intervention_step: int | None
     first_intervention_clearance: float
@@ -520,24 +520,27 @@ def proxy_clearance_forward_threshold(initial_pose: RobotPose2D) -> float:
 
 def evaluate_filter(
     *,
-    safety_filter: SafeSAGEDifferentialDriveSafetyFilter,
+    safety_filter: SafeSAGEUnicycleCBFFilter,
     nominal_command: WaypointCommand,
     robot_pose: RobotPose2D,
     pipeline_frame: MotionPipelineFrame,
-) -> tuple[SafeSAGEDifferentialDriveResult, np.ndarray, float]:
+) -> tuple[SafeSAGEUnicycleCBFResult, np.ndarray, float]:
     """Evaluate the fixed field at the current look-ahead configuration."""
 
     chassis_position, query_yaw = current_pose_in_field_frame(
         robot_pose,
         anchor_pose=pipeline_frame.anchor_pose_world,
     )
-    query_position = lookahead_position_grid_xy(
-        chassis_position,
-        yaw_radians=query_yaw,
+    query_state = lookahead_state(
+        np.array(
+            [chassis_position[0], chassis_position[1], query_yaw],
+            dtype=np.float64,
+        ),
         lookahead_distance=(
-            stationary.DIFFERENTIAL_DRIVE_LOOKAHEAD_DISTANCE
+            stationary.UNICYCLE_LOOKAHEAD_DISTANCE
         ),
     )
+    query_position = query_state[:2]
     result = safety_filter.filter_command(
         nominal_command.linear_velocity,
         nominal_command.angular_velocity,
@@ -563,7 +566,7 @@ def print_live_status(
     clearance: float,
     rightward_displacement: float,
     nominal_command: WaypointCommand,
-    filter_result: SafeSAGEDifferentialDriveResult,
+    filter_result: SafeSAGEUnicycleCBFResult,
 ) -> None:
     """Print one compact closed-loop status line."""
 
@@ -601,7 +604,7 @@ def run_motion_trial(
     guidance_policy: SafeSAGEGuidancePolicy,
     grid_config: LocalOccupancyGridConfig,
     field_config: SafeSAGEFieldPipelineConfig,
-    safety_filter: SafeSAGEDifferentialDriveSafetyFilter,
+    safety_filter: SafeSAGEUnicycleCBFFilter,
 ) -> MotionResult:
     """Run one fail-closed full-state Safe-SAGE motion trial."""
 
@@ -694,6 +697,12 @@ def run_motion_trial(
     print("SAFE-SAGE H_FULL STAGE D - CLOSED-LOOP MOTION")
     print("=" * 70)
     print("\nControlled motion settings:")
+    print("  Chassis state:                 (x, y, psi)")
+    print("  Executable input:              (v, omega)")
+    print(
+        "  Look-ahead distance:           "
+        f"{stationary.UNICYCLE_LOOKAHEAD_DISTANCE:.3f} m"
+    )
     print(
         "  Maximum duration:              "
         f"{MAXIMUM_MOTION_SECONDS:.1f} s"
@@ -1127,7 +1136,7 @@ def main() -> None:
     footprint = shift_rectangular_footprint_to_lookahead(
         measured_footprint,
         lookahead_distance=(
-            stationary.DIFFERENTIAL_DRIVE_LOOKAHEAD_DISTANCE
+            stationary.UNICYCLE_LOOKAHEAD_DISTANCE
         ),
     )
     field_config = stationary.create_field_pipeline_config(footprint)
@@ -1218,11 +1227,11 @@ def main() -> None:
             ),
         )
     )
-    safety_filter = SafeSAGEDifferentialDriveSafetyFilter(
+    safety_filter = SafeSAGEUnicycleCBFFilter(
         paper_filter,
-        SafeSAGEDifferentialDriveConfig(
+        SafeSAGEUnicycleCBFConfig(
             lookahead_distance=(
-                stationary.DIFFERENTIAL_DRIVE_LOOKAHEAD_DISTANCE
+                stationary.UNICYCLE_LOOKAHEAD_DISTANCE
             ),
             minimum_linear_velocity=0.0,
             maximum_linear_velocity=(
