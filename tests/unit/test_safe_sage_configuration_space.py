@@ -145,6 +145,30 @@ def test_asymmetric_rectangle_uses_minkowski_reflection() -> None:
     assert occupied_columns_at_zero == {3, 4, 5, 6}
 
 
+def test_subcell_front_extent_marks_overlapping_candidate_cell() -> None:
+    source_grid = make_grid(
+        resolution=0.2,
+        occupied_cells=((5, 5, 7, 0.9, -5.0),),
+    )
+    result = build_safe_sage_configuration_space(
+        source_grid,
+        SafeSAGEConfigurationSpaceConfig(
+            footprint=RectangularRobotFootprint(
+                front_extent=0.14,
+                rear_extent=0.587351,
+                left_extent=0.2466,
+                right_extent=0.2466,
+                safety_margin=0.05,
+            ),
+            yaw_slice_count=4,
+        ),
+    )
+
+    mask_at_zero = result.occupancy_grids[2].occupied_mask
+    assert mask_at_zero[5, 4]
+    assert not mask_at_zero[5, 3]
+
+
 def test_circular_footprint_is_yaw_invariant() -> None:
     result = build_safe_sage_configuration_space(
         centered_obstacle_grid(),

@@ -313,10 +313,16 @@ def _footprint_cell_offsets(
     yaw_radians: float,
     resolution: float,
 ) -> tuple[tuple[int, int], ...]:
-    """Rasterize reflected footprint offsets for one yaw."""
+    """Conservatively rasterize reflected footprint cells for one yaw."""
 
     maximum_radius = _maximum_footprint_radius(footprint)
-    maximum_offset = int(math.ceil(maximum_radius / resolution))
+    cell_half_extent = 0.5 * resolution
+    cell_half_diagonal = math.sqrt(2.0) * cell_half_extent
+    maximum_offset = int(
+        math.ceil(
+            (maximum_radius + cell_half_diagonal) / resolution
+        )
+    )
     offsets: list[tuple[int, int]] = []
 
     for row_offset in range(-maximum_offset, maximum_offset + 1):
@@ -329,13 +335,14 @@ def _footprint_cell_offsets(
             obstacle_in_footprint_x = -candidate_minus_obstacle_x
             obstacle_in_footprint_y = -candidate_minus_obstacle_y
 
-            if _footprint_contains_robot_frame_point(
+            if _footprint_overlaps_grid_cell(
                 footprint,
-                point_grid_xy=(
+                cell_center_grid_xy=(
                     obstacle_in_footprint_x,
                     obstacle_in_footprint_y,
                 ),
                 yaw_radians=yaw_radians,
+                cell_half_extent=cell_half_extent,
             ):
                 offsets.append((row_offset, column_offset))
 
@@ -363,32 +370,91 @@ def _maximum_footprint_radius(footprint: RobotFootprint) -> float:
     return math.hypot(maximum_x, maximum_y)
 
 
-def _footprint_contains_robot_frame_point(
+def _footprint_overlaps_grid_cell(
     footprint: RobotFootprint,
     *,
-    point_grid_xy: tuple[float, float],
+    cell_center_grid_xy: tuple[float, float],
     yaw_radians: float,
+    cell_half_extent: float,
 ) -> bool:
-    """Return whether one grid-frame point lies in the rotated footprint."""
+    """Return whether an axis-aligned grid cell intersects the footprint."""
 
-    point_x, point_y = point_grid_xy
+    center_x, center_y = cell_center_grid_xy
+    tolerance = 1e-12
     if isinstance(footprint, CircularRobotFootprint):
         radius = footprint.radius + footprint.safety_margin
-        return math.hypot(point_x, point_y) <= radius + 1e-12
+        nearest_x = max(abs(center_x) - cell_half_extent, 0.0)
+        nearest_y = max(abs(center_y) - cell_half_extent, 0.0)
+        return math.hypot(nearest_x, nearest_y) <= radius + tolerance
 
     cosine = math.cos(yaw_radians)
     sine = math.sin(yaw_radians)
-    footprint_x = cosine * point_x + sine * point_y
-    footprint_y = -sine * point_x + cosine * point_y
     margin = footprint.safety_margin
-    return bool(
-        -footprint.rear_extent - margin - 1e-12
-        <= footprint_x
-        <= footprint.front_extent + margin + 1e-12
-        and -footprint.right_extent - margin - 1e-12
-        <= footprint_y
-        <= footprint.left_extent + margin + 1e-12
+    rectangle_half_x = (
+        0.5 * (footprint.front_extent + footprint.rear_extent)
+        + margin
     )
+    rectangle_half_y = (
+        0.5 * (footprint.left_extent + footprint.right_extent)
+        + margin
+    )
+    rectangle_center_local_x = 0.5 * (
+        footprint.front_extent - footprint.rear_extent
+    )
+    rectangle_center_local_y = 0.5 * (
+        footprint.left_extent - footprint.right_extent
+    )
+    rectangle_center_grid_x = (
+        cosine * rectangle_center_local_x
+        - sine * rectangle_center_local_y
+    )
+    rectangle_center_grid_y = (
+        sine * rectangle_center_local_x
+        + cosine * rectangle_center_local_y
+    )
+    separation_x = center_x - rectangle_center_grid_x
+    separation_y = center_y - rectangle_center_grid_y
+    absolute_cosine = abs(cosine)
+    absolute_sine = abs(sine)
+
+    # Separating-axis test for an oriented rectangle and one axis-aligned
+    # square. Marking every intersecting cell makes the discrete collision
+    # set conservative without folding grid resolution into the policy
+    # safety margin.
+    grid_x_limit = (
+        cell_half_extent
+        + rectangle_half_x * absolute_cosine
+        + rectangle_half_y * absolute_sine
+    )
+    if abs(separation_x) > grid_x_limit + tolerance:
+        return False
+
+    grid_y_limit = (
+        cell_half_extent
+        + rectangle_half_x * absolute_sine
+        + rectangle_half_y * absolute_cosine
+    )
+    if abs(separation_y) > grid_y_limit + tolerance:
+        return False
+
+    projection_on_rectangle_x = abs(
+        separation_x * cosine + separation_y * sine
+    )
+    rectangle_x_limit = (
+        rectangle_half_x
+        + cell_half_extent * (absolute_cosine + absolute_sine)
+    )
+    if projection_on_rectangle_x > rectangle_x_limit + tolerance:
+        return False
+
+    projection_on_rectangle_y = abs(
+        -separation_x * sine + separation_y * cosine
+    )
+    rectangle_y_limit = (
+        rectangle_half_y
+        + cell_half_extent * (absolute_sine + absolute_cosine)
+    )
+    return projection_on_rectangle_y <= rectangle_y_limit + tolerance
 
 
 def _expand_grid_with_offsets(
