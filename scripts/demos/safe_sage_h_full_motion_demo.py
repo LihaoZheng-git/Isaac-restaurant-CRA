@@ -18,9 +18,10 @@ At every new LiDAR frame the demo:
 
 The field frame remains fixed at the robot pose associated with the first
 scan. Every later observation is transformed into that same frame, and the
-current robot configuration advances through it. This preserves the spatial
-approach seen by the CBF instead of resetting the query to the local origin
-and introducing grid-cell jumps whenever a new scan arrives.
+current look-ahead control point advances through it. The physical footprint
+is expressed about that same point. This preserves the spatial approach seen
+by the CBF and gives Nova Carter a realizable interface through which the
+paper's tangential planar guidance can influence angular velocity.
 
 The motion loop fails closed when LiDAR data becomes stale, perception or a
 PDE solve fails, the query leaves the field, the CBF becomes infeasible, an
@@ -84,11 +85,17 @@ from robot.safety.obstacle_tracking import (
 )
 from robot.safety.safe_sage_cbf_filter import (
     SafeSAGECBFConfig,
-    SafeSAGECBFResult,
     SafeSAGECBFSafetyFilter,
 )
 from robot.safety.safe_sage_configuration_space import (
     RectangularRobotFootprint,
+)
+from robot.safety.safe_sage_differential_drive_interface import (
+    SafeSAGEDifferentialDriveConfig,
+    SafeSAGEDifferentialDriveResult,
+    SafeSAGEDifferentialDriveSafetyFilter,
+    lookahead_position_grid_xy,
+    shift_rectangular_footprint_to_lookahead,
 )
 from robot.safety.safe_sage_field_pipeline import (
     SafeSAGEFieldPipelineConfig,
@@ -161,7 +168,7 @@ class MotionResult:
     received_scan_count: int
     initial_pose: RobotPose2D
     final_pose: RobotPose2D
-    final_filter_result: SafeSAGECBFResult
+    final_filter_result: SafeSAGEDifferentialDriveResult
     intervention_seen: bool
     first_intervention_step: int | None
     first_intervention_clearance: float
@@ -513,16 +520,23 @@ def proxy_clearance_forward_threshold(initial_pose: RobotPose2D) -> float:
 
 def evaluate_filter(
     *,
-    safety_filter: SafeSAGECBFSafetyFilter,
+    safety_filter: SafeSAGEDifferentialDriveSafetyFilter,
     nominal_command: WaypointCommand,
     robot_pose: RobotPose2D,
     pipeline_frame: MotionPipelineFrame,
-) -> tuple[SafeSAGECBFResult, np.ndarray, float]:
-    """Evaluate the scan-anchored field at the current relative pose."""
+) -> tuple[SafeSAGEDifferentialDriveResult, np.ndarray, float]:
+    """Evaluate the fixed field at the current look-ahead configuration."""
 
-    query_position, query_yaw = current_pose_in_field_frame(
+    chassis_position, query_yaw = current_pose_in_field_frame(
         robot_pose,
         anchor_pose=pipeline_frame.anchor_pose_world,
+    )
+    query_position = lookahead_position_grid_xy(
+        chassis_position,
+        yaw_radians=query_yaw,
+        lookahead_distance=(
+            stationary.DIFFERENTIAL_DRIVE_LOOKAHEAD_DISTANCE
+        ),
     )
     result = safety_filter.filter_command(
         nominal_command.linear_velocity,
@@ -531,6 +545,7 @@ def evaluate_filter(
         query_yaw_radians=query_yaw,
         configuration_space=pipeline_frame.pipeline.configuration_space,
         h_full=pipeline_frame.pipeline.h_full,
+        guidance_fields=pipeline_frame.pipeline.guidance_fields,
         temporal_safety_derivative=(
             stationary.STATIC_TEMPORAL_SAFETY_DERIVATIVE
         ),
@@ -548,7 +563,7 @@ def print_live_status(
     clearance: float,
     rightward_displacement: float,
     nominal_command: WaypointCommand,
-    filter_result: SafeSAGECBFResult,
+    filter_result: SafeSAGEDifferentialDriveResult,
 ) -> None:
     """Print one compact closed-loop status line."""
 
@@ -563,6 +578,8 @@ def print_live_status(
         f"clear={clearance:.3f} "
         f"right={rightward_displacement:.3f} "
         f"h={filter_result.sampled_safety_value:.3f} "
+        f"g=({filter_result.sampled_guidance_grid_xy[0]:.2f},"
+        f"{filter_result.sampled_guidance_grid_xy[1]:.2f}) "
         f"v={nominal_command.linear_velocity:.3f}->"
         f"{filter_result.safe_linear_velocity:.3f} "
         f"w={nominal_command.angular_velocity:.3f}->"
@@ -584,7 +601,7 @@ def run_motion_trial(
     guidance_policy: SafeSAGEGuidancePolicy,
     grid_config: LocalOccupancyGridConfig,
     field_config: SafeSAGEFieldPipelineConfig,
-    safety_filter: SafeSAGECBFSafetyFilter,
+    safety_filter: SafeSAGEDifferentialDriveSafetyFilter,
 ) -> MotionResult:
     """Run one fail-closed full-state Safe-SAGE motion trial."""
 
@@ -1100,12 +1117,18 @@ def main() -> None:
     class_policy = stationary.class_policy_from_guidance_policy(
         guidance_policy
     )
-    footprint = RectangularRobotFootprint(
+    measured_footprint = RectangularRobotFootprint(
         front_extent=stationary.ROBOT_FRONT_EXTENT,
         rear_extent=stationary.ROBOT_REAR_EXTENT,
         left_extent=stationary.ROBOT_LEFT_EXTENT,
         right_extent=stationary.ROBOT_RIGHT_EXTENT,
         safety_margin=stationary.ROBOT_SAFETY_MARGIN,
+    )
+    footprint = shift_rectangular_footprint_to_lookahead(
+        measured_footprint,
+        lookahead_distance=(
+            stationary.DIFFERENTIAL_DRIVE_LOOKAHEAD_DISTANCE
+        ),
     )
     field_config = stationary.create_field_pipeline_config(footprint)
     grid_config = LocalOccupancyGridConfig(
@@ -1172,9 +1195,35 @@ def main() -> None:
             stationary.ANGULAR_BIN_SIZE_DEGREES
         ),
     )
-    safety_filter = SafeSAGECBFSafetyFilter(
+    paper_filter = SafeSAGECBFSafetyFilter(
         SafeSAGECBFConfig(
             gamma=stationary.CBF_GAMMA,
+            minimum_planar_velocity=(
+                -robot_controller.config.max_linear_speed
+            ),
+            maximum_planar_velocity=(
+                robot_controller.config.max_linear_speed
+            ),
+            minimum_angular_velocity=(
+                -robot_controller.config.max_angular_speed
+            ),
+            maximum_angular_velocity=(
+                robot_controller.config.max_angular_speed
+            ),
+            planar_velocity_weight=(
+                stationary.CBF_LINEAR_VELOCITY_WEIGHT
+            ),
+            angular_velocity_weight=(
+                stationary.CBF_ANGULAR_VELOCITY_WEIGHT
+            ),
+        )
+    )
+    safety_filter = SafeSAGEDifferentialDriveSafetyFilter(
+        paper_filter,
+        SafeSAGEDifferentialDriveConfig(
+            lookahead_distance=(
+                stationary.DIFFERENTIAL_DRIVE_LOOKAHEAD_DISTANCE
+            ),
             minimum_linear_velocity=0.0,
             maximum_linear_velocity=(
                 robot_controller.config.max_linear_speed
@@ -1191,7 +1240,7 @@ def main() -> None:
             angular_velocity_weight=(
                 stationary.CBF_ANGULAR_VELOCITY_WEIGHT
             ),
-        )
+        ),
     )
 
     print("\nStarting the fail-closed closed-loop motion trial...")

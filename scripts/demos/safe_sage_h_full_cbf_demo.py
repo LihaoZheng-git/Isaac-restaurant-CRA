@@ -134,12 +134,17 @@ from robot.safety.poisson_safety_function import (
 )
 from robot.safety.safe_sage_cbf_filter import (
     SafeSAGECBFConfig,
-    SafeSAGECBFResult,
     SafeSAGECBFSafetyFilter,
 )
 from robot.safety.safe_sage_configuration_space import (
     RectangularRobotFootprint,
     SafeSAGEConfigurationSpaceConfig,
+)
+from robot.safety.safe_sage_differential_drive_interface import (
+    SafeSAGEDifferentialDriveConfig,
+    SafeSAGEDifferentialDriveResult,
+    SafeSAGEDifferentialDriveSafetyFilter,
+    shift_rectangular_footprint_to_lookahead,
 )
 from robot.safety.safe_sage_field_pipeline import (
     SafeSAGEFieldPipelineConfig,
@@ -247,13 +252,14 @@ H_FULL_POISSON_CONVERGENCE_TOLERANCE = 1e-6
 CBF_GAMMA = 1.0
 CBF_LINEAR_VELOCITY_WEIGHT = 1.0
 CBF_ANGULAR_VELOCITY_WEIGHT = 1.0
+DIFFERENTIAL_DRIVE_LOOKAHEAD_DISTANCE = 0.10
 STATIC_TEMPORAL_SAFETY_DERIVATIVE = 0.0
 
 FORWARD_PROBE_SPACING = 0.05
 FORWARD_PROBE_MAXIMUM_X = 1.50
 
-CURRENT_CONFIGURATION_POSITION_GRID_XY = np.array(
-    [0.0, 0.0],
+CURRENT_LOOKAHEAD_POSITION_GRID_XY = np.array(
+    [DIFFERENTIAL_DRIVE_LOOKAHEAD_DISTANCE, 0.0],
     dtype=np.float64,
 )
 CURRENT_CONFIGURATION_YAW_RADIANS = 0.0
@@ -657,7 +663,17 @@ def print_stage_a_report(
         f"{source_grid.occupied_cell_count}"
     )
 
-    print("\nMeasured Nova Carter footprint:")
+    print("\nMeasured chassis-referenced Nova Carter footprint:")
+    print(f"  Front extent (+X):            {ROBOT_FRONT_EXTENT:.6f} m")
+    print(f"  Rear extent (-X):             {ROBOT_REAR_EXTENT:.6f} m")
+    print(f"  Left extent (+Y):             {ROBOT_LEFT_EXTENT:.6f} m")
+    print(f"  Right extent (-Y):            {ROBOT_RIGHT_EXTENT:.6f} m")
+
+    print("\nEquivalent look-ahead-referenced footprint:")
+    print(
+        "  Look-ahead distance:          "
+        f"{DIFFERENTIAL_DRIVE_LOOKAHEAD_DISTANCE:.6f} m"
+    )
     print(f"  Front extent (+X):            {footprint.front_extent:.6f} m")
     print(f"  Rear extent (-X):             {footprint.rear_extent:.6f} m")
     print(f"  Left extent (+Y):             {footprint.left_extent:.6f} m")
@@ -811,7 +827,7 @@ def print_stage_b_report(
 def print_stage_c_report(
     *,
     nominal_command: WaypointCommand,
-    filter_result: SafeSAGECBFResult,
+    filter_result: SafeSAGEDifferentialDriveResult,
     initial_pose: RobotPose2D,
     final_pose: RobotPose2D,
 ) -> None:
@@ -828,7 +844,7 @@ def print_stage_c_report(
     local_query_is_correct = (
         np.allclose(
             filter_result.query_position_grid_xy,
-            CURRENT_CONFIGURATION_POSITION_GRID_XY,
+            CURRENT_LOOKAHEAD_POSITION_GRID_XY,
             rtol=0.0,
             atol=1e-12,
         )
@@ -853,13 +869,14 @@ def print_stage_c_report(
     gradient_x, gradient_y, gradient_yaw = (
         filter_result.sampled_gradient
     )
+    guidance_x, guidance_y = filter_result.sampled_guidance_grid_xy
 
     print("\n" + "=" * 70)
-    print("SAFE-SAGE H_FULL STAGE C - STATIONARY FULL-STATE CBF")
+    print("SAFE-SAGE H_FULL STAGE C - PAPER FILTER AND DRIVE INTERFACE")
     print("=" * 70)
 
 
-    print("\nLocal field query:")
+    print("\nLook-ahead field query:")
     print(
         "  Position (x, y):              "
         f"({filter_result.query_position_grid_xy[0]:.3f}, "
@@ -885,6 +902,8 @@ def print_stage_c_report(
     print(f"  dh/dx:                        {gradient_x:.6f}")
     print(f"  dh/dy:                        {gradient_y:.6f}")
     print(f"  dh/dpsi:                      {gradient_yaw:.6f}")
+    print(f"  Semantic LGF vx:              {guidance_x:.6f}")
+    print(f"  Semantic LGF vy:              {guidance_y:.6f}")
     print(
         "  dh/dt (static obstacle):      "
         f"{filter_result.temporal_safety_derivative:.6f}"
@@ -926,6 +945,10 @@ def print_stage_c_report(
 
     print("\nFull-state CBF inequality:")
     print(
+        "  Paper-space normal:           "
+        f"{filter_result.constraint.constraint_normal}"
+    )
+    print(
         "  Linear coefficient:           "
         f"{filter_result.linear_velocity_coefficient:.6f}"
     )
@@ -951,7 +974,7 @@ def print_stage_c_report(
     )
 
     print("\nValidation checks:")
-    print(f"  Robot-local query used:        {local_query_is_correct}")
+    print(f"  Look-ahead query used:         {local_query_is_correct}")
     print(
         "  Constraint feasible:          "
         f"{filter_result.constraint_feasible}"
@@ -971,8 +994,8 @@ def print_stage_c_report(
     if accepted:
         print(
             "  [PASS] The measured yaw-dependent geometry, semantic "
-            "h_full field, and differential-drive CBF produced a valid "
-            "stationary safe command."
+            "LGF/h_full fields, paper constraint, and differential-drive "
+            "interface produced a valid stationary safe command."
         )
     else:
         print(
@@ -994,17 +1017,15 @@ def print_stage_c_report(
 
 def evaluate_forward_counterfactuals(
     *,
-    safety_filter: SafeSAGECBFSafetyFilter,
+    safety_filter: SafeSAGEDifferentialDriveSafetyFilter,
     nominal_command: WaypointCommand,
     pipeline: SafeSAGEFieldPipelineResult,
-) -> tuple[SafeSAGECBFResult, ...]:
+) -> tuple[SafeSAGEDifferentialDriveResult, ...]:
     """Evaluate virtual forward poses until the first unsafe boundary."""
 
-    probe_results: list[SafeSAGECBFResult] = []
-    probe_count = int(
-        math.floor(
-            FORWARD_PROBE_MAXIMUM_X / FORWARD_PROBE_SPACING
-        )
+    probe_results: list[SafeSAGEDifferentialDriveResult] = []
+    probe_count = math.floor(
+        FORWARD_PROBE_MAXIMUM_X / FORWARD_PROBE_SPACING
     ) + 1
 
     for probe_index in range(probe_count):
@@ -1013,12 +1034,17 @@ def evaluate_forward_counterfactuals(
             nominal_command.linear_velocity,
             nominal_command.angular_velocity,
             query_position_grid_xy=np.array(
-                [probe_x, 0.0],
+                [
+                    probe_x
+                    + DIFFERENTIAL_DRIVE_LOOKAHEAD_DISTANCE,
+                    0.0,
+                ],
                 dtype=np.float64,
             ),
             query_yaw_radians=CURRENT_CONFIGURATION_YAW_RADIANS,
             configuration_space=pipeline.configuration_space,
             h_full=pipeline.h_full,
+            guidance_fields=pipeline.guidance_fields,
             temporal_safety_derivative=(
                 STATIC_TEMPORAL_SAFETY_DERIVATIVE
             ),
@@ -1032,7 +1058,7 @@ def evaluate_forward_counterfactuals(
 
 def print_forward_probe_report(
     *,
-    probe_results: tuple[SafeSAGECBFResult, ...],
+    probe_results: tuple[SafeSAGEDifferentialDriveResult, ...],
 ) -> None:
     """Print and validate the stationary forward safety transition."""
 
@@ -1099,10 +1125,10 @@ def print_forward_probe_report(
         "the robot did not move."
     )
     print(
-        "\n     x        h       dh/dx    v_safe    w_safe     margin  "
+        "\n   q_l.x      h       vsem_x   vsem_y   v_safe   w_safe  "
         "status"
     )
-    print("  " + "-" * 66)
+    print("  " + "-" * 72)
 
     for result in probe_results:
         if result.query_on_unsafe_boundary:
@@ -1115,10 +1141,10 @@ def print_forward_probe_report(
         print(
             f"  {result.query_position_grid_xy[0]:6.2f}  "
             f"{result.sampled_safety_value:8.4f}  "
-            f"{result.sampled_gradient[0]:9.4f}  "
-            f"{result.safe_linear_velocity:8.4f}  "
-            f"{result.safe_angular_velocity:8.4f}  "
-            f"{result.cbf_margin:9.2e}  "
+            f"{result.sampled_guidance_grid_xy[0]:8.3f}  "
+            f"{result.sampled_guidance_grid_xy[1]:8.3f}  "
+            f"{result.safe_linear_velocity:7.3f}  "
+            f"{result.safe_angular_velocity:7.3f}  "
             f"{status}"
         )
 
@@ -1181,12 +1207,16 @@ def main() -> None:
         )
     class_policy = class_policy_from_guidance_policy(guidance_policy)
 
-    footprint = RectangularRobotFootprint(
+    measured_footprint = RectangularRobotFootprint(
         front_extent=ROBOT_FRONT_EXTENT,
         rear_extent=ROBOT_REAR_EXTENT,
         left_extent=ROBOT_LEFT_EXTENT,
         right_extent=ROBOT_RIGHT_EXTENT,
         safety_margin=ROBOT_SAFETY_MARGIN,
+    )
+    footprint = shift_rectangular_footprint_to_lookahead(
+        measured_footprint,
+        lookahead_distance=DIFFERENTIAL_DRIVE_LOOKAHEAD_DISTANCE,
     )
     field_pipeline_config = create_field_pipeline_config(footprint)
 
@@ -1348,9 +1378,31 @@ def main() -> None:
     nominal_command = create_waypoint_controller().compute_command(
         robot_pose
     )
-    safety_filter = SafeSAGECBFSafetyFilter(
+    paper_filter = SafeSAGECBFSafetyFilter(
         SafeSAGECBFConfig(
             gamma=CBF_GAMMA,
+            minimum_planar_velocity=(
+                -robot_controller.config.max_linear_speed
+            ),
+            maximum_planar_velocity=(
+                robot_controller.config.max_linear_speed
+            ),
+            minimum_angular_velocity=(
+                -robot_controller.config.max_angular_speed
+            ),
+            maximum_angular_velocity=(
+                robot_controller.config.max_angular_speed
+            ),
+            planar_velocity_weight=CBF_LINEAR_VELOCITY_WEIGHT,
+            angular_velocity_weight=CBF_ANGULAR_VELOCITY_WEIGHT,
+        )
+    )
+    safety_filter = SafeSAGEDifferentialDriveSafetyFilter(
+        paper_filter,
+        SafeSAGEDifferentialDriveConfig(
+            lookahead_distance=(
+                DIFFERENTIAL_DRIVE_LOOKAHEAD_DISTANCE
+            ),
             minimum_linear_velocity=0.0,
             maximum_linear_velocity=(
                 robot_controller.config.max_linear_speed
@@ -1363,17 +1415,18 @@ def main() -> None:
             ),
             linear_velocity_weight=CBF_LINEAR_VELOCITY_WEIGHT,
             angular_velocity_weight=CBF_ANGULAR_VELOCITY_WEIGHT,
-        )
+        ),
     )
     filter_result = safety_filter.filter_command(
         nominal_command.linear_velocity,
         nominal_command.angular_velocity,
         query_position_grid_xy=(
-            CURRENT_CONFIGURATION_POSITION_GRID_XY
+            CURRENT_LOOKAHEAD_POSITION_GRID_XY
         ),
         query_yaw_radians=CURRENT_CONFIGURATION_YAW_RADIANS,
         configuration_space=pipeline.configuration_space,
         h_full=pipeline.h_full,
+        guidance_fields=pipeline.guidance_fields,
         temporal_safety_derivative=(
             STATIC_TEMPORAL_SAFETY_DERIVATIVE
         ),

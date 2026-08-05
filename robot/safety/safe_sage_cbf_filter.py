@@ -1,30 +1,37 @@
-"""Full-state Safe-SAGE CBF filter for differential-drive commands.
+"""Paper-faithful analytical Safe-SAGE safety filter.
 
-For the configuration state ``z = (x, y, psi)`` and unicycle controls
-``u = (v, omega)``, the dynamics are
+Safe-SAGE constructs two distinct field products:
 
-    z_dot = (v cos(psi), v sin(psi), omega).
+* ``h_full(x, y, psi)`` supplies the scalar safety value and yaw derivative;
+* ``v_sem(x, y, psi)`` supplies the normal-and-tangential semantic guidance.
 
-Given the yaw-indexed safety field ``h_full(x, y, psi)``, the CBF condition is
+For the reduced-order command ``u = (u_x, u_y, omega)``, the analytical
+constraint from Safe-SAGE is
 
-    (h_x cos(psi) + h_y sin(psi)) v
-        + h_psi omega + h_t + gamma h >= 0.
+    [v_sem_x, v_sem_y, partial(h_full)/partial(psi)] dot u
+        + temporal_scale * partial(h_full)/partial(t)
+        >= -gamma * h_full.
 
-``h_t`` is accepted explicitly and defaults to zero. It is the extension
-point for dynamic-obstacle field derivatives; this module does not estimate
-it from tracking data.
+The spatial gradient of ``h_full`` is retained only for diagnostics and the
+paper's temporal scaling. It deliberately does not replace ``v_sem`` in the
+constraint: doing so would discard the non-conservative tangential flow that
+encodes passing-side semantics.
 
-The closest actuator-limited command is found by an analytical projection
-onto one half-space and a two-dimensional command box. Optional positive
-weights control the relative cost of changing linear and angular velocity.
+This module operates in the paper's planar reduced-order command space.
+Embodiment-specific control interfaces, including Nova Carter's
+differential-drive mapping, live in separate modules.
 """
 
 import math
+from collections.abc import Sequence
 from dataclasses import dataclass
+from itertools import product
 from numbers import Real
 
 import numpy as np
-
+from robot.safety.laplace_guidance_field import (
+    LaplaceGuidanceFieldResult,
+)
 from robot.safety.safe_sage_configuration_space import (
     SafeSAGEConfigurationSpaceResult,
 )
@@ -44,15 +51,17 @@ def _validated_real(value: object, *, name: str) -> float:
 
 @dataclass(frozen=True)
 class SafeSAGECBFConfig:
-    """Barrier, actuator, numerical, and command-projection settings."""
+    """Barrier, reduced-order bounds, and projection settings."""
 
     gamma: float = 1.0
-    minimum_linear_velocity: float = 0.0
-    maximum_linear_velocity: float = 0.25
+    minimum_planar_velocity: float = -0.25
+    maximum_planar_velocity: float = 0.25
     minimum_angular_velocity: float = -0.8
     maximum_angular_velocity: float = 0.8
-    linear_velocity_weight: float = 1.0
+    planar_velocity_weight: float = 1.0
     angular_velocity_weight: float = 1.0
+    temporal_scaling_epsilon: float = 1e-6
+    temporal_scaling_kappa: float = 1.0
     numerical_tolerance: float = 1e-9
     intervention_tolerance: float = 1e-6
 
@@ -62,12 +71,12 @@ class SafeSAGECBFConfig:
             for name, value in (
                 ("gamma", self.gamma),
                 (
-                    "minimum_linear_velocity",
-                    self.minimum_linear_velocity,
+                    "minimum_planar_velocity",
+                    self.minimum_planar_velocity,
                 ),
                 (
-                    "maximum_linear_velocity",
-                    self.maximum_linear_velocity,
+                    "maximum_planar_velocity",
+                    self.maximum_planar_velocity,
                 ),
                 (
                     "minimum_angular_velocity",
@@ -78,12 +87,20 @@ class SafeSAGECBFConfig:
                     self.maximum_angular_velocity,
                 ),
                 (
-                    "linear_velocity_weight",
-                    self.linear_velocity_weight,
+                    "planar_velocity_weight",
+                    self.planar_velocity_weight,
                 ),
                 (
                     "angular_velocity_weight",
                     self.angular_velocity_weight,
+                ),
+                (
+                    "temporal_scaling_epsilon",
+                    self.temporal_scaling_epsilon,
+                ),
+                (
+                    "temporal_scaling_kappa",
+                    self.temporal_scaling_kappa,
                 ),
                 ("numerical_tolerance", self.numerical_tolerance),
                 (
@@ -96,12 +113,12 @@ class SafeSAGECBFConfig:
         if values["gamma"] <= 0.0:
             raise ValueError("gamma must be greater than zero.")
         if (
-            values["minimum_linear_velocity"]
-            > values["maximum_linear_velocity"]
+            values["minimum_planar_velocity"]
+            > values["maximum_planar_velocity"]
         ):
             raise ValueError(
-                "minimum_linear_velocity cannot exceed "
-                "maximum_linear_velocity."
+                "minimum_planar_velocity cannot exceed "
+                "maximum_planar_velocity."
             )
         if (
             values["minimum_angular_velocity"]
@@ -112,12 +129,12 @@ class SafeSAGECBFConfig:
                 "maximum_angular_velocity."
             )
         if not (
-            values["minimum_linear_velocity"]
+            values["minimum_planar_velocity"]
             <= 0.0
-            <= values["maximum_linear_velocity"]
+            <= values["maximum_planar_velocity"]
         ):
             raise ValueError(
-                "Linear-velocity limits must contain zero."
+                "Planar-velocity limits must contain zero."
             )
         if not (
             values["minimum_angular_velocity"]
@@ -127,13 +144,21 @@ class SafeSAGECBFConfig:
             raise ValueError(
                 "Angular-velocity limits must contain zero."
             )
-        if values["linear_velocity_weight"] <= 0.0:
+        if values["planar_velocity_weight"] <= 0.0:
             raise ValueError(
-                "linear_velocity_weight must be greater than zero."
+                "planar_velocity_weight must be greater than zero."
             )
         if values["angular_velocity_weight"] <= 0.0:
             raise ValueError(
                 "angular_velocity_weight must be greater than zero."
+            )
+        if values["temporal_scaling_epsilon"] <= 0.0:
+            raise ValueError(
+                "temporal_scaling_epsilon must be greater than zero."
+            )
+        if values["temporal_scaling_kappa"] <= 0.0:
+            raise ValueError(
+                "temporal_scaling_kappa must be greater than zero."
             )
         if values["numerical_tolerance"] <= 0.0:
             raise ValueError(
@@ -149,13 +174,9 @@ class SafeSAGECBFConfig:
 
 
 @dataclass(frozen=True)
-class SafeSAGECBFResult:
-    """Safe command and complete full-state CBF diagnostics."""
+class SafeSAGEConstraintEvaluation:
+    """Interpolated fields and one paper-faithful CBF half-space."""
 
-    nominal_linear_velocity: float
-    nominal_angular_velocity: float
-    safe_linear_velocity: float
-    safe_angular_velocity: float
     query_position_grid_xy: tuple[float, float]
     query_yaw_radians: float
     query_cell: tuple[int, int]
@@ -164,10 +185,25 @@ class SafeSAGECBFResult:
     yaw_interpolation_weight: float
     sampled_safety_value: float
     sampled_gradient: tuple[float, float, float]
+    sampled_guidance_grid_xy: tuple[float, float]
     temporal_safety_derivative: float
-    linear_velocity_coefficient: float
-    angular_velocity_coefficient: float
+    temporal_scaling: float
+    scaled_temporal_safety_derivative: float
+    constraint_normal: tuple[float, float, float]
     constraint_right_hand_side: float
+    query_on_unsafe_boundary: bool
+    unsafe_reason: str | None
+
+
+@dataclass(frozen=True)
+class SafeSAGECBFResult:
+    """Safe reduced-order command and complete CBF diagnostics."""
+
+    nominal_planar_velocity_grid_xy: tuple[float, float]
+    nominal_angular_velocity: float
+    safe_planar_velocity_grid_xy: tuple[float, float]
+    safe_angular_velocity: float
+    constraint: SafeSAGEConstraintEvaluation
     nominal_control_left_hand_side: float
     safe_control_left_hand_side: float
     cbf_margin: float
@@ -175,12 +211,71 @@ class SafeSAGECBFResult:
     constraint_satisfied: bool
     intervention_active: bool
     emergency_stop_active: bool
-    query_on_unsafe_boundary: bool
     emergency_reason: str | None
+
+    @property
+    def query_position_grid_xy(self) -> tuple[float, float]:
+        return self.constraint.query_position_grid_xy
+
+    @property
+    def query_yaw_radians(self) -> float:
+        return self.constraint.query_yaw_radians
+
+    @property
+    def query_cell(self) -> tuple[int, int]:
+        return self.constraint.query_cell
+
+    @property
+    def lower_yaw_slice(self) -> int:
+        return self.constraint.lower_yaw_slice
+
+    @property
+    def upper_yaw_slice(self) -> int:
+        return self.constraint.upper_yaw_slice
+
+    @property
+    def yaw_interpolation_weight(self) -> float:
+        return self.constraint.yaw_interpolation_weight
+
+    @property
+    def sampled_safety_value(self) -> float:
+        return self.constraint.sampled_safety_value
+
+    @property
+    def sampled_gradient(self) -> tuple[float, float, float]:
+        return self.constraint.sampled_gradient
+
+    @property
+    def sampled_guidance_grid_xy(self) -> tuple[float, float]:
+        return self.constraint.sampled_guidance_grid_xy
+
+    @property
+    def temporal_safety_derivative(self) -> float:
+        return self.constraint.temporal_safety_derivative
+
+    @property
+    def temporal_scaling(self) -> float:
+        return self.constraint.temporal_scaling
+
+    @property
+    def scaled_temporal_safety_derivative(self) -> float:
+        return self.constraint.scaled_temporal_safety_derivative
+
+    @property
+    def constraint_normal(self) -> tuple[float, float, float]:
+        return self.constraint.constraint_normal
+
+    @property
+    def constraint_right_hand_side(self) -> float:
+        return self.constraint.constraint_right_hand_side
+
+    @property
+    def query_on_unsafe_boundary(self) -> bool:
+        return self.constraint.query_on_unsafe_boundary
 
 
 class SafeSAGECBFSafetyFilter:
-    """Project differential-drive commands onto the full-state safe set."""
+    """Project planar reduced-order commands using Safe-SAGE Eq. (19)."""
 
     def __init__(self, config: SafeSAGECBFConfig | None = None) -> None:
         self.config = config or SafeSAGECBFConfig()
@@ -189,24 +284,138 @@ class SafeSAGECBFSafetyFilter:
 
     def filter_command(
         self,
-        nominal_linear_velocity: float,
+        nominal_planar_velocity_grid_xy: np.ndarray,
         nominal_angular_velocity: float,
         *,
         query_position_grid_xy: np.ndarray,
         query_yaw_radians: float,
         configuration_space: SafeSAGEConfigurationSpaceResult,
         h_full: SafeSAGEHFullResult,
+        guidance_fields: Sequence[LaplaceGuidanceFieldResult],
         temporal_safety_derivative: float = 0.0,
     ) -> SafeSAGECBFResult:
-        """Return the nearest actuator-limited full-state-safe command."""
+        """Return the nearest reduced-order command satisfying Eq. (19)."""
 
-        nominal_linear = _validated_real(
-            nominal_linear_velocity,
-            name="nominal_linear_velocity",
+        nominal_planar = _validated_point(
+            nominal_planar_velocity_grid_xy,
+            name="nominal_planar_velocity_grid_xy",
         )
         nominal_angular = _validated_real(
             nominal_angular_velocity,
             name="nominal_angular_velocity",
+        )
+        constraint = self.evaluate_constraint(
+            query_position_grid_xy=query_position_grid_xy,
+            query_yaw_radians=query_yaw_radians,
+            configuration_space=configuration_space,
+            h_full=h_full,
+            guidance_fields=guidance_fields,
+            temporal_safety_derivative=temporal_safety_derivative,
+        )
+        nominal_command = np.array(
+            [nominal_planar[0], nominal_planar[1], nominal_angular],
+            dtype=np.float64,
+        )
+        if constraint.unsafe_reason is not None:
+            return self._emergency_result(
+                nominal_command,
+                constraint=constraint,
+                reason=constraint.unsafe_reason,
+            )
+
+        lower_bounds = np.array(
+            [
+                self.config.minimum_planar_velocity,
+                self.config.minimum_planar_velocity,
+                self.config.minimum_angular_velocity,
+            ],
+            dtype=np.float64,
+        )
+        upper_bounds = np.array(
+            [
+                self.config.maximum_planar_velocity,
+                self.config.maximum_planar_velocity,
+                self.config.maximum_angular_velocity,
+            ],
+            dtype=np.float64,
+        )
+        weights = np.array(
+            [
+                self.config.planar_velocity_weight,
+                self.config.planar_velocity_weight,
+                self.config.angular_velocity_weight,
+            ],
+            dtype=np.float64,
+        )
+        command_normal = np.asarray(
+            constraint.constraint_normal,
+            dtype=np.float64,
+        )
+        tolerance = self.config.numerical_tolerance
+        safe_command, feasible = project_weighted_box_halfspace(
+            nominal_command,
+            lower_bounds=lower_bounds,
+            upper_bounds=upper_bounds,
+            weights=weights,
+            constraint_normal=command_normal,
+            constraint_rhs=constraint.constraint_right_hand_side,
+            numerical_tolerance=tolerance,
+        )
+        if not feasible:
+            return self._emergency_result(
+                nominal_command,
+                constraint=constraint,
+                reason="infeasible_cbf_constraint",
+            )
+
+        nominal_lhs = float(np.dot(command_normal, nominal_command))
+        safe_lhs = float(np.dot(command_normal, safe_command))
+        cbf_margin = safe_lhs - constraint.constraint_right_hand_side
+        constraint_satisfied = cbf_margin >= -tolerance
+        intervention_active = bool(
+            np.any(
+                np.abs(safe_command - nominal_command)
+                > self.config.intervention_tolerance
+            )
+        )
+
+        return SafeSAGECBFResult(
+            nominal_planar_velocity_grid_xy=(
+                float(nominal_command[0]),
+                float(nominal_command[1]),
+            ),
+            nominal_angular_velocity=nominal_angular,
+            safe_planar_velocity_grid_xy=(
+                float(safe_command[0]),
+                float(safe_command[1]),
+            ),
+            safe_angular_velocity=float(safe_command[2]),
+            constraint=constraint,
+            nominal_control_left_hand_side=nominal_lhs,
+            safe_control_left_hand_side=safe_lhs,
+            cbf_margin=cbf_margin,
+            constraint_feasible=True,
+            constraint_satisfied=constraint_satisfied,
+            intervention_active=intervention_active,
+            emergency_stop_active=False,
+            emergency_reason=None,
+        )
+
+    def evaluate_constraint(
+        self,
+        *,
+        query_position_grid_xy: np.ndarray,
+        query_yaw_radians: float,
+        configuration_space: SafeSAGEConfigurationSpaceResult,
+        h_full: SafeSAGEHFullResult,
+        guidance_fields: Sequence[LaplaceGuidanceFieldResult],
+        temporal_safety_derivative: float = 0.0,
+    ) -> SafeSAGEConstraintEvaluation:
+        """Interpolate fields and construct the Safe-SAGE half-space."""
+
+        query_position = _validated_point(
+            query_position_grid_xy,
+            name="query_position_grid_xy",
         )
         query_yaw = _validated_real(
             query_yaw_radians,
@@ -216,8 +425,12 @@ class SafeSAGECBFSafetyFilter:
             temporal_safety_derivative,
             name="temporal_safety_derivative",
         )
-        query_position = _validated_point(query_position_grid_xy)
-        _validate_field_alignment(configuration_space, h_full)
+        guidance_sequence = tuple(guidance_fields)
+        _validate_field_alignment(
+            configuration_space,
+            h_full,
+            guidance_sequence,
+        )
 
         reference_grid = configuration_space.occupancy_grids[0]
         query_cell = reference_grid.robot_point_to_cell(query_position)
@@ -225,21 +438,19 @@ class SafeSAGECBFSafetyFilter:
             raise ValueError(
                 "query_position_grid_xy lies outside the local grid."
             )
-
         lower_yaw, upper_yaw, yaw_weight = _yaw_interpolation(
             query_yaw,
             yaw_slice_count=h_full.yaw_slice_count,
         )
-        (
-            sampled_safety,
-            sampled_spatial_gradient,
-        ) = _sample_periodic_scalar_and_spatial_gradient(
-            h_full.values,
-            query_position=query_position,
-            grid=reference_grid,
-            lower_yaw=lower_yaw,
-            upper_yaw=upper_yaw,
-            yaw_weight=yaw_weight,
+        sampled_safety, sampled_spatial_gradient = (
+            _sample_periodic_scalar_and_spatial_gradient(
+                h_full.values,
+                query_position=query_position,
+                grid=reference_grid,
+                lower_yaw=lower_yaw,
+                upper_yaw=upper_yaw,
+                yaw_weight=yaw_weight,
+            )
         )
         sampled_yaw_derivative = float(
             _sample_periodic_field(
@@ -251,13 +462,13 @@ class SafeSAGECBFSafetyFilter:
                 yaw_weight=yaw_weight,
             )
         )
-        sampled_gradient = np.array(
-            [
-                sampled_spatial_gradient[0],
-                sampled_spatial_gradient[1],
-                sampled_yaw_derivative,
-            ],
-            dtype=np.float64,
+        sampled_guidance = _sample_periodic_guidance(
+            guidance_sequence,
+            query_position=query_position,
+            grid=reference_grid,
+            lower_yaw=lower_yaw,
+            upper_yaw=upper_yaw,
+            yaw_weight=yaw_weight,
         )
 
         tolerance = self.config.numerical_tolerance
@@ -266,8 +477,6 @@ class SafeSAGECBFSafetyFilter:
         elif yaw_weight > 0.5 + tolerance:
             active_yaw_slices = (upper_yaw,)
         else:
-            # At the exact nearest-slice tie, either discrete orientation
-            # being unsafe is sufficient for a conservative stop.
             active_yaw_slices = (lower_yaw, upper_yaw)
         query_on_boundary = any(
             bool(
@@ -280,135 +489,36 @@ class SafeSAGECBFSafetyFilter:
             for yaw_index in active_yaw_slices
         )
 
-        cosine = math.cos(query_yaw)
-        sine = math.sin(query_yaw)
+        temporal_scaling = _temporal_scaling(
+            sampled_guidance,
+            sampled_spatial_gradient,
+            safety_value=sampled_safety,
+            epsilon=self.config.temporal_scaling_epsilon,
+            kappa=self.config.temporal_scaling_kappa,
+        )
+        scaled_temporal_derivative = (
+            temporal_scaling * temporal_derivative
+        )
         command_normal = np.array(
             [
-                sampled_gradient[0] * cosine
-                + sampled_gradient[1] * sine,
-                sampled_gradient[2],
+                sampled_guidance[0],
+                sampled_guidance[1],
+                sampled_yaw_derivative,
             ],
             dtype=np.float64,
         )
+        safety_for_constraint = max(0.0, sampled_safety)
         constraint_rhs = (
-            -self.config.gamma * sampled_safety
-            - temporal_derivative
+            -self.config.gamma * safety_for_constraint
+            - scaled_temporal_derivative
         )
-
+        unsafe_reason: str | None = None
         if query_on_boundary:
-            return self._emergency_result(
-                nominal_linear,
-                nominal_angular,
-                query_position=query_position,
-                query_yaw=query_yaw,
-                query_cell=query_cell,
-                lower_yaw=lower_yaw,
-                upper_yaw=upper_yaw,
-                yaw_weight=yaw_weight,
-                sampled_safety=sampled_safety,
-                sampled_gradient=sampled_gradient,
-                temporal_derivative=temporal_derivative,
-                command_normal=command_normal,
-                constraint_rhs=constraint_rhs,
-                query_on_boundary=True,
-                reason="unsafe_configuration_boundary",
-            )
+            unsafe_reason = "unsafe_configuration_boundary"
+        elif sampled_safety < -tolerance:
+            unsafe_reason = "negative_safety_value"
 
-        if sampled_safety < -tolerance:
-            return self._emergency_result(
-                nominal_linear,
-                nominal_angular,
-                query_position=query_position,
-                query_yaw=query_yaw,
-                query_cell=query_cell,
-                lower_yaw=lower_yaw,
-                upper_yaw=upper_yaw,
-                yaw_weight=yaw_weight,
-                sampled_safety=sampled_safety,
-                sampled_gradient=sampled_gradient,
-                temporal_derivative=temporal_derivative,
-                command_normal=command_normal,
-                constraint_rhs=constraint_rhs,
-                query_on_boundary=False,
-                reason="negative_safety_value",
-            )
-        sampled_safety = max(0.0, sampled_safety)
-        constraint_rhs = (
-            -self.config.gamma * sampled_safety
-            - temporal_derivative
-        )
-
-        nominal_command = np.array(
-            [nominal_linear, nominal_angular],
-            dtype=np.float64,
-        )
-        lower_bounds = np.array(
-            [
-                self.config.minimum_linear_velocity,
-                self.config.minimum_angular_velocity,
-            ],
-            dtype=np.float64,
-        )
-        upper_bounds = np.array(
-            [
-                self.config.maximum_linear_velocity,
-                self.config.maximum_angular_velocity,
-            ],
-            dtype=np.float64,
-        )
-        weights = np.array(
-            [
-                self.config.linear_velocity_weight,
-                self.config.angular_velocity_weight,
-            ],
-            dtype=np.float64,
-        )
-        safe_command, feasible = _project_weighted_box_halfspace(
-            nominal_command,
-            lower_bounds=lower_bounds,
-            upper_bounds=upper_bounds,
-            weights=weights,
-            constraint_normal=command_normal,
-            constraint_rhs=constraint_rhs,
-            numerical_tolerance=tolerance,
-        )
-        if not feasible:
-            return self._emergency_result(
-                nominal_linear,
-                nominal_angular,
-                query_position=query_position,
-                query_yaw=query_yaw,
-                query_cell=query_cell,
-                lower_yaw=lower_yaw,
-                upper_yaw=upper_yaw,
-                yaw_weight=yaw_weight,
-                sampled_safety=sampled_safety,
-                sampled_gradient=sampled_gradient,
-                temporal_derivative=temporal_derivative,
-                command_normal=command_normal,
-                constraint_rhs=constraint_rhs,
-                query_on_boundary=False,
-                reason="infeasible_cbf_constraint",
-            )
-
-        safe_linear = float(safe_command[0])
-        safe_angular = float(safe_command[1])
-        nominal_lhs = float(np.dot(command_normal, nominal_command))
-        safe_lhs = float(np.dot(command_normal, safe_command))
-        cbf_margin = safe_lhs - constraint_rhs
-        constraint_satisfied = cbf_margin >= -tolerance
-        intervention_active = (
-            abs(safe_linear - nominal_linear)
-            > self.config.intervention_tolerance
-            or abs(safe_angular - nominal_angular)
-            > self.config.intervention_tolerance
-        )
-
-        return SafeSAGECBFResult(
-            nominal_linear_velocity=nominal_linear,
-            nominal_angular_velocity=nominal_angular,
-            safe_linear_velocity=safe_linear,
-            safe_angular_velocity=safe_angular,
+        return SafeSAGEConstraintEvaluation(
             query_position_grid_xy=(
                 float(query_position[0]),
                 float(query_position[1]),
@@ -420,115 +530,93 @@ class SafeSAGECBFSafetyFilter:
             yaw_interpolation_weight=yaw_weight,
             sampled_safety_value=sampled_safety,
             sampled_gradient=(
-                float(sampled_gradient[0]),
-                float(sampled_gradient[1]),
-                float(sampled_gradient[2]),
+                float(sampled_spatial_gradient[0]),
+                float(sampled_spatial_gradient[1]),
+                sampled_yaw_derivative,
+            ),
+            sampled_guidance_grid_xy=(
+                float(sampled_guidance[0]),
+                float(sampled_guidance[1]),
             ),
             temporal_safety_derivative=temporal_derivative,
-            linear_velocity_coefficient=float(command_normal[0]),
-            angular_velocity_coefficient=float(command_normal[1]),
+            temporal_scaling=temporal_scaling,
+            scaled_temporal_safety_derivative=(
+                scaled_temporal_derivative
+            ),
+            constraint_normal=(
+                float(command_normal[0]),
+                float(command_normal[1]),
+                float(command_normal[2]),
+            ),
             constraint_right_hand_side=constraint_rhs,
-            nominal_control_left_hand_side=nominal_lhs,
-            safe_control_left_hand_side=safe_lhs,
-            cbf_margin=cbf_margin,
-            constraint_feasible=True,
-            constraint_satisfied=constraint_satisfied,
-            intervention_active=intervention_active,
-            emergency_stop_active=False,
-            query_on_unsafe_boundary=False,
-            emergency_reason=None,
+            query_on_unsafe_boundary=query_on_boundary,
+            unsafe_reason=unsafe_reason,
         )
 
     def _emergency_result(
         self,
-        nominal_linear: float,
-        nominal_angular: float,
+        nominal_command: np.ndarray,
         *,
-        query_position: np.ndarray,
-        query_yaw: float,
-        query_cell: tuple[int, int],
-        lower_yaw: int,
-        upper_yaw: int,
-        yaw_weight: float,
-        sampled_safety: float,
-        sampled_gradient: np.ndarray,
-        temporal_derivative: float,
-        command_normal: np.ndarray,
-        constraint_rhs: float,
-        query_on_boundary: bool,
+        constraint: SafeSAGEConstraintEvaluation,
         reason: str,
     ) -> SafeSAGECBFResult:
         """Return a stationary fallback with preserved diagnostics."""
 
-        nominal_command = np.array(
-            [nominal_linear, nominal_angular],
+        command_normal = np.asarray(
+            constraint.constraint_normal,
             dtype=np.float64,
         )
         nominal_lhs = float(np.dot(command_normal, nominal_command))
         safe_lhs = 0.0
-        intervention_active = (
-            abs(nominal_linear) > self.config.intervention_tolerance
-            or abs(nominal_angular)
-            > self.config.intervention_tolerance
+        intervention_active = bool(
+            np.any(
+                np.abs(nominal_command)
+                > self.config.intervention_tolerance
+            )
         )
 
         return SafeSAGECBFResult(
-            nominal_linear_velocity=nominal_linear,
-            nominal_angular_velocity=nominal_angular,
-            safe_linear_velocity=0.0,
+            nominal_planar_velocity_grid_xy=(
+                float(nominal_command[0]),
+                float(nominal_command[1]),
+            ),
+            nominal_angular_velocity=float(nominal_command[2]),
+            safe_planar_velocity_grid_xy=(0.0, 0.0),
             safe_angular_velocity=0.0,
-            query_position_grid_xy=(
-                float(query_position[0]),
-                float(query_position[1]),
-            ),
-            query_yaw_radians=query_yaw,
-            query_cell=query_cell,
-            lower_yaw_slice=lower_yaw,
-            upper_yaw_slice=upper_yaw,
-            yaw_interpolation_weight=yaw_weight,
-            sampled_safety_value=sampled_safety,
-            sampled_gradient=(
-                float(sampled_gradient[0]),
-                float(sampled_gradient[1]),
-                float(sampled_gradient[2]),
-            ),
-            temporal_safety_derivative=temporal_derivative,
-            linear_velocity_coefficient=float(command_normal[0]),
-            angular_velocity_coefficient=float(command_normal[1]),
-            constraint_right_hand_side=constraint_rhs,
+            constraint=constraint,
             nominal_control_left_hand_side=nominal_lhs,
             safe_control_left_hand_side=safe_lhs,
-            cbf_margin=safe_lhs - constraint_rhs,
+            cbf_margin=(
+                safe_lhs - constraint.constraint_right_hand_side
+            ),
             constraint_feasible=False,
             constraint_satisfied=False,
             intervention_active=intervention_active,
             emergency_stop_active=True,
-            query_on_unsafe_boundary=query_on_boundary,
             emergency_reason=reason,
         )
 
 
-def _validated_point(value: object) -> np.ndarray:
+def _validated_point(value: object, *, name: str) -> np.ndarray:
     """Return a finite two-dimensional query point."""
 
     try:
         point = np.asarray(value, dtype=np.float64)
     except (TypeError, ValueError) as error:
-        raise TypeError(
-            "query_position_grid_xy must contain real numbers."
-        ) from error
+        raise TypeError(f"{name} must contain real numbers.") from error
     if point.shape != (2,):
-        raise ValueError("query_position_grid_xy must have shape (2,).")
+        raise ValueError(f"{name} must have shape (2,).")
     if not np.isfinite(point).all():
-        raise ValueError("query_position_grid_xy must be finite.")
+        raise ValueError(f"{name} must be finite.")
     return np.ascontiguousarray(point, dtype=np.float64)
 
 
 def _validate_field_alignment(
     configuration_space: SafeSAGEConfigurationSpaceResult,
     h_full: SafeSAGEHFullResult,
+    guidance_fields: tuple[LaplaceGuidanceFieldResult, ...],
 ) -> None:
-    """Validate yaw, grid, shape, resolution, and numerical alignment."""
+    """Validate configuration, safety, and guidance-field alignment."""
 
     if not isinstance(
         configuration_space,
@@ -544,6 +632,10 @@ def _validate_field_alignment(
     if yaw_slice_count < 2:
         raise ValueError(
             "configuration_space must contain at least two yaw slices."
+        )
+    if len(guidance_fields) != yaw_slice_count:
+        raise ValueError(
+            "guidance_fields length must match the yaw-slice count."
         )
     if np.asarray(configuration_space.yaw_angles_radians).shape != (
         yaw_slice_count,
@@ -631,6 +723,32 @@ def _validate_field_alignment(
                 "All configuration-space grids must share one config."
             )
 
+    for field_index, guidance_field in enumerate(guidance_fields):
+        if not isinstance(guidance_field, LaplaceGuidanceFieldResult):
+            raise TypeError(
+                "Every guidance field must be a "
+                "LaplaceGuidanceFieldResult."
+            )
+        if guidance_field.shape != reference_grid.shape:
+            raise ValueError(
+                "Guidance-field shape must match the configuration "
+                f"space at yaw index {field_index}."
+            )
+        if not math.isclose(
+            guidance_field.resolution,
+            reference_grid.config.resolution,
+            rel_tol=1e-9,
+            abs_tol=1e-12,
+        ):
+            raise ValueError(
+                "Guidance-field resolution must match the "
+                f"configuration space at yaw index {field_index}."
+            )
+        if not np.isfinite(guidance_field.vectors_robot_xy).all():
+            raise ValueError(
+                "Guidance-field vectors must contain finite values."
+            )
+
     arrays = (
         h_full.values,
         h_full.spatial_gradients_robot_xy,
@@ -678,6 +796,55 @@ def _sample_periodic_field(
         grid=grid,
     )
     return (1.0 - yaw_weight) * lower_value + yaw_weight * upper_value
+
+
+def _sample_periodic_guidance(
+    guidance_fields: tuple[LaplaceGuidanceFieldResult, ...],
+    *,
+    query_position: np.ndarray,
+    grid,
+    lower_yaw: int,
+    upper_yaw: int,
+    yaw_weight: float,
+) -> np.ndarray:
+    """Trilinearly sample the semantic LGF at one configuration."""
+
+    lower_value = _bilinear_sample_cell_centers(
+        guidance_fields[lower_yaw].vectors_robot_xy,
+        point_grid_xy=query_position,
+        grid=grid,
+    )
+    upper_value = _bilinear_sample_cell_centers(
+        guidance_fields[upper_yaw].vectors_robot_xy,
+        point_grid_xy=query_position,
+        grid=grid,
+    )
+    sampled = (
+        (1.0 - yaw_weight) * lower_value
+        + yaw_weight * upper_value
+    )
+    return np.asarray(sampled, dtype=np.float64)
+
+
+def _temporal_scaling(
+    sampled_guidance: np.ndarray,
+    sampled_spatial_gradient: np.ndarray,
+    *,
+    safety_value: float,
+    epsilon: float,
+    kappa: float,
+) -> float:
+    """Return the bounded temporal multiplier from Safe-SAGE Eq. (17)."""
+
+    guidance_norm = float(np.linalg.norm(sampled_guidance))
+    gradient_norm = float(np.linalg.norm(sampled_spatial_gradient))
+    open_space_regularizer = epsilon * (
+        1.0 - math.exp(-kappa * max(0.0, safety_value))
+    )
+    denominator = gradient_norm + open_space_regularizer
+    if denominator <= np.finfo(np.float64).eps:
+        return 1.0 if guidance_norm > 0.0 else 0.0
+    return min(guidance_norm / denominator, 1.0)
 
 
 def _sample_periodic_scalar_and_spatial_gradient(
@@ -836,8 +1003,8 @@ def _bilinear_coordinates(
     column_position = float(
         np.clip(column_position, 0.0, config.column_count - 1)
     )
-    row_zero = int(math.floor(row_position))
-    column_zero = int(math.floor(column_position))
+    row_zero = math.floor(row_position)
+    column_zero = math.floor(column_position)
     row_one = min(row_zero + 1, config.row_count - 1)
     column_one = min(column_zero + 1, config.column_count - 1)
     return (
@@ -850,7 +1017,7 @@ def _bilinear_coordinates(
     )
 
 
-def _project_weighted_box_halfspace(
+def project_weighted_box_halfspace(
     nominal: np.ndarray,
     *,
     lower_bounds: np.ndarray,
@@ -860,14 +1027,38 @@ def _project_weighted_box_halfspace(
     constraint_rhs: float,
     numerical_tolerance: float,
 ) -> tuple[np.ndarray, bool]:
-    """Solve a weighted two-command projection by scaling coordinates."""
+    """Solve a weighted finite-dimensional box/half-space projection."""
 
-    square_root_weights = np.sqrt(weights)
+    arrays = tuple(
+        np.asarray(value, dtype=np.float64)
+        for value in (
+            nominal,
+            lower_bounds,
+            upper_bounds,
+            weights,
+            constraint_normal,
+        )
+    )
+    nominal_array, lower_array, upper_array, weight_array, normal_array = (
+        arrays
+    )
+    if nominal_array.ndim != 1 or nominal_array.size == 0:
+        raise ValueError("nominal must be a non-empty one-dimensional array.")
+    if any(array.shape != nominal_array.shape for array in arrays[1:]):
+        raise ValueError("Projection arrays must have identical shapes.")
+    if any(not np.isfinite(array).all() for array in arrays):
+        raise ValueError("Projection arrays must contain finite values.")
+    if np.any(lower_array > upper_array):
+        raise ValueError("lower_bounds cannot exceed upper_bounds.")
+    if np.any(weight_array <= 0.0):
+        raise ValueError("weights must be strictly positive.")
+
+    square_root_weights = np.sqrt(weight_array)
     scaled_command, feasible = _project_onto_box_halfspace(
-        nominal * square_root_weights,
-        lower_bounds=lower_bounds * square_root_weights,
-        upper_bounds=upper_bounds * square_root_weights,
-        constraint_normal=constraint_normal / square_root_weights,
+        nominal_array * square_root_weights,
+        lower_bounds=lower_array * square_root_weights,
+        upper_bounds=upper_array * square_root_weights,
+        constraint_normal=normal_array / square_root_weights,
         constraint_rhs=constraint_rhs,
         numerical_tolerance=numerical_tolerance,
     )
@@ -883,7 +1074,7 @@ def _project_onto_box_halfspace(
     constraint_rhs: float,
     numerical_tolerance: float,
 ) -> tuple[np.ndarray, bool]:
-    """Project one 2D point onto a box intersected with a half-space."""
+    """Project one point onto a box intersected with one half-space."""
 
     clipped_nominal = np.clip(nominal, lower_bounds, upper_bounds)
     normal_squared = float(
@@ -900,7 +1091,7 @@ def _project_onto_box_halfspace(
     )
     maximum_lhs = float(np.dot(constraint_normal, maximum_point))
     if maximum_lhs < constraint_rhs - numerical_tolerance:
-        return np.zeros(2, dtype=np.float64), False
+        return np.zeros_like(nominal, dtype=np.float64), False
 
     clipped_lhs = float(
         np.dot(constraint_normal, clipped_nominal)
@@ -926,53 +1117,58 @@ def _project_onto_box_halfspace(
         if candidate_lhs >= constraint_rhs - numerical_tolerance:
             candidates.append(bounded_candidate)
 
-    projection_scale = (
-        constraint_rhs - float(np.dot(constraint_normal, nominal))
-    ) / normal_squared
-    add_candidate(nominal + projection_scale * constraint_normal)
-
-    for fixed_index in range(2):
-        free_index = 1 - fixed_index
-        for fixed_value in (
-            lower_bounds[fixed_index],
-            upper_bounds[fixed_index],
-        ):
-            candidate = np.array(nominal, copy=True)
-            candidate[fixed_index] = fixed_value
-            free_normal = float(constraint_normal[free_index])
-            required_free_contribution = (
-                constraint_rhs
-                - constraint_normal[fixed_index] * fixed_value
+    # Each coordinate is either free (0), fixed to its lower bound (-1),
+    # or fixed to its upper bound (+1). Projecting onto every box face and
+    # retaining the feasible minimum gives the exact convex solution.
+    dimension = nominal.size
+    for states in product((-1, 0, 1), repeat=dimension):
+        free_indices = np.array(
+            [index for index, state in enumerate(states) if state == 0],
+            dtype=np.int64,
+        )
+        fixed_indices = np.array(
+            [index for index, state in enumerate(states) if state != 0],
+            dtype=np.int64,
+        )
+        candidate = np.array(nominal, copy=True)
+        for index in fixed_indices:
+            candidate[index] = (
+                lower_bounds[index]
+                if states[index] < 0
+                else upper_bounds[index]
             )
-            feasible_lower = float(lower_bounds[free_index])
-            feasible_upper = float(upper_bounds[free_index])
 
-            if abs(free_normal) <= numerical_tolerance:
-                if required_free_contribution > numerical_tolerance:
+        fixed_contribution = float(
+            np.dot(
+                constraint_normal[fixed_indices],
+                candidate[fixed_indices],
+            )
+        )
+        if free_indices.size:
+            free_normal = constraint_normal[free_indices]
+            free_normal_squared = float(
+                np.dot(free_normal, free_normal)
+            )
+            if free_normal_squared <= numerical_tolerance**2:
+                if fixed_contribution < (
+                    constraint_rhs - numerical_tolerance
+                ):
                     continue
-            elif free_normal > 0.0:
-                feasible_lower = max(
-                    feasible_lower,
-                    required_free_contribution / free_normal,
-                )
             else:
-                feasible_upper = min(
-                    feasible_upper,
-                    required_free_contribution / free_normal,
+                free_nominal = nominal[free_indices]
+                scale = (
+                    constraint_rhs
+                    - fixed_contribution
+                    - float(np.dot(free_normal, free_nominal))
+                ) / free_normal_squared
+                candidate[free_indices] = (
+                    free_nominal + scale * free_normal
                 )
-
-            if feasible_lower > feasible_upper + numerical_tolerance:
-                continue
-            candidate[free_index] = np.clip(
-                nominal[free_index],
-                feasible_lower,
-                feasible_upper,
-            )
-            add_candidate(candidate)
+        add_candidate(candidate)
 
     add_candidate(maximum_point)
     if not candidates:
-        return np.zeros(2, dtype=np.float64), False
+        return np.zeros_like(nominal, dtype=np.float64), False
 
     objective_values = [
         float(np.sum(np.square(candidate - nominal)))
