@@ -35,6 +35,7 @@ Press Play in Isaac Sim when requested.
 
 import math
 import sys
+import time
 import traceback
 from pathlib import Path
 
@@ -103,13 +104,16 @@ from robot.sensor.lidar import NovaCarterLidar
 # ---------------------------------------------------------------------------
 
 
-MPC_HORIZON_STEPS = 12
+# A 12-step / 2.4 s horizon ended before the nominal trajectory passed the
+# proxy, so the least-cost safe prediction only slowed near the horizon end.
+# Six seconds lets the optimizer compare stopping with an actual side-pass.
+MPC_HORIZON_STEPS = 30
 MPC_TIME_STEP = 0.20
 MPC_LINEAR_VELOCITY_WEIGHT = 1.0
-MPC_ANGULAR_VELOCITY_WEIGHT = 0.05
-MPC_COMMAND_SMOOTHNESS_WEIGHT = 0.01
-MPC_MAXIMUM_SQP_ITERATIONS = 8
-MPC_MAXIMUM_SOLVER_ITERATIONS = 200
+MPC_ANGULAR_VELOCITY_WEIGHT = 0.02
+MPC_COMMAND_SMOOTHNESS_WEIGHT = 0.005
+MPC_MAXIMUM_SQP_ITERATIONS = 12
+MPC_MAXIMUM_SOLVER_ITERATIONS = 400
 
 MINIMUM_PREDICTED_LATERAL_DISPLACEMENT = 0.03
 MINIMUM_FIRST_ANGULAR_SPEED = 1e-3
@@ -212,6 +216,7 @@ def print_prediction_report(
     nominal_angular_velocity: float,
     mpc_config: SafeSAGEUnicycleMPCConfig,
     mpc_result: SafeSAGEUnicycleMPCResult,
+    mpc_solve_wall_seconds: float,
     analytical_result: SafeSAGEUnicycleCBFResult,
     passing_side: PassingSide,
     initial_pose: RobotPose2D,
@@ -306,6 +311,7 @@ def print_prediction_report(
         f"{mpc_result.solver_iteration_count}"
     )
     print(f"  Objective value:             {mpc_result.objective_value:.6e}")
+    print(f"  MPC solve wall time:         {mpc_solve_wall_seconds:.3f} s")
 
     print("\nPredicted trajectory in the fixed field frame:")
     print(
@@ -548,6 +554,7 @@ def main() -> None:
     )
 
     print("Running stationary unicycle MPC prediction...")
+    mpc_start_wall_time = time.perf_counter()
     mpc_result = mpc.plan(
         initial_chassis_state,
         np.array(
@@ -575,6 +582,7 @@ def main() -> None:
             angular_velocity_weight=(stationary.CBF_ANGULAR_VELOCITY_WEIGHT),
         ),
     )
+    mpc_solve_wall_seconds = time.perf_counter() - mpc_start_wall_time
     analytical_result = analytical_filter.filter_command(
         mpc_result.linear_velocity,
         mpc_result.angular_velocity,
@@ -601,6 +609,7 @@ def main() -> None:
         nominal_angular_velocity=nominal_command.angular_velocity,
         mpc_config=mpc_config,
         mpc_result=mpc_result,
+        mpc_solve_wall_seconds=mpc_solve_wall_seconds,
         analytical_result=analytical_result,
         passing_side=semantic_parameters.passing_side,
         initial_pose=anchor_pose,
