@@ -113,7 +113,9 @@ MPC_LINEAR_VELOCITY_WEIGHT = 1.0
 MPC_ANGULAR_VELOCITY_WEIGHT = 0.02
 MPC_COMMAND_SMOOTHNESS_WEIGHT = 0.005
 MPC_MAXIMUM_SQP_ITERATIONS = 12
-MPC_MAXIMUM_SOLVER_ITERATIONS = 400
+MPC_MAXIMUM_SOLVER_ITERATIONS = 4000
+
+MAXIMUM_ACCEPTED_MPC_SOLVE_WALL_SECONDS = 0.50
 
 MINIMUM_PREDICTED_LATERAL_DISPLACEMENT = 0.03
 MINIMUM_FIRST_ANGULAR_SPEED = 1e-3
@@ -259,11 +261,15 @@ def print_prediction_report(
         and analytical_result.constraint_satisfied
         and not analytical_result.emergency_stop_active
     )
+    solve_time_acceptable = bool(
+        mpc_solve_wall_seconds <= MAXIMUM_ACCEPTED_MPC_SOLVE_WALL_SECONDS
+    )
     accepted = bool(
         mpc_constraint_valid
         and predictive_turn_seen
         and analytical_backup_valid
         and robot_stationary
+        and solve_time_acceptable
     )
 
     print("\n" + "=" * 78)
@@ -280,6 +286,7 @@ def print_prediction_report(
     print("\nPredictive control configuration:")
     print("  State:                       (x, y, yaw)")
     print("  Executable input:            (v, omega)")
+    print("  Sparse QP solver:            OSQP")
     print(f"  Horizon steps:               {mpc_config.horizon_steps}")
     print(f"  Time step:                   {mpc_config.time_step:.3f} s")
     print(
@@ -369,6 +376,7 @@ def print_prediction_report(
     print(f"  Predictive CBF valid:         {mpc_constraint_valid}")
     print(f"  Early passing turn predicted: {predictive_turn_seen}")
     print(f"  Analytical backup valid:      {analytical_backup_valid}")
+    print(f"  MPC solve time acceptable:    {solve_time_acceptable}")
     print(f"  Robot remained stationary:    {robot_stationary}")
     print(f"  Measured position drift:       {position_drift:.6f} m")
     print(f"  Measured yaw drift:            {math.degrees(yaw_drift):.4f} degrees")
