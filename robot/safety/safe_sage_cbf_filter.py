@@ -112,62 +112,38 @@ class SafeSAGECBFConfig:
 
         if values["gamma"] <= 0.0:
             raise ValueError("gamma must be greater than zero.")
-        if (
-            values["minimum_planar_velocity"]
-            > values["maximum_planar_velocity"]
-        ):
+        if values["minimum_planar_velocity"] > values["maximum_planar_velocity"]:
             raise ValueError(
-                "minimum_planar_velocity cannot exceed "
-                "maximum_planar_velocity."
+                "minimum_planar_velocity cannot exceed maximum_planar_velocity."
             )
-        if (
-            values["minimum_angular_velocity"]
-            > values["maximum_angular_velocity"]
-        ):
+        if values["minimum_angular_velocity"] > values["maximum_angular_velocity"]:
             raise ValueError(
-                "minimum_angular_velocity cannot exceed "
-                "maximum_angular_velocity."
+                "minimum_angular_velocity cannot exceed maximum_angular_velocity."
             )
         if not (
             values["minimum_planar_velocity"]
             <= 0.0
             <= values["maximum_planar_velocity"]
         ):
-            raise ValueError(
-                "Planar-velocity limits must contain zero."
-            )
+            raise ValueError("Planar-velocity limits must contain zero.")
         if not (
             values["minimum_angular_velocity"]
             <= 0.0
             <= values["maximum_angular_velocity"]
         ):
-            raise ValueError(
-                "Angular-velocity limits must contain zero."
-            )
+            raise ValueError("Angular-velocity limits must contain zero.")
         if values["planar_velocity_weight"] <= 0.0:
-            raise ValueError(
-                "planar_velocity_weight must be greater than zero."
-            )
+            raise ValueError("planar_velocity_weight must be greater than zero.")
         if values["angular_velocity_weight"] <= 0.0:
-            raise ValueError(
-                "angular_velocity_weight must be greater than zero."
-            )
+            raise ValueError("angular_velocity_weight must be greater than zero.")
         if values["temporal_scaling_epsilon"] <= 0.0:
-            raise ValueError(
-                "temporal_scaling_epsilon must be greater than zero."
-            )
+            raise ValueError("temporal_scaling_epsilon must be greater than zero.")
         if values["temporal_scaling_kappa"] <= 0.0:
-            raise ValueError(
-                "temporal_scaling_kappa must be greater than zero."
-            )
+            raise ValueError("temporal_scaling_kappa must be greater than zero.")
         if values["numerical_tolerance"] <= 0.0:
-            raise ValueError(
-                "numerical_tolerance must be greater than zero."
-            )
+            raise ValueError("numerical_tolerance must be greater than zero.")
         if values["intervention_tolerance"] < 0.0:
-            raise ValueError(
-                "intervention_tolerance cannot be negative."
-            )
+            raise ValueError("intervention_tolerance cannot be negative.")
 
         for name, value in values.items():
             object.__setattr__(self, name, value)
@@ -185,6 +161,7 @@ class SafeSAGEConstraintEvaluation:
     yaw_interpolation_weight: float
     sampled_safety_value: float
     sampled_gradient: tuple[float, float, float]
+    interpolant_gradient: tuple[float, float, float]
     sampled_guidance_grid_xy: tuple[float, float]
     temporal_safety_derivative: float
     temporal_scaling: float
@@ -244,6 +221,10 @@ class SafeSAGECBFResult:
     @property
     def sampled_gradient(self) -> tuple[float, float, float]:
         return self.constraint.sampled_gradient
+
+    @property
+    def interpolant_gradient(self) -> tuple[float, float, float]:
+        return self.constraint.interpolant_gradient
 
     @property
     def sampled_guidance_grid_xy(self) -> tuple[float, float]:
@@ -435,22 +416,22 @@ class SafeSAGECBFSafetyFilter:
         reference_grid = configuration_space.occupancy_grids[0]
         query_cell = reference_grid.robot_point_to_cell(query_position)
         if query_cell is None:
-            raise ValueError(
-                "query_position_grid_xy lies outside the local grid."
-            )
+            raise ValueError("query_position_grid_xy lies outside the local grid.")
         lower_yaw, upper_yaw, yaw_weight = _yaw_interpolation(
             query_yaw,
             yaw_slice_count=h_full.yaw_slice_count,
         )
-        sampled_safety, sampled_spatial_gradient = (
-            _sample_periodic_scalar_and_spatial_gradient(
-                h_full.values,
-                query_position=query_position,
-                grid=reference_grid,
-                lower_yaw=lower_yaw,
-                upper_yaw=upper_yaw,
-                yaw_weight=yaw_weight,
-            )
+        (
+            sampled_safety,
+            sampled_spatial_gradient,
+            interpolant_yaw_derivative,
+        ) = _sample_periodic_scalar_and_spatial_gradient(
+            h_full.values,
+            query_position=query_position,
+            grid=reference_grid,
+            lower_yaw=lower_yaw,
+            upper_yaw=upper_yaw,
+            yaw_weight=yaw_weight,
         )
         sampled_yaw_derivative = float(
             _sample_periodic_field(
@@ -462,6 +443,11 @@ class SafeSAGECBFSafetyFilter:
                 yaw_weight=yaw_weight,
             )
         )
+        if yaw_weight <= self.config.numerical_tolerance:
+            # The piecewise-linear yaw interpolant is nondifferentiable at a
+            # slice knot. Use the precomputed centered derivative there,
+            # matching a symmetric finite-difference/SQP linearization.
+            interpolant_yaw_derivative = sampled_yaw_derivative
         sampled_guidance = _sample_periodic_guidance(
             guidance_sequence,
             query_position=query_position,
@@ -496,9 +482,7 @@ class SafeSAGECBFSafetyFilter:
             epsilon=self.config.temporal_scaling_epsilon,
             kappa=self.config.temporal_scaling_kappa,
         )
-        scaled_temporal_derivative = (
-            temporal_scaling * temporal_derivative
-        )
+        scaled_temporal_derivative = temporal_scaling * temporal_derivative
         command_normal = np.array(
             [
                 sampled_guidance[0],
@@ -509,8 +493,7 @@ class SafeSAGECBFSafetyFilter:
         )
         safety_for_constraint = max(0.0, sampled_safety)
         constraint_rhs = (
-            -self.config.gamma * safety_for_constraint
-            - scaled_temporal_derivative
+            -self.config.gamma * safety_for_constraint - scaled_temporal_derivative
         )
         unsafe_reason: str | None = None
         if query_on_boundary:
@@ -534,15 +517,18 @@ class SafeSAGECBFSafetyFilter:
                 float(sampled_spatial_gradient[1]),
                 sampled_yaw_derivative,
             ),
+            interpolant_gradient=(
+                float(sampled_spatial_gradient[0]),
+                float(sampled_spatial_gradient[1]),
+                interpolant_yaw_derivative,
+            ),
             sampled_guidance_grid_xy=(
                 float(sampled_guidance[0]),
                 float(sampled_guidance[1]),
             ),
             temporal_safety_derivative=temporal_derivative,
             temporal_scaling=temporal_scaling,
-            scaled_temporal_safety_derivative=(
-                scaled_temporal_derivative
-            ),
+            scaled_temporal_safety_derivative=(scaled_temporal_derivative),
             constraint_normal=(
                 float(command_normal[0]),
                 float(command_normal[1]),
@@ -569,10 +555,7 @@ class SafeSAGECBFSafetyFilter:
         nominal_lhs = float(np.dot(command_normal, nominal_command))
         safe_lhs = 0.0
         intervention_active = bool(
-            np.any(
-                np.abs(nominal_command)
-                > self.config.intervention_tolerance
-            )
+            np.any(np.abs(nominal_command) > self.config.intervention_tolerance)
         )
 
         return SafeSAGECBFResult(
@@ -586,9 +569,7 @@ class SafeSAGECBFSafetyFilter:
             constraint=constraint,
             nominal_control_left_hand_side=nominal_lhs,
             safe_control_left_hand_side=safe_lhs,
-            cbf_margin=(
-                safe_lhs - constraint.constraint_right_hand_side
-            ),
+            cbf_margin=(safe_lhs - constraint.constraint_right_hand_side),
             constraint_feasible=False,
             constraint_satisfied=False,
             intervention_active=intervention_active,
@@ -623,32 +604,20 @@ def _validate_field_alignment(
         SafeSAGEConfigurationSpaceResult,
     ):
         raise TypeError(
-            "configuration_space must be a "
-            "SafeSAGEConfigurationSpaceResult."
+            "configuration_space must be a SafeSAGEConfigurationSpaceResult."
         )
     if not isinstance(h_full, SafeSAGEHFullResult):
         raise TypeError("h_full must be a SafeSAGEHFullResult.")
     yaw_slice_count = configuration_space.yaw_slice_count
     if yaw_slice_count < 2:
-        raise ValueError(
-            "configuration_space must contain at least two yaw slices."
-        )
+        raise ValueError("configuration_space must contain at least two yaw slices.")
     if len(guidance_fields) != yaw_slice_count:
+        raise ValueError("guidance_fields length must match the yaw-slice count.")
+    if np.asarray(configuration_space.yaw_angles_radians).shape != (yaw_slice_count,):
+        raise ValueError("configuration_space yaw angles must match its grid count.")
+    if np.asarray(h_full.yaw_angles_radians).shape != (yaw_slice_count,):
         raise ValueError(
-            "guidance_fields length must match the yaw-slice count."
-        )
-    if np.asarray(configuration_space.yaw_angles_radians).shape != (
-        yaw_slice_count,
-    ):
-        raise ValueError(
-            "configuration_space yaw angles must match its grid count."
-        )
-    if np.asarray(h_full.yaw_angles_radians).shape != (
-        yaw_slice_count,
-    ):
-        raise ValueError(
-            "h_full yaw angles must match the configuration-space "
-            "grid count."
+            "h_full yaw angles must match the configuration-space grid count."
         )
     expected_yaw_angles = np.linspace(
         -math.pi,
@@ -664,70 +633,48 @@ def _validate_field_alignment(
         atol=1e-12,
     ):
         raise ValueError(
-            "configuration_space yaw angles must be uniformly spaced "
-            "on [-pi, pi)."
+            "configuration_space yaw angles must be uniformly spaced on [-pi, pi)."
         )
     if h_full.values.ndim != 3:
-        raise ValueError(
-            "h_full values must have shape (yaw, rows, columns)."
-        )
+        raise ValueError("h_full values must have shape (yaw, rows, columns).")
     if yaw_slice_count != h_full.yaw_slice_count:
-        raise ValueError(
-            "configuration_space and h_full yaw counts must match."
-        )
+        raise ValueError("configuration_space and h_full yaw counts must match.")
     if not np.allclose(
         configuration_space.yaw_angles_radians,
         h_full.yaw_angles_radians,
         rtol=0.0,
         atol=1e-12,
     ):
-        raise ValueError(
-            "configuration_space and h_full yaw angles must match."
-        )
+        raise ValueError("configuration_space and h_full yaw angles must match.")
 
     reference_grid = configuration_space.occupancy_grids[0]
     expected_scalar_shape = (yaw_slice_count,) + reference_grid.shape
     expected_spatial_gradient_shape = expected_scalar_shape + (2,)
     if h_full.values.shape != expected_scalar_shape:
+        raise ValueError("h_full values must match the configuration-space shape.")
+    if h_full.spatial_gradients_robot_xy.shape != expected_spatial_gradient_shape:
         raise ValueError(
-            "h_full values must match the configuration-space shape."
-        )
-    if (
-        h_full.spatial_gradients_robot_xy.shape
-        != expected_spatial_gradient_shape
-    ):
-        raise ValueError(
-            "h_full spatial gradients must have shape "
-            "(yaw, rows, columns, 2)."
+            "h_full spatial gradients must have shape (yaw, rows, columns, 2)."
         )
     if h_full.yaw_derivatives.shape != expected_scalar_shape:
-        raise ValueError(
-            "h_full yaw derivatives must match the values shape."
-        )
+        raise ValueError("h_full yaw derivatives must match the values shape.")
     if h_full.dirichlet_boundary_masks.shape != expected_scalar_shape:
-        raise ValueError(
-            "h_full boundary masks must match the values shape."
-        )
+        raise ValueError("h_full boundary masks must match the values shape.")
     if not math.isclose(
         h_full.resolution,
         reference_grid.config.resolution,
         rel_tol=1e-9,
         abs_tol=1e-12,
     ):
-        raise ValueError(
-            "h_full resolution must match the configuration space."
-        )
+        raise ValueError("h_full resolution must match the configuration space.")
     for grid in configuration_space.occupancy_grids:
         if grid.config != reference_grid.config:
-            raise ValueError(
-                "All configuration-space grids must share one config."
-            )
+            raise ValueError("All configuration-space grids must share one config.")
 
     for field_index, guidance_field in enumerate(guidance_fields):
         if not isinstance(guidance_field, LaplaceGuidanceFieldResult):
             raise TypeError(
-                "Every guidance field must be a "
-                "LaplaceGuidanceFieldResult."
+                "Every guidance field must be a LaplaceGuidanceFieldResult."
             )
         if guidance_field.shape != reference_grid.shape:
             raise ValueError(
@@ -745,9 +692,7 @@ def _validate_field_alignment(
                 f"configuration space at yaw index {field_index}."
             )
         if not np.isfinite(guidance_field.vectors_robot_xy).all():
-            raise ValueError(
-                "Guidance-field vectors must contain finite values."
-            )
+            raise ValueError("Guidance-field vectors must contain finite values.")
 
     arrays = (
         h_full.values,
@@ -819,10 +764,7 @@ def _sample_periodic_guidance(
         point_grid_xy=query_position,
         grid=grid,
     )
-    sampled = (
-        (1.0 - yaw_weight) * lower_value
-        + yaw_weight * upper_value
-    )
+    sampled = (1.0 - yaw_weight) * lower_value + yaw_weight * upper_value
     return np.asarray(sampled, dtype=np.float64)
 
 
@@ -838,9 +780,7 @@ def _temporal_scaling(
 
     guidance_norm = float(np.linalg.norm(sampled_guidance))
     gradient_norm = float(np.linalg.norm(sampled_spatial_gradient))
-    open_space_regularizer = epsilon * (
-        1.0 - math.exp(-kappa * max(0.0, safety_value))
-    )
+    open_space_regularizer = epsilon * (1.0 - math.exp(-kappa * max(0.0, safety_value)))
     denominator = gradient_norm + open_space_regularizer
     if denominator <= np.finfo(np.float64).eps:
         return 1.0 if guidance_norm > 0.0 else 0.0
@@ -855,34 +795,27 @@ def _sample_periodic_scalar_and_spatial_gradient(
     lower_yaw: int,
     upper_yaw: int,
     yaw_weight: float,
-) -> tuple[float, np.ndarray]:
-    """Sample one scalar field and differentiate that same interpolant."""
+) -> tuple[float, np.ndarray, float]:
+    """Sample one scalar field and differentiate its spatial/yaw interpolant."""
 
-    lower_value, lower_gradient = (
-        _bilinear_sample_scalar_with_gradient(
-            values[lower_yaw],
-            point_grid_xy=query_position,
-            grid=grid,
-        )
+    lower_value, lower_gradient = _bilinear_sample_scalar_with_gradient(
+        values[lower_yaw],
+        point_grid_xy=query_position,
+        grid=grid,
     )
-    upper_value, upper_gradient = (
-        _bilinear_sample_scalar_with_gradient(
-            values[upper_yaw],
-            point_grid_xy=query_position,
-            grid=grid,
-        )
+    upper_value, upper_gradient = _bilinear_sample_scalar_with_gradient(
+        values[upper_yaw],
+        point_grid_xy=query_position,
+        grid=grid,
     )
-    sampled_value = (
-        (1.0 - yaw_weight) * lower_value
-        + yaw_weight * upper_value
-    )
-    sampled_gradient = (
-        (1.0 - yaw_weight) * lower_gradient
-        + yaw_weight * upper_gradient
-    )
-    return float(sampled_value), np.asarray(
-        sampled_gradient,
-        dtype=np.float64,
+    sampled_value = (1.0 - yaw_weight) * lower_value + yaw_weight * upper_value
+    sampled_gradient = (1.0 - yaw_weight) * lower_gradient + yaw_weight * upper_gradient
+    yaw_spacing = math.tau / values.shape[0]
+    yaw_derivative = (upper_value - lower_value) / yaw_spacing
+    return (
+        float(sampled_value),
+        np.asarray(sampled_gradient, dtype=np.float64),
+        float(yaw_derivative),
     )
 
 
@@ -903,18 +836,13 @@ def _bilinear_sample_cell_centers(
         column_fraction,
     ) = _bilinear_coordinates(point_grid_xy, grid=grid)
 
-    lower_value = (
-        (1.0 - column_fraction) * values[row_zero, column_zero]
-        + column_fraction * values[row_zero, column_one]
-    )
-    upper_value = (
-        (1.0 - column_fraction) * values[row_one, column_zero]
-        + column_fraction * values[row_one, column_one]
-    )
-    return (
-        (1.0 - row_fraction) * lower_value
-        + row_fraction * upper_value
-    )
+    lower_value = (1.0 - column_fraction) * values[
+        row_zero, column_zero
+    ] + column_fraction * values[row_zero, column_one]
+    upper_value = (1.0 - column_fraction) * values[
+        row_one, column_zero
+    ] + column_fraction * values[row_one, column_one]
+    return (1.0 - row_fraction) * lower_value + row_fraction * upper_value
 
 
 def _bilinear_sample_scalar_with_gradient(
@@ -941,18 +869,9 @@ def _bilinear_sample_scalar_with_gradient(
     value_10 = float(values[row_one, column_zero])
     value_11 = float(values[row_one, column_one])
 
-    lower_value = (
-        (1.0 - column_fraction) * value_00
-        + column_fraction * value_01
-    )
-    upper_value = (
-        (1.0 - column_fraction) * value_10
-        + column_fraction * value_11
-    )
-    sampled_value = (
-        (1.0 - row_fraction) * lower_value
-        + row_fraction * upper_value
-    )
+    lower_value = (1.0 - column_fraction) * value_00 + column_fraction * value_01
+    upper_value = (1.0 - column_fraction) * value_10 + column_fraction * value_11
+    sampled_value = (1.0 - row_fraction) * lower_value + row_fraction * upper_value
 
     resolution = grid.config.resolution
     derivative_x = (
@@ -977,32 +896,19 @@ def _bilinear_coordinates(
     """Return checked cell-center interpolation indices and fractions."""
 
     config = grid.config
-    column_position = (
-        (point_grid_xy[0] - config.minimum_x) / config.resolution
-        - 0.5
-    )
-    row_position = (
-        (point_grid_xy[1] - config.minimum_y) / config.resolution
-        - 0.5
-    )
+    column_position = (point_grid_xy[0] - config.minimum_x) / config.resolution - 0.5
+    row_position = (point_grid_xy[1] - config.minimum_y) / config.resolution - 0.5
     tolerance = 1e-9
     if not (
         -tolerance <= row_position <= config.row_count - 1 + tolerance
-        and -tolerance
-        <= column_position
-        <= config.column_count - 1 + tolerance
+        and -tolerance <= column_position <= config.column_count - 1 + tolerance
     ):
         raise ValueError(
-            "query_position_grid_xy must lie within the grid-cell-center "
-            "domain."
+            "query_position_grid_xy must lie within the grid-cell-center domain."
         )
 
-    row_position = float(
-        np.clip(row_position, 0.0, config.row_count - 1)
-    )
-    column_position = float(
-        np.clip(column_position, 0.0, config.column_count - 1)
-    )
+    row_position = float(np.clip(row_position, 0.0, config.row_count - 1))
+    column_position = float(np.clip(column_position, 0.0, config.column_count - 1))
     row_zero = math.floor(row_position)
     column_zero = math.floor(column_position)
     row_one = min(row_zero + 1, config.row_count - 1)
@@ -1039,9 +945,7 @@ def project_weighted_box_halfspace(
             constraint_normal,
         )
     )
-    nominal_array, lower_array, upper_array, weight_array, normal_array = (
-        arrays
-    )
+    nominal_array, lower_array, upper_array, weight_array, normal_array = arrays
     if nominal_array.ndim != 1 or nominal_array.size == 0:
         raise ValueError("nominal must be a non-empty one-dimensional array.")
     if any(array.shape != nominal_array.shape for array in arrays[1:]):
@@ -1077,9 +981,7 @@ def _project_onto_box_halfspace(
     """Project one point onto a box intersected with one half-space."""
 
     clipped_nominal = np.clip(nominal, lower_bounds, upper_bounds)
-    normal_squared = float(
-        np.dot(constraint_normal, constraint_normal)
-    )
+    normal_squared = float(np.dot(constraint_normal, constraint_normal))
     if normal_squared <= numerical_tolerance**2:
         feasible = constraint_rhs <= numerical_tolerance
         return clipped_nominal, feasible
@@ -1093,9 +995,7 @@ def _project_onto_box_halfspace(
     if maximum_lhs < constraint_rhs - numerical_tolerance:
         return np.zeros_like(nominal, dtype=np.float64), False
 
-    clipped_lhs = float(
-        np.dot(constraint_normal, clipped_nominal)
-    )
+    clipped_lhs = float(np.dot(constraint_normal, clipped_nominal))
     if clipped_lhs >= constraint_rhs - numerical_tolerance:
         return clipped_nominal, True
 
@@ -1111,9 +1011,7 @@ def _project_onto_box_halfspace(
             lower_bounds,
             upper_bounds,
         )
-        candidate_lhs = float(
-            np.dot(constraint_normal, bounded_candidate)
-        )
+        candidate_lhs = float(np.dot(constraint_normal, bounded_candidate))
         if candidate_lhs >= constraint_rhs - numerical_tolerance:
             candidates.append(bounded_candidate)
 
@@ -1133,9 +1031,7 @@ def _project_onto_box_halfspace(
         candidate = np.array(nominal, copy=True)
         for index in fixed_indices:
             candidate[index] = (
-                lower_bounds[index]
-                if states[index] < 0
-                else upper_bounds[index]
+                lower_bounds[index] if states[index] < 0 else upper_bounds[index]
             )
 
         fixed_contribution = float(
@@ -1146,13 +1042,9 @@ def _project_onto_box_halfspace(
         )
         if free_indices.size:
             free_normal = constraint_normal[free_indices]
-            free_normal_squared = float(
-                np.dot(free_normal, free_normal)
-            )
+            free_normal_squared = float(np.dot(free_normal, free_normal))
             if free_normal_squared <= numerical_tolerance**2:
-                if fixed_contribution < (
-                    constraint_rhs - numerical_tolerance
-                ):
+                if fixed_contribution < (constraint_rhs - numerical_tolerance):
                     continue
             else:
                 free_nominal = nominal[free_indices]
@@ -1161,9 +1053,7 @@ def _project_onto_box_halfspace(
                     - fixed_contribution
                     - float(np.dot(free_normal, free_nominal))
                 ) / free_normal_squared
-                candidate[free_indices] = (
-                    free_nominal + scale * free_normal
-                )
+                candidate[free_indices] = free_nominal + scale * free_normal
         add_candidate(candidate)
 
     add_candidate(maximum_point)
@@ -1171,7 +1061,6 @@ def _project_onto_box_halfspace(
         return np.zeros_like(nominal, dtype=np.float64), False
 
     objective_values = [
-        float(np.sum(np.square(candidate - nominal)))
-        for candidate in candidates
+        float(np.sum(np.square(candidate - nominal))) for candidate in candidates
     ]
     return candidates[int(np.argmin(objective_values))], True

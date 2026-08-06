@@ -114,15 +114,18 @@ def make_fields(
     )
     shape = (yaw_slice_count,) + grids[0].shape
     grid_config = grids[0].config
-    x_centers = grid_config.minimum_x + (
-        np.arange(grid_config.column_count, dtype=np.float64) + 0.5
-    ) * grid_config.resolution
-    y_centers = grid_config.minimum_y + (
-        np.arange(grid_config.row_count, dtype=np.float64) + 0.5
-    ) * grid_config.resolution
+    x_centers = (
+        grid_config.minimum_x
+        + (np.arange(grid_config.column_count, dtype=np.float64) + 0.5)
+        * grid_config.resolution
+    )
+    y_centers = (
+        grid_config.minimum_y
+        + (np.arange(grid_config.row_count, dtype=np.float64) + 0.5)
+        * grid_config.resolution
+    )
     spatial_offsets = (
-        gradient[0] * x_centers[np.newaxis, :]
-        + gradient[1] * y_centers[:, np.newaxis]
+        gradient[0] * x_centers[np.newaxis, :] + gradient[1] * y_centers[:, np.newaxis]
     )
     values = np.empty(shape, dtype=np.float64)
     for yaw_index in range(yaw_slice_count):
@@ -195,9 +198,7 @@ def apply_filter(
 ):
     """Apply one filter to aligned synthetic fields at the origin."""
 
-    configuration_space, h_full, guidance_fields = make_fields(
-        **field_kwargs
-    )
+    configuration_space, h_full, guidance_fields = make_fields(**field_kwargs)
     return safety_filter.filter_command(
         np.asarray(nominal_planar, dtype=np.float64),
         nominal_angular,
@@ -219,9 +220,7 @@ def test_safe_nominal_command_passes_through() -> None:
 
     assert result.safe_planar_velocity_grid_xy == pytest.approx((0.2, 0.0))
     assert result.safe_angular_velocity == pytest.approx(0.0)
-    assert result.constraint.constraint_normal == pytest.approx(
-        (-1.0, 0.0, 0.0)
-    )
+    assert result.constraint.constraint_normal == pytest.approx((-1.0, 0.0, 0.0))
     assert result.constraint_feasible
     assert result.constraint_satisfied
     assert not result.intervention_active
@@ -276,12 +275,8 @@ def test_opposite_tangential_guidance_produces_opposite_lateral_commands() -> No
         guidance=(-1.0, 1.0),
     )
 
-    assert pass_right.safe_planar_velocity_grid_xy == pytest.approx(
-        (0.1, -0.1)
-    )
-    assert pass_left.safe_planar_velocity_grid_xy == pytest.approx(
-        (0.1, 0.1)
-    )
+    assert pass_right.safe_planar_velocity_grid_xy == pytest.approx((0.1, -0.1))
+    assert pass_left.safe_planar_velocity_grid_xy == pytest.approx((0.1, 0.1))
 
 
 def test_yaw_derivative_directly_changes_angular_velocity() -> None:
@@ -342,6 +337,38 @@ def test_periodic_yaw_interpolation_wraps_at_pi() -> None:
     assert result.upper_yaw_slice == 0
     assert result.yaw_interpolation_weight == pytest.approx(0.5)
     assert result.sampled_safety_value == pytest.approx(3.0)
+
+
+def test_interpolant_gradient_matches_sampled_value_finite_difference() -> None:
+    query_yaw = -0.75 * np.pi
+    epsilon = 1e-6
+    field_arguments = {
+        "gradient": (0.3, -0.2, 0.0),
+        "per_yaw_safety_values": (1.0, 2.0, 3.0, 4.0),
+    }
+    result = apply_filter(
+        make_filter(),
+        query_yaw=query_yaw,
+        **field_arguments,
+    )
+    positive = apply_filter(
+        make_filter(),
+        query_yaw=query_yaw + epsilon,
+        **field_arguments,
+    )
+    negative = apply_filter(
+        make_filter(),
+        query_yaw=query_yaw - epsilon,
+        **field_arguments,
+    )
+    finite_difference_yaw = (
+        positive.sampled_safety_value - negative.sampled_safety_value
+    ) / (2.0 * epsilon)
+
+    assert result.interpolant_gradient[:2] == pytest.approx((0.3, -0.2))
+    assert result.interpolant_gradient[2] == pytest.approx(finite_difference_yaw)
+    assert result.interpolant_gradient[2] == pytest.approx(2.0 / np.pi)
+    assert result.sampled_gradient[2] == pytest.approx(0.0)
 
 
 def test_guidance_is_interpolated_across_yaw() -> None:
@@ -433,9 +460,7 @@ def test_angular_weight_changes_three_command_projection() -> None:
 
     assert equal_weight.safe_planar_velocity_grid_xy[0] == pytest.approx(0.1)
     assert equal_weight.safe_angular_velocity == pytest.approx(0.1)
-    assert angular_expensive.safe_planar_velocity_grid_xy[0] == pytest.approx(
-        0.04
-    )
+    assert angular_expensive.safe_planar_velocity_grid_xy[0] == pytest.approx(0.04)
     assert angular_expensive.safe_angular_velocity == pytest.approx(0.04)
 
 
