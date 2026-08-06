@@ -120,6 +120,20 @@ def test_passing_side_reverses_predicted_steering() -> None:
     )
 
 
+def test_exact_dtcbf_restoration_recovers_surrogate_mismatch() -> None:
+    result = plan_synthetic(
+        guidance=(-1.0, -1.0),
+        gradient=(-1.0, 0.0, 0.0),
+        safety_value=0.75,
+    )
+
+    assert result.success, result.status
+    assert result.restoration_used
+    assert result.status == "exact_dtcbf_feasibility_restored"
+    assert result.minimum_dtcbf_margin >= -1e-6
+    assert not result.fallback_active
+
+
 def test_result_shapes_and_arrays_are_read_only() -> None:
     result = plan_synthetic(
         guidance=(-1.0, 0.0),
@@ -165,6 +179,7 @@ def test_unsafe_current_configuration_fails_closed() -> None:
         {"minimum_linear_velocity": 0.1},
         {"angular_velocity_weight": 0.0},
         {"command_smoothness_weight": -1.0},
+        {"maximum_restoration_iterations": 0},
     ),
 )
 def test_invalid_configuration_is_rejected(

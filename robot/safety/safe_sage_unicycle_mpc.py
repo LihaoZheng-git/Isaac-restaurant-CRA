@@ -99,6 +99,7 @@ class SafeSAGEUnicycleMPCConfig:
     command_smoothness_weight: float = 0.01
     maximum_sqp_iterations: int = 6
     maximum_solver_iterations: int = 150
+    maximum_restoration_iterations: int = 300
     solver_tolerance: float = 1e-7
     trajectory_tolerance: float = 1e-5
     constraint_tolerance: float = 1e-6
@@ -117,6 +118,10 @@ class SafeSAGEUnicycleMPCConfig:
             "maximum_solver_iterations": _positive_integer(
                 self.maximum_solver_iterations,
                 name="maximum_solver_iterations",
+            ),
+            "maximum_restoration_iterations": _positive_integer(
+                self.maximum_restoration_iterations,
+                name="maximum_restoration_iterations",
             ),
         }
         real_values = {
@@ -159,24 +164,20 @@ class SafeSAGEUnicycleMPCConfig:
         if real_values["gamma"] <= 0.0:
             raise ValueError("gamma must be greater than zero.")
         if real_values["lookahead_distance"] <= 0.0:
-            raise ValueError(
-                "lookahead_distance must be greater than zero."
-            )
+            raise ValueError("lookahead_distance must be greater than zero.")
         if (
             real_values["minimum_linear_velocity"]
             > real_values["maximum_linear_velocity"]
         ):
             raise ValueError(
-                "minimum_linear_velocity cannot exceed "
-                "maximum_linear_velocity."
+                "minimum_linear_velocity cannot exceed maximum_linear_velocity."
             )
         if (
             real_values["minimum_angular_velocity"]
             > real_values["maximum_angular_velocity"]
         ):
             raise ValueError(
-                "minimum_angular_velocity cannot exceed "
-                "maximum_angular_velocity."
+                "minimum_angular_velocity cannot exceed maximum_angular_velocity."
             )
         if not (
             real_values["minimum_linear_velocity"]
@@ -200,9 +201,7 @@ class SafeSAGEUnicycleMPCConfig:
             if real_values[name] <= 0.0:
                 raise ValueError(f"{name} must be greater than zero.")
         if real_values["command_smoothness_weight"] < 0.0:
-            raise ValueError(
-                "command_smoothness_weight cannot be negative."
-            )
+            raise ValueError("command_smoothness_weight cannot be negative.")
         if real_values["intervention_tolerance"] < 0.0:
             raise ValueError("intervention_tolerance cannot be negative.")
 
@@ -234,6 +233,7 @@ class SafeSAGEUnicycleMPCResult:
     success: bool
     intervention_active: bool
     fallback_active: bool
+    restoration_used: bool
     status: str
 
     @property
@@ -352,6 +352,8 @@ class SafeSAGEUnicycleMPC:
         completed_sqp_iterations = 0
         latest_result = None
         latest_linearized_margins = np.empty(0, dtype=np.float64)
+        sqp_failure_message: str | None = None
+        restoration_used = False
 
         for sqp_index in range(self.config.maximum_sqp_iterations):
             completed_sqp_iterations = sqp_index + 1
@@ -365,19 +367,7 @@ class SafeSAGEUnicycleMPC:
                     self.config.horizon_steps,
                     2,
                 )
-                command_error = commands - nominal_sequence
-                value = np.sum(
-                    self.config.linear_velocity_weight
-                    * np.square(command_error[:, 0])
-                    + self.config.angular_velocity_weight
-                    * np.square(command_error[:, 1])
-                )
-                if self.config.command_smoothness_weight > 0.0:
-                    command_delta = np.diff(commands, axis=0)
-                    value += self.config.command_smoothness_weight * float(
-                        np.sum(np.square(command_delta))
-                    )
-                return float(value)
+                return self._objective_value(commands, nominal_sequence)
 
             def predictive_constraints(
                 flattened_commands: np.ndarray,
@@ -419,13 +409,8 @@ class SafeSAGEUnicycleMPC:
             latest_result = optimization
             solver_iterations += int(getattr(optimization, "nit", 0))
             if not bool(optimization.success):
-                return self._fallback_result(
-                    initial_state,
-                    clipped_nominal,
-                    status=f"solver_failure: {optimization.message}",
-                    sqp_iterations=completed_sqp_iterations,
-                    solver_iterations=solver_iterations,
-                )
+                sqp_failure_message = f"guidance_sqp_failure: {optimization.message}"
+                break
 
             command_guess = self._clip_commands(
                 np.asarray(optimization.x, dtype=np.float64).reshape(
@@ -440,9 +425,7 @@ class SafeSAGEUnicycleMPC:
                 reference_safety=reference_safety,
                 reference_samples=reference_samples,
             )
-            command_change = float(
-                np.max(np.abs(command_guess - previous_guess))
-            )
+            command_change = float(np.max(np.abs(command_guess - previous_guess)))
             reference_chassis = candidate_chassis
             reference_safety = candidate_safety
 
@@ -466,29 +449,68 @@ class SafeSAGEUnicycleMPC:
             true_margins = self._sampled_dtcbf_margins(reference_samples)
             if (
                 command_change <= self.config.trajectory_tolerance
-                and float(np.min(true_margins))
-                >= -self.config.constraint_tolerance
+                and float(np.min(true_margins)) >= -self.config.constraint_tolerance
             ):
                 break
 
         if latest_result is None:
             raise RuntimeError("The SQP loop did not execute.")
 
-        predicted_values = self._time_adjusted_safety_values(
-            reference_samples
-        )
+        predicted_values = self._time_adjusted_safety_values(reference_samples)
         true_margins = self._sampled_dtcbf_margins(reference_samples)
-        if float(np.min(true_margins)) < -self.config.constraint_tolerance:
-            return self._fallback_result(
+        requires_restoration = bool(
+            sqp_failure_message is not None
+            or float(np.min(true_margins)) < -self.config.constraint_tolerance
+        )
+        if requires_restoration:
+            restoration = self._restore_exact_dtcbf_feasibility(
                 initial_state,
-                clipped_nominal,
-                status="sqp_did_not_satisfy_predictive_cbf",
-                sqp_iterations=completed_sqp_iterations,
-                solver_iterations=solver_iterations,
+                command_guess,
+                nominal_sequence=nominal_sequence,
+                configuration_space=configuration_space,
+                h_full=h_full,
+                guidance_fields=guidance_fields,
+                temporal_safety_derivative=temporal_derivative,
             )
-        if latest_linearized_margins.size and (
-            float(np.min(latest_linearized_margins))
-            < -self.config.constraint_tolerance
+            solver_iterations += restoration[4]
+            if not restoration[0]:
+                previous_margin = float(np.min(true_margins))
+                reason = restoration[5]
+                if sqp_failure_message is not None:
+                    reason = f"{sqp_failure_message}; {reason}"
+                return self._fallback_result(
+                    initial_state,
+                    clipped_nominal,
+                    status=(
+                        f"predictive_cbf_restoration_failed: {reason}; "
+                        f"pre_restoration_min_margin={previous_margin:.3e}"
+                    ),
+                    sqp_iterations=completed_sqp_iterations,
+                    solver_iterations=solver_iterations,
+                )
+            (
+                _,
+                command_guess,
+                reference_chassis,
+                reference_safety,
+                _,
+                _,
+                reference_samples,
+                true_margins,
+                restoration_objective,
+            ) = restoration
+            predicted_values = self._time_adjusted_safety_values(reference_samples)
+            restoration_used = True
+        else:
+            restoration_objective = float(latest_result.fun)
+
+        if (
+            not restoration_used
+            and latest_linearized_margins.size
+            and (
+                float(np.min(latest_linearized_margins))
+                < -self.config.constraint_tolerance
+            )
         ):
             return self._fallback_result(
                 initial_state,
@@ -514,13 +536,173 @@ class SafeSAGEUnicycleMPC:
                 float(nominal_sequence[0, 0]),
                 float(nominal_sequence[0, 1]),
             ),
-            objective_value=float(latest_result.fun),
+            objective_value=restoration_objective,
             sqp_iteration_count=completed_sqp_iterations,
             solver_iteration_count=solver_iterations,
             success=True,
             intervention_active=intervention,
             fallback_active=False,
-            status="converged",
+            restoration_used=restoration_used,
+            status=(
+                "exact_dtcbf_feasibility_restored" if restoration_used else "converged"
+            ),
+        )
+
+    def _objective_value(
+        self,
+        commands: np.ndarray,
+        nominal_sequence: np.ndarray,
+    ) -> float:
+        """Return the weighted paper command-tracking objective."""
+
+        command_error = commands - nominal_sequence
+        value = np.sum(
+            self.config.linear_velocity_weight * np.square(command_error[:, 0])
+            + self.config.angular_velocity_weight * np.square(command_error[:, 1])
+        )
+        if self.config.command_smoothness_weight > 0.0:
+            command_delta = np.diff(commands, axis=0)
+            value += self.config.command_smoothness_weight * float(
+                np.sum(np.square(command_delta))
+            )
+        return float(value)
+
+    def _restore_exact_dtcbf_feasibility(
+        self,
+        initial_state: np.ndarray,
+        command_guess: np.ndarray,
+        *,
+        nominal_sequence: np.ndarray,
+        configuration_space: SafeSAGEConfigurationSpaceResult,
+        h_full: SafeSAGEHFullResult,
+        guidance_fields: Sequence[LaplaceGuidanceFieldResult],
+        temporal_safety_derivative: float,
+    ) -> tuple[
+        bool,
+        np.ndarray,
+        np.ndarray,
+        np.ndarray,
+        int,
+        str,
+        _ReferenceSamples,
+        np.ndarray,
+        float,
+    ]:
+        """Restore the nonlinear sampled DTCBF after guidance SQP.
+
+        Safe-SAGE uses the non-conservative guidance field as the positional
+        derivative inside its SQP approximation. On a discrete grid that
+        approximation need not satisfy the sampled nonlinear DTCBF after a
+        finite number of outer iterations. This final SLSQP pass retains the
+        guidance-SQP solution as its warm start while enforcing the original
+        sampled DTCBF inequality exactly.
+        """
+
+        horizon = self.config.horizon_steps
+        invalid_samples = _ReferenceSamples(
+            safety_values=np.full(horizon + 1, np.nan, dtype=np.float64),
+            constraint_normals=np.full(
+                (horizon + 1, 3),
+                np.nan,
+                dtype=np.float64,
+            ),
+            scaled_temporal_derivatives=np.full(
+                horizon + 1,
+                np.nan,
+                dtype=np.float64,
+            ),
+        )
+
+        def objective(flattened_commands: np.ndarray) -> float:
+            commands = flattened_commands.reshape(horizon, 2)
+            return self._objective_value(commands, nominal_sequence)
+
+        def exact_constraints(flattened_commands: np.ndarray) -> np.ndarray:
+            commands = flattened_commands.reshape(horizon, 2)
+            chassis_states = self._rollout(initial_state, commands)
+            safety_states = self._safety_states(chassis_states)
+            grid_margins = self._grid_domain_margins(
+                safety_states,
+                configuration_space=configuration_space,
+            )
+            try:
+                samples = self._sample_reference(
+                    safety_states,
+                    configuration_space=configuration_space,
+                    h_full=h_full,
+                    guidance_fields=guidance_fields,
+                    temporal_safety_derivative=(temporal_safety_derivative),
+                )
+            except (TypeError, ValueError):
+                dtcbf_margins = np.full(
+                    horizon,
+                    -1.0,
+                    dtype=np.float64,
+                )
+            else:
+                dtcbf_margins = self._sampled_dtcbf_margins(samples)
+            return np.concatenate((dtcbf_margins, grid_margins))
+
+        optimization = minimize(
+            objective,
+            command_guess.reshape(-1),
+            method="SLSQP",
+            bounds=self._solver_bounds(),
+            constraints={"type": "ineq", "fun": exact_constraints},
+            options={
+                "ftol": self.config.solver_tolerance,
+                "maxiter": self.config.maximum_restoration_iterations,
+                "disp": False,
+            },
+        )
+        iteration_count = int(getattr(optimization, "nit", 0))
+        commands = self._clip_commands(
+            np.asarray(optimization.x, dtype=np.float64).reshape(
+                horizon,
+                2,
+            )
+        )
+        chassis_states = self._rollout(initial_state, commands)
+        safety_states = self._safety_states(chassis_states)
+        try:
+            samples = self._sample_reference(
+                safety_states,
+                configuration_space=configuration_space,
+                h_full=h_full,
+                guidance_fields=guidance_fields,
+                temporal_safety_derivative=temporal_safety_derivative,
+            )
+            margins = self._sampled_dtcbf_margins(samples)
+        except (TypeError, ValueError) as error:
+            return (
+                False,
+                commands,
+                chassis_states,
+                safety_states,
+                iteration_count,
+                f"invalid_restored_reference: {error}",
+                invalid_samples,
+                np.full(horizon, np.nan, dtype=np.float64),
+                math.inf,
+            )
+
+        minimum_margin = float(np.min(margins))
+        success = bool(
+            optimization.success and minimum_margin >= -self.config.constraint_tolerance
+        )
+        message = str(optimization.message)
+        if not success:
+            message = f"{message}; restored_min_margin={minimum_margin:.3e}"
+        return (
+            success,
+            commands,
+            chassis_states,
+            safety_states,
+            iteration_count,
+            message,
+            samples,
+            margins,
+            float(optimization.fun),
         )
 
     def _nominal_sequence(
@@ -539,8 +721,7 @@ class SafeSAGEUnicycleMPC:
         expected_shape = (self.config.horizon_steps, 2)
         if command.shape != expected_shape:
             raise ValueError(
-                "nominal_command must have shape (2,) or "
-                f"{expected_shape}."
+                f"nominal_command must have shape (2,) or {expected_shape}."
             )
         if not np.isfinite(command).all():
             raise ValueError("nominal_command must contain finite values.")
@@ -620,9 +801,7 @@ class SafeSAGEUnicycleMPC:
             )
             values.append(evaluation.sampled_safety_value)
             normals.append(evaluation.constraint_normal)
-            temporal_terms.append(
-                evaluation.scaled_temporal_safety_derivative
-            )
+            temporal_terms.append(evaluation.scaled_temporal_safety_derivative)
         return _ReferenceSamples(
             safety_values=np.asarray(values, dtype=np.float64),
             constraint_normals=np.asarray(normals, dtype=np.float64),
@@ -642,10 +821,7 @@ class SafeSAGEUnicycleMPC:
             self.config.horizon_steps + 1,
             dtype=np.float64,
         )
-        return (
-            samples.safety_values
-            + times * samples.scaled_temporal_derivatives
-        )
+        return samples.safety_values + times * samples.scaled_temporal_derivatives
 
     def _linearized_dtcbf_margins(
         self,
@@ -661,17 +837,13 @@ class SafeSAGEUnicycleMPC:
             [wrap_to_pi(float(value)) for value in state_delta[:, 2]],
             dtype=np.float64,
         )
-        linearized_values = (
-            self._time_adjusted_safety_values(reference_samples)
-            + np.sum(
-                reference_samples.constraint_normals * state_delta,
-                axis=1,
-            )
+        linearized_values = self._time_adjusted_safety_values(
+            reference_samples
+        ) + np.sum(
+            reference_samples.constraint_normals * state_delta,
+            axis=1,
         )
-        return (
-            linearized_values[1:]
-            - self.config.dtcbf_decay * linearized_values[:-1]
-        )
+        return linearized_values[1:] - self.config.dtcbf_decay * linearized_values[:-1]
 
     def _sampled_dtcbf_margins(
         self,
@@ -765,5 +937,6 @@ class SafeSAGEUnicycleMPC:
             success=False,
             intervention_active=True,
             fallback_active=True,
+            restoration_used=False,
             status=status,
         )
