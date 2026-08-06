@@ -325,6 +325,91 @@ def test_nonlinear_rescue_recovers_osqp_iteration_limit() -> None:
     assert result.predicted_chassis_states[-1, 1] < 0.0
 
 
+def test_exact_feasibility_recovery_survives_solver_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    configuration_space, h_full, guidance_fields = make_fields(
+        guidance=(-1.0, -1.0),
+        gradient=(-1.0, -1.0, 0.0),
+        safety_value=0.75,
+    )
+    mpc = make_mpc(
+        horizon_steps=30,
+        maximum_solver_iterations=1,
+    )
+    monkeypatch.setattr(
+        mpc,
+        "_solve_exact_nonlinear_rescue",
+        lambda *args, **kwargs: (None, 1, "forced numerical failure"),
+    )
+
+    result = mpc.plan(
+        np.zeros(3, dtype=np.float64),
+        np.array([0.25, 0.0], dtype=np.float64),
+        configuration_space=configuration_space,
+        h_full=h_full,
+        guidance_fields=guidance_fields,
+    )
+
+    assert result.success, result.status
+    assert not result.fallback_active
+    assert result.status in {
+        "translation_scaled_feasibility_recovered",
+        "stationary_feasibility_recovered",
+    }
+    assert result.minimum_dtcbf_margin >= -1e-6
+
+
+def test_shifted_safe_horizon_warm_starts_next_control_cycle() -> None:
+    configuration_space, h_full, guidance_fields = make_fields(
+        guidance=(-1.0, -1.0),
+        gradient=(-1.0, -1.0, 0.0),
+        safety_value=0.75,
+    )
+    mpc = make_mpc(horizon_steps=30)
+    nominal_command = np.array([0.25, 0.0], dtype=np.float64)
+    first = mpc.plan(
+        np.zeros(3, dtype=np.float64),
+        nominal_command,
+        configuration_space=configuration_space,
+        h_full=h_full,
+        guidance_fields=guidance_fields,
+    )
+
+    assert first.success, first.status
+    shifted_commands = np.vstack(
+        (first.command_sequence[1:], np.zeros((1, 2), dtype=np.float64))
+    )
+    second = mpc.plan(
+        first.predicted_chassis_states[1],
+        nominal_command,
+        initial_command_guess=shifted_commands,
+        configuration_space=configuration_space,
+        h_full=h_full,
+        guidance_fields=guidance_fields,
+    )
+
+    assert second.success, second.status
+    assert not second.fallback_active
+    assert second.minimum_dtcbf_margin >= -1e-6
+    assert second.predicted_chassis_states[-1, 1] < 0.0
+
+
+def test_initial_command_guess_shape_is_validated() -> None:
+    configuration_space, h_full, guidance_fields = make_fields()
+    mpc = make_mpc()
+
+    with pytest.raises(ValueError, match="initial_command_guess"):
+        mpc.plan(
+            np.zeros(3, dtype=np.float64),
+            np.array([0.25, 0.0], dtype=np.float64),
+            initial_command_guess=np.zeros((3, 2), dtype=np.float64),
+            configuration_space=configuration_space,
+            h_full=h_full,
+            guidance_fields=guidance_fields,
+        )
+
+
 def test_result_shapes_and_arrays_are_read_only() -> None:
     result = plan_synthetic(
         guidance=(-1.0, 0.0),

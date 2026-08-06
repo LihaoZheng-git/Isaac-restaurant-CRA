@@ -20,6 +20,9 @@ SQP prematurely; they do not relax the exact nonlinear DTCBF acceptance
 check applied to every returned trajectory.  If OSQP reaches its iteration
 limit, a bounded SLSQP rescue uses analytical unicycle sensitivities and
 sampled ``h_full`` gradients to restore the same exact nonlinear constraints.
+If both numerical solvers fail, a deterministic last-resort recovery reduces
+translation while preserving the planned turn, then verifies a stationary
+horizon.  A recovery is returned only when the exact DTCBF check passes.
 
 The module has no Isaac Sim dependency.
 """
@@ -357,6 +360,7 @@ class SafeSAGEUnicycleMPC:
         initial_chassis_state_grid: Sequence[float] | np.ndarray,
         nominal_command: Sequence[float] | np.ndarray,
         *,
+        initial_command_guess: Sequence[float] | np.ndarray | None = None,
         configuration_space: SafeSAGEConfigurationSpaceResult,
         h_full: SafeSAGEHFullResult,
         guidance_fields: Sequence[LaplaceGuidanceFieldResult],
@@ -367,6 +371,8 @@ class SafeSAGEUnicycleMPC:
         ``initial_chassis_state_grid`` is ``(x, y, yaw)`` in the fixed local
         field frame. ``nominal_command`` may be one ``(v, omega)`` command or
         an explicit ``(horizon_steps, 2)`` reference sequence.
+        ``initial_command_guess`` optionally supplies a distinct warm-start
+        sequence without changing the command-tracking objective.
         """
 
         initial_state = _finite_vector(
@@ -379,7 +385,14 @@ class SafeSAGEUnicycleMPC:
             name="temporal_safety_derivative",
         )
         nominal_sequence = self._nominal_sequence(nominal_command)
-        reference_commands = self._clip_commands(nominal_sequence)
+        if initial_command_guess is None:
+            reference_commands = nominal_sequence
+        else:
+            reference_commands = self._command_sequence(
+                initial_command_guess,
+                name="initial_command_guess",
+            )
+        reference_commands = self._clip_commands(reference_commands)
         reference = self._evaluate_trajectory(
             initial_state,
             reference_commands,
@@ -451,6 +464,7 @@ class SafeSAGEUnicycleMPC:
 
         restoration_used = not self._trajectory_is_safe(reference)
         nonlinear_rescue_used = False
+        feasibility_recovery_status: str | None = None
         if restoration_used:
             restoration_success = False
             restoration_failure: str | None = None
@@ -516,18 +530,32 @@ class SafeSAGEUnicycleMPC:
                 )
                 total_qp_iterations += rescue_iterations
                 if rescue is None:
-                    return self._fallback_result(
-                        initial_state,
-                        nominal_sequence,
-                        status=(
-                            "exact_nonlinear_rescue_failed: "
-                            f"{restoration_failure}; {rescue_status}"
-                        ),
-                        sqp_iterations=completed_sqp_iterations,
-                        solver_iterations=total_qp_iterations,
+                    recovery, recovery_status = (
+                        self._recover_feasible_command_horizon(
+                            reference,
+                            initial_state=initial_state,
+                            configuration_space=configuration_space,
+                            h_full=h_full,
+                            guidance_fields=guidance_fields,
+                            temporal_safety_derivative=temporal_derivative,
+                        )
                     )
-                reference = rescue
-                nonlinear_rescue_used = True
+                    if recovery is None:
+                        return self._fallback_result(
+                            initial_state,
+                            nominal_sequence,
+                            status=(
+                                "exact_nonlinear_rescue_failed: "
+                                f"{restoration_failure}; {rescue_status}"
+                            ),
+                            sqp_iterations=completed_sqp_iterations,
+                            solver_iterations=total_qp_iterations,
+                        )
+                    reference = recovery
+                    feasibility_recovery_status = recovery_status
+                else:
+                    reference = rescue
+                    nonlinear_rescue_used = True
 
         intervention = bool(
             np.any(
@@ -556,15 +584,64 @@ class SafeSAGEUnicycleMPC:
             fallback_active=False,
             restoration_used=restoration_used,
             status=(
-                "exact_nonlinear_feasibility_restored"
-                if nonlinear_rescue_used
-                else (
-                    "exact_dtcbf_feasibility_restored"
-                    if restoration_used
-                    else "converged"
+                feasibility_recovery_status
+                or (
+                    "exact_nonlinear_feasibility_restored"
+                    if nonlinear_rescue_used
+                    else (
+                        "exact_dtcbf_feasibility_restored"
+                        if restoration_used
+                        else "converged"
+                    )
                 )
             ),
         )
+
+    def _recover_feasible_command_horizon(
+        self,
+        reference: _TrajectoryEvaluation,
+        *,
+        initial_state: np.ndarray,
+        configuration_space: SafeSAGEConfigurationSpaceResult,
+        h_full: SafeSAGEHFullResult,
+        guidance_fields: Sequence[LaplaceGuidanceFieldResult],
+        temporal_safety_derivative: float,
+    ) -> tuple[_TrajectoryEvaluation | None, str | None]:
+        """Recover exact feasibility by reducing translation, then stopping.
+
+        This deterministic last-resort path is used only after both sparse
+        SQP and the exact nonlinear rescue fail.  Scaling linear velocity
+        while retaining the planned angular profile reduces nonholonomic
+        turning radius without discarding the selected passing direction.
+        Every candidate is accepted only after exact DTCBF evaluation.
+        """
+
+        for linear_scale in (0.875, 0.75, 0.625, 0.5, 0.375, 0.25, 0.125, 0.0):
+            commands = np.array(reference.commands, dtype=np.float64, copy=True)
+            commands[:, 0] *= linear_scale
+            candidate = self._evaluate_trajectory(
+                initial_state,
+                commands,
+                configuration_space=configuration_space,
+                h_full=h_full,
+                guidance_fields=guidance_fields,
+                temporal_safety_derivative=temporal_safety_derivative,
+            )
+            if candidate is not None and self._trajectory_is_safe(candidate):
+                return candidate, "translation_scaled_feasibility_recovered"
+
+        stationary_commands = np.zeros_like(reference.commands)
+        stationary = self._evaluate_trajectory(
+            initial_state,
+            stationary_commands,
+            configuration_space=configuration_space,
+            h_full=h_full,
+            guidance_fields=guidance_fields,
+            temporal_safety_derivative=temporal_safety_derivative,
+        )
+        if stationary is not None and self._trajectory_is_safe(stationary):
+            return stationary, "stationary_feasibility_recovered"
+        return None, None
 
     def _solve_exact_nonlinear_rescue(
         self,
@@ -1159,7 +1236,20 @@ class SafeSAGEUnicycleMPC:
     ) -> np.ndarray:
         """Expand one nominal command or validate a complete sequence."""
 
-        command = np.asarray(nominal_command, dtype=np.float64)
+        return self._command_sequence(
+            nominal_command,
+            name="nominal_command",
+        )
+
+    def _command_sequence(
+        self,
+        command_value: Sequence[float] | np.ndarray,
+        *,
+        name: str,
+    ) -> np.ndarray:
+        """Expand one command or validate a complete horizon sequence."""
+
+        command = np.asarray(command_value, dtype=np.float64)
         if command.shape == (2,):
             command = np.repeat(
                 command[np.newaxis, :],
@@ -1168,11 +1258,9 @@ class SafeSAGEUnicycleMPC:
             )
         expected_shape = (self.config.horizon_steps, 2)
         if command.shape != expected_shape:
-            raise ValueError(
-                f"nominal_command must have shape (2,) or {expected_shape}."
-            )
+            raise ValueError(f"{name} must have shape (2,) or {expected_shape}.")
         if not np.isfinite(command).all():
-            raise ValueError("nominal_command must contain finite values.")
+            raise ValueError(f"{name} must contain finite values.")
         return np.ascontiguousarray(command, dtype=np.float64)
 
     def _clip_commands(self, commands: np.ndarray) -> np.ndarray:
