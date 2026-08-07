@@ -109,6 +109,28 @@ def test_open_space_passes_nominal_command_through() -> None:
     assert result.minimum_dtcbf_margin >= -1e-6
 
 
+def test_safe_warm_start_is_a_seed_not_the_returned_solution() -> None:
+    configuration_space, h_full, guidance_fields = make_fields(
+        guidance=(-1.0, 0.0),
+        gradient=(0.0, 0.0, 0.0),
+        safety_value=2.0,
+    )
+    mpc = make_mpc()
+
+    result = mpc.plan(
+        np.zeros(3, dtype=np.float64),
+        np.array([0.25, 0.0], dtype=np.float64),
+        initial_command_guess=np.zeros((10, 2), dtype=np.float64),
+        configuration_space=configuration_space,
+        h_full=h_full,
+        guidance_fields=guidance_fields,
+    )
+
+    assert result.success, result.status
+    assert result.first_command == pytest.approx((0.25, 0.0))
+    assert not result.intervention_active
+
+
 def test_predictive_filter_turns_before_current_filter_is_active() -> None:
     result = plan_synthetic(
         guidance=(-1.0, -1.0),

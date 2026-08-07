@@ -15,7 +15,7 @@ Stage A - controlled fixed-field construction:
 
 Stage B - receding-horizon wheel motion:
 
-1. Read the current chassis pose and compute a nominal waypoint command.
+1. Roll the waypoint controller forward over the full prediction horizon.
 2. Shift the preceding safe horizon and append a stationary terminal command.
 3. Revalidate and solve the Safe-SAGE unicycle MPC in the fixed field.
 4. Pass the first MPC command through the analytical unicycle CBF backup.
@@ -279,6 +279,7 @@ def run_fixed_field_motion_trial(
     print("  Field frame:                    fixed at the initial robot pose")
     print("  Chassis state:                  (x, y, psi)")
     print("  Executable command:             (v, omega)")
+    print("  Nominal MPC horizon:            closed-loop waypoint rollout")
     print(f"  MPC control interval:           {MPC_CONTROL_INTERVAL_SECONDS:.3f} s")
     print(f"  Physics steps per command:      {CONTROL_PHYSICS_STEPS}")
     print(f"  Maximum simulated duration:     {MAXIMUM_MOTION_SECONDS:.1f} s")
@@ -316,10 +317,15 @@ def run_fixed_field_motion_trial(
             [field_position[0], field_position[1], field_yaw],
             dtype=np.float64,
         )
-        nominal_array = np.array(
+        nominal_horizon = waypoint_controller.predict_commands(
+            robot_pose,
+            horizon_steps=mpc.config.horizon_steps,
+            time_step=mpc.config.time_step,
+        )
+        nominal_sequence = np.ascontiguousarray(
             [
-                nominal_command.linear_velocity,
-                nominal_command.angular_velocity,
+                (command.linear_velocity, command.angular_velocity)
+                for command in nominal_horizon
             ],
             dtype=np.float64,
         )
@@ -328,7 +334,7 @@ def run_fixed_field_motion_trial(
         solve_start = time.perf_counter()
         mpc_result = mpc.plan(
             chassis_state,
-            nominal_array,
+            nominal_sequence,
             initial_command_guess=warm_start_commands,
             configuration_space=(pipeline_frame.pipeline.configuration_space),
             h_full=pipeline_frame.pipeline.h_full,

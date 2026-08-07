@@ -427,6 +427,34 @@ class SafeSAGEUnicycleMPC:
         completed_sqp_iterations = 0
         guidance_failure: str | None = None
 
+        if initial_command_guess is not None and self._trajectory_is_safe(reference):
+            nominal_reference = self._evaluate_trajectory(
+                initial_state,
+                self._clip_commands(nominal_sequence),
+                configuration_space=configuration_space,
+                h_full=h_full,
+                guidance_fields=guidance_fields,
+                temporal_safety_derivative=temporal_derivative,
+            )
+            if nominal_reference is not None and self._trajectory_is_safe(
+                nominal_reference
+            ):
+                reference = nominal_reference
+            else:
+                reference, improvement_steps, improvement_iterations = (
+                    self._improve_safe_warm_start(
+                        reference,
+                        initial_state=initial_state,
+                        nominal_sequence=nominal_sequence,
+                        configuration_space=configuration_space,
+                        h_full=h_full,
+                        guidance_fields=guidance_fields,
+                        temporal_safety_derivative=temporal_derivative,
+                    )
+                )
+                completed_sqp_iterations += improvement_steps
+                total_qp_iterations += improvement_iterations
+
         if not self._trajectory_is_safe(reference):
             for sqp_index in range(self.config.maximum_sqp_iterations):
                 completed_sqp_iterations = sqp_index + 1
@@ -596,6 +624,117 @@ class SafeSAGEUnicycleMPC:
                 )
             ),
         )
+
+    def _improve_safe_warm_start(
+        self,
+        reference: _TrajectoryEvaluation,
+        *,
+        initial_state: np.ndarray,
+        nominal_sequence: np.ndarray,
+        configuration_space: SafeSAGEConfigurationSpaceResult,
+        h_full: SafeSAGEHFullResult,
+        guidance_fields: Sequence[LaplaceGuidanceFieldResult],
+        temporal_safety_derivative: float,
+    ) -> tuple[_TrajectoryEvaluation, int, int]:
+        """Move a feasible warm start toward the nominal command sequence.
+
+        A warm start is a numerical seed, not the MPC solution.  Each sparse
+        guidance SQP proposal is accepted only when an exact-DTCBF-safe
+        backtracking step also improves the nominal tracking objective.
+        """
+
+        current = reference
+        completed_steps = 0
+        solver_iterations = 0
+        for _ in range(self.config.maximum_sqp_iterations):
+            solution = self._solve_sparse_subproblem(
+                current,
+                nominal_sequence=nominal_sequence,
+                configuration_space=configuration_space,
+                derivative_mode="guidance",
+            )
+            completed_steps += 1
+            solver_iterations += solution.iteration_count
+            if not solution.success:
+                break
+
+            candidate = self._evaluate_trajectory(
+                initial_state,
+                solution.commands,
+                configuration_space=configuration_space,
+                h_full=h_full,
+                guidance_fields=guidance_fields,
+                temporal_safety_derivative=temporal_safety_derivative,
+            )
+            improved = self._select_safe_objective_step(
+                current,
+                candidate,
+                initial_state=initial_state,
+                proposed_commands=solution.commands,
+                nominal_sequence=nominal_sequence,
+                configuration_space=configuration_space,
+                h_full=h_full,
+                guidance_fields=guidance_fields,
+                temporal_safety_derivative=temporal_safety_derivative,
+            )
+            if improved is None:
+                break
+            command_change = float(
+                np.max(np.abs(improved.commands - current.commands))
+            )
+            current = improved
+            if command_change <= self.config.trajectory_tolerance:
+                break
+        return current, completed_steps, solver_iterations
+
+    def _select_safe_objective_step(
+        self,
+        reference: _TrajectoryEvaluation,
+        candidate: _TrajectoryEvaluation | None,
+        *,
+        initial_state: np.ndarray,
+        proposed_commands: np.ndarray,
+        nominal_sequence: np.ndarray,
+        configuration_space: SafeSAGEConfigurationSpaceResult,
+        h_full: SafeSAGEHFullResult,
+        guidance_fields: Sequence[LaplaceGuidanceFieldResult],
+        temporal_safety_derivative: float,
+    ) -> _TrajectoryEvaluation | None:
+        """Backtrack to an exact-safe step with lower nominal objective."""
+
+        reference_objective = self._objective_value(
+            reference.commands,
+            nominal_sequence,
+        )
+
+        def is_acceptable(trial: _TrajectoryEvaluation | None) -> bool:
+            return bool(
+                trial is not None
+                and self._trajectory_is_safe(trial)
+                and self._objective_value(trial.commands, nominal_sequence)
+                < reference_objective - 1e-12
+            )
+
+        if is_acceptable(candidate):
+            return candidate
+
+        step_size = 1.0
+        for _ in range(self.config.maximum_line_search_iterations):
+            step_size *= self.config.line_search_contraction
+            trial_commands = reference.commands + step_size * (
+                proposed_commands - reference.commands
+            )
+            trial = self._evaluate_trajectory(
+                initial_state,
+                trial_commands,
+                configuration_space=configuration_space,
+                h_full=h_full,
+                guidance_fields=guidance_fields,
+                temporal_safety_derivative=temporal_safety_derivative,
+            )
+            if is_acceptable(trial):
+                return trial
+        return None
 
     def _recover_feasible_command_horizon(
         self,

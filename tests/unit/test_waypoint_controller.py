@@ -227,6 +227,62 @@ def test_controller_reset_returns_to_first_waypoint() -> None:
     )
 
 
+def test_prediction_captures_rotation_to_driving_transition() -> None:
+    controller = WaypointController([Waypoint(1.0, 0.0)])
+
+    commands = controller.predict_commands(
+        RobotPose2D(0.0, 0.0, math.pi / 2.0),
+        horizon_steps=8,
+        time_step=0.5,
+    )
+
+    assert commands[0].mode is WaypointMode.ROTATING
+    assert commands[0].linear_velocity == pytest.approx(0.0)
+    assert any(command.mode is WaypointMode.DRIVING for command in commands)
+    assert any(command.linear_velocity > 0.0 for command in commands)
+
+
+def test_prediction_does_not_mutate_live_route_state() -> None:
+    controller = WaypointController(
+        [
+            Waypoint(0.05, 0.0),
+            Waypoint(1.0, 0.0),
+        ]
+    )
+
+    commands = controller.predict_commands(
+        RobotPose2D(0.0, 0.0, 0.0),
+        horizon_steps=4,
+        time_step=0.2,
+    )
+
+    assert len(commands) == 4
+    assert commands[0].target_waypoint == Waypoint(1.0, 0.0)
+    assert controller.current_waypoint_index == 0
+
+
+@pytest.mark.parametrize(
+    ("horizon_steps", "time_step"),
+    [
+        (0, 0.2),
+        (2, 0.0),
+        (2, math.inf),
+    ],
+)
+def test_prediction_rejects_invalid_configuration(
+    horizon_steps: int,
+    time_step: float,
+) -> None:
+    controller = WaypointController([Waypoint(1.0, 0.0)])
+
+    with pytest.raises(ValueError):
+        controller.predict_commands(
+            RobotPose2D(0.0, 0.0, 0.0),
+            horizon_steps=horizon_steps,
+            time_step=time_step,
+        )
+
+
 def test_controller_rejects_empty_route() -> None:
     """A controller requires at least one waypoint."""
 
