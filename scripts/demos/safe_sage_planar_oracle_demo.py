@@ -9,7 +9,7 @@ Stage A - fixed real-perception field:
 
 1. Position Nova Carter in the spacious restaurant test area.
 2. Create and observe the session-only blue semantic proxy.
-3. Associate one real LiDAR track with the proxy and label it ``person``.
+3. Associate one real LiDAR track with the proxy and label it ``object``.
 4. Build one fixed Safe-SAGE field about the measured chassis footprint.
 
 Stage B - virtual planar closed loop:
@@ -32,7 +32,8 @@ Run from the project root:
 
     python -u scripts/demos/safe_sage_planar_oracle_demo.py
 
-Press Play in Isaac Sim when requested.
+Playback begins automatically after the stage is loaded. To run without a
+window, set ``ISAAC_SIM_HEADLESS=1`` before launching the demo.
 """
 
 import math
@@ -98,6 +99,17 @@ from robot.sensor.lidar import NovaCarterLidar
 # ---------------------------------------------------------------------------
 
 
+PAPER_BASELINE_GUIDANCE_POLICY_PATH = (
+    PROJECT_ROOT / "configs" / "safe_sage_paper_baseline.json"
+)
+PAPER_BASELINE_SEMANTIC_CLASS = "object"
+# Safe-SAGE reports b_object=-0.5 and b_person=-1.7. Its exact numerical
+# tangential strength is not reported, so the JSON records one fixed
+# reproduction value instead of silently tuning lambda during this trial.
+PAPER_BASELINE_TANGENTIAL_STRENGTH_SOURCE = (
+    "fixed repository reproduction value; exact paper value not reported"
+)
+
 ORACLE_CONTROL_INTERVAL_SECONDS = 0.20
 ORACLE_HORIZON_STEPS = 30
 ORACLE_MAXIMUM_SECONDS = 20.0
@@ -112,6 +124,17 @@ ORACLE_ANALYTICAL_TIME_STEP = (
     ORACLE_CONTROL_INTERVAL_SECONDS / ORACLE_ANALYTICAL_SUBSTEPS
 )
 
+# The controlled planar-oracle proxy starts far enough ahead that the initial
+# 6 s nominal MPC rollout remains outside its zero-Dirichlet interior. This
+# gives the local SQP linearization a meaningful safety gradient while still
+# requiring a clear semantic bypass. The earlier x=27.35 m placement started
+# only about 0.70 m from the chassis reference and made the initial local
+# optimization artificially infeasible.
+ORACLE_PROXY_POSITION_WORLD = np.array(
+    [28.20, stationary.ROBOT_START_POSITION_WORLD[1], 0.50],
+    dtype=np.float64,
+)
+
 NOMINAL_PLANAR_COMMAND = np.array([0.20, 0.0, 0.0], dtype=np.float64)
 MINIMUM_RIGHTWARD_RESPONSE = 0.05
 SETTLED_PLANAR_SPEED = 0.01
@@ -122,7 +145,9 @@ MPC_PLANAR_VELOCITY_WEIGHT = 1.0
 MPC_ANGULAR_VELOCITY_WEIGHT = 0.02
 MPC_COMMAND_SMOOTHNESS_WEIGHT = 0.005
 MPC_LATERAL_SEED_SPEED = 0.15
-MPC_MAXIMUM_SOLVER_ITERATIONS = 500
+MPC_MAXIMUM_SQP_ITERATIONS = 8
+MPC_MAXIMUM_RESTORATION_ITERATIONS = 12
+MPC_MAXIMUM_SOLVER_ITERATIONS = 4000
 
 NOMINAL_MARKER_ROOT = "/World/SafeSAGEPlanarOracle/NominalPath"
 SAFE_MARKER_ROOT = "/World/SafeSAGEPlanarOracle/SafePath"
@@ -157,6 +182,22 @@ class PlanarOracleResult:
     minimum_backup_margin: float
     mean_mpc_solve_wall_seconds: float
     maximum_mpc_solve_wall_seconds: float
+
+
+def configure_oracle_proxy_position() -> None:
+    """Apply the planar-oracle scenario position to shared demo helpers.
+
+    The imported perception and clearance helpers intentionally share one
+    proxy-position array. Updating it before the session-layer proxy is
+    created keeps rendering, LiDAR association, field construction, and the
+    independent clearance calculation on exactly the same geometry.
+    """
+
+    if stationary.STATIC_PROXY_POSITION_WORLD.shape != (3,):
+        raise RuntimeError(
+            "The shared static-proxy position must have shape (3,)."
+        )
+    stationary.STATIC_PROXY_POSITION_WORLD[:] = ORACLE_PROXY_POSITION_WORLD
 
 
 def predictive_result_is_valid(
@@ -288,7 +329,7 @@ def create_oracle_configuration() -> tuple[
     """Create the unshifted paper-space field configuration."""
 
     guidance_policy = SafeSAGEGuidancePolicy.from_json(
-        stationary.GUIDANCE_POLICY_PATH
+        PAPER_BASELINE_GUIDANCE_POLICY_PATH
     )
     class_policy = stationary.class_policy_from_guidance_policy(
         guidance_policy
@@ -368,6 +409,10 @@ def create_controller_stack(
                 MPC_COMMAND_SMOOTHNESS_WEIGHT
             ),
             lateral_seed_speed=MPC_LATERAL_SEED_SPEED,
+            maximum_sqp_iterations=MPC_MAXIMUM_SQP_ITERATIONS,
+            maximum_restoration_iterations=(
+                MPC_MAXIMUM_RESTORATION_ITERATIONS
+            ),
             maximum_solver_iterations=MPC_MAXIMUM_SOLVER_ITERATIONS,
         ),
     )
@@ -415,6 +460,8 @@ def run_planar_oracle(
     print("  Virtual command:               (v_x, v_y, omega)")
     print("  Field reference point:         chassis origin")
     print("  Nominal command:               (0.200, 0.000, 0.000)")
+    print("  Predictive solver:             sparse SQP/QP (OSQP)")
+    print("  Warm start:                    shifted plan + terminal stop")
     print(
         "  MPC horizon:                   "
         f"{ORACLE_HORIZON_STEPS} steps"
@@ -584,7 +631,7 @@ def run_planar_oracle(
         warm_start = np.vstack(
             (
                 mpc_result.command_sequence[1:],
-                mpc_result.command_sequence[-1:],
+                np.zeros((1, 3), dtype=np.float64),
             )
         )
 
@@ -769,7 +816,7 @@ def main() -> None:
     print("=" * 78)
     print("Mode: real perception + virtual planar closed loop")
     print("Physical Nova Carter wheel commands: disabled")
-    print(f"Guidance policy: {stationary.GUIDANCE_POLICY_PATH}")
+    print(f"Guidance policy: {PAPER_BASELINE_GUIDANCE_POLICY_PATH}")
 
     (
         class_policy,
@@ -784,6 +831,7 @@ def main() -> None:
         robot_prim_path=stationary.ROBOT_PRIM_PATH,
         expected_meters_per_unit=stationary.EXPECTED_METERS_PER_UNIT,
     )
+    configure_oracle_proxy_position()
     stationary.create_static_proxy(loaded_scene.stage)
     robot_controller = NovaCarterController(
         robot_prim_path=stationary.ROBOT_PRIM_PATH
@@ -793,7 +841,8 @@ def main() -> None:
         device=stationary.PHYSICS_DEVICE,
     )
 
-    print("\nPress Play in Isaac Sim to begin.")
+    print("\nStarting Isaac Sim playback automatically...")
+    app_utils.play()
     if not wait_until_playing(simulation_app):
         return
 
@@ -871,6 +920,11 @@ def main() -> None:
         guidance_policy=guidance_policy,
         grid_config=grid_config,
         field_config=field_config,
+        semantic_class=PAPER_BASELINE_SEMANTIC_CLASS,
+    )
+
+    baseline_parameters = guidance_policy.parameters_for(
+        PAPER_BASELINE_SEMANTIC_CLASS
     )
 
     print("\n" + "=" * 78)
@@ -900,6 +954,31 @@ def main() -> None:
     print(
         f"  Grid shape:                     "
         f"{pipeline_frame.pipeline.configuration_space.occupancy_grids[0].shape}"
+    )
+    print("\n  Frozen paper-baseline policy:")
+    print(
+        f"    Semantic class:               "
+        f"{PAPER_BASELINE_SEMANTIC_CLASS}"
+    )
+    print(
+        f"    Normalized risk:              "
+        f"{baseline_parameters.risk:.3f}"
+    )
+    print(
+        f"    Normal boundary flux b:       "
+        f"{baseline_parameters.boundary_flux:.3f}"
+    )
+    print(
+        f"    Tangential strength lambda:   "
+        f"{baseline_parameters.tangential_strength:.3f}"
+    )
+    print(
+        f"    Passing side:                 "
+        f"{baseline_parameters.passing_side.value}"
+    )
+    print(
+        f"    Lambda source:                "
+        f"{PAPER_BASELINE_TANGENTIAL_STRENGTH_SOURCE}"
     )
     print("  Footprint reference:            chassis origin (no look-ahead)")
     print("  Physical robot remained still:  True")
@@ -949,6 +1028,11 @@ def main() -> None:
     print("  - White markers continue straight through the proxy.")
     print("  - Green markers should curve toward robot-right and pass it.")
     print("  - The final virtual point is shown in magenta.")
+
+    if stationary.SIMULATION_HEADLESS:
+        print("\nHeadless run complete; closing Isaac Sim.")
+        return
+
     print("\nThe GUI will remain open for inspection.")
     print("Close the Isaac Sim window when finished.")
 

@@ -24,7 +24,7 @@ def make_mpc(**overrides: float) -> SafeSAGEPlanarMPC:
         "angular_velocity_weight": 0.10,
         "command_smoothness_weight": 0.001,
         "lateral_seed_speed": 0.15,
-        "maximum_solver_iterations": 200,
+        "maximum_solver_iterations": 4000,
     }
     values.update(overrides)
     return SafeSAGEPlanarMPC(
@@ -109,7 +109,7 @@ def test_passing_side_reverses_lateral_translation() -> None:
     )
 
 
-def test_full_nominal_sequence_and_warm_start_are_accepted() -> None:
+def test_warm_start_is_improved_toward_full_nominal_sequence() -> None:
     configuration_space, h_full, guidance_fields = make_fields(
         guidance=(-1.0, 0.0),
         gradient=(0.0, 0.0, 0.0),
@@ -131,7 +131,25 @@ def test_full_nominal_sequence_and_warm_start_are_accepted() -> None:
     )
 
     assert result.success, result.status
-    assert result.first_command == pytest.approx((0.20, -0.02, 0.10))
+    assert result.status == "warm_start_objective_improved"
+    assert 0.0 < result.first_command[0] < 0.20
+    assert result.first_command[1:] == pytest.approx((-0.02, 0.10))
+    assert not result.fallback_active
+
+
+def test_exact_gradient_phase_restores_mismatched_guidance() -> None:
+    result = plan_synthetic(
+        guidance=(0.0, 0.0),
+        gradient=(-1.0, -2.0, 0.0),
+        safety_value=0.20,
+    )
+
+    assert result.success, result.status
+    assert result.exact_restoration_used
+    assert result.status == "exact_dtcbf_feasibility_restored"
+    assert not result.fallback_active
+    assert result.first_command[1] < 0.0
+    assert result.minimum_dtcbf_margin >= -1e-6
 
 
 def test_result_shapes_and_arrays_are_read_only() -> None:
@@ -192,7 +210,15 @@ def test_initial_command_guess_shape_is_validated() -> None:
         {"angular_velocity_weight": 0.0},
         {"command_smoothness_weight": -1.0},
         {"lateral_seed_speed": -0.1},
+        {"maximum_sqp_iterations": 0},
+        {"maximum_restoration_iterations": 0},
         {"maximum_solver_iterations": 0},
+        {"planar_velocity_trust_region": 0.0},
+        {"angular_velocity_trust_region": 0.0},
+        {"cbf_slack_weight": 0.0},
+        {"trajectory_tolerance": 0.0},
+        {"line_search_contraction": 1.0},
+        {"maximum_line_search_iterations": 0},
     ),
 )
 def test_invalid_configuration_is_rejected(

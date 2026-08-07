@@ -1,23 +1,28 @@
-"""Predictive Safe-SAGE filter in the paper's planar command space.
+"""Sparse Safe-SAGE MPC in the paper's planar command space.
 
-This module is an experimental oracle, not a Nova Carter wheel controller.
-It deliberately uses the reduced-order state and input from Safe-SAGE:
+This module is a diagnostic oracle, not a Nova Carter wheel controller.  It
+uses the reduced-order state and directly commanded velocity from Safe-SAGE:
 
     state   = (x, y, yaw)
     command = (v_x, v_y, omega)
     state[k + 1] = state[k] + dt * command[k]
 
-The optimization minimizes deviation from a nominal planar velocity while
-enforcing the exact sampled discrete-time CBF condition
+The predictive filter applies explicit sequential quadratic programming
+(SQP).  Each convex subproblem linearizes the discrete-time CBF condition
 
-    h[k + 1] >= exp(-gamma * dt) * h[k].
+    h[k + 1] >= exp(-gamma * dt) * h[k]
 
-SciPy's SLSQP implementation supplies the sequential quadratic programming
-loop.  Its CBF Jacobian uses ``(v_sem_x, v_sem_y, dh_full/dyaw)``, matching
-the Safe-SAGE predictive linearization.  Every returned trajectory is then
-checked against the nonlinear interpolated ``h_full`` values and unsafe
-configuration-space masks.  An exact-gradient restoration is attempted if
-the semantic linearization does not produce a feasible trajectory.
+about one reference trajectory.  The semantic guidance field supplies the
+position components of the predictive derivative, while the interpolated
+``h_full`` yaw derivative supplies its third component.  OSQP solves the
+resulting sparse QP.  A separate exact-gradient SQP phase is used only when
+the semantic phase does not restore the sampled nonlinear DTCBF.
+
+Elastic variables keep an individual QP from failing on an infeasible local
+linearization.  They never relax final acceptance: every returned moving
+trajectory is checked against exact interpolated ``h_full`` values, exact
+DTCBF margins, field bounds, and configuration-space unsafe masks.  The
+controller otherwise returns a verified stationary horizon or fails closed.
 
 No Isaac Sim dependency is introduced here, and no result from this module
 may be sent directly to a differential-drive base.
@@ -29,6 +34,8 @@ from dataclasses import dataclass
 from numbers import Real
 
 import numpy as np
+import osqp
+
 from robot.control.planar_single_integrator import integrate_planar_euler
 from robot.safety.laplace_guidance_field import (
     LaplaceGuidanceFieldResult,
@@ -38,7 +45,7 @@ from robot.safety.safe_sage_configuration_space import (
     SafeSAGEConfigurationSpaceResult,
 )
 from robot.safety.safe_sage_h_full import SafeSAGEHFullResult
-from scipy.optimize import Bounds, minimize
+from scipy import sparse
 
 
 def _finite_real(value: object, *, name: str) -> float:
@@ -88,7 +95,7 @@ def _frozen_array(value: np.ndarray) -> np.ndarray:
 
 @dataclass(frozen=True)
 class SafeSAGEPlanarMPCConfig:
-    """Prediction horizon, planar bounds, costs, and SQP tolerances."""
+    """Prediction, cost, sparse SQP, and OSQP configuration."""
 
     horizon_steps: int = 30
     time_step: float = 0.20
@@ -101,10 +108,18 @@ class SafeSAGEPlanarMPCConfig:
     angular_velocity_weight: float = 0.02
     command_smoothness_weight: float = 0.005
     lateral_seed_speed: float = 0.15
-    maximum_solver_iterations: int = 500
-    solver_tolerance: float = 1e-8
+    maximum_sqp_iterations: int = 8
+    maximum_restoration_iterations: int = 12
+    maximum_solver_iterations: int = 4000
+    planar_velocity_trust_region: float = 0.15
+    angular_velocity_trust_region: float = 0.40
+    cbf_slack_weight: float = 100.0
+    solver_tolerance: float = 1e-6
+    trajectory_tolerance: float = 1e-4
     constraint_tolerance: float = 1e-6
     intervention_tolerance: float = 1e-5
+    line_search_contraction: float = 0.5
+    maximum_line_search_iterations: int = 8
 
     def __post_init__(self) -> None:
         integer_values = {
@@ -112,9 +127,21 @@ class SafeSAGEPlanarMPCConfig:
                 self.horizon_steps,
                 name="horizon_steps",
             ),
+            "maximum_sqp_iterations": _positive_integer(
+                self.maximum_sqp_iterations,
+                name="maximum_sqp_iterations",
+            ),
+            "maximum_restoration_iterations": _positive_integer(
+                self.maximum_restoration_iterations,
+                name="maximum_restoration_iterations",
+            ),
             "maximum_solver_iterations": _positive_integer(
                 self.maximum_solver_iterations,
                 name="maximum_solver_iterations",
+            ),
+            "maximum_line_search_iterations": _positive_integer(
+                self.maximum_line_search_iterations,
+                name="maximum_line_search_iterations",
             ),
         }
         real_values = {
@@ -145,9 +172,20 @@ class SafeSAGEPlanarMPCConfig:
                     self.command_smoothness_weight,
                 ),
                 ("lateral_seed_speed", self.lateral_seed_speed),
+                (
+                    "planar_velocity_trust_region",
+                    self.planar_velocity_trust_region,
+                ),
+                (
+                    "angular_velocity_trust_region",
+                    self.angular_velocity_trust_region,
+                ),
+                ("cbf_slack_weight", self.cbf_slack_weight),
                 ("solver_tolerance", self.solver_tolerance),
+                ("trajectory_tolerance", self.trajectory_tolerance),
                 ("constraint_tolerance", self.constraint_tolerance),
                 ("intervention_tolerance", self.intervention_tolerance),
+                ("line_search_contraction", self.line_search_contraction),
             )
         }
 
@@ -186,7 +224,11 @@ class SafeSAGEPlanarMPCConfig:
         for name in (
             "planar_velocity_weight",
             "angular_velocity_weight",
+            "planar_velocity_trust_region",
+            "angular_velocity_trust_region",
+            "cbf_slack_weight",
             "solver_tolerance",
+            "trajectory_tolerance",
             "constraint_tolerance",
         ):
             if real_values[name] <= 0.0:
@@ -198,6 +240,11 @@ class SafeSAGEPlanarMPCConfig:
         ):
             if real_values[name] < 0.0:
                 raise ValueError(f"{name} cannot be negative.")
+        if not 0.0 < real_values["line_search_contraction"] < 1.0:
+            raise ValueError(
+                "line_search_contraction must lie strictly between zero "
+                "and one."
+            )
 
         for name, value in integer_values.items():
             object.__setattr__(self, name, value)
@@ -268,6 +315,17 @@ class _TrajectoryEvaluation:
     margins: np.ndarray
 
 
+@dataclass(frozen=True)
+class _SparseQPSolution:
+    """One sparse SQP subproblem result."""
+
+    success: bool
+    commands: np.ndarray
+    iteration_count: int
+    status: str
+    maximum_cbf_slack: float
+
+
 class SafeSAGEPlanarMPC:
     """Finite-horizon Safe-SAGE oracle for ``(v_x, v_y, omega)``."""
 
@@ -296,9 +354,9 @@ class SafeSAGEPlanarMPC:
         """Return a safe idealized planar command horizon.
 
         ``nominal_command`` may be one ``(v_x, v_y, omega)`` vector or a
-        complete ``(horizon_steps, 3)`` reference sequence.  The returned
-        command remains in the paper's reduced-order space and is not an
-        executable Nova Carter wheel command.
+        complete ``(horizon_steps, 3)`` reference sequence.  A supplied
+        ``initial_command_guess`` is the primary SQP reference; it does not
+        change the nominal command-tracking objective.
         """
 
         initial_state = _finite_vector(
@@ -307,338 +365,614 @@ class SafeSAGEPlanarMPC:
             name="initial_state_grid",
         )
         nominal_sequence = self._nominal_sequence(nominal_command)
-        initial_evaluation = self._evaluate_commands(
+        warm_start_supplied = initial_command_guess is not None
+        if warm_start_supplied:
+            reference_commands = self._command_sequence(
+                initial_command_guess,
+                name="initial_command_guess",
+            )
+            reference_source = "warm_start"
+        else:
+            reference_commands = nominal_sequence.copy()
+            reference_source = "nominal"
+
+        stationary_commands = np.zeros_like(nominal_sequence)
+        stationary = self._evaluate_commands(
             initial_state,
-            np.zeros_like(nominal_sequence),
+            stationary_commands,
             configuration_space=configuration_space,
             h_full=h_full,
             guidance_fields=guidance_fields,
         )
-        if initial_evaluation is None:
+        if stationary is None:
             return self._failed_result(
                 initial_state,
                 nominal_sequence,
                 status="initial_state_outside_field_grid",
             )
-        if initial_evaluation.unsafe_configuration_mask[0]:
+        if stationary.unsafe_configuration_mask[0]:
             return self._failed_result(
                 initial_state,
                 nominal_sequence,
                 status="unsafe_configuration_boundary",
             )
 
-        seeds: list[tuple[str, np.ndarray]] = []
-        if initial_command_guess is not None:
-            seeds.append(
-                (
-                    "provided_warm_start",
-                    self._command_sequence(
-                        initial_command_guess,
-                        name="initial_command_guess",
-                    ),
-                )
-            )
-        seeds.append(("nominal", nominal_sequence.copy()))
-        seeds.append(
-            (
-                "analytical_rollout",
-                self._analytical_rollout_seed(
-                    initial_state,
-                    nominal_sequence,
-                    configuration_space=configuration_space,
-                    h_full=h_full,
-                    guidance_fields=guidance_fields,
-                ),
-            )
-        )
-        directional_seed = self._directional_seed(
-            initial_evaluation,
-            nominal_sequence,
-        )
-        if directional_seed is not None:
-            seeds.append(("semantic_lateral", directional_seed))
-
-        unique_seeds = self._unique_clipped_seeds(seeds)
-        feasible_candidates: list[
-            tuple[float, _TrajectoryEvaluation, int, bool, str]
-        ] = []
-        best_attempt: _TrajectoryEvaluation | None = None
-        best_attempt_violation = math.inf
-        total_iterations = 0
-
-        for seed_name, seed in unique_seeds:
-            evaluation, iterations, solver_success, solver_status = (
-                self._solve_from_seed(
-                    initial_state,
-                    seed,
-                    nominal_sequence=nominal_sequence,
-                    configuration_space=configuration_space,
-                    h_full=h_full,
-                    guidance_fields=guidance_fields,
-                    derivative_mode="semantic",
-                )
-            )
-            total_iterations += iterations
-            if evaluation is None:
-                continue
-            violation = self._maximum_violation(evaluation)
-            if violation < best_attempt_violation:
-                best_attempt = evaluation
-                best_attempt_violation = violation
-            if self._trajectory_is_safe(evaluation):
-                feasible_candidates.append(
-                    (
-                        self._objective_value(
-                            evaluation.commands,
-                            nominal_sequence,
-                        ),
-                        evaluation,
-                        iterations,
-                        False,
-                        (
-                            "converged"
-                            if solver_success
-                            else f"feasible_{seed_name}_{solver_status}"
-                        ),
-                    )
-                )
-
-        if not feasible_candidates and best_attempt is not None:
-            restored, iterations, solver_success, solver_status = (
-                self._solve_from_seed(
-                    initial_state,
-                    best_attempt.commands,
-                    nominal_sequence=nominal_sequence,
-                    configuration_space=configuration_space,
-                    h_full=h_full,
-                    guidance_fields=guidance_fields,
-                    derivative_mode="exact",
-                )
-            )
-            total_iterations += iterations
-            if restored is not None and self._trajectory_is_safe(restored):
-                feasible_candidates.append(
-                    (
-                        self._objective_value(
-                            restored.commands,
-                            nominal_sequence,
-                        ),
-                        restored,
-                        iterations,
-                        True,
-                        (
-                            "exact_nonlinear_feasibility_restored"
-                            if solver_success
-                            else f"exact_feasible_{solver_status}"
-                        ),
-                    )
-                )
-
-        if feasible_candidates:
-            (
-                objective_value,
-                evaluation,
-                _,
-                restoration_used,
-                status,
-            ) = min(feasible_candidates, key=lambda candidate: candidate[0])
-            intervention = bool(
-                np.any(
-                    np.abs(evaluation.commands - nominal_sequence)
-                    > self.config.intervention_tolerance
-                )
-            )
-            return self._result(
-                evaluation,
-                nominal_sequence=nominal_sequence,
-                objective_value=objective_value,
-                solver_iteration_count=total_iterations,
-                success=True,
-                intervention_active=intervention,
-                fallback_active=False,
-                exact_restoration_used=restoration_used,
-                status=status,
-            )
-
-        stationary = self._evaluate_commands(
+        reference = self._evaluate_commands(
             initial_state,
-            np.zeros_like(nominal_sequence),
+            reference_commands,
             configuration_space=configuration_space,
             h_full=h_full,
             guidance_fields=guidance_fields,
         )
-        if stationary is not None and self._trajectory_is_safe(stationary):
-            return self._result(
+        if reference is None:
+            reference = stationary
+            reference_source = "stationary"
+
+        if not warm_start_supplied and not self._trajectory_is_safe(reference):
+            directional_commands = self._directional_seed(
                 stationary,
-                nominal_sequence=nominal_sequence,
-                objective_value=self._objective_value(
-                    stationary.commands,
-                    nominal_sequence,
-                ),
-                solver_iteration_count=total_iterations,
-                success=True,
-                intervention_active=True,
-                fallback_active=True,
-                exact_restoration_used=False,
-                status="stationary_feasibility_recovered",
-            )
-
-        return self._failed_result(
-            initial_state,
-            nominal_sequence,
-            status="no_safe_planar_horizon",
-            solver_iteration_count=total_iterations,
-        )
-
-    def _solve_from_seed(
-        self,
-        initial_state: np.ndarray,
-        seed: np.ndarray,
-        *,
-        nominal_sequence: np.ndarray,
-        configuration_space: SafeSAGEConfigurationSpaceResult,
-        h_full: SafeSAGEHFullResult,
-        guidance_fields: Sequence[LaplaceGuidanceFieldResult],
-        derivative_mode: str,
-    ) -> tuple[_TrajectoryEvaluation | None, int, bool, str]:
-        """Run one bounded SLSQP solve from a deterministic seed."""
-
-        if derivative_mode not in {"semantic", "exact"}:
-            raise ValueError("derivative_mode must be 'semantic' or 'exact'.")
-        flat_seed = self._clip_commands(seed).reshape(-1)
-
-        def constraint_values(flat_commands: np.ndarray) -> np.ndarray:
-            evaluation = self._evaluate_commands(
-                initial_state,
-                flat_commands.reshape(self.config.horizon_steps, 3),
-                configuration_space=configuration_space,
-                h_full=h_full,
-                guidance_fields=guidance_fields,
-            )
-            if evaluation is None:
-                return np.full(
-                    self.config.horizon_steps,
-                    -1e3,
-                    dtype=np.float64,
-                )
-            values = evaluation.margins.copy()
-            invalid_next = evaluation.unsafe_configuration_mask[1:]
-            values[invalid_next] = np.minimum(values[invalid_next], -1.0)
-            return values
-
-        def constraint_jacobian(flat_commands: np.ndarray) -> np.ndarray:
-            evaluation = self._evaluate_commands(
-                initial_state,
-                flat_commands.reshape(self.config.horizon_steps, 3),
-                configuration_space=configuration_space,
-                h_full=h_full,
-                guidance_fields=guidance_fields,
-            )
-            if evaluation is None:
-                return np.zeros(
-                    (self.config.horizon_steps, flat_commands.size),
-                    dtype=np.float64,
-                )
-            derivatives = (
-                evaluation.semantic_normals
-                if derivative_mode == "semantic"
-                else evaluation.exact_gradients
-            )
-            return self._dtcbf_command_jacobian(derivatives)
-
-        result = minimize(
-            fun=lambda flat: self._objective_value(
-                flat.reshape(self.config.horizon_steps, 3),
                 nominal_sequence,
-            ),
-            x0=flat_seed,
-            jac=lambda flat: self._objective_gradient(
-                flat.reshape(self.config.horizon_steps, 3),
-                nominal_sequence,
-            ).reshape(-1),
-            method="SLSQP",
-            bounds=self._flat_bounds(),
-            constraints=(
-                {
-                    "type": "ineq",
-                    "fun": constraint_values,
-                    "jac": constraint_jacobian,
-                },
-            ),
-            options={
-                "maxiter": self.config.maximum_solver_iterations,
-                "ftol": self.config.solver_tolerance,
-                "disp": False,
-            },
-        )
-        commands = self._clip_commands(
-            np.asarray(result.x, dtype=np.float64).reshape(
-                self.config.horizon_steps,
-                3,
             )
-        )
-        evaluation = self._evaluate_commands(
-            initial_state,
-            commands,
-            configuration_space=configuration_space,
-            h_full=h_full,
-            guidance_fields=guidance_fields,
-        )
-        return (
-            evaluation,
-            int(getattr(result, "nit", 0)),
-            bool(result.success),
-            self._normalized_status(str(result.message)),
-        )
-
-    def _analytical_rollout_seed(
-        self,
-        initial_state: np.ndarray,
-        nominal_sequence: np.ndarray,
-        *,
-        configuration_space: SafeSAGEConfigurationSpaceResult,
-        h_full: SafeSAGEHFullResult,
-        guidance_fields: Sequence[LaplaceGuidanceFieldResult],
-    ) -> np.ndarray:
-        """Roll out the existing paper-space analytical filter as a seed."""
-
-        commands = np.zeros_like(nominal_sequence)
-        state = initial_state.copy()
-        for index, nominal in enumerate(nominal_sequence):
-            try:
-                result = self.paper_filter.filter_command(
-                    nominal[:2],
-                    float(nominal[2]),
-                    query_position_grid_xy=state[:2],
-                    query_yaw_radians=float(state[2]),
+            if directional_commands is not None:
+                directional = self._evaluate_commands(
+                    initial_state,
+                    directional_commands,
                     configuration_space=configuration_space,
                     h_full=h_full,
                     guidance_fields=guidance_fields,
                 )
-            except ValueError:
-                break
-            if result.emergency_stop_active:
-                break
-            commands[index] = (
-                result.safe_planar_velocity_grid_xy[0],
-                result.safe_planar_velocity_grid_xy[1],
-                result.safe_angular_velocity,
+                if (
+                    directional is not None
+                    and self._violation_metric(directional)
+                    < self._violation_metric(reference)
+                ):
+                    reference = directional
+                    reference_source = "directional_seed"
+
+        total_solver_iterations = 0
+        exact_restoration_used = False
+        status = "nominal_horizon_safe"
+
+        if (
+            reference_source != "nominal"
+            and self._trajectory_is_safe(reference)
+        ):
+            solution = self._solve_sparse_subproblem(
+                reference,
+                nominal_sequence=nominal_sequence,
+                configuration_space=configuration_space,
+                derivative_mode="guidance",
             )
-            state = integrate_planar_euler(
-                state,
-                commands[index],
-                time_step=self.config.time_step,
+            total_solver_iterations += solution.iteration_count
+            if solution.success:
+                candidate = self._evaluate_commands(
+                    initial_state,
+                    solution.commands,
+                    configuration_space=configuration_space,
+                    h_full=h_full,
+                    guidance_fields=guidance_fields,
+                )
+                improved = self._select_safe_objective_step(
+                    reference,
+                    candidate,
+                    initial_state=initial_state,
+                    proposed_commands=solution.commands,
+                    nominal_sequence=nominal_sequence,
+                    configuration_space=configuration_space,
+                    h_full=h_full,
+                    guidance_fields=guidance_fields,
+                )
+                if improved is not None:
+                    reference = improved
+                    status = f"{reference_source}_objective_improved"
+                else:
+                    status = f"{reference_source}_exact_safe"
+            else:
+                status = f"{reference_source}_exact_safe_{solution.status}"
+
+        if not self._trajectory_is_safe(reference):
+            guidance_failure: str | None = None
+            for _ in range(self.config.maximum_sqp_iterations):
+                solution = self._solve_sparse_subproblem(
+                    reference,
+                    nominal_sequence=nominal_sequence,
+                    configuration_space=configuration_space,
+                    derivative_mode="guidance",
+                )
+                total_solver_iterations += solution.iteration_count
+                if not solution.success:
+                    guidance_failure = solution.status
+                    break
+
+                candidate = self._evaluate_commands(
+                    initial_state,
+                    solution.commands,
+                    configuration_space=configuration_space,
+                    h_full=h_full,
+                    guidance_fields=guidance_fields,
+                )
+                accepted = self._select_violation_reducing_step(
+                    reference,
+                    candidate,
+                    initial_state=initial_state,
+                    proposed_commands=solution.commands,
+                    configuration_space=configuration_space,
+                    h_full=h_full,
+                    guidance_fields=guidance_fields,
+                )
+                if accepted is None:
+                    guidance_failure = "guidance_sqp_did_not_improve"
+                    break
+                command_change = float(
+                    np.max(np.abs(accepted.commands - reference.commands))
+                )
+                reference = accepted
+                if self._trajectory_is_safe(reference):
+                    status = "guidance_sqp_converged"
+                    break
+                if command_change <= self.config.trajectory_tolerance:
+                    guidance_failure = "guidance_sqp_stalled"
+                    break
+
+            if not self._trajectory_is_safe(reference):
+                exact_restoration_used = True
+                restoration_failure: str | None = guidance_failure
+                for _ in range(self.config.maximum_restoration_iterations):
+                    solution = self._solve_sparse_subproblem(
+                        reference,
+                        nominal_sequence=nominal_sequence,
+                        configuration_space=configuration_space,
+                        derivative_mode="gradient",
+                    )
+                    total_solver_iterations += solution.iteration_count
+                    if not solution.success:
+                        restoration_failure = solution.status
+                        break
+
+                    candidate = self._evaluate_commands(
+                        initial_state,
+                        solution.commands,
+                        configuration_space=configuration_space,
+                        h_full=h_full,
+                        guidance_fields=guidance_fields,
+                    )
+                    accepted = self._select_violation_reducing_step(
+                        reference,
+                        candidate,
+                        initial_state=initial_state,
+                        proposed_commands=solution.commands,
+                        configuration_space=configuration_space,
+                        h_full=h_full,
+                        guidance_fields=guidance_fields,
+                    )
+                    if accepted is None:
+                        restoration_failure = (
+                            "exact_qp_restoration_did_not_improve"
+                        )
+                        break
+                    command_change = float(
+                        np.max(
+                            np.abs(accepted.commands - reference.commands)
+                        )
+                    )
+                    reference = accepted
+                    if self._trajectory_is_safe(reference):
+                        status = "exact_dtcbf_feasibility_restored"
+                        break
+                    if command_change <= self.config.trajectory_tolerance:
+                        restoration_failure = "exact_qp_restoration_stalled"
+                        break
+
+                if not self._trajectory_is_safe(reference):
+                    return self._stationary_or_failed_result(
+                        stationary,
+                        initial_state=initial_state,
+                        nominal_sequence=nominal_sequence,
+                        solver_iteration_count=total_solver_iterations,
+                        failure_status=(
+                            restoration_failure
+                            or "exact_qp_restoration_exhausted"
+                        ),
+                    )
+
+        intervention = bool(
+            np.any(
+                np.abs(reference.commands - nominal_sequence)
+                > self.config.intervention_tolerance
             )
-        return self._clip_commands(commands)
+        )
+        return self._result(
+            reference,
+            nominal_sequence=nominal_sequence,
+            objective_value=self._objective_value(
+                reference.commands,
+                nominal_sequence,
+            ),
+            solver_iteration_count=total_solver_iterations,
+            success=True,
+            intervention_active=intervention,
+            fallback_active=False,
+            exact_restoration_used=exact_restoration_used,
+            status=status,
+        )
+
+    def _solve_sparse_subproblem(
+        self,
+        reference: _TrajectoryEvaluation,
+        *,
+        nominal_sequence: np.ndarray,
+        configuration_space: SafeSAGEConfigurationSpaceResult,
+        derivative_mode: str,
+    ) -> _SparseQPSolution:
+        """Assemble and solve one sparse Safe-SAGE SQP subproblem."""
+
+        if derivative_mode == "guidance":
+            derivatives = reference.semantic_normals
+        elif derivative_mode == "gradient":
+            derivatives = reference.exact_gradients
+        else:
+            raise ValueError("derivative_mode must be guidance or gradient.")
+
+        horizon = self.config.horizon_steps
+        command_variable_count = 3 * horizon
+        slack_variable_count = horizon
+        reference_flat = reference.commands.reshape(-1)
+        state_sensitivities = self._state_sensitivities()
+
+        cbf_rows = np.empty(
+            (horizon, command_variable_count),
+            dtype=np.float64,
+        )
+        cbf_lower = np.empty(horizon, dtype=np.float64)
+        for index in range(horizon):
+            row = (
+                derivatives[index + 1] @ state_sensitivities[index + 1]
+                - self.config.dtcbf_decay
+                * derivatives[index]
+                @ state_sensitivities[index]
+            )
+            cbf_rows[index] = row
+            cbf_lower[index] = (
+                float(row @ reference_flat) - reference.margins[index]
+            )
+
+        grid = configuration_space.occupancy_grids[0]
+        half_cell = 0.5 * grid.config.resolution
+        grid_minimum = np.array(
+            [
+                grid.config.minimum_x + half_cell,
+                grid.config.minimum_y + half_cell,
+            ],
+            dtype=np.float64,
+        )
+        grid_maximum = np.array(
+            [
+                grid.config.maximum_x - half_cell,
+                grid.config.maximum_y - half_cell,
+            ],
+            dtype=np.float64,
+        )
+        grid_rows: list[np.ndarray] = []
+        grid_lower: list[float] = []
+        grid_upper: list[float] = []
+        for index in range(1, horizon + 1):
+            for axis in (0, 1):
+                row = state_sensitivities[index, axis]
+                offset = float(row @ reference_flat)
+                grid_rows.append(row)
+                grid_lower.append(
+                    grid_minimum[axis] - reference.states[index, axis] + offset
+                )
+                grid_upper.append(
+                    grid_maximum[axis] - reference.states[index, axis] + offset
+                )
+
+        actuator_lower, actuator_upper = self._actuator_bounds()
+        trust_radius = np.tile(
+            np.array(
+                [
+                    self.config.planar_velocity_trust_region,
+                    self.config.planar_velocity_trust_region,
+                    self.config.angular_velocity_trust_region,
+                ],
+                dtype=np.float64,
+            ),
+            horizon,
+        )
+        command_lower = np.maximum(
+            actuator_lower,
+            reference_flat - trust_radius,
+        )
+        command_upper = np.minimum(
+            actuator_upper,
+            reference_flat + trust_radius,
+        )
+
+        command_identity = sparse.eye(command_variable_count, format="csc")
+        slack_identity = sparse.eye(slack_variable_count, format="csc")
+        zero_command_slack = sparse.csc_matrix(
+            (command_variable_count, slack_variable_count)
+        )
+        zero_slack_command = sparse.csc_matrix(
+            (slack_variable_count, command_variable_count)
+        )
+        zero_grid_slack = sparse.csc_matrix(
+            (len(grid_rows), slack_variable_count)
+        )
+        command_matrix = sparse.hstack(
+            (command_identity, zero_command_slack),
+            format="csc",
+        )
+        slack_matrix = sparse.hstack(
+            (zero_slack_command, slack_identity),
+            format="csc",
+        )
+        cbf_matrix = sparse.hstack(
+            (sparse.csc_matrix(cbf_rows), slack_identity),
+            format="csc",
+        )
+        grid_matrix = sparse.hstack(
+            (sparse.csc_matrix(np.asarray(grid_rows)), zero_grid_slack),
+            format="csc",
+        )
+        constraint_matrix = sparse.vstack(
+            (command_matrix, slack_matrix, cbf_matrix, grid_matrix),
+            format="csc",
+        )
+        constraint_lower = np.concatenate(
+            (
+                command_lower,
+                np.zeros(slack_variable_count, dtype=np.float64),
+                cbf_lower,
+                np.asarray(grid_lower, dtype=np.float64),
+            )
+        )
+        constraint_upper = np.concatenate(
+            (
+                command_upper,
+                np.full(slack_variable_count, np.inf),
+                np.full(horizon, np.inf),
+                np.asarray(grid_upper, dtype=np.float64),
+            )
+        )
+        objective_matrix, objective_vector = self._quadratic_objective(
+            nominal_sequence,
+            slack_variable_count=slack_variable_count,
+        )
+        warm_start = np.concatenate(
+            (
+                reference_flat,
+                np.maximum(0.0, -reference.margins),
+            )
+        )
+
+        solver = osqp.OSQP()
+        try:
+            solver.setup(
+                P=objective_matrix,
+                q=objective_vector,
+                A=constraint_matrix,
+                l=constraint_lower,
+                u=constraint_upper,
+                verbose=False,
+                eps_abs=self.config.solver_tolerance,
+                eps_rel=self.config.solver_tolerance,
+                max_iter=self.config.maximum_solver_iterations,
+                polishing=True,
+                warm_starting=True,
+            )
+            solver.warm_start(x=warm_start)
+            result = solver.solve(raise_error=False)
+        except (RuntimeError, ValueError) as error:
+            return _SparseQPSolution(
+                success=False,
+                commands=reference.commands,
+                iteration_count=0,
+                status=f"osqp_exception: {error}",
+                maximum_cbf_slack=math.inf,
+            )
+
+        solver_status = str(result.info.status)
+        solved = solver_status.casefold() in {"solved", "solved inaccurate"}
+        if not solved or result.x is None:
+            return _SparseQPSolution(
+                success=False,
+                commands=reference.commands,
+                iteration_count=int(result.info.iter),
+                status=f"osqp_{solver_status}",
+                maximum_cbf_slack=math.inf,
+            )
+
+        optimizer = np.asarray(result.x, dtype=np.float64)
+        commands = self._clip_commands(
+            optimizer[:command_variable_count].reshape(horizon, 3)
+        )
+        maximum_cbf_slack = float(
+            np.max(optimizer[command_variable_count:], initial=0.0)
+        )
+        return _SparseQPSolution(
+            success=True,
+            commands=commands,
+            iteration_count=int(result.info.iter),
+            status=solver_status,
+            maximum_cbf_slack=maximum_cbf_slack,
+        )
+
+    def _quadratic_objective(
+        self,
+        nominal_sequence: np.ndarray,
+        *,
+        slack_variable_count: int,
+    ) -> tuple[sparse.csc_matrix, np.ndarray]:
+        """Return OSQP's upper-triangular ``P`` and linear vector ``q``."""
+
+        horizon = self.config.horizon_steps
+        weights = np.tile(
+            np.array(
+                [
+                    self.config.planar_velocity_weight,
+                    self.config.planar_velocity_weight,
+                    self.config.angular_velocity_weight,
+                ],
+                dtype=np.float64,
+            ),
+            horizon,
+        )
+        matrix = np.diag(2.0 * weights + 1e-10)
+        vector = -2.0 * weights * nominal_sequence.reshape(-1)
+
+        smoothness = self.config.command_smoothness_weight
+        if smoothness > 0.0:
+            for stage in range(horizon - 1):
+                for command_axis in (0, 1, 2):
+                    first = 3 * stage + command_axis
+                    second = first + 3
+                    matrix[first, first] += 2.0 * smoothness
+                    matrix[second, second] += 2.0 * smoothness
+                    matrix[first, second] -= 2.0 * smoothness
+                    matrix[second, first] -= 2.0 * smoothness
+
+        command_objective = sparse.csc_matrix(np.triu(matrix))
+        slack_objective = (
+            sparse.eye(slack_variable_count, format="csc") * 1e-10
+        )
+        objective_matrix = sparse.block_diag(
+            (command_objective, slack_objective),
+            format="csc",
+        )
+        objective_vector = np.concatenate(
+            (
+                vector,
+                np.full(
+                    slack_variable_count,
+                    self.config.cbf_slack_weight,
+                    dtype=np.float64,
+                ),
+            )
+        )
+        return objective_matrix, objective_vector
+
+    def _state_sensitivities(self) -> np.ndarray:
+        """Return exact direct-planar state sensitivities over the horizon."""
+
+        horizon = self.config.horizon_steps
+        sensitivities = np.zeros(
+            (horizon + 1, 3, 3 * horizon),
+            dtype=np.float64,
+        )
+        step_identity = self.config.time_step * np.eye(3, dtype=np.float64)
+        for state_index in range(1, horizon + 1):
+            sensitivities[state_index] = sensitivities[state_index - 1]
+            command_start = 3 * (state_index - 1)
+            sensitivities[
+                state_index,
+                :,
+                command_start : command_start + 3,
+            ] += step_identity
+        return sensitivities
+
+    def _select_safe_objective_step(
+        self,
+        reference: _TrajectoryEvaluation,
+        candidate: _TrajectoryEvaluation | None,
+        *,
+        initial_state: np.ndarray,
+        proposed_commands: np.ndarray,
+        nominal_sequence: np.ndarray,
+        configuration_space: SafeSAGEConfigurationSpaceResult,
+        h_full: SafeSAGEHFullResult,
+        guidance_fields: Sequence[LaplaceGuidanceFieldResult],
+    ) -> _TrajectoryEvaluation | None:
+        """Backtrack to an exact-safe step with a lower nominal cost."""
+
+        reference_objective = self._objective_value(
+            reference.commands,
+            nominal_sequence,
+        )
+
+        def acceptable(trial: _TrajectoryEvaluation | None) -> bool:
+            return bool(
+                trial is not None
+                and self._trajectory_is_safe(trial)
+                and self._objective_value(trial.commands, nominal_sequence)
+                < reference_objective - 1e-12
+            )
+
+        if acceptable(candidate):
+            return candidate
+
+        step_size = 1.0
+        for _ in range(self.config.maximum_line_search_iterations):
+            step_size *= self.config.line_search_contraction
+            trial_commands = reference.commands + step_size * (
+                proposed_commands - reference.commands
+            )
+            trial = self._evaluate_commands(
+                initial_state,
+                trial_commands,
+                configuration_space=configuration_space,
+                h_full=h_full,
+                guidance_fields=guidance_fields,
+            )
+            if acceptable(trial):
+                return trial
+        return None
+
+    def _select_violation_reducing_step(
+        self,
+        reference: _TrajectoryEvaluation,
+        candidate: _TrajectoryEvaluation | None,
+        *,
+        initial_state: np.ndarray,
+        proposed_commands: np.ndarray,
+        configuration_space: SafeSAGEConfigurationSpaceResult,
+        h_full: SafeSAGEHFullResult,
+        guidance_fields: Sequence[LaplaceGuidanceFieldResult],
+    ) -> _TrajectoryEvaluation | None:
+        """Backtrack until exact nonlinear safety violation decreases."""
+
+        reference_metric = self._violation_metric(reference)
+        if candidate is not None and (
+            self._trajectory_is_safe(candidate)
+            or self._violation_metric(candidate) < reference_metric
+        ):
+            return candidate
+
+        step_size = 1.0
+        best: _TrajectoryEvaluation | None = None
+        best_metric = reference_metric
+        for _ in range(self.config.maximum_line_search_iterations):
+            step_size *= self.config.line_search_contraction
+            trial_commands = reference.commands + step_size * (
+                proposed_commands - reference.commands
+            )
+            trial = self._evaluate_commands(
+                initial_state,
+                trial_commands,
+                configuration_space=configuration_space,
+                h_full=h_full,
+                guidance_fields=guidance_fields,
+            )
+            if trial is None:
+                continue
+            metric = self._violation_metric(trial)
+            if metric < best_metric:
+                best = trial
+                best_metric = metric
+            if self._trajectory_is_safe(trial):
+                return trial
+        return best
 
     def _directional_seed(
         self,
-        initial_evaluation: _TrajectoryEvaluation,
+        stationary_evaluation: _TrajectoryEvaluation,
         nominal_sequence: np.ndarray,
     ) -> np.ndarray | None:
-        """Bias one warm start toward the initial semantic passing side."""
+        """Return one deterministic seed using the initial passing side."""
 
-        lateral_guidance = float(initial_evaluation.semantic_normals[0, 1])
+        lateral_guidance = float(
+            stationary_evaluation.semantic_normals[0, 1]
+        )
         if (
             abs(lateral_guidance) <= self.config.constraint_tolerance
             or self.config.lateral_seed_speed <= 0.0
@@ -660,9 +994,10 @@ class SafeSAGEPlanarMPC:
         h_full: SafeSAGEHFullResult,
         guidance_fields: Sequence[LaplaceGuidanceFieldResult],
     ) -> _TrajectoryEvaluation | None:
-        """Roll out commands and sample exact/semantic field information."""
+        """Roll out commands and sample exact and semantic field data."""
 
-        states = self._rollout(initial_state, commands)
+        clipped_commands = self._clip_commands(commands)
+        states = self._rollout(initial_state, clipped_commands)
         safety_values = np.empty(states.shape[0], dtype=np.float64)
         semantic_normals = np.empty_like(states)
         exact_gradients = np.empty_like(states)
@@ -676,7 +1011,7 @@ class SafeSAGEPlanarMPC:
                     h_full=h_full,
                     guidance_fields=guidance_fields,
                 )
-            except ValueError:
+            except (TypeError, ValueError):
                 return None
             safety_values[index] = evaluation.sampled_safety_value
             semantic_normals[index] = evaluation.constraint_normal
@@ -687,7 +1022,10 @@ class SafeSAGEPlanarMPC:
             - self.config.dtcbf_decay * safety_values[:-1]
         )
         return _TrajectoryEvaluation(
-            commands=np.ascontiguousarray(commands, dtype=np.float64),
+            commands=np.ascontiguousarray(
+                clipped_commands,
+                dtype=np.float64,
+            ),
             states=states,
             safety_values=safety_values,
             semantic_normals=semantic_normals,
@@ -716,40 +1054,6 @@ class SafeSAGEPlanarMPC:
             )
         return states
 
-    def _dtcbf_command_jacobian(
-        self,
-        state_derivatives: np.ndarray,
-    ) -> np.ndarray:
-        """Return DTCBF sensitivities with respect to the command horizon."""
-
-        horizon = self.config.horizon_steps
-        state_sensitivities = np.zeros(
-            (horizon + 1, 3, 3 * horizon),
-            dtype=np.float64,
-        )
-        identity_step = self.config.time_step * np.eye(3, dtype=np.float64)
-        for state_index in range(1, horizon + 1):
-            state_sensitivities[state_index] = state_sensitivities[
-                state_index - 1
-            ]
-            command_start = 3 * (state_index - 1)
-            state_sensitivities[
-                state_index,
-                :,
-                command_start : command_start + 3,
-            ] += identity_step
-
-        jacobian = np.empty((horizon, 3 * horizon), dtype=np.float64)
-        for index in range(horizon):
-            jacobian[index] = (
-                state_derivatives[index + 1]
-                @ state_sensitivities[index + 1]
-                - self.config.dtcbf_decay
-                * state_derivatives[index]
-                @ state_sensitivities[index]
-            )
-        return jacobian
-
     def _objective_value(
         self,
         commands: np.ndarray,
@@ -774,50 +1078,16 @@ class SafeSAGEPlanarMPC:
             )
         return value
 
-    def _objective_gradient(
-        self,
-        commands: np.ndarray,
-        nominal_sequence: np.ndarray,
-    ) -> np.ndarray:
-        """Return the analytical gradient of the quadratic objective."""
-
-        weights = np.array(
-            [
-                self.config.planar_velocity_weight,
-                self.config.planar_velocity_weight,
-                self.config.angular_velocity_weight,
-            ],
-            dtype=np.float64,
-        )
-        gradient = 2.0 * weights * (commands - nominal_sequence)
-        smoothness = self.config.command_smoothness_weight
-        if smoothness > 0.0 and commands.shape[0] > 1:
-            changes = commands[1:] - commands[:-1]
-            gradient[:-1] -= 2.0 * smoothness * changes
-            gradient[1:] += 2.0 * smoothness * changes
-        return gradient
-
     def _nominal_sequence(
         self,
         nominal_command: Sequence[float] | np.ndarray,
     ) -> np.ndarray:
-        """Expand one nominal command or validate a full reference horizon."""
+        """Expand one nominal command or validate a full reference."""
 
-        array = np.asarray(nominal_command, dtype=np.float64)
-        if array.shape == (3,):
-            array = np.repeat(
-                array[np.newaxis, :],
-                self.config.horizon_steps,
-                axis=0,
-            )
-        elif array.shape != (self.config.horizon_steps, 3):
-            raise ValueError(
-                "nominal_command must have shape (3,) or "
-                f"({self.config.horizon_steps}, 3)."
-            )
-        if not np.isfinite(array).all():
-            raise ValueError("nominal_command must contain only finite values.")
-        return self._clip_commands(array)
+        return self._command_sequence(
+            nominal_command,
+            name="nominal_command",
+        )
 
     def _command_sequence(
         self,
@@ -825,18 +1095,26 @@ class SafeSAGEPlanarMPC:
         *,
         name: str,
     ) -> np.ndarray:
-        """Validate one explicit command horizon without broadcasting."""
+        """Expand one command or validate an explicit command horizon."""
 
         array = np.asarray(value, dtype=np.float64)
+        if array.shape == (3,):
+            array = np.repeat(
+                array[np.newaxis, :],
+                self.config.horizon_steps,
+                axis=0,
+            )
         expected_shape = (self.config.horizon_steps, 3)
         if array.shape != expected_shape:
-            raise ValueError(f"{name} must have shape {expected_shape}.")
+            raise ValueError(
+                f"{name} must have shape (3,) or {expected_shape}."
+            )
         if not np.isfinite(array).all():
             raise ValueError(f"{name} must contain only finite values.")
         return self._clip_commands(array)
 
     def _clip_commands(self, commands: np.ndarray) -> np.ndarray:
-        """Clip one command horizon to the ideal planar actuator bounds."""
+        """Clip one command horizon to the ideal planar actuator box."""
 
         result = np.asarray(commands, dtype=np.float64).copy()
         result[:, :2] = np.clip(
@@ -851,45 +1129,32 @@ class SafeSAGEPlanarMPC:
         )
         return np.ascontiguousarray(result, dtype=np.float64)
 
-    def _flat_bounds(self) -> Bounds:
-        """Return repeated box bounds for SciPy's SLSQP solver."""
+    def _actuator_bounds(self) -> tuple[np.ndarray, np.ndarray]:
+        """Return flattened lower and upper ideal command bounds."""
 
-        lower_one = np.array(
-            [
-                self.config.minimum_planar_velocity,
-                self.config.minimum_planar_velocity,
-                self.config.minimum_angular_velocity,
-            ],
-            dtype=np.float64,
+        lower = np.tile(
+            np.array(
+                [
+                    self.config.minimum_planar_velocity,
+                    self.config.minimum_planar_velocity,
+                    self.config.minimum_angular_velocity,
+                ],
+                dtype=np.float64,
+            ),
+            self.config.horizon_steps,
         )
-        upper_one = np.array(
-            [
-                self.config.maximum_planar_velocity,
-                self.config.maximum_planar_velocity,
-                self.config.maximum_angular_velocity,
-            ],
-            dtype=np.float64,
+        upper = np.tile(
+            np.array(
+                [
+                    self.config.maximum_planar_velocity,
+                    self.config.maximum_planar_velocity,
+                    self.config.maximum_angular_velocity,
+                ],
+                dtype=np.float64,
+            ),
+            self.config.horizon_steps,
         )
-        return Bounds(
-            np.tile(lower_one, self.config.horizon_steps),
-            np.tile(upper_one, self.config.horizon_steps),
-        )
-
-    def _unique_clipped_seeds(
-        self,
-        seeds: Sequence[tuple[str, np.ndarray]],
-    ) -> list[tuple[str, np.ndarray]]:
-        """Remove numerically identical multi-start command horizons."""
-
-        unique: list[tuple[str, np.ndarray]] = []
-        for name, seed in seeds:
-            clipped = self._clip_commands(seed)
-            if not any(
-                np.array_equal(clipped, existing)
-                for _, existing in unique
-            ):
-                unique.append((name, clipped))
-        return unique
+        return lower, upper
 
     def _trajectory_is_safe(self, evaluation: _TrajectoryEvaluation) -> bool:
         """Apply the exact nonlinear acceptance boundary."""
@@ -898,17 +1163,71 @@ class SafeSAGEPlanarMPC:
             np.isfinite(evaluation.safety_values).all()
             and np.isfinite(evaluation.margins).all()
             and not np.any(evaluation.unsafe_configuration_mask)
-            and np.min(evaluation.margins)
+            and float(np.min(evaluation.safety_values))
+            >= -self.config.constraint_tolerance
+            and float(np.min(evaluation.margins))
             >= -self.config.constraint_tolerance
         )
 
-    def _maximum_violation(self, evaluation: _TrajectoryEvaluation) -> float:
-        """Return the largest exact DTCBF or unsafe-cell violation."""
+    def _violation_metric(
+        self,
+        evaluation: _TrajectoryEvaluation,
+    ) -> tuple[int, float]:
+        """Return a lexicographic exact-safety violation measure."""
 
-        margin_violation = max(0.0, -float(np.min(evaluation.margins)))
-        if np.any(evaluation.unsafe_configuration_mask):
-            return max(1.0, margin_violation)
-        return margin_violation
+        unsafe_count = int(np.count_nonzero(
+            evaluation.unsafe_configuration_mask
+        ))
+        if (
+            not np.isfinite(evaluation.safety_values).all()
+            or not np.isfinite(evaluation.margins).all()
+        ):
+            return unsafe_count + self.config.horizon_steps + 1, math.inf
+        safety_violation = max(
+            0.0,
+            -float(np.min(evaluation.safety_values)),
+        )
+        margin_violation = max(
+            0.0,
+            -float(np.min(evaluation.margins)),
+        )
+        return unsafe_count, max(safety_violation, margin_violation)
+
+    def _stationary_or_failed_result(
+        self,
+        stationary: _TrajectoryEvaluation,
+        *,
+        initial_state: np.ndarray,
+        nominal_sequence: np.ndarray,
+        solver_iteration_count: int,
+        failure_status: str,
+    ) -> SafeSAGEPlanarMPCResult:
+        """Return a verified stop, otherwise a deterministic failure."""
+
+        if self._trajectory_is_safe(stationary):
+            return self._result(
+                stationary,
+                nominal_sequence=nominal_sequence,
+                objective_value=self._objective_value(
+                    stationary.commands,
+                    nominal_sequence,
+                ),
+                solver_iteration_count=solver_iteration_count,
+                success=True,
+                intervention_active=True,
+                fallback_active=True,
+                exact_restoration_used=True,
+                status=(
+                    "stationary_feasibility_recovered_after_"
+                    f"{failure_status}"
+                ),
+            )
+        return self._failed_result(
+            initial_state,
+            nominal_sequence,
+            status=f"no_safe_planar_horizon_after_{failure_status}",
+            solver_iteration_count=solver_iteration_count,
+        )
 
     def _result(
         self,
@@ -980,10 +1299,3 @@ class SafeSAGEPlanarMPC:
             exact_restoration_used=False,
             status=status,
         )
-
-    @staticmethod
-    def _normalized_status(message: str) -> str:
-        """Convert one SciPy solver message to a compact report token."""
-
-        normalized = "_".join(message.strip().lower().split())
-        return normalized.replace("/", "_") or "unknown_solver_status"
