@@ -376,10 +376,100 @@ def test_exact_feasibility_recovery_survives_solver_failure(
     assert result.success, result.status
     assert not result.fallback_active
     assert result.status in {
+        "guidance_steered_feasibility_recovered",
+        "guidance_rotation_feasibility_recovered",
         "translation_scaled_feasibility_recovered",
         "stationary_feasibility_recovered",
     }
     assert result.minimum_dtcbf_margin >= -1e-6
+
+
+def test_last_resort_recovery_preserves_guidance_passing_side() -> None:
+    configuration_space, h_full, guidance_fields = make_fields(
+        guidance=(-1.0, -1.0),
+        gradient=(-1.0, 0.0, 0.0),
+        safety_value=0.75,
+    )
+    mpc = make_mpc(horizon_steps=30)
+    initial_state = np.zeros(3, dtype=np.float64)
+    nominal_sequence = mpc._nominal_sequence(np.array([0.25, 0.0]))
+    reference = mpc._evaluate_trajectory(
+        initial_state,
+        nominal_sequence,
+        configuration_space=configuration_space,
+        h_full=h_full,
+        guidance_fields=guidance_fields,
+        temporal_safety_derivative=0.0,
+    )
+
+    assert reference is not None
+    assert not mpc._trajectory_is_safe(reference)
+    candidate, status = mpc._recover_feasible_command_horizon(
+        reference,
+        initial_state=initial_state,
+        configuration_space=configuration_space,
+        h_full=h_full,
+        guidance_fields=guidance_fields,
+        temporal_safety_derivative=0.0,
+        preferred_lateral_direction_grid_y=-1.0,
+    )
+
+    assert candidate is not None
+    assert status == "guidance_steered_feasibility_recovered"
+    assert candidate.commands[0, 1] < 0.0
+    assert np.max(candidate.commands[:, 0]) > 0.0
+    assert candidate.chassis_states[-1, 1] < 0.0
+    assert mpc._trajectory_is_safe(candidate)
+
+
+def test_recovery_does_not_confuse_local_turn_with_passing_side() -> None:
+    configuration_space, h_full, guidance_fields = make_fields(
+        guidance=(-1.0, 1.0),
+        gradient=(-1.0, 0.0, 0.0),
+        safety_value=0.75,
+    )
+    mpc = make_mpc(horizon_steps=30)
+    initial_state = np.array([0.0, 0.0, -0.5], dtype=np.float64)
+    nominal_sequence = mpc._nominal_sequence(np.array([0.25, 0.0]))
+    reference = mpc._evaluate_trajectory(
+        initial_state,
+        nominal_sequence,
+        configuration_space=configuration_space,
+        h_full=h_full,
+        guidance_fields=guidance_fields,
+        temporal_safety_derivative=0.0,
+    )
+
+    assert reference is not None
+    assert mpc._initial_guidance_angular_coefficient(reference) > 0.0
+    candidate, status = mpc._recover_feasible_command_horizon(
+        reference,
+        initial_state=initial_state,
+        configuration_space=configuration_space,
+        h_full=h_full,
+        guidance_fields=guidance_fields,
+        temporal_safety_derivative=0.0,
+        preferred_lateral_direction_grid_y=-1.0,
+    )
+
+    assert candidate is not None
+    assert status == "guidance_steered_feasibility_recovered"
+    assert candidate.chassis_states[-1, 1] < initial_state[1]
+    assert mpc._trajectory_is_safe(candidate)
+
+
+def test_zero_preferred_lateral_direction_is_rejected() -> None:
+    configuration_space, h_full, guidance_fields = make_fields()
+
+    with pytest.raises(ValueError, match="preferred_lateral_direction_grid_y"):
+        make_mpc().plan(
+            np.zeros(3, dtype=np.float64),
+            np.array([0.25, 0.0]),
+            preferred_lateral_direction_grid_y=0.0,
+            configuration_space=configuration_space,
+            h_full=h_full,
+            guidance_fields=guidance_fields,
+        )
 
 
 def test_shifted_safe_horizon_warm_starts_next_control_cycle() -> None:
@@ -430,6 +520,43 @@ def test_initial_command_guess_shape_is_validated() -> None:
             h_full=h_full,
             guidance_fields=guidance_fields,
         )
+
+
+def test_prediction_never_accepts_an_unsafe_configuration_cell() -> None:
+    configuration_space, h_full, guidance_fields = make_fields(
+        guidance=(0.0, 0.0),
+        gradient=(0.0, 0.0, 0.0),
+        safety_value=2.0,
+    )
+    mpc = make_mpc(horizon_steps=30)
+
+    result = mpc.plan(
+        np.zeros(3, dtype=np.float64),
+        np.array([0.30, 0.0], dtype=np.float64),
+        configuration_space=configuration_space,
+        h_full=h_full,
+        guidance_fields=guidance_fields,
+    )
+
+    assert result.success, result.status
+    assert not result.fallback_active
+    assert result.status in {
+        "guidance_steered_feasibility_recovered",
+        "guidance_rotation_feasibility_recovered",
+        "translation_scaled_feasibility_recovered",
+        "stationary_feasibility_recovered",
+    }
+    evaluations = [
+        mpc.paper_filter.evaluate_constraint(
+            query_position_grid_xy=state[:2],
+            query_yaw_radians=float(state[2]),
+            configuration_space=configuration_space,
+            h_full=h_full,
+            guidance_fields=guidance_fields,
+        )
+        for state in result.predicted_safety_states
+    ]
+    assert all(evaluation.unsafe_reason is None for evaluation in evaluations)
 
 
 def test_result_shapes_and_arrays_are_read_only() -> None:

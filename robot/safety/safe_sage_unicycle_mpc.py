@@ -88,6 +88,17 @@ def _finite_vector(
     return np.ascontiguousarray(array, dtype=np.float64)
 
 
+def _optional_direction(value: object, *, name: str) -> float | None:
+    """Return a normalized optional signed direction."""
+
+    if value is None:
+        return None
+    direction = _finite_real(value, name=name)
+    if direction == 0.0:
+        raise ValueError(f"{name} must be nonzero when supplied.")
+    return math.copysign(1.0, direction)
+
+
 def _frozen_array(value: np.ndarray) -> np.ndarray:
     """Return an owned, contiguous, read-only float64 array."""
 
@@ -315,6 +326,7 @@ class _ReferenceSamples:
     guidance_normals: np.ndarray
     exact_gradients: np.ndarray
     scaled_temporal_derivatives: np.ndarray
+    unsafe_configuration_mask: np.ndarray
 
 
 @dataclass(frozen=True)
@@ -361,6 +373,7 @@ class SafeSAGEUnicycleMPC:
         nominal_command: Sequence[float] | np.ndarray,
         *,
         initial_command_guess: Sequence[float] | np.ndarray | None = None,
+        preferred_lateral_direction_grid_y: float | None = None,
         configuration_space: SafeSAGEConfigurationSpaceResult,
         h_full: SafeSAGEHFullResult,
         guidance_fields: Sequence[LaplaceGuidanceFieldResult],
@@ -373,6 +386,9 @@ class SafeSAGEUnicycleMPC:
         an explicit ``(horizon_steps, 2)`` reference sequence.
         ``initial_command_guess`` optionally supplies a distinct warm-start
         sequence without changing the command-tracking objective.
+        ``preferred_lateral_direction_grid_y`` optionally preserves a
+        semantic passing-side convention during last-resort numerical
+        recovery.  It does not add a cost or constraint to ordinary MPC.
         """
 
         initial_state = _finite_vector(
@@ -383,6 +399,10 @@ class SafeSAGEUnicycleMPC:
         temporal_derivative = _finite_real(
             temporal_safety_derivative,
             name="temporal_safety_derivative",
+        )
+        preferred_lateral_direction = _optional_direction(
+            preferred_lateral_direction_grid_y,
+            name="preferred_lateral_direction_grid_y",
         )
         nominal_sequence = self._nominal_sequence(nominal_command)
         if initial_command_guess is None:
@@ -566,6 +586,9 @@ class SafeSAGEUnicycleMPC:
                             h_full=h_full,
                             guidance_fields=guidance_fields,
                             temporal_safety_derivative=temporal_derivative,
+                            preferred_lateral_direction_grid_y=(
+                                preferred_lateral_direction
+                            ),
                         )
                     )
                     if recovery is None:
@@ -745,15 +768,133 @@ class SafeSAGEUnicycleMPC:
         h_full: SafeSAGEHFullResult,
         guidance_fields: Sequence[LaplaceGuidanceFieldResult],
         temporal_safety_derivative: float,
+        preferred_lateral_direction_grid_y: float | None = None,
     ) -> tuple[_TrajectoryEvaluation | None, str | None]:
-        """Recover exact feasibility by reducing translation, then stopping.
+        """Recover exact feasibility without discarding Safe-SAGE direction.
 
         This deterministic last-resort path is used only after both sparse
-        SQP and the exact nonlinear rescue fail.  Scaling linear velocity
-        while retaining the planned angular profile reduces nonholonomic
-        turning radius without discarding the selected passing direction.
-        Every candidate is accepted only after exact DTCBF evaluation.
+        SQP and the exact nonlinear rescue fail.  A failed numerical iterate
+        is not a trustworthy source of passing direction, so first construct
+        short steering seeds from the current Safe-SAGE constraint normal.
+        Only if no guidance-steered seed is exactly safe do we reduce
+        translation on the original iterate and finally try a full stop.
+        Every returned candidate passes exact DTCBF evaluation.
         """
+
+        preferred_lateral_direction = _optional_direction(
+            preferred_lateral_direction_grid_y,
+            name="preferred_lateral_direction_grid_y",
+        )
+        initial_lateral_position = float(reference.chassis_states[0, 1])
+
+        def has_preferred_lateral_progress(
+            candidate: _TrajectoryEvaluation,
+        ) -> bool:
+            if preferred_lateral_direction is None:
+                return True
+            lateral_change = (
+                float(candidate.chassis_states[-1, 1])
+                - initial_lateral_position
+            )
+            return preferred_lateral_direction * lateral_change > 1e-3
+
+        angular_coefficient = self._initial_guidance_angular_coefficient(reference)
+        direction_tolerance = 1e-10
+        if abs(angular_coefficient) > direction_tolerance:
+            local_steering_direction = math.copysign(1.0, angular_coefficient)
+            steering_directions = (
+                local_steering_direction,
+                -local_steering_direction,
+            )
+            steering_step_count = min(
+                self.config.horizon_steps,
+                max(1, math.ceil(0.8 / self.config.time_step)),
+            )
+            for steering_direction in steering_directions:
+                angular_limit = (
+                    self.config.maximum_angular_velocity
+                    if steering_direction > 0.0
+                    else abs(self.config.minimum_angular_velocity)
+                )
+                if angular_limit <= 0.0:
+                    continue
+                angular_fractions = (1.0, 0.75, 0.5, 0.25)
+                moving_linear_scales = (
+                    0.875,
+                    0.75,
+                    0.625,
+                    0.5,
+                    0.375,
+                    0.25,
+                    0.125,
+                )
+                for angular_fraction in angular_fractions:
+                    steering_rate = (
+                        steering_direction * angular_fraction * angular_limit
+                    )
+                    for linear_scale in moving_linear_scales:
+                        commands = np.array(
+                            reference.commands,
+                            dtype=np.float64,
+                            copy=True,
+                        )
+                        # Establish heading without simultaneously advancing
+                        # into the obstacle, then translate along the selected
+                        # side.  Uniformly scaling translation can recover a
+                        # pure rotation that is safe but contains no bypass
+                        # trajectory, which gives the next MPC cycle a
+                        # deadlocked warm start.
+                        commands[:, 0] *= linear_scale
+                        commands[:steering_step_count, 0] = 0.0
+                        commands[:, 1] = 0.0
+                        commands[:steering_step_count, 1] = steering_rate
+                        candidate = self._evaluate_trajectory(
+                            initial_state,
+                            commands,
+                            configuration_space=configuration_space,
+                            h_full=h_full,
+                            guidance_fields=guidance_fields,
+                            temporal_safety_derivative=temporal_safety_derivative,
+                        )
+                        if (
+                            candidate is not None
+                            and self._trajectory_is_safe(candidate)
+                            and has_preferred_lateral_progress(candidate)
+                        ):
+                            return (
+                                candidate,
+                                "guidance_steered_feasibility_recovered",
+                            )
+
+
+            # A pure rotation is safe in many scenes but is not a bypass
+            # plan. Consider it only after moving candidates in both angular
+            # directions fail. Its direction remains the local constraint's
+            # best instantaneous correction.
+            steering_direction = local_steering_direction
+            angular_limit = (
+                self.config.maximum_angular_velocity
+                if steering_direction > 0.0
+                else abs(self.config.minimum_angular_velocity)
+            )
+            for angular_fraction in (1.0, 0.75, 0.5, 0.25):
+                commands = np.zeros_like(reference.commands)
+                commands[:steering_step_count, 1] = (
+                    steering_direction * angular_fraction * angular_limit
+                )
+                candidate = self._evaluate_trajectory(
+                    initial_state,
+                    commands,
+                    configuration_space=configuration_space,
+                    h_full=h_full,
+                    guidance_fields=guidance_fields,
+                    temporal_safety_derivative=temporal_safety_derivative,
+                )
+                if candidate is not None and self._trajectory_is_safe(candidate):
+                    return (
+                        candidate,
+                        "guidance_rotation_feasibility_recovered",
+                    )
 
         for linear_scale in (0.875, 0.75, 0.625, 0.5, 0.375, 0.25, 0.125, 0.0):
             commands = np.array(reference.commands, dtype=np.float64, copy=True)
@@ -781,6 +922,29 @@ class SafeSAGEUnicycleMPC:
         if stationary is not None and self._trajectory_is_safe(stationary):
             return stationary, "stationary_feasibility_recovered"
         return None, None
+
+    def _initial_guidance_angular_coefficient(
+        self,
+        reference: _TrajectoryEvaluation,
+    ) -> float:
+        """Return the current Safe-SAGE coefficient multiplying ``omega``.
+
+        The look-ahead point velocity is
+        ``(v cos(yaw) - ell omega sin(yaw),
+        v sin(yaw) + ell omega cos(yaw))``.  Pulling the sampled paper-space
+        constraint normal back through that interface gives the coefficient
+        below.  Its sign is therefore the angular direction that increases
+        the Safe-SAGE constraint margin; it is not a demo-specific side flag.
+        """
+
+        yaw = float(reference.chassis_states[0, 2])
+        normal = reference.samples.guidance_normals[0]
+        distance = self.config.lookahead_distance
+        return float(
+            -distance * math.sin(yaw) * normal[0]
+            + distance * math.cos(yaw) * normal[1]
+            + normal[2]
+        )
 
     def _solve_exact_nonlinear_rescue(
         self,
@@ -1358,6 +1522,7 @@ class SafeSAGEUnicycleMPC:
 
         return bool(
             np.isfinite(trajectory.margins).all()
+            and not np.any(trajectory.samples.unsafe_configuration_mask)
             and float(np.min(trajectory.margins)) >= -self.config.constraint_tolerance
         )
 
@@ -1365,7 +1530,10 @@ class SafeSAGEUnicycleMPC:
     def _maximum_violation(trajectory: _TrajectoryEvaluation) -> float:
         """Return the nonnegative maximum DTCBF violation."""
 
-        if not np.isfinite(trajectory.margins).all():
+        if (
+            not np.isfinite(trajectory.margins).all()
+            or np.any(trajectory.samples.unsafe_configuration_mask)
+        ):
             return math.inf
         return max(0.0, -float(np.min(trajectory.margins)))
 
@@ -1491,6 +1659,7 @@ class SafeSAGEUnicycleMPC:
         guidance_normals: list[tuple[float, float, float]] = []
         exact_gradients: list[tuple[float, float, float]] = []
         temporal_terms: list[float] = []
+        unsafe_configurations: list[bool] = []
         for state in safety_states:
             evaluation = self.paper_filter.evaluate_constraint(
                 query_position_grid_xy=state[:2],
@@ -1504,6 +1673,7 @@ class SafeSAGEUnicycleMPC:
             guidance_normals.append(evaluation.constraint_normal)
             exact_gradients.append(evaluation.interpolant_gradient)
             temporal_terms.append(evaluation.scaled_temporal_safety_derivative)
+            unsafe_configurations.append(evaluation.unsafe_reason is not None)
         return _ReferenceSamples(
             safety_values=np.asarray(values, dtype=np.float64),
             guidance_normals=np.asarray(
@@ -1517,6 +1687,10 @@ class SafeSAGEUnicycleMPC:
             scaled_temporal_derivatives=np.asarray(
                 temporal_terms,
                 dtype=np.float64,
+            ),
+            unsafe_configuration_mask=np.asarray(
+                unsafe_configurations,
+                dtype=bool,
             ),
         )
 

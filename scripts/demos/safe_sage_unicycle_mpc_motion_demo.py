@@ -15,7 +15,7 @@ Stage A - controlled fixed-field construction:
 
 Stage B - receding-horizon wheel motion:
 
-1. Roll the waypoint controller forward over the full prediction horizon.
+1. Hold the current waypoint command as the nominal MPC horizon reference.
 2. Shift the preceding safe horizon and append a stationary terminal command.
 3. Revalidate and solve the Safe-SAGE unicycle MPC in the fixed field.
 4. Pass the first MPC command through the analytical unicycle CBF backup.
@@ -64,6 +64,10 @@ from isaacsim.core.simulation_manager import SimulationManager
 from pxr import Usd
 
 from robot.control.differential_drive import NovaCarterController
+from robot.control.unicycle_model import (
+    integrate_unicycle_euler,
+    lookahead_state,
+)
 from robot.navigation.waypoint_controller import RobotPose2D, WaypointCommand
 from robot.runtime.simulation_loop import (
     advance_playing_steps,
@@ -84,7 +88,10 @@ from robot.safety.safe_sage_configuration_space import (
     RectangularRobotFootprint,
 )
 from robot.safety.safe_sage_field_pipeline import SafeSAGEFieldPipelineConfig
-from robot.safety.safe_sage_guidance_policy import SafeSAGEGuidancePolicy
+from robot.safety.safe_sage_guidance_policy import (
+    PassingSide,
+    SafeSAGEGuidancePolicy,
+)
 from robot.safety.safe_sage_unicycle_cbf_filter import (
     SafeSAGEUnicycleCBFConfig,
     SafeSAGEUnicycleCBFFilter,
@@ -121,6 +128,10 @@ MINIMUM_EXPECTED_RIGHTWARD_DISPLACEMENT = motion.MINIMUM_EXPECTED_RIGHTWARD_DISP
 SETTLED_LINEAR_SPEED = motion.SETTLED_LINEAR_SPEED
 SETTLED_ANGULAR_SPEED = motion.SETTLED_ANGULAR_SPEED
 SETTLED_CONFIRMATION_CYCLES = 5
+DIRECTIONAL_AUDIT_FORWARD_SAMPLES = (0.0, 0.15, 0.30, 0.45)
+DIRECTIONAL_AUDIT_LINEAR_VELOCITY = 0.05
+DIRECTIONAL_AUDIT_ANGULAR_VELOCITY = 0.30
+DIRECTIONAL_COEFFICIENT_TOLERANCE = 1e-8
 
 
 @dataclass(frozen=True)
@@ -207,6 +218,15 @@ def print_live_status(
 ) -> None:
     """Print one compact fixed-field MPC status line."""
 
+    angular_coefficient = backup_result.angular_velocity_coefficient
+    if angular_coefficient < -DIRECTIONAL_COEFFICIENT_TOLERANCE:
+        field_turn = "R"
+    elif angular_coefficient > DIRECTIONAL_COEFFICIENT_TOLERANCE:
+        field_turn = "L"
+    else:
+        field_turn = "N"
+    predicted_y = mpc_result.predicted_chassis_states[:, 1]
+
     print(
         f"  cycle={control_cycle:<3} "
         f"pose=({robot_pose.x:.3f},{robot_pose.y:.3f},"
@@ -223,10 +243,116 @@ def print_live_status(
         f"{backup_result.safe_angular_velocity:.3f}) "
         f"hmin={float(np.min(mpc_result.predicted_safety_values)):.3f} "
         f"margin={float(np.min(mpc_result.dtcbf_margins)):.2e} "
+        f"field={field_turn}[{angular_coefficient:.2e}] "
+        f"y[min,max,end]=({float(np.min(predicted_y)):.3f},"
+        f"{float(np.max(predicted_y)):.3f},{float(predicted_y[-1]):.3f}) "
         f"solve={solve_wall_seconds:.3f}s "
         f"warm={warm_start_used} "
         f"status={mpc_result.status}"
     )
+
+
+def print_directional_field_audit(
+    *,
+    pipeline_frame: motion.MotionPipelineFrame,
+    mpc: SafeSAGEUnicycleMPC,
+    backup_filter: SafeSAGEUnicycleCBFFilter,
+    passing_side: PassingSide,
+) -> None:
+    """Print field-side diagnostics without issuing a wheel command."""
+
+    configuration_space = pipeline_frame.pipeline.configuration_space
+    h_full = pipeline_frame.pipeline.h_full
+    guidance_fields = pipeline_frame.pipeline.guidance_fields
+    lookahead_distance = backup_filter.config.lookahead_distance
+
+    def evaluate_chassis_state(
+        chassis_state: np.ndarray,
+    ) -> SafeSAGEUnicycleCBFResult:
+        query_state = lookahead_state(
+            chassis_state,
+            lookahead_distance=lookahead_distance,
+        )
+        return backup_filter.filter_command(
+            0.0,
+            0.0,
+            query_position_grid_xy=query_state[:2],
+            query_yaw_radians=float(query_state[2]),
+            configuration_space=configuration_space,
+            h_full=h_full,
+            guidance_fields=guidance_fields,
+            temporal_safety_derivative=(
+                stationary.STATIC_TEMPORAL_SAFETY_DERIVATIVE
+            ),
+        )
+
+    def preference(coefficient: float) -> str:
+        if coefficient < -DIRECTIONAL_COEFFICIENT_TOLERANCE:
+            return "RIGHT"
+        if coefficient > DIRECTIONAL_COEFFICIENT_TOLERANCE:
+            return "LEFT"
+        return "NEUTRAL"
+
+    print("\n" + "=" * 78)
+    print("SAFE-SAGE FIXED-FIELD DIRECTIONAL AUDIT - STATIONARY")
+    print("=" * 78)
+    expected_sign = "negative" if passing_side is PassingSide.RIGHT else "positive"
+    print(
+        f"Expected passing side: {passing_side.value.upper()} "
+        f"({expected_sign} field-frame Y at the initial heading)"
+    )
+    print("No command in this audit reaches the wheels.")
+    print("\nCenterline field samples:")
+    print("  chassis_x      h       guidance_xy          a_v       a_omega  preference")
+    for forward_position in DIRECTIONAL_AUDIT_FORWARD_SAMPLES:
+        state = np.array([forward_position, 0.0, 0.0], dtype=np.float64)
+        result = evaluate_chassis_state(state)
+        guidance = result.sampled_guidance_grid_xy
+        print(
+            f"  {forward_position:8.3f}  "
+            f"{result.sampled_safety_value:7.4f}  "
+            f"({guidance[0]:8.4f},{guidance[1]:8.4f})  "
+            f"{result.linear_velocity_coefficient:9.4f}  "
+            f"{result.angular_velocity_coefficient:9.4f}  "
+            f"{preference(result.angular_velocity_coefficient):>10}"
+            + (
+                "  [UNSAFE CELL]"
+                if result.query_on_unsafe_boundary
+                else ""
+            )
+        )
+
+    initial_state = np.zeros(3, dtype=np.float64)
+    initial_result = evaluate_chassis_state(initial_state)
+    print("\nOne-step exact DTCBF probes from the initial state:")
+    print("  probe       command(v,omega)      next_h      margin    unsafe")
+    for label, angular_velocity in (
+        ("RIGHT", -DIRECTIONAL_AUDIT_ANGULAR_VELOCITY),
+        ("STRAIGHT", 0.0),
+        ("LEFT", DIRECTIONAL_AUDIT_ANGULAR_VELOCITY),
+    ):
+        command = np.array(
+            [DIRECTIONAL_AUDIT_LINEAR_VELOCITY, angular_velocity],
+            dtype=np.float64,
+        )
+        next_state = integrate_unicycle_euler(
+            initial_state,
+            command,
+            time_step=mpc.config.time_step,
+        )
+        next_result = evaluate_chassis_state(next_state)
+        margin = (
+            next_result.sampled_safety_value
+            - mpc.config.dtcbf_decay * initial_result.sampled_safety_value
+        )
+        print(
+            f"  {label:<8}  "
+            f"({command[0]:6.3f},{command[1]:7.3f})  "
+            f"{next_result.sampled_safety_value:10.5f}  "
+            f"{margin:9.3e}  "
+            f"{str(next_result.constraint.unsafe_reason):>8}"
+        )
+    print("=" * 78)
 
 
 def run_fixed_field_motion_trial(
@@ -236,6 +362,7 @@ def run_fixed_field_motion_trial(
     pipeline_frame: motion.MotionPipelineFrame,
     mpc: SafeSAGEUnicycleMPC,
     backup_filter: SafeSAGEUnicycleCBFFilter,
+    passing_side: PassingSide,
 ) -> FixedFieldMotionResult:
     """Execute receding-horizon MPC against one frozen Safe-SAGE field."""
 
@@ -279,7 +406,8 @@ def run_fixed_field_motion_trial(
     print("  Field frame:                    fixed at the initial robot pose")
     print("  Chassis state:                  (x, y, psi)")
     print("  Executable command:             (v, omega)")
-    print("  Nominal MPC horizon:            closed-loop waypoint rollout")
+    print("  Nominal MPC horizon:            repeated current waypoint command")
+    print(f"  Persistent passing side:        {passing_side.value}")
     print(f"  MPC control interval:           {MPC_CONTROL_INTERVAL_SECONDS:.3f} s")
     print(f"  Physics steps per command:      {CONTROL_PHYSICS_STEPS}")
     print(f"  Maximum simulated duration:     {MAXIMUM_MOTION_SECONDS:.1f} s")
@@ -317,15 +445,10 @@ def run_fixed_field_motion_trial(
             [field_position[0], field_position[1], field_yaw],
             dtype=np.float64,
         )
-        nominal_horizon = waypoint_controller.predict_commands(
-            robot_pose,
-            horizon_steps=mpc.config.horizon_steps,
-            time_step=mpc.config.time_step,
-        )
-        nominal_sequence = np.ascontiguousarray(
+        nominal_command_vector = np.array(
             [
-                (command.linear_velocity, command.angular_velocity)
-                for command in nominal_horizon
+                nominal_command.linear_velocity,
+                nominal_command.angular_velocity,
             ],
             dtype=np.float64,
         )
@@ -334,12 +457,15 @@ def run_fixed_field_motion_trial(
         solve_start = time.perf_counter()
         mpc_result = mpc.plan(
             chassis_state,
-            nominal_sequence,
+            nominal_command_vector,
             initial_command_guess=warm_start_commands,
             configuration_space=(pipeline_frame.pipeline.configuration_space),
             h_full=pipeline_frame.pipeline.h_full,
             guidance_fields=pipeline_frame.pipeline.guidance_fields,
             temporal_safety_derivative=(stationary.STATIC_TEMPORAL_SAFETY_DERIVATIVE),
+            preferred_lateral_direction_grid_y=(
+                -1.0 if passing_side is PassingSide.RIGHT else 1.0
+            ),
         )
         solve_wall_seconds = time.perf_counter() - solve_start
         solve_wall_times.append(solve_wall_seconds)
@@ -363,8 +489,9 @@ def run_fixed_field_motion_trial(
         # command that was just selected and append a stationary terminal
         # command.  A new forward nominal command at the tail can invalidate
         # an otherwise safe shifted horizon and force a nonlinear rescue on
-        # every cycle.  The nominal sequence remains the optimization
-        # objective; this sequence is only the numerical seed.
+        # every cycle.  The current nominal waypoint command is repeated by
+        # the MPC as its paper-style horizon objective; this sequence is only
+        # the numerical seed.
         warm_start_commands = np.ascontiguousarray(
             np.vstack(
                 (
@@ -863,12 +990,22 @@ def main() -> None:
     )
 
     mpc, backup_filter = create_controller_stack(robot_controller)
+    passing_side = guidance_policy.parameters_for(
+        stationary.SEMANTIC_CLASS
+    ).passing_side
+    print_directional_field_audit(
+        pipeline_frame=pipeline_frame,
+        mpc=mpc,
+        backup_filter=backup_filter,
+        passing_side=passing_side,
+    )
     result = run_fixed_field_motion_trial(
         stage=loaded_scene.stage,
         robot_controller=robot_controller,
         pipeline_frame=pipeline_frame,
         mpc=mpc,
         backup_filter=backup_filter,
+        passing_side=passing_side,
     )
     print_motion_result(result)
 

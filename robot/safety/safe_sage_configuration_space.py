@@ -313,14 +313,20 @@ def _footprint_cell_offsets(
     yaw_radians: float,
     resolution: float,
 ) -> tuple[tuple[int, int], ...]:
-    """Conservatively rasterize reflected footprint cells for one yaw."""
+    """Conservatively rasterize reflected footprint cells for one yaw.
+
+    Both the measured obstacle point and the continuous robot query may lie
+    anywhere inside their respective grid cells.  Their relative positional
+    uncertainty is therefore one full cell half-extent (two half cells) on
+    each planar axis.
+    """
 
     maximum_radius = _maximum_footprint_radius(footprint)
-    cell_half_extent = 0.5 * resolution
-    cell_half_diagonal = math.sqrt(2.0) * cell_half_extent
+    relative_cell_half_extent = resolution
+    relative_cell_half_diagonal = math.sqrt(2.0) * relative_cell_half_extent
     maximum_offset = int(
         math.ceil(
-            (maximum_radius + cell_half_diagonal) / resolution
+            (maximum_radius + relative_cell_half_diagonal) / resolution
         )
     )
     offsets: list[tuple[int, int]] = []
@@ -342,7 +348,7 @@ def _footprint_cell_offsets(
                     obstacle_in_footprint_y,
                 ),
                 yaw_radians=yaw_radians,
-                cell_half_extent=cell_half_extent,
+                cell_half_extent=relative_cell_half_extent,
             ):
                 offsets.append((row_offset, column_offset))
 
@@ -377,7 +383,7 @@ def _footprint_overlaps_grid_cell(
     yaw_radians: float,
     cell_half_extent: float,
 ) -> bool:
-    """Return whether an axis-aligned grid cell intersects the footprint."""
+    """Test the footprint against combined obstacle/query-cell uncertainty."""
 
     center_x, center_y = cell_center_grid_xy
     tolerance = 1e-12
@@ -417,10 +423,9 @@ def _footprint_overlaps_grid_cell(
     absolute_cosine = abs(cosine)
     absolute_sine = abs(sine)
 
-    # Separating-axis test for an oriented rectangle and one axis-aligned
-    # square. Marking every intersecting cell makes the discrete collision
-    # set conservative without folding grid resolution into the policy
-    # safety margin.
+    # Separating-axis test for an oriented rectangle and the Minkowski sum of
+    # the obstacle and query cells.  This keeps discretization uncertainty
+    # separate from the user-selected physical safety margin.
     grid_x_limit = (
         cell_half_extent
         + rectangle_half_x * absolute_cosine
