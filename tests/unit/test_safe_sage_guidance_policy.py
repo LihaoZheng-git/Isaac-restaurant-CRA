@@ -155,6 +155,22 @@ def test_repository_configuration_loads() -> None:
     )
 
 
+def test_paper_baseline_configuration_loads_fixed_flux_values() -> None:
+    policy = SafeSAGEGuidancePolicy.from_json(
+        PROJECT_ROOT / "configs" / "safe_sage_paper_baseline.json"
+    )
+
+    static_object = policy.parameters_for("object")
+    person = policy.parameters_for("person")
+
+    assert static_object.boundary_flux == pytest.approx(-0.5)
+    assert person.boundary_flux == pytest.approx(-1.7)
+    assert static_object.tangential_strength == pytest.approx(1.25)
+    assert person.tangential_strength == pytest.approx(1.25)
+    assert static_object.passing_side is PassingSide.RIGHT
+    assert person.passing_side is PassingSide.RIGHT
+
+
 def test_lookup_normalizes_class_name(tmp_path) -> None:
     policy = SafeSAGEGuidancePolicy.from_json(
         write_config(tmp_path, default_config())
