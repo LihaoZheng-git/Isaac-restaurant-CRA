@@ -376,6 +376,7 @@ def test_exact_feasibility_recovery_survives_solver_failure(
     assert result.success, result.status
     assert not result.fallback_active
     assert result.status in {
+        "nominal_guidance_seed_feasibility_recovered",
         "guidance_steered_feasibility_recovered",
         "guidance_rotation_feasibility_recovered",
         "translation_scaled_feasibility_recovered",
@@ -407,6 +408,7 @@ def test_last_resort_recovery_preserves_guidance_passing_side() -> None:
     candidate, status = mpc._recover_feasible_command_horizon(
         reference,
         initial_state=initial_state,
+        nominal_sequence=nominal_sequence,
         configuration_space=configuration_space,
         h_full=h_full,
         guidance_fields=guidance_fields,
@@ -415,7 +417,7 @@ def test_last_resort_recovery_preserves_guidance_passing_side() -> None:
     )
 
     assert candidate is not None
-    assert status == "guidance_steered_feasibility_recovered"
+    assert status == "nominal_guidance_seed_feasibility_recovered"
     assert candidate.commands[0, 1] < 0.0
     assert np.max(candidate.commands[:, 0]) > 0.0
     assert candidate.chassis_states[-1, 1] < 0.0
@@ -445,6 +447,7 @@ def test_recovery_does_not_confuse_local_turn_with_passing_side() -> None:
     candidate, status = mpc._recover_feasible_command_horizon(
         reference,
         initial_state=initial_state,
+        nominal_sequence=nominal_sequence,
         configuration_space=configuration_space,
         h_full=h_full,
         guidance_fields=guidance_fields,
@@ -453,7 +456,7 @@ def test_recovery_does_not_confuse_local_turn_with_passing_side() -> None:
     )
 
     assert candidate is not None
-    assert status == "guidance_steered_feasibility_recovered"
+    assert status == "nominal_guidance_seed_feasibility_recovered"
     assert candidate.chassis_states[-1, 1] < initial_state[1]
     assert mpc._trajectory_is_safe(candidate)
 

@@ -637,6 +637,7 @@ class SafeSAGEUnicycleMPC:
                         self._recover_feasible_command_horizon(
                             reference,
                             initial_state=initial_state,
+                            nominal_sequence=nominal_sequence,
                             configuration_space=configuration_space,
                             h_full=h_full,
                             guidance_fields=guidance_fields,
@@ -659,6 +660,22 @@ class SafeSAGEUnicycleMPC:
                         )
                     reference = recovery
                     feasibility_recovery_status = recovery_status
+                    (
+                        reference,
+                        improvement_steps,
+                        improvement_iterations,
+                    ) = self._improve_safe_warm_start(
+                        reference,
+                        initial_state=initial_state,
+                        nominal_sequence=nominal_sequence,
+                        target_chassis_states=target_states,
+                        configuration_space=configuration_space,
+                        h_full=h_full,
+                        guidance_fields=guidance_fields,
+                        temporal_safety_derivative=temporal_derivative,
+                    )
+                    completed_sqp_iterations += improvement_steps
+                    total_qp_iterations += improvement_iterations
                 else:
                     reference = rescue
                     nonlinear_rescue_used = True
@@ -832,6 +849,7 @@ class SafeSAGEUnicycleMPC:
         reference: _TrajectoryEvaluation,
         *,
         initial_state: np.ndarray,
+        nominal_sequence: np.ndarray,
         configuration_space: SafeSAGEConfigurationSpaceResult,
         h_full: SafeSAGEHFullResult,
         guidance_fields: Sequence[LaplaceGuidanceFieldResult],
@@ -841,11 +859,12 @@ class SafeSAGEUnicycleMPC:
         """Recover exact feasibility without discarding Safe-SAGE direction.
 
         This deterministic last-resort path is used only after both sparse
-        SQP and the exact nonlinear rescue fail. A failed numerical iterate
-        is not a trustworthy source of passing direction, so first construct
-        short steering seeds from the current Safe-SAGE constraint normal.
-        Only if no guidance-steered seed is exactly safe do we reduce
-        translation on the original iterate and finally try a full stop.
+        SQP and the exact nonlinear rescue fail. A failed numerical iterate is
+        not a trustworthy motion reference, so guidance-steered candidates are
+        constructed from the obstacle-unaware nominal command sequence. The
+        exact-safe candidate with the smallest nominal tracking objective is
+        selected. Only if no such candidate exists do we reduce translation on
+        the failed iterate and finally try a full stop.
         Every returned candidate passes exact DTCBF evaluation.
         """
 
@@ -879,9 +898,23 @@ class SafeSAGEUnicycleMPC:
                 local_steering_direction,
                 -local_steering_direction,
             )
-            steering_step_count = min(
-                self.config.horizon_steps,
-                max(1, math.ceil(0.8 / self.config.time_step)),
+            best_candidate: _TrajectoryEvaluation | None = None
+            best_objective = math.inf
+            maximum_steering_steps = min(
+                self.config.horizon_steps, 15
+            )
+            translation_profiles = (
+                (1.0, 1.0),
+                (1.0, 0.75),
+                (1.0, 0.5),
+                (1.0, 0.25),
+                (1.0, 0.0),
+                (0.75, 0.75),
+                (0.75, 0.5),
+                (0.75, 0.25),
+                (0.50, 0.50),
+                (0.50, 0.25),
+                (0.25, 0.25),
             )
             for steering_direction in steering_directions:
                 angular_limit = (
@@ -891,62 +924,70 @@ class SafeSAGEUnicycleMPC:
                 )
                 if angular_limit <= 0.0:
                     continue
-                angular_fractions = (1.0, 0.75, 0.5, 0.25)
-                moving_linear_scales = (
-                    0.875,
-                    0.75,
-                    0.625,
-                    0.5,
-                    0.375,
-                    0.25,
-                    0.125,
-                )
-                for angular_fraction in angular_fractions:
-                    steering_rate = (
-                        steering_direction
-                        * angular_fraction
-                        * angular_limit
-                    )
-                    for linear_scale in moving_linear_scales:
-                        commands = np.array(
-                            reference.commands,
-                            dtype=np.float64,
-                            copy=True,
+                for steering_step_count in range(
+                    1, maximum_steering_steps + 1
+                ):
+                    for angular_fraction in (1.0, 0.75, 0.5, 0.25):
+                        steering_rate = (
+                            steering_direction
+                            * angular_fraction
+                            * angular_limit
                         )
-                        # Establish heading without simultaneously advancing
-                        # into the obstacle, then translate along the selected
-                        # side. Uniformly scaling translation can recover a
-                        # pure rotation that is safe but contains no bypass
-                        # trajectory, which gives the next MPC cycle a
-                        # deadlocked warm start.
-                        commands[:, 0] *= linear_scale
-                        commands[:steering_step_count, 0] = 0.0
-                        commands[:, 1] = 0.0
-                        commands[:steering_step_count, 1] = steering_rate
-                        candidate = self._evaluate_trajectory(
-                            initial_state,
-                            commands,
-                            configuration_space=configuration_space,
-                            h_full=h_full,
-                            guidance_fields=guidance_fields,
-                            temporal_safety_derivative=(
-                                temporal_safety_derivative
-                            ),
-                        )
-                        if (
-                            candidate is not None
-                            and self._trajectory_is_safe(candidate)
-                            and has_preferred_lateral_progress(candidate)
-                        ):
-                            return (
-                                candidate,
-                                "guidance_steered_feasibility_recovered",
+                        for (
+                            linear_scale,
+                            steering_linear_fraction,
+                        ) in translation_profiles:
+                            commands = np.array(
+                                nominal_sequence,
+                                dtype=np.float64,
+                                copy=True,
                             )
+                            commands[:, 0] *= linear_scale
+                            commands[:steering_step_count, 0] = (
+                                nominal_sequence[:steering_step_count, 0]
+                                * steering_linear_fraction
+                            )
+                            commands[:steering_step_count, 1] = steering_rate
+                            candidate = self._evaluate_trajectory(
+                                initial_state,
+                                commands,
+                                configuration_space=configuration_space,
+                                h_full=h_full,
+                                guidance_fields=guidance_fields,
+                                temporal_safety_derivative=(
+                                    temporal_safety_derivative
+                                ),
+                            )
+                            if (
+                                candidate is None
+                                or not self._trajectory_is_safe(candidate)
+                                or not has_preferred_lateral_progress(candidate)
+                            ):
+                                continue
+                            objective = self._objective_value(
+                                candidate.commands,
+                                nominal_sequence,
+                                chassis_states=candidate.chassis_states,
+                                target_chassis_states=None,
+                            )
+                            if objective < best_objective:
+                                best_candidate = candidate
+                                best_objective = objective
+
+            if best_candidate is not None:
+                return (
+                    best_candidate,
+                    "nominal_guidance_seed_feasibility_recovered",
+                )
 
             # A pure rotation is safe in many scenes but is not a bypass
             # plan. Consider it only after moving candidates in both angular
             # directions fail. Its direction remains the local constraint's
             # best instantaneous correction.
+            steering_step_count = min(
+                self.config.horizon_steps,
+                max(1, math.ceil(0.8 / self.config.time_step)),
+            )
             steering_direction = local_steering_direction
             angular_limit = (
                 self.config.maximum_angular_velocity

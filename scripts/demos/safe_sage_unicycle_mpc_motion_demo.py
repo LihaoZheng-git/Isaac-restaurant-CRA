@@ -15,12 +15,13 @@ Stage A - controlled fixed-field construction:
 
 Stage B - receding-horizon wheel motion:
 
-1. Hold the current waypoint command as the nominal MPC horizon reference.
-2. Shift the preceding safe horizon and append a stationary terminal command.
-3. Revalidate and solve the Safe-SAGE unicycle MPC in the fixed field.
-4. Pass the first MPC command through the analytical unicycle CBF backup.
-5. Execute only that backed-up ``(v, omega)`` command for one MPC interval.
-6. Repeat until the robot clears the proxy or a fail-closed condition occurs.
+1. Roll out the obstacle-unaware waypoint feedback policy over the MPC horizon.
+2. Keep that nominal policy continuous during safety-induced heading changes.
+3. Shift the preceding safe horizon and append a stationary terminal command.
+4. Revalidate and solve the Safe-SAGE unicycle MPC in the fixed field.
+5. Pass the first MPC command through the analytical unicycle CBF backup.
+6. Execute only that backed-up ``(v, omega)`` command for one MPC interval.
+7. Repeat until the robot clears the proxy or a fail-closed condition occurs.
 
 The known proxy pose is used only by an independent clearance monitor and
 the final validation report. It is never supplied to perception, MPC, or the
@@ -68,7 +69,13 @@ from robot.control.unicycle_model import (
     integrate_unicycle_euler,
     lookahead_state,
 )
-from robot.navigation.waypoint_controller import RobotPose2D, WaypointCommand
+from robot.navigation.waypoint_controller import (
+    RobotPose2D,
+    Waypoint,
+    WaypointCommand,
+    WaypointController,
+    WaypointControllerConfig,
+)
 from robot.runtime.simulation_loop import (
     advance_playing_steps,
     wait_until_playing,
@@ -355,6 +362,29 @@ def print_directional_field_audit(
     print("=" * 78)
 
 
+def create_motion_waypoint_controller() -> WaypointController:
+    """Create a continuous obstacle-unaware go-to-goal policy.
+
+    The generic waypoint controller's rotate-only mode is useful for ordinary
+    navigation, but it can remove all nominal forward progress after a safety
+    intervention. This motion stage instead uses the same goal and gains while
+    retaining the continuous cosine-aligned command. It still has no obstacle,
+    semantic, field, or passing-side input.
+    """
+
+    return WaypointController(
+        [Waypoint(*stationary.ROBOT_GOAL_WORLD[:2])],
+        config=WaypointControllerConfig(
+            maximum_linear_velocity=0.20,
+            maximum_angular_velocity=0.60,
+            linear_gain=0.80,
+            angular_gain=1.50,
+            position_tolerance=0.10,
+            rotate_in_place_threshold_radians=math.pi,
+        ),
+    )
+
+
 def run_fixed_field_motion_trial(
     *,
     stage: Usd.Stage,
@@ -368,7 +398,7 @@ def run_fixed_field_motion_trial(
 
     initial_pose = stationary.read_robot_pose(stage)
     robot_pose = initial_pose
-    waypoint_controller = stationary.create_waypoint_controller()
+    waypoint_controller = create_motion_waypoint_controller()
     clearance_threshold = motion.proxy_clearance_forward_threshold(initial_pose)
 
     completed_control_cycles = 0
@@ -406,7 +436,7 @@ def run_fixed_field_motion_trial(
     print("  Field frame:                    fixed at the initial robot pose")
     print("  Chassis state:                  (x, y, psi)")
     print("  Executable command:             (v, omega)")
-    print("  Nominal MPC horizon:            repeated current waypoint command")
+    print("  Nominal MPC horizon:            waypoint feedback rollout")
     print(f"  Persistent passing side:        {passing_side.value}")
     print(f"  MPC control interval:           {MPC_CONTROL_INTERVAL_SECONDS:.3f} s")
     print(f"  Physics steps per command:      {CONTROL_PHYSICS_STEPS}")
@@ -432,6 +462,18 @@ def run_fixed_field_motion_trial(
 
         robot_pose = stationary.read_robot_pose(stage)
         nominal_command = waypoint_controller.compute_command(robot_pose)
+        predicted_nominal_commands = waypoint_controller.predict_commands(
+            robot_pose,
+            horizon_steps=mpc.config.horizon_steps,
+            time_step=mpc.config.time_step,
+        )
+        nominal_command_sequence = np.array(
+            [
+                [command.linear_velocity, command.angular_velocity]
+                for command in predicted_nominal_commands
+            ],
+            dtype=np.float64,
+        )
         if nominal_command.route_complete:
             route_complete = True
             termination_reason = "The nominal waypoint route completed."
@@ -445,19 +487,11 @@ def run_fixed_field_motion_trial(
             [field_position[0], field_position[1], field_yaw],
             dtype=np.float64,
         )
-        nominal_command_vector = np.array(
-            [
-                nominal_command.linear_velocity,
-                nominal_command.angular_velocity,
-            ],
-            dtype=np.float64,
-        )
-
         warm_start_used = warm_start_commands is not None
         solve_start = time.perf_counter()
         mpc_result = mpc.plan(
             chassis_state,
-            nominal_command_vector,
+            nominal_command_sequence,
             initial_command_guess=warm_start_commands,
             configuration_space=(pipeline_frame.pipeline.configuration_space),
             h_full=pipeline_frame.pipeline.h_full,
@@ -487,11 +521,8 @@ def run_fixed_field_motion_trial(
         # Receding-horizon MPC should continue from the preceding safe plan,
         # revalidated at the newly measured chassis state.  Shift away the
         # command that was just selected and append a stationary terminal
-        # command.  A new forward nominal command at the tail can invalidate
-        # an otherwise safe shifted horizon and force a nonlinear rescue on
-        # every cycle.  The current nominal waypoint command is repeated by
-        # the MPC as its paper-style horizon objective; this sequence is only
-        # the numerical seed.
+        # command. The obstacle-unaware waypoint feedback rollout remains the
+        # MPC objective; this shifted safe sequence is only its numerical seed.
         warm_start_commands = np.ascontiguousarray(
             np.vstack(
                 (
