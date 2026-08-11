@@ -20,6 +20,11 @@ SQP prematurely; they do not relax the exact nonlinear DTCBF acceptance
 check applied to every returned trajectory.  If OSQP reaches its iteration
 limit, a bounded SLSQP rescue uses analytical unicycle sensitivities and
 sampled ``h_full`` gradients to restore the same exact nonlinear constraints.
+If both numerical solvers fail, a deterministic last-resort recovery reduces
+translation while preserving the planned turn, then verifies a stationary
+horizon.  A recovery is returned only when the exact DTCBF check passes.
+Final acceptance also rejects every predicted configuration-space cell marked
+unsafe; interpolated positive ``h_full`` values cannot override that mask.
 
 The module has no Isaac Sim dependency.
 """
@@ -37,6 +42,7 @@ from scipy.optimize import minimize
 from robot.control.unicycle_model import (
     integrate_unicycle_euler,
     lookahead_state,
+    wrap_to_pi,
 )
 from robot.safety.laplace_guidance_field import (
     LaplaceGuidanceFieldResult,
@@ -85,6 +91,17 @@ def _finite_vector(
     return np.ascontiguousarray(array, dtype=np.float64)
 
 
+def _optional_direction(value: object, *, name: str) -> float | None:
+    """Return a normalized optional signed direction."""
+
+    if value is None:
+        return None
+    direction = _finite_real(value, name=name)
+    if direction == 0.0:
+        raise ValueError(f"{name} must be nonzero when supplied.")
+    return math.copysign(1.0, direction)
+
+
 def _frozen_array(value: np.ndarray) -> np.ndarray:
     """Return an owned, contiguous, read-only float64 array."""
 
@@ -108,6 +125,8 @@ class SafeSAGEUnicycleMPCConfig:
     linear_velocity_weight: float = 1.0
     angular_velocity_weight: float = 0.10
     command_smoothness_weight: float = 0.01
+    position_tracking_weight: float = 2.0
+    yaw_tracking_weight: float = 0.10
     maximum_sqp_iterations: int = 6
     maximum_restoration_iterations: int = 12
     maximum_nonlinear_rescue_iterations: int = 300
@@ -178,6 +197,11 @@ class SafeSAGEUnicycleMPCConfig:
                     self.command_smoothness_weight,
                 ),
                 (
+                    "position_tracking_weight",
+                    self.position_tracking_weight,
+                ),
+                ("yaw_tracking_weight", self.yaw_tracking_weight),
+                (
                     "linear_velocity_trust_region",
                     self.linear_velocity_trust_region,
                 ),
@@ -238,8 +262,13 @@ class SafeSAGEUnicycleMPCConfig:
         ):
             if real_values[name] <= 0.0:
                 raise ValueError(f"{name} must be greater than zero.")
-        if real_values["command_smoothness_weight"] < 0.0:
-            raise ValueError("command_smoothness_weight cannot be negative.")
+        for name in (
+            "command_smoothness_weight",
+            "position_tracking_weight",
+            "yaw_tracking_weight",
+        ):
+            if real_values[name] < 0.0:
+                raise ValueError(f"{name} cannot be negative.")
         if real_values["intervention_tolerance"] < 0.0:
             raise ValueError("intervention_tolerance cannot be negative.")
         if not 0.0 < real_values["line_search_contraction"] < 1.0:
@@ -312,6 +341,7 @@ class _ReferenceSamples:
     guidance_normals: np.ndarray
     exact_gradients: np.ndarray
     scaled_temporal_derivatives: np.ndarray
+    unsafe_configuration_mask: np.ndarray
 
 
 @dataclass(frozen=True)
@@ -357,6 +387,11 @@ class SafeSAGEUnicycleMPC:
         initial_chassis_state_grid: Sequence[float] | np.ndarray,
         nominal_command: Sequence[float] | np.ndarray,
         *,
+        initial_command_guess: Sequence[float] | np.ndarray | None = None,
+        target_chassis_states_grid: (
+            Sequence[Sequence[float]] | np.ndarray | None
+        ) = None,
+        preferred_lateral_direction_grid_y: float | None = None,
         configuration_space: SafeSAGEConfigurationSpaceResult,
         h_full: SafeSAGEHFullResult,
         guidance_fields: Sequence[LaplaceGuidanceFieldResult],
@@ -367,6 +402,14 @@ class SafeSAGEUnicycleMPC:
         ``initial_chassis_state_grid`` is ``(x, y, yaw)`` in the fixed local
         field frame. ``nominal_command`` may be one ``(v, omega)`` command or
         an explicit ``(horizon_steps, 2)`` reference sequence.
+        ``initial_command_guess`` optionally supplies a distinct warm-start
+        sequence without changing the command-tracking objective.
+        ``target_chassis_states_grid`` optionally supplies an
+        ``(horizon_steps + 1, 3)`` position-and-yaw path. When supplied, the
+        MPC tracks that path in addition to the nominal command sequence.
+        ``preferred_lateral_direction_grid_y`` optionally preserves a
+        semantic passing-side convention during last-resort numerical
+        recovery. It does not add a cost or constraint to ordinary MPC.
         """
 
         initial_state = _finite_vector(
@@ -378,8 +421,29 @@ class SafeSAGEUnicycleMPC:
             temporal_safety_derivative,
             name="temporal_safety_derivative",
         )
+        preferred_lateral_direction = _optional_direction(
+            preferred_lateral_direction_grid_y,
+            name="preferred_lateral_direction_grid_y",
+        )
         nominal_sequence = self._nominal_sequence(nominal_command)
-        reference_commands = self._clip_commands(nominal_sequence)
+        target_states = self._target_state_sequence(
+            target_chassis_states_grid
+        )
+        state_tracking_active = bool(
+            target_states is not None
+            and (
+                self.config.position_tracking_weight > 0.0
+                or self.config.yaw_tracking_weight > 0.0
+            )
+        )
+        if initial_command_guess is None:
+            reference_commands = nominal_sequence
+        else:
+            reference_commands = self._command_sequence(
+                initial_command_guess,
+                name="initial_command_guess",
+            )
+        reference_commands = self._clip_commands(reference_commands)
         reference = self._evaluate_trajectory(
             initial_state,
             reference_commands,
@@ -414,12 +478,62 @@ class SafeSAGEUnicycleMPC:
         completed_sqp_iterations = 0
         guidance_failure: str | None = None
 
+        if (
+            initial_command_guess is not None
+            and self._trajectory_is_safe(reference)
+            and not state_tracking_active
+        ):
+            nominal_reference = self._evaluate_trajectory(
+                initial_state,
+                self._clip_commands(nominal_sequence),
+                configuration_space=configuration_space,
+                h_full=h_full,
+                guidance_fields=guidance_fields,
+                temporal_safety_derivative=temporal_derivative,
+            )
+            if nominal_reference is not None and self._trajectory_is_safe(
+                nominal_reference
+            ):
+                reference = nominal_reference
+            else:
+                reference, improvement_steps, improvement_iterations = (
+                    self._improve_safe_warm_start(
+                        reference,
+                        initial_state=initial_state,
+                        nominal_sequence=nominal_sequence,
+                        target_chassis_states=target_states,
+                        configuration_space=configuration_space,
+                        h_full=h_full,
+                        guidance_fields=guidance_fields,
+                        temporal_safety_derivative=temporal_derivative,
+                    )
+                )
+                completed_sqp_iterations += improvement_steps
+                total_qp_iterations += improvement_iterations
+
+        if state_tracking_active and self._trajectory_is_safe(reference):
+            reference, improvement_steps, improvement_iterations = (
+                self._improve_safe_warm_start(
+                    reference,
+                    initial_state=initial_state,
+                    nominal_sequence=nominal_sequence,
+                    target_chassis_states=target_states,
+                    configuration_space=configuration_space,
+                    h_full=h_full,
+                    guidance_fields=guidance_fields,
+                    temporal_safety_derivative=temporal_derivative,
+                )
+            )
+            completed_sqp_iterations += improvement_steps
+            total_qp_iterations += improvement_iterations
+
         if not self._trajectory_is_safe(reference):
             for sqp_index in range(self.config.maximum_sqp_iterations):
                 completed_sqp_iterations = sqp_index + 1
                 solution = self._solve_sparse_subproblem(
                     reference,
                     nominal_sequence=nominal_sequence,
+                    target_chassis_states=target_states,
                     configuration_space=configuration_space,
                     derivative_mode="guidance",
                 )
@@ -451,6 +565,7 @@ class SafeSAGEUnicycleMPC:
 
         restoration_used = not self._trajectory_is_safe(reference)
         nonlinear_rescue_used = False
+        feasibility_recovery_status: str | None = None
         if restoration_used:
             restoration_success = False
             restoration_failure: str | None = None
@@ -459,6 +574,7 @@ class SafeSAGEUnicycleMPC:
                 solution = self._solve_sparse_subproblem(
                     reference,
                     nominal_sequence=nominal_sequence,
+                    target_chassis_states=target_states,
                     configuration_space=configuration_space,
                     derivative_mode="gradient",
                 )
@@ -508,6 +624,7 @@ class SafeSAGEUnicycleMPC:
                         reference,
                         initial_state=initial_state,
                         nominal_sequence=nominal_sequence,
+                        target_chassis_states=target_states,
                         configuration_space=configuration_space,
                         h_full=h_full,
                         guidance_fields=guidance_fields,
@@ -516,18 +633,52 @@ class SafeSAGEUnicycleMPC:
                 )
                 total_qp_iterations += rescue_iterations
                 if rescue is None:
-                    return self._fallback_result(
-                        initial_state,
-                        nominal_sequence,
-                        status=(
-                            "exact_nonlinear_rescue_failed: "
-                            f"{restoration_failure}; {rescue_status}"
-                        ),
-                        sqp_iterations=completed_sqp_iterations,
-                        solver_iterations=total_qp_iterations,
+                    recovery, recovery_status = (
+                        self._recover_feasible_command_horizon(
+                            reference,
+                            initial_state=initial_state,
+                            nominal_sequence=nominal_sequence,
+                            configuration_space=configuration_space,
+                            h_full=h_full,
+                            guidance_fields=guidance_fields,
+                            temporal_safety_derivative=temporal_derivative,
+                            preferred_lateral_direction_grid_y=(
+                                preferred_lateral_direction
+                            ),
+                        )
                     )
-                reference = rescue
-                nonlinear_rescue_used = True
+                    if recovery is None:
+                        return self._fallback_result(
+                            initial_state,
+                            nominal_sequence,
+                            status=(
+                                "exact_nonlinear_rescue_failed: "
+                                f"{restoration_failure}; {rescue_status}"
+                            ),
+                            sqp_iterations=completed_sqp_iterations,
+                            solver_iterations=total_qp_iterations,
+                        )
+                    reference = recovery
+                    feasibility_recovery_status = recovery_status
+                    (
+                        reference,
+                        improvement_steps,
+                        improvement_iterations,
+                    ) = self._improve_safe_warm_start(
+                        reference,
+                        initial_state=initial_state,
+                        nominal_sequence=nominal_sequence,
+                        target_chassis_states=target_states,
+                        configuration_space=configuration_space,
+                        h_full=h_full,
+                        guidance_fields=guidance_fields,
+                        temporal_safety_derivative=temporal_derivative,
+                    )
+                    completed_sqp_iterations += improvement_steps
+                    total_qp_iterations += improvement_iterations
+                else:
+                    reference = rescue
+                    nonlinear_rescue_used = True
 
         intervention = bool(
             np.any(
@@ -548,6 +699,8 @@ class SafeSAGEUnicycleMPC:
             objective_value=self._objective_value(
                 reference.commands,
                 nominal_sequence,
+                chassis_states=reference.chassis_states,
+                target_chassis_states=target_states,
             ),
             sqp_iteration_count=completed_sqp_iterations,
             solver_iteration_count=total_qp_iterations,
@@ -556,14 +709,360 @@ class SafeSAGEUnicycleMPC:
             fallback_active=False,
             restoration_used=restoration_used,
             status=(
-                "exact_nonlinear_feasibility_restored"
-                if nonlinear_rescue_used
-                else (
-                    "exact_dtcbf_feasibility_restored"
-                    if restoration_used
-                    else "converged"
+                feasibility_recovery_status
+                or (
+                    "exact_nonlinear_feasibility_restored"
+                    if nonlinear_rescue_used
+                    else (
+                        "exact_dtcbf_feasibility_restored"
+                        if restoration_used
+                        else "converged"
+                    )
                 )
             ),
+        )
+
+    def _improve_safe_warm_start(
+        self,
+        reference: _TrajectoryEvaluation,
+        *,
+        initial_state: np.ndarray,
+        nominal_sequence: np.ndarray,
+        target_chassis_states: np.ndarray | None = None,
+        configuration_space: SafeSAGEConfigurationSpaceResult,
+        h_full: SafeSAGEHFullResult,
+        guidance_fields: Sequence[LaplaceGuidanceFieldResult],
+        temporal_safety_derivative: float,
+    ) -> tuple[_TrajectoryEvaluation, int, int]:
+        """Move a feasible warm start toward the nominal command sequence.
+
+        A warm start is a numerical seed, not the MPC solution.  Each sparse
+        guidance SQP proposal is accepted only when an exact-DTCBF-safe
+        backtracking step also improves the nominal tracking objective.
+        """
+
+        current = reference
+        completed_steps = 0
+        solver_iterations = 0
+        for _ in range(self.config.maximum_sqp_iterations):
+            solution = self._solve_sparse_subproblem(
+                current,
+                nominal_sequence=nominal_sequence,
+                target_chassis_states=target_chassis_states,
+                configuration_space=configuration_space,
+                derivative_mode="guidance",
+            )
+            completed_steps += 1
+            solver_iterations += solution.iteration_count
+            if not solution.success:
+                break
+
+            candidate = self._evaluate_trajectory(
+                initial_state,
+                solution.commands,
+                configuration_space=configuration_space,
+                h_full=h_full,
+                guidance_fields=guidance_fields,
+                temporal_safety_derivative=temporal_safety_derivative,
+            )
+            improved = self._select_safe_objective_step(
+                current,
+                candidate,
+                initial_state=initial_state,
+                proposed_commands=solution.commands,
+                nominal_sequence=nominal_sequence,
+                target_chassis_states=target_chassis_states,
+                configuration_space=configuration_space,
+                h_full=h_full,
+                guidance_fields=guidance_fields,
+                temporal_safety_derivative=temporal_safety_derivative,
+            )
+            if improved is None:
+                break
+            command_change = float(
+                np.max(np.abs(improved.commands - current.commands))
+            )
+            current = improved
+            if command_change <= self.config.trajectory_tolerance:
+                break
+        return current, completed_steps, solver_iterations
+
+    def _select_safe_objective_step(
+        self,
+        reference: _TrajectoryEvaluation,
+        candidate: _TrajectoryEvaluation | None,
+        *,
+        initial_state: np.ndarray,
+        proposed_commands: np.ndarray,
+        nominal_sequence: np.ndarray,
+        target_chassis_states: np.ndarray | None = None,
+        configuration_space: SafeSAGEConfigurationSpaceResult,
+        h_full: SafeSAGEHFullResult,
+        guidance_fields: Sequence[LaplaceGuidanceFieldResult],
+        temporal_safety_derivative: float,
+    ) -> _TrajectoryEvaluation | None:
+        """Backtrack to an exact-safe step with lower nominal objective."""
+
+        reference_objective = self._objective_value(
+            reference.commands,
+            nominal_sequence,
+            chassis_states=reference.chassis_states,
+            target_chassis_states=target_chassis_states,
+        )
+
+        def is_acceptable(trial: _TrajectoryEvaluation | None) -> bool:
+            return bool(
+                trial is not None
+                and self._trajectory_is_safe(trial)
+                and self._objective_value(
+                    trial.commands,
+                    nominal_sequence,
+                    chassis_states=trial.chassis_states,
+                    target_chassis_states=target_chassis_states,
+                )
+                < reference_objective - 1e-12
+            )
+
+        if is_acceptable(candidate):
+            return candidate
+
+        step_size = 1.0
+        for _ in range(self.config.maximum_line_search_iterations):
+            step_size *= self.config.line_search_contraction
+            trial_commands = reference.commands + step_size * (
+                proposed_commands - reference.commands
+            )
+            trial = self._evaluate_trajectory(
+                initial_state,
+                trial_commands,
+                configuration_space=configuration_space,
+                h_full=h_full,
+                guidance_fields=guidance_fields,
+                temporal_safety_derivative=temporal_safety_derivative,
+            )
+            if is_acceptable(trial):
+                return trial
+        return None
+
+    def _recover_feasible_command_horizon(
+        self,
+        reference: _TrajectoryEvaluation,
+        *,
+        initial_state: np.ndarray,
+        nominal_sequence: np.ndarray,
+        configuration_space: SafeSAGEConfigurationSpaceResult,
+        h_full: SafeSAGEHFullResult,
+        guidance_fields: Sequence[LaplaceGuidanceFieldResult],
+        temporal_safety_derivative: float,
+        preferred_lateral_direction_grid_y: float | None = None,
+    ) -> tuple[_TrajectoryEvaluation | None, str | None]:
+        """Recover exact feasibility without discarding Safe-SAGE direction.
+
+        This deterministic last-resort path is used only after both sparse
+        SQP and the exact nonlinear rescue fail. A failed numerical iterate is
+        not a trustworthy motion reference, so guidance-steered candidates are
+        constructed from the obstacle-unaware nominal command sequence. The
+        exact-safe candidate with the smallest nominal tracking objective is
+        selected. Only if no such candidate exists do we reduce translation on
+        the failed iterate and finally try a full stop.
+        Every returned candidate passes exact DTCBF evaluation.
+        """
+
+        preferred_lateral_direction = _optional_direction(
+            preferred_lateral_direction_grid_y,
+            name="preferred_lateral_direction_grid_y",
+        )
+        initial_lateral_position = float(reference.chassis_states[0, 1])
+
+        def has_preferred_lateral_progress(
+            candidate: _TrajectoryEvaluation,
+        ) -> bool:
+            if preferred_lateral_direction is None:
+                return True
+            lateral_change = (
+                float(candidate.chassis_states[-1, 1])
+                - initial_lateral_position
+            )
+            return preferred_lateral_direction * lateral_change > 1e-3
+
+        angular_coefficient = self._initial_guidance_angular_coefficient(
+            reference
+        )
+        direction_tolerance = 1e-10
+        if abs(angular_coefficient) > direction_tolerance:
+            local_steering_direction = math.copysign(
+                1.0,
+                angular_coefficient,
+            )
+            steering_directions = (
+                local_steering_direction,
+                -local_steering_direction,
+            )
+            best_candidate: _TrajectoryEvaluation | None = None
+            best_objective = math.inf
+            maximum_steering_steps = min(
+                self.config.horizon_steps, 15
+            )
+            translation_profiles = (
+                (1.0, 1.0),
+                (1.0, 0.75),
+                (1.0, 0.5),
+                (1.0, 0.25),
+                (1.0, 0.0),
+                (0.75, 0.75),
+                (0.75, 0.5),
+                (0.75, 0.25),
+                (0.50, 0.50),
+                (0.50, 0.25),
+                (0.25, 0.25),
+            )
+            for steering_direction in steering_directions:
+                angular_limit = (
+                    self.config.maximum_angular_velocity
+                    if steering_direction > 0.0
+                    else abs(self.config.minimum_angular_velocity)
+                )
+                if angular_limit <= 0.0:
+                    continue
+                for steering_step_count in range(
+                    1, maximum_steering_steps + 1
+                ):
+                    for angular_fraction in (1.0, 0.75, 0.5, 0.25):
+                        steering_rate = (
+                            steering_direction
+                            * angular_fraction
+                            * angular_limit
+                        )
+                        for (
+                            linear_scale,
+                            steering_linear_fraction,
+                        ) in translation_profiles:
+                            commands = np.array(
+                                nominal_sequence,
+                                dtype=np.float64,
+                                copy=True,
+                            )
+                            commands[:, 0] *= linear_scale
+                            commands[:steering_step_count, 0] = (
+                                nominal_sequence[:steering_step_count, 0]
+                                * steering_linear_fraction
+                            )
+                            commands[:steering_step_count, 1] = steering_rate
+                            candidate = self._evaluate_trajectory(
+                                initial_state,
+                                commands,
+                                configuration_space=configuration_space,
+                                h_full=h_full,
+                                guidance_fields=guidance_fields,
+                                temporal_safety_derivative=(
+                                    temporal_safety_derivative
+                                ),
+                            )
+                            if (
+                                candidate is None
+                                or not self._trajectory_is_safe(candidate)
+                                or not has_preferred_lateral_progress(candidate)
+                            ):
+                                continue
+                            objective = self._objective_value(
+                                candidate.commands,
+                                nominal_sequence,
+                                chassis_states=candidate.chassis_states,
+                                target_chassis_states=None,
+                            )
+                            if objective < best_objective:
+                                best_candidate = candidate
+                                best_objective = objective
+
+            if best_candidate is not None:
+                return (
+                    best_candidate,
+                    "nominal_guidance_seed_feasibility_recovered",
+                )
+
+            # A pure rotation is safe in many scenes but is not a bypass
+            # plan. Consider it only after moving candidates in both angular
+            # directions fail. Its direction remains the local constraint's
+            # best instantaneous correction.
+            steering_step_count = min(
+                self.config.horizon_steps,
+                max(1, math.ceil(0.8 / self.config.time_step)),
+            )
+            steering_direction = local_steering_direction
+            angular_limit = (
+                self.config.maximum_angular_velocity
+                if steering_direction > 0.0
+                else abs(self.config.minimum_angular_velocity)
+            )
+            for angular_fraction in (1.0, 0.75, 0.5, 0.25):
+                commands = np.zeros_like(reference.commands)
+                commands[:steering_step_count, 1] = (
+                    steering_direction * angular_fraction * angular_limit
+                )
+                candidate = self._evaluate_trajectory(
+                    initial_state,
+                    commands,
+                    configuration_space=configuration_space,
+                    h_full=h_full,
+                    guidance_fields=guidance_fields,
+                    temporal_safety_derivative=temporal_safety_derivative,
+                )
+                if candidate is not None and self._trajectory_is_safe(
+                    candidate
+                ):
+                    return (
+                        candidate,
+                        "guidance_rotation_feasibility_recovered",
+                    )
+
+        for linear_scale in (0.875, 0.75, 0.625, 0.5, 0.375, 0.25, 0.125, 0.0):
+            commands = np.array(reference.commands, dtype=np.float64, copy=True)
+            commands[:, 0] *= linear_scale
+            candidate = self._evaluate_trajectory(
+                initial_state,
+                commands,
+                configuration_space=configuration_space,
+                h_full=h_full,
+                guidance_fields=guidance_fields,
+                temporal_safety_derivative=temporal_safety_derivative,
+            )
+            if candidate is not None and self._trajectory_is_safe(candidate):
+                return candidate, "translation_scaled_feasibility_recovered"
+
+        stationary_commands = np.zeros_like(reference.commands)
+        stationary = self._evaluate_trajectory(
+            initial_state,
+            stationary_commands,
+            configuration_space=configuration_space,
+            h_full=h_full,
+            guidance_fields=guidance_fields,
+            temporal_safety_derivative=temporal_safety_derivative,
+        )
+        if stationary is not None and self._trajectory_is_safe(stationary):
+            return stationary, "stationary_feasibility_recovered"
+        return None, None
+
+    def _initial_guidance_angular_coefficient(
+        self,
+        reference: _TrajectoryEvaluation,
+    ) -> float:
+        """Return the current Safe-SAGE coefficient multiplying ``omega``.
+
+        The look-ahead point velocity is
+        ``(v cos(yaw) - ell omega sin(yaw),
+        v sin(yaw) + ell omega cos(yaw))``. Pulling the sampled paper-space
+        constraint normal back through that interface gives the coefficient
+        below. Its sign is therefore the angular direction that increases
+        the Safe-SAGE constraint margin; it is not a demo-specific side flag.
+        """
+
+        yaw = float(reference.chassis_states[0, 2])
+        normal = reference.samples.guidance_normals[0]
+        distance = self.config.lookahead_distance
+        return float(
+            -distance * math.sin(yaw) * normal[0]
+            + distance * math.cos(yaw) * normal[1]
+            + normal[2]
         )
 
     def _solve_exact_nonlinear_rescue(
@@ -572,6 +1071,7 @@ class SafeSAGEUnicycleMPC:
         *,
         initial_state: np.ndarray,
         nominal_sequence: np.ndarray,
+        target_chassis_states: np.ndarray | None = None,
         configuration_space: SafeSAGEConfigurationSpaceResult,
         h_full: SafeSAGEHFullResult,
         guidance_fields: Sequence[LaplaceGuidanceFieldResult],
@@ -632,27 +1132,26 @@ class SafeSAGEUnicycleMPC:
                 horizon,
                 2,
             )
-            return self._objective_value(commands, nominal_sequence)
+            chassis_states = self._rollout(initial_state, commands)
+            return self._objective_value(
+                commands,
+                nominal_sequence,
+                chassis_states=chassis_states,
+                target_chassis_states=target_chassis_states,
+            )
 
         def objective_jacobian(flattened_commands: np.ndarray) -> np.ndarray:
             commands = np.asarray(flattened_commands, dtype=np.float64).reshape(
                 horizon,
                 2,
             )
-            weights = np.array(
-                [
-                    self.config.linear_velocity_weight,
-                    self.config.angular_velocity_weight,
-                ],
-                dtype=np.float64,
-            )
-            gradient = 2.0 * weights * (commands - nominal_sequence)
-            smoothness = self.config.command_smoothness_weight
-            if smoothness > 0.0:
-                differences = np.diff(commands, axis=0)
-                gradient[:-1] -= 2.0 * smoothness * differences
-                gradient[1:] += 2.0 * smoothness * differences
-            return gradient.reshape(-1)
+            chassis_states = self._rollout(initial_state, commands)
+            return self._objective_gradient(
+                commands,
+                nominal_sequence,
+                chassis_states=chassis_states,
+                target_chassis_states=target_chassis_states,
+            ).reshape(-1)
 
         def constraint_values(flattened_commands: np.ndarray) -> np.ndarray:
             evaluation = evaluate(flattened_commands)
@@ -729,6 +1228,7 @@ class SafeSAGEUnicycleMPC:
         reference: _TrajectoryEvaluation,
         *,
         nominal_sequence: np.ndarray,
+        target_chassis_states: np.ndarray | None = None,
         configuration_space: SafeSAGEConfigurationSpaceResult,
         derivative_mode: str,
     ) -> _SparseQPSolution:
@@ -869,6 +1369,9 @@ class SafeSAGEUnicycleMPC:
         )
         objective_matrix, objective_vector = self._quadratic_objective(
             nominal_sequence,
+            reference=reference,
+            state_sensitivities=state_sensitivities,
+            target_chassis_states=target_chassis_states,
             slack_variable_count=slack_variable_count,
         )
         warm_start = np.concatenate(
@@ -936,9 +1439,12 @@ class SafeSAGEUnicycleMPC:
         self,
         nominal_sequence: np.ndarray,
         *,
+        reference: _TrajectoryEvaluation,
+        state_sensitivities: np.ndarray,
+        target_chassis_states: np.ndarray | None,
         slack_variable_count: int,
     ) -> tuple[sparse.csc_matrix, np.ndarray]:
-        """Return OSQP's upper-triangular ``P`` and linear vector ``q``."""
+        """Return the local command-and-state tracking QP objective."""
 
         horizon = self.config.horizon_steps
         weights = np.tile(
@@ -953,6 +1459,31 @@ class SafeSAGEUnicycleMPC:
         )
         matrix = np.diag(2.0 * weights + 1e-10)
         vector = -2.0 * weights * nominal_sequence.reshape(-1)
+
+        if target_chassis_states is not None:
+            reference_flat = reference.commands.reshape(-1)
+            state_weights = np.array(
+                [
+                    self.config.position_tracking_weight,
+                    self.config.position_tracking_weight,
+                    self.config.yaw_tracking_weight,
+                ],
+                dtype=np.float64,
+            )
+            state_weight_matrix = np.diag(state_weights)
+            for state_index in range(1, horizon + 1):
+                sensitivity = state_sensitivities[state_index]
+                state_error = self._state_tracking_error(
+                    reference.chassis_states[state_index],
+                    target_chassis_states[state_index],
+                )
+                affine_offset = state_error - sensitivity @ reference_flat
+                matrix += 2.0 * (
+                    sensitivity.T @ state_weight_matrix @ sensitivity
+                )
+                vector += 2.0 * (
+                    sensitivity.T @ state_weight_matrix @ affine_offset
+                )
 
         smoothness = self.config.command_smoothness_weight
         if smoothness > 0.0:
@@ -1142,6 +1673,7 @@ class SafeSAGEUnicycleMPC:
 
         return bool(
             np.isfinite(trajectory.margins).all()
+            and not np.any(trajectory.samples.unsafe_configuration_mask)
             and float(np.min(trajectory.margins)) >= -self.config.constraint_tolerance
         )
 
@@ -1149,7 +1681,10 @@ class SafeSAGEUnicycleMPC:
     def _maximum_violation(trajectory: _TrajectoryEvaluation) -> float:
         """Return the nonnegative maximum DTCBF violation."""
 
-        if not np.isfinite(trajectory.margins).all():
+        if (
+            not np.isfinite(trajectory.margins).all()
+            or np.any(trajectory.samples.unsafe_configuration_mask)
+        ):
             return math.inf
         return max(0.0, -float(np.min(trajectory.margins)))
 
@@ -1159,7 +1694,43 @@ class SafeSAGEUnicycleMPC:
     ) -> np.ndarray:
         """Expand one nominal command or validate a complete sequence."""
 
-        command = np.asarray(nominal_command, dtype=np.float64)
+        return self._command_sequence(
+            nominal_command,
+            name="nominal_command",
+        )
+
+    def _target_state_sequence(
+        self,
+        target_value: Sequence[Sequence[float]] | np.ndarray | None,
+    ) -> np.ndarray | None:
+        """Validate one optional chassis-state path over the full horizon."""
+
+        if target_value is None:
+            return None
+        target = np.asarray(target_value, dtype=np.float64)
+        expected_shape = (self.config.horizon_steps + 1, 3)
+        if target.shape != expected_shape:
+            raise ValueError(
+                "target_chassis_states_grid must have shape "
+                f"{expected_shape}."
+            )
+        if not np.isfinite(target).all():
+            raise ValueError(
+                "target_chassis_states_grid must contain finite values."
+            )
+        # Own the validated reference so a caller cannot mutate the MPC
+        # objective while one synchronous planning call is in progress.
+        return np.array(target, dtype=np.float64, order="C", copy=True)
+
+    def _command_sequence(
+        self,
+        command_value: Sequence[float] | np.ndarray,
+        *,
+        name: str,
+    ) -> np.ndarray:
+        """Expand one command or validate a complete horizon sequence."""
+
+        command = np.asarray(command_value, dtype=np.float64)
         if command.shape == (2,):
             command = np.repeat(
                 command[np.newaxis, :],
@@ -1168,11 +1739,9 @@ class SafeSAGEUnicycleMPC:
             )
         expected_shape = (self.config.horizon_steps, 2)
         if command.shape != expected_shape:
-            raise ValueError(
-                f"nominal_command must have shape (2,) or {expected_shape}."
-            )
+            raise ValueError(f"{name} must have shape (2,) or {expected_shape}.")
         if not np.isfinite(command).all():
-            raise ValueError("nominal_command must contain finite values.")
+            raise ValueError(f"{name} must contain finite values.")
         return np.ascontiguousarray(command, dtype=np.float64)
 
     def _clip_commands(self, commands: np.ndarray) -> np.ndarray:
@@ -1264,6 +1833,7 @@ class SafeSAGEUnicycleMPC:
         guidance_normals: list[tuple[float, float, float]] = []
         exact_gradients: list[tuple[float, float, float]] = []
         temporal_terms: list[float] = []
+        unsafe_configurations: list[bool] = []
         for state in safety_states:
             evaluation = self.paper_filter.evaluate_constraint(
                 query_position_grid_xy=state[:2],
@@ -1277,6 +1847,7 @@ class SafeSAGEUnicycleMPC:
             guidance_normals.append(evaluation.constraint_normal)
             exact_gradients.append(evaluation.interpolant_gradient)
             temporal_terms.append(evaluation.scaled_temporal_safety_derivative)
+            unsafe_configurations.append(evaluation.unsafe_reason is not None)
         return _ReferenceSamples(
             safety_values=np.asarray(values, dtype=np.float64),
             guidance_normals=np.asarray(
@@ -1290,6 +1861,10 @@ class SafeSAGEUnicycleMPC:
             scaled_temporal_derivatives=np.asarray(
                 temporal_terms,
                 dtype=np.float64,
+            ),
+            unsafe_configuration_mask=np.asarray(
+                unsafe_configurations,
+                dtype=bool,
             ),
         )
 
@@ -1309,8 +1884,11 @@ class SafeSAGEUnicycleMPC:
         self,
         commands: np.ndarray,
         nominal_sequence: np.ndarray,
+        *,
+        chassis_states: np.ndarray | None = None,
+        target_chassis_states: np.ndarray | None = None,
     ) -> float:
-        """Return the weighted paper command-tracking objective."""
+        """Return the command and optional chassis-path tracking objective."""
 
         command_error = commands - nominal_sequence
         value = np.sum(
@@ -1322,7 +1900,95 @@ class SafeSAGEUnicycleMPC:
             value += self.config.command_smoothness_weight * float(
                 np.sum(np.square(command_delta))
             )
+        if target_chassis_states is not None:
+            if chassis_states is None:
+                raise ValueError(
+                    "chassis_states are required for state-path tracking."
+                )
+            errors = np.stack(
+                [
+                    self._state_tracking_error(state, target)
+                    for state, target in zip(
+                        chassis_states[1:],
+                        target_chassis_states[1:],
+                    )
+                ]
+            )
+            value += self.config.position_tracking_weight * float(
+                np.sum(np.square(errors[:, :2]))
+            )
+            value += self.config.yaw_tracking_weight * float(
+                np.sum(np.square(errors[:, 2]))
+            )
         return float(value)
+
+    def _objective_gradient(
+        self,
+        commands: np.ndarray,
+        nominal_sequence: np.ndarray,
+        *,
+        chassis_states: np.ndarray,
+        target_chassis_states: np.ndarray | None,
+    ) -> np.ndarray:
+        """Return the analytical objective gradient with respect to commands."""
+
+        command_weights = np.array(
+            [
+                self.config.linear_velocity_weight,
+                self.config.angular_velocity_weight,
+            ],
+            dtype=np.float64,
+        )
+        gradient = 2.0 * command_weights * (commands - nominal_sequence)
+        smoothness = self.config.command_smoothness_weight
+        if smoothness > 0.0:
+            command_differences = np.diff(commands, axis=0)
+            gradient[:-1] -= 2.0 * smoothness * command_differences
+            gradient[1:] += 2.0 * smoothness * command_differences
+
+        if target_chassis_states is not None:
+            sensitivities = self._rollout_state_sensitivities(
+                chassis_states,
+                commands,
+            )
+            state_weights = np.array(
+                [
+                    self.config.position_tracking_weight,
+                    self.config.position_tracking_weight,
+                    self.config.yaw_tracking_weight,
+                ],
+                dtype=np.float64,
+            )
+            state_gradient = np.zeros(2 * self.config.horizon_steps)
+            for state_index in range(1, self.config.horizon_steps + 1):
+                state_error = self._state_tracking_error(
+                    chassis_states[state_index],
+                    target_chassis_states[state_index],
+                )
+                state_gradient += 2.0 * (
+                    sensitivities[state_index].T
+                    @ (state_weights * state_error)
+                )
+            gradient += state_gradient.reshape(self.config.horizon_steps, 2)
+        return gradient
+
+    @staticmethod
+    def _state_tracking_error(
+        chassis_state: np.ndarray,
+        target_chassis_state: np.ndarray,
+    ) -> np.ndarray:
+        """Return position error and the shortest signed yaw error."""
+
+        return np.array(
+            [
+                chassis_state[0] - target_chassis_state[0],
+                chassis_state[1] - target_chassis_state[1],
+                wrap_to_pi(
+                    float(chassis_state[2] - target_chassis_state[2])
+                ),
+            ],
+            dtype=np.float64,
+        )
 
     def _fallback_result(
         self,

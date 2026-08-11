@@ -13,6 +13,8 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from enum import Enum
 
+from robot.control.unicycle_model import integrate_unicycle_euler
+
 
 @dataclass(frozen=True)
 class Waypoint:
@@ -309,6 +311,49 @@ class WaypointController:
             waypoint_advanced=waypoint_advanced,
             route_complete=False,
         )
+
+    def predict_commands(
+        self,
+        pose: RobotPose2D,
+        *,
+        horizon_steps: int,
+        time_step: float,
+    ) -> tuple[WaypointCommand, ...]:
+        """Roll out closed-loop nominal commands without changing this controller.
+
+        Recomputing the waypoint command at every predicted unicycle state
+        captures transitions between rotate-in-place and forward-driving modes.
+        This is the nominal command sequence required by predictive filters.
+        """
+
+        if isinstance(horizon_steps, bool) or not isinstance(horizon_steps, int):
+            raise TypeError("horizon_steps must be an integer.")
+        if horizon_steps <= 0:
+            raise ValueError("horizon_steps must be greater than zero.")
+        prediction_time_step = float(time_step)
+        if not math.isfinite(prediction_time_step):
+            raise ValueError("time_step must be finite.")
+        if prediction_time_step <= 0.0:
+            raise ValueError("time_step must be greater than zero.")
+
+        predictor = WaypointController(self._waypoints, config=self.config)
+        predictor._current_waypoint_index = self._current_waypoint_index
+        predicted_pose = pose
+        commands: list[WaypointCommand] = []
+        for _ in range(horizon_steps):
+            command = predictor.compute_command(predicted_pose)
+            commands.append(command)
+            next_state = integrate_unicycle_euler(
+                (predicted_pose.x, predicted_pose.y, predicted_pose.yaw),
+                (command.linear_velocity, command.angular_velocity),
+                time_step=prediction_time_step,
+            )
+            predicted_pose = RobotPose2D(
+                x=float(next_state[0]),
+                y=float(next_state[1]),
+                yaw=float(next_state[2]),
+            )
+        return tuple(commands)
 
     def _advance_reached_waypoints(
         self,

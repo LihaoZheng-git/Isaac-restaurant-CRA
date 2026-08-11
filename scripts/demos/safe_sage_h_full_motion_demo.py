@@ -202,8 +202,14 @@ def build_motion_pipeline_frame(
     guidance_policy: SafeSAGEGuidancePolicy,
     grid_config: LocalOccupancyGridConfig,
     field_config: SafeSAGEFieldPipelineConfig,
+    semantic_class: str = stationary.SEMANTIC_CLASS,
 ) -> MotionPipelineFrame:
-    """Build one full Safe-SAGE field in the fixed trial-anchor frame."""
+    """Build one full Safe-SAGE field in the fixed trial-anchor frame.
+
+    ``semantic_class`` defaults to the original controlled ``person`` label
+    so existing motion demos retain their behavior. Diagnostic callers may
+    override the label when reproducing a different paper baseline.
+    """
 
     start_wall_time = time.perf_counter()
     obstacle_points = stationary.extract_obstacle_points(
@@ -261,7 +267,7 @@ def build_motion_pipeline_frame(
 
     semantic_obstacle = SemanticObstacle(
         tracked_obstacle=proxy_track,
-        semantic_class=stationary.SEMANTIC_CLASS,
+        semantic_class=semantic_class,
         semantic_confidence=1.0,
         label_source="manual",
     )

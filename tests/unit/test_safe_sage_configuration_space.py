@@ -119,8 +119,8 @@ def test_quarter_turn_swaps_rectangular_length_and_width() -> None:
     mask_at_zero = result.occupancy_grids[2].occupied_mask
     mask_at_half_pi = result.occupancy_grids[3].occupied_mask
     np.testing.assert_array_equal(mask_at_half_pi, mask_at_zero.T)
-    assert result.footprint_cell_counts[2] == 15
-    assert result.footprint_cell_counts[3] == 15
+    assert result.footprint_cell_counts[2] == 35
+    assert result.footprint_cell_counts[3] == 35
 
 
 def test_asymmetric_rectangle_uses_minkowski_reflection() -> None:
@@ -142,7 +142,7 @@ def test_asymmetric_rectangle_uses_minkowski_reflection() -> None:
             result.occupancy_grids[2].occupied_mask[5]
         ).tolist()
     )
-    assert occupied_columns_at_zero == {3, 4, 5, 6}
+    assert occupied_columns_at_zero == {2, 3, 4, 5, 6, 7}
 
 
 def test_subcell_front_extent_marks_overlapping_candidate_cell() -> None:
@@ -167,6 +167,26 @@ def test_subcell_front_extent_marks_overlapping_candidate_cell() -> None:
     mask_at_zero = result.occupancy_grids[2].occupied_mask
     assert mask_at_zero[5, 4]
     assert not mask_at_zero[5, 3]
+
+
+def test_query_and_obstacle_cell_uncertainty_are_both_conservative() -> None:
+    source_grid = make_grid(
+        resolution=1.0,
+        occupied_cells=((5, 5, 7, 0.9, -5.0),),
+    )
+    result = build_safe_sage_configuration_space(
+        source_grid,
+        SafeSAGEConfigurationSpaceConfig(
+            footprint=CircularRobotFootprint(radius=0.01),
+            yaw_slice_count=4,
+        ),
+    )
+
+    mask = result.occupancy_grids[0].occupied_mask
+    assert mask[5, 4]
+    assert mask[5, 6]
+    assert mask[4, 5]
+    assert mask[6, 5]
 
 
 def test_circular_footprint_is_yaw_invariant() -> None:

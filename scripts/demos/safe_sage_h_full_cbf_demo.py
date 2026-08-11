@@ -56,6 +56,7 @@ Press Play in Isaac Sim when requested.
 """
 
 import math
+import os
 import sys
 import traceback
 from pathlib import Path
@@ -81,10 +82,14 @@ from isaacsim import SimulationApp
 
 
 RTX_HISTORY_TRANSFORM_COUNT = 20
+SIMULATION_HEADLESS = os.environ.get(
+    "ISAAC_SIM_HEADLESS",
+    "0",
+).strip().casefold() in {"1", "true", "yes", "on"}
 
 simulation_app = SimulationApp(
     {
-        "headless": False,
+        "headless": SIMULATION_HEADLESS,
         "enable_motion_bvh": True,
         "extra_args": [
             (
