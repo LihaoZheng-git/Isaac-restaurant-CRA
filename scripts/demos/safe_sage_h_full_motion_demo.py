@@ -83,6 +83,7 @@ from robot.safety.obstacle_detection import ObstacleDetectionConfig
 from robot.safety.obstacle_tracking import (
     ObstacleTracker,
     ObstacleTrackerConfig,
+    TrackedObstacle,
 )
 from robot.safety.safe_sage_cbf_filter import (
     SafeSAGECBFConfig,
@@ -106,6 +107,9 @@ from robot.safety.safe_sage_guidance_policy import (
     SafeSAGEGuidancePolicy,
 )
 from robot.safety.semantic_obstacle import SemanticObstacle
+from robot.safety.safe_sage_temporal_derivative import (
+    TemporalSafetyDerivativeInput,
+)
 from robot.scene.loader import load_robot_scene
 from robot.scene.transforms import compute_relative_prim_transform
 from robot.sensor.lidar import LidarFrameInfo, NovaCarterLidar
@@ -157,6 +161,8 @@ class MotionPipelineFrame:
     proxy_association_error: float
     pipeline: SafeSAGEFieldPipelineResult
     build_wall_seconds: float
+    proxy_velocity_world_xy: tuple[float, float] = (0.0, 0.0)
+    temporal_safety_derivative: TemporalSafetyDerivativeInput = 0.0
 
 
 @dataclass(frozen=True)
@@ -203,6 +209,7 @@ def build_motion_pipeline_frame(
     grid_config: LocalOccupancyGridConfig,
     field_config: SafeSAGEFieldPipelineConfig,
     semantic_class: str = stationary.SEMANTIC_CLASS,
+    controlled_proxy_position_world_xy: np.ndarray | None = None,
 ) -> MotionPipelineFrame:
     """Build one full Safe-SAGE field in the fixed trial-anchor frame.
 
@@ -233,10 +240,16 @@ def build_motion_pipeline_frame(
             frame_info.sensor_timestamp_nanoseconds * 1e-9
         ),
     )
-    proxy_track, association_error = stationary.find_proxy_track(
-        tracking_result,
-        robot_pose=robot_pose,
-    )
+    if controlled_proxy_position_world_xy is None:
+        proxy_track, association_error = stationary.find_proxy_track(
+            tracking_result,
+            robot_pose=robot_pose,
+        )
+    else:
+        proxy_track, association_error = find_controlled_proxy_track_world(
+            tracking_result.tracked_obstacles,
+            controlled_proxy_position_world_xy,
+        )
     if proxy_track is None:
         raise RuntimeError(
             "No LiDAR track matched the controlled proxy; nearest "
@@ -296,7 +309,47 @@ def build_motion_pipeline_frame(
         proxy_association_error=association_error,
         pipeline=pipeline,
         build_wall_seconds=time.perf_counter() - start_wall_time,
+        proxy_velocity_world_xy=proxy_track.velocity_world_xy,
     )
+
+
+def find_controlled_proxy_track_world(
+    tracked_obstacles: tuple[TrackedObstacle, ...],
+    controlled_proxy_position_world_xy: np.ndarray,
+) -> tuple[TrackedObstacle | None, float]:
+    """Associate one controlled semantic label by known proxy world pose.
+
+    This helper is experimental infrastructure.  The known pose selects which
+    real LiDAR track receives the manual label; it is not included in the
+    occupancy geometry or supplied to either safety filter.
+    """
+
+    expected = np.asarray(
+        controlled_proxy_position_world_xy,
+        dtype=np.float64,
+    )
+    if expected.shape != (2,):
+        raise ValueError(
+            "controlled_proxy_position_world_xy must have shape (2,)."
+        )
+    if not np.all(np.isfinite(expected)):
+        raise ValueError(
+            "controlled_proxy_position_world_xy must contain finite values."
+        )
+    best_track: TrackedObstacle | None = None
+    best_error = math.inf
+    for tracked_obstacle in tracked_obstacles:
+        centroid_world = np.asarray(
+            tracked_obstacle.centroid_world_xy,
+            dtype=np.float64,
+        )
+        error = float(np.linalg.norm(centroid_world - expected))
+        if error < best_error:
+            best_track = tracked_obstacle
+            best_error = error
+    if best_error > stationary.PROXY_ASSOCIATION_RADIUS:
+        return None, best_error
+    return best_track, best_error
 
 
 def robot_points_in_anchor_frame(
@@ -399,10 +452,18 @@ def robot_policy_footprint_polygon(pose: RobotPose2D) -> np.ndarray:
     )
 
 
-def proxy_footprint_polygon() -> np.ndarray:
-    """Return the static proxy's ground-truth world rectangle."""
+def proxy_footprint_polygon(
+    proxy_position_world_xy: np.ndarray | None = None,
+) -> np.ndarray:
+    """Return the controlled proxy's ground-truth world rectangle."""
 
-    center = stationary.STATIC_PROXY_POSITION_WORLD[:2]
+    center = (
+        stationary.STATIC_PROXY_POSITION_WORLD[:2]
+        if proxy_position_world_xy is None
+        else np.asarray(proxy_position_world_xy, dtype=np.float64)
+    )
+    if center.shape != (2,) or not np.all(np.isfinite(center)):
+        raise ValueError("proxy_position_world_xy must be one finite XY point.")
     half_x = 0.5 * stationary.PROXY_DIMENSIONS[0]
     half_y = 0.5 * stationary.PROXY_DIMENSIONS[1]
     return np.array(
@@ -416,11 +477,14 @@ def proxy_footprint_polygon() -> np.ndarray:
     )
 
 
-def policy_footprint_clearance(pose: RobotPose2D) -> float:
+def policy_footprint_clearance(
+    pose: RobotPose2D,
+    proxy_position_world_xy: np.ndarray | None = None,
+) -> float:
     """Return exact polygon clearance for the controlled validation pair."""
 
     robot_polygon = robot_policy_footprint_polygon(pose)
-    proxy_polygon = proxy_footprint_polygon()
+    proxy_polygon = proxy_footprint_polygon(proxy_position_world_xy)
     if convex_polygons_overlap(robot_polygon, proxy_polygon):
         return 0.0
 
@@ -508,11 +572,21 @@ def forward_and_rightward_displacement(
     return forward, rightward
 
 
-def proxy_clearance_forward_threshold(initial_pose: RobotPose2D) -> float:
+def proxy_clearance_forward_threshold(
+    initial_pose: RobotPose2D,
+    proxy_position_world_xy: np.ndarray | None = None,
+) -> float:
     """Return forward progress required to pass the proxy longitudinally."""
 
-    delta_x = stationary.STATIC_PROXY_POSITION_WORLD[0] - initial_pose.x
-    delta_y = stationary.STATIC_PROXY_POSITION_WORLD[1] - initial_pose.y
+    center = (
+        stationary.STATIC_PROXY_POSITION_WORLD[:2]
+        if proxy_position_world_xy is None
+        else np.asarray(proxy_position_world_xy, dtype=np.float64)
+    )
+    if center.shape != (2,) or not np.all(np.isfinite(center)):
+        raise ValueError("proxy_position_world_xy must be one finite XY point.")
+    delta_x = center[0] - initial_pose.x
+    delta_y = center[1] - initial_pose.y
     proxy_center_forward = (
         math.cos(initial_pose.yaw) * delta_x
         + math.sin(initial_pose.yaw) * delta_y

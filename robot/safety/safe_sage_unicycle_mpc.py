@@ -52,6 +52,10 @@ from robot.safety.safe_sage_configuration_space import (
     SafeSAGEConfigurationSpaceResult,
 )
 from robot.safety.safe_sage_h_full import SafeSAGEHFullResult
+from robot.safety.safe_sage_temporal_derivative import (
+    TemporalSafetyDerivativeInput,
+    validate_temporal_safety_derivative,
+)
 
 
 def _finite_real(value: object, *, name: str) -> float:
@@ -400,7 +404,7 @@ class SafeSAGEUnicycleMPC:
         configuration_space: SafeSAGEConfigurationSpaceResult,
         h_full: SafeSAGEHFullResult,
         guidance_fields: Sequence[LaplaceGuidanceFieldResult],
-        temporal_safety_derivative: float = 0.0,
+        temporal_safety_derivative: TemporalSafetyDerivativeInput = 0.0,
     ) -> SafeSAGEUnicycleMPCResult:
         """Optimize a safe command horizon and return its first command.
 
@@ -422,9 +426,10 @@ class SafeSAGEUnicycleMPC:
             size=3,
             name="initial_chassis_state_grid",
         )
-        temporal_derivative = _finite_real(
+        temporal_derivative = validate_temporal_safety_derivative(
             temporal_safety_derivative,
-            name="temporal_safety_derivative",
+            h_full=h_full,
+            grid_config=configuration_space.occupancy_grids[0].config,
         )
         preferred_lateral_direction = _optional_direction(
             preferred_lateral_direction_grid_y,
@@ -737,7 +742,7 @@ class SafeSAGEUnicycleMPC:
         configuration_space: SafeSAGEConfigurationSpaceResult,
         h_full: SafeSAGEHFullResult,
         guidance_fields: Sequence[LaplaceGuidanceFieldResult],
-        temporal_safety_derivative: float,
+        temporal_safety_derivative: TemporalSafetyDerivativeInput,
     ) -> tuple[_TrajectoryEvaluation, int, int]:
         """Move a feasible warm start toward the nominal command sequence.
 
@@ -804,7 +809,7 @@ class SafeSAGEUnicycleMPC:
         configuration_space: SafeSAGEConfigurationSpaceResult,
         h_full: SafeSAGEHFullResult,
         guidance_fields: Sequence[LaplaceGuidanceFieldResult],
-        temporal_safety_derivative: float,
+        temporal_safety_derivative: TemporalSafetyDerivativeInput,
     ) -> _TrajectoryEvaluation | None:
         """Backtrack to an exact-safe step with lower nominal objective."""
 
@@ -858,7 +863,7 @@ class SafeSAGEUnicycleMPC:
         configuration_space: SafeSAGEConfigurationSpaceResult,
         h_full: SafeSAGEHFullResult,
         guidance_fields: Sequence[LaplaceGuidanceFieldResult],
-        temporal_safety_derivative: float,
+        temporal_safety_derivative: TemporalSafetyDerivativeInput,
         preferred_lateral_direction_grid_y: float | None = None,
     ) -> tuple[_TrajectoryEvaluation | None, str | None]:
         """Recover exact feasibility without discarding Safe-SAGE direction.
@@ -1080,7 +1085,7 @@ class SafeSAGEUnicycleMPC:
         configuration_space: SafeSAGEConfigurationSpaceResult,
         h_full: SafeSAGEHFullResult,
         guidance_fields: Sequence[LaplaceGuidanceFieldResult],
-        temporal_safety_derivative: float,
+        temporal_safety_derivative: TemporalSafetyDerivativeInput,
     ) -> tuple[_TrajectoryEvaluation | None, int, str]:
         """Rescue a stalled QP sequence using exact nonlinear DTCBF values.
 
@@ -1597,7 +1602,7 @@ class SafeSAGEUnicycleMPC:
         configuration_space: SafeSAGEConfigurationSpaceResult,
         h_full: SafeSAGEHFullResult,
         guidance_fields: Sequence[LaplaceGuidanceFieldResult],
-        temporal_safety_derivative: float,
+        temporal_safety_derivative: TemporalSafetyDerivativeInput,
     ) -> _TrajectoryEvaluation | None:
         """Backtrack until the sampled nonlinear DTCBF violation improves."""
 
@@ -1642,7 +1647,7 @@ class SafeSAGEUnicycleMPC:
         configuration_space: SafeSAGEConfigurationSpaceResult,
         h_full: SafeSAGEHFullResult,
         guidance_fields: Sequence[LaplaceGuidanceFieldResult],
-        temporal_safety_derivative: float,
+        temporal_safety_derivative: TemporalSafetyDerivativeInput,
     ) -> _TrajectoryEvaluation | None:
         """Roll out and sample one complete command sequence."""
 
@@ -1889,7 +1894,7 @@ class SafeSAGEUnicycleMPC:
         configuration_space: SafeSAGEConfigurationSpaceResult,
         h_full: SafeSAGEHFullResult,
         guidance_fields: Sequence[LaplaceGuidanceFieldResult],
-        temporal_safety_derivative: float,
+        temporal_safety_derivative: TemporalSafetyDerivativeInput,
     ) -> _ReferenceSamples:
         """Sample ``h_full``, Safe-SAGE guidance, and exact gradients."""
 

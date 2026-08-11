@@ -29,6 +29,9 @@ from robot.safety.safe_sage_configuration_space import (
     SafeSAGEConfigurationSpaceResult,
 )
 from robot.safety.safe_sage_h_full import SafeSAGEHFullResult
+from robot.safety.safe_sage_temporal_derivative import (
+    TemporalSafetyDerivativeInput,
+)
 
 
 def _validated_real(value: object, *, name: str) -> float:
@@ -265,7 +268,7 @@ class SafeSAGEUnicycleCBFFilter:
         configuration_space: SafeSAGEConfigurationSpaceResult,
         h_full: SafeSAGEHFullResult,
         guidance_fields: Sequence[LaplaceGuidanceFieldResult],
-        temporal_safety_derivative: float = 0.0,
+        temporal_safety_derivative: TemporalSafetyDerivativeInput = 0.0,
     ) -> SafeSAGEUnicycleCBFResult:
         """Return the nearest bounded command satisfying the mapped CBF."""
 

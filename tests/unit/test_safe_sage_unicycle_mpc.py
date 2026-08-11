@@ -10,6 +10,9 @@ from robot.safety.safe_sage_unicycle_mpc import (
     SafeSAGEUnicycleMPC,
     SafeSAGEUnicycleMPCConfig,
 )
+from robot.safety.safe_sage_temporal_derivative import (
+    SafeSAGETemporalDerivativeResult,
+)
 
 
 def make_mpc(**overrides: float) -> SafeSAGEUnicycleMPC:
@@ -93,6 +96,52 @@ def test_mpc_exact_gradient_uses_derivative_of_yaw_interpolant() -> None:
     np.testing.assert_allclose(samples.exact_gradients[:, 0], 0.3)
     np.testing.assert_allclose(samples.exact_gradients[:, 1], -0.2)
     np.testing.assert_allclose(samples.exact_gradients[:, 2], 2.0 / np.pi)
+
+
+def test_mpc_samples_spatial_temporal_field_along_prediction() -> None:
+    configuration_space, h_full, guidance_fields = make_fields(
+        safety_value=1.0,
+        gradient=(-1.0, 0.0, 0.0),
+        guidance=(-1.0, 0.0),
+    )
+    grid_config = configuration_space.occupancy_grids[0].config
+    column_values = np.linspace(-0.2, 0.2, grid_config.column_count)
+    temporal_values = np.broadcast_to(
+        column_values,
+        h_full.values.shape,
+    ).copy()
+    temporal_field = SafeSAGETemporalDerivativeResult(
+        values=temporal_values,
+        raw_values=temporal_values,
+        valid_mask=np.ones_like(temporal_values, dtype=bool),
+        yaw_angles_radians=h_full.yaw_angles_radians,
+        grid_config=grid_config,
+        time_delta_seconds=0.2,
+        egomotion_translation_grid_xy=(0.0, 0.0),
+        smoothing_factor=1.0,
+    )
+    mpc = make_mpc()
+    safety_states = np.repeat(
+        np.array([[0.0, 0.0, 0.0]], dtype=np.float64),
+        mpc.config.horizon_steps + 1,
+        axis=0,
+    )
+    safety_states[:, 0] = np.linspace(
+        0.0,
+        1.0,
+        mpc.config.horizon_steps + 1,
+    )
+
+    samples = mpc._sample_reference(
+        safety_states,
+        configuration_space=configuration_space,
+        h_full=h_full,
+        guidance_fields=guidance_fields,
+        temporal_safety_derivative=temporal_field,
+    )
+
+    assert samples.scaled_temporal_derivatives[0] == pytest.approx(0.0)
+    assert samples.scaled_temporal_derivatives[-1] == pytest.approx(0.1)
 
 
 def test_open_space_passes_nominal_command_through() -> None:

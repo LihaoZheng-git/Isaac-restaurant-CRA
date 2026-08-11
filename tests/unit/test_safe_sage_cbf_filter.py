@@ -20,6 +20,9 @@ from robot.safety.safe_sage_configuration_space import (
     uniform_yaw_angles,
 )
 from robot.safety.safe_sage_h_full import SafeSAGEHFullResult
+from robot.safety.safe_sage_temporal_derivative import (
+    SafeSAGETemporalDerivativeResult,
+)
 
 
 def make_filter(**overrides: float) -> SafeSAGECBFSafetyFilter:
@@ -311,6 +314,40 @@ def test_negative_temporal_derivative_tightens_constraint() -> None:
     assert stationary.safe_planar_velocity_grid_xy[0] == pytest.approx(0.1)
     assert approaching.temporal_scaling == pytest.approx(1.0)
     assert approaching.safe_planar_velocity_grid_xy[0] == pytest.approx(0.05)
+
+
+def test_spatial_temporal_field_is_sampled_at_query_configuration() -> None:
+    configuration_space, h_full, guidance_fields = make_fields(
+        safety_value=0.2,
+        gradient=(-2.0, 0.0, 0.0),
+        guidance=(-2.0, 0.0),
+    )
+    temporal_values = np.zeros_like(h_full.values)
+    temporal_values[:, 2, 2] = -0.1
+    temporal_field = SafeSAGETemporalDerivativeResult(
+        values=temporal_values,
+        raw_values=temporal_values,
+        valid_mask=np.ones_like(temporal_values, dtype=bool),
+        yaw_angles_radians=h_full.yaw_angles_radians,
+        grid_config=configuration_space.occupancy_grids[0].config,
+        time_delta_seconds=0.2,
+        egomotion_translation_grid_xy=(0.0, 0.0),
+        smoothing_factor=1.0,
+    )
+
+    result = make_filter().filter_command(
+        np.array([0.3, 0.0]),
+        0.0,
+        query_position_grid_xy=np.array([0.0, 0.0]),
+        query_yaw_radians=0.0,
+        configuration_space=configuration_space,
+        h_full=h_full,
+        guidance_fields=guidance_fields,
+        temporal_safety_derivative=temporal_field,
+    )
+
+    assert result.temporal_safety_derivative == pytest.approx(-0.1)
+    assert result.safe_planar_velocity_grid_xy[0] == pytest.approx(0.05)
 
 
 def test_temporal_scaling_is_bounded() -> None:

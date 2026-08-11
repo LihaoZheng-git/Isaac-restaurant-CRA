@@ -36,6 +36,10 @@ from robot.safety.safe_sage_configuration_space import (
     SafeSAGEConfigurationSpaceResult,
 )
 from robot.safety.safe_sage_h_full import SafeSAGEHFullResult
+from robot.safety.safe_sage_temporal_derivative import (
+    TemporalSafetyDerivativeInput,
+    sample_temporal_safety_derivative,
+)
 
 
 def _validated_real(value: object, *, name: str) -> float:
@@ -273,7 +277,7 @@ class SafeSAGECBFSafetyFilter:
         configuration_space: SafeSAGEConfigurationSpaceResult,
         h_full: SafeSAGEHFullResult,
         guidance_fields: Sequence[LaplaceGuidanceFieldResult],
-        temporal_safety_derivative: float = 0.0,
+        temporal_safety_derivative: TemporalSafetyDerivativeInput = 0.0,
     ) -> SafeSAGECBFResult:
         """Return the nearest reduced-order command satisfying Eq. (19)."""
 
@@ -458,7 +462,7 @@ class SafeSAGECBFSafetyFilter:
         configuration_space: SafeSAGEConfigurationSpaceResult,
         h_full: SafeSAGEHFullResult,
         guidance_fields: Sequence[LaplaceGuidanceFieldResult],
-        temporal_safety_derivative: float = 0.0,
+        temporal_safety_derivative: TemporalSafetyDerivativeInput = 0.0,
     ) -> SafeSAGEConstraintEvaluation:
         """Interpolate fields and construct the Safe-SAGE half-space."""
 
@@ -470,10 +474,6 @@ class SafeSAGECBFSafetyFilter:
             query_yaw_radians,
             name="query_yaw_radians",
         )
-        temporal_derivative = _validated_real(
-            temporal_safety_derivative,
-            name="temporal_safety_derivative",
-        )
         guidance_sequence = tuple(guidance_fields)
         _validate_field_alignment(
             configuration_space,
@@ -482,6 +482,13 @@ class SafeSAGECBFSafetyFilter:
         )
 
         reference_grid = configuration_space.occupancy_grids[0]
+        temporal_derivative = sample_temporal_safety_derivative(
+            temporal_safety_derivative,
+            query_position_grid_xy=query_position,
+            query_yaw_radians=query_yaw,
+            h_full=h_full,
+            grid_config=reference_grid.config,
+        )
         query_cell = reference_grid.robot_point_to_cell(query_position)
         if query_cell is None:
             raise ValueError("query_position_grid_xy lies outside the local grid.")
