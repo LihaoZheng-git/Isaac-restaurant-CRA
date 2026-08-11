@@ -142,6 +142,24 @@ def test_controller_slows_near_waypoint() -> None:
     )
 
 
+def test_configured_alignment_floor_preserves_obstacle_unaware_progress() -> None:
+    controller = WaypointController(
+        [Waypoint(1.0, 0.0)],
+        config=WaypointControllerConfig(
+            minimum_alignment_scale=0.25,
+            rotate_in_place_threshold_radians=math.pi,
+        ),
+    )
+
+    command = controller.compute_command(
+        RobotPose2D(x=0.0, y=0.0, yaw=math.pi / 2.0)
+    )
+
+    assert command.mode is WaypointMode.DRIVING
+    assert command.linear_velocity == pytest.approx(0.05)
+    assert command.angular_velocity == pytest.approx(-0.60)
+
+
 def test_controller_advances_reached_waypoint() -> None:
     """A reached waypoint should advance to the next target."""
 
@@ -314,6 +332,8 @@ def test_controller_rejects_non_waypoint_entries() -> None:
         ("maximum_angular_velocity", -1.0),
         ("linear_gain", math.inf),
         ("position_tolerance", 0.0),
+        ("minimum_alignment_scale", -0.1),
+        ("minimum_alignment_scale", 1.1),
         (
             "rotate_in_place_threshold_radians",
             math.pi + 0.1,

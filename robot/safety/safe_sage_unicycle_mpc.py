@@ -31,7 +31,7 @@ The module has no Isaac Sim dependency.
 
 import math
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from numbers import Real
 
 import numpy as np
@@ -115,6 +115,7 @@ class SafeSAGEUnicycleMPCConfig:
     """Prediction, actuator, cost, sparse SQP, and OSQP settings."""
 
     horizon_steps: int = 12
+    safety_substeps_per_interval: int = 1
     time_step: float = 0.20
     gamma: float = 1.0
     lookahead_distance: float = 0.10
@@ -146,6 +147,10 @@ class SafeSAGEUnicycleMPCConfig:
             "horizon_steps": _positive_integer(
                 self.horizon_steps,
                 name="horizon_steps",
+            ),
+            "safety_substeps_per_interval": _positive_integer(
+                self.safety_substeps_per_interval,
+                name="safety_substeps_per_interval",
             ),
             "maximum_sqp_iterations": _positive_integer(
                 self.maximum_sqp_iterations,
@@ -1654,6 +1659,17 @@ class SafeSAGEUnicycleMPC:
             )
         except (TypeError, ValueError):
             return None
+        if self.config.safety_substeps_per_interval > 1:
+            unsafe_mask = self._inter_sample_unsafe_mask(
+                chassis_states,
+                samples.unsafe_configuration_mask,
+                configuration_space=configuration_space,
+                h_full=h_full,
+            )
+            samples = replace(
+                samples,
+                unsafe_configuration_mask=unsafe_mask,
+            )
         safety_values = self._time_adjusted_safety_values(samples)
         margins = safety_values[1:] - self.config.dtcbf_decay * safety_values[:-1]
         return _TrajectoryEvaluation(
@@ -1664,6 +1680,54 @@ class SafeSAGEUnicycleMPC:
             safety_values=safety_values,
             margins=margins,
         )
+
+    def _inter_sample_unsafe_mask(
+        self,
+        chassis_states: np.ndarray,
+        endpoint_mask: np.ndarray,
+        *,
+        configuration_space: SafeSAGEConfigurationSpaceResult,
+        h_full: SafeSAGEHFullResult,
+    ) -> np.ndarray:
+        """Mark intervals whose interpolated motion enters an unsafe cell.
+
+        DTCBF constraints remain defined at MPC sample times.  This denser
+        geometry check prevents a command from leaving and then re-entering
+        the safe configuration space between two samples.  Any unsafe
+        interior point marks the interval's endpoint unsafe, so the existing
+        exact-feasibility and recovery paths reject that command horizon.
+        """
+
+        unsafe = np.array(endpoint_mask, dtype=bool, copy=True)
+        substeps = self.config.safety_substeps_per_interval
+        for interval in range(self.config.horizon_steps):
+            start = chassis_states[interval]
+            end = chassis_states[interval + 1]
+            yaw_delta = wrap_to_pi(float(end[2] - start[2]))
+            for substep in range(1, substeps):
+                fraction = substep / substeps
+                chassis_state = np.array(
+                    [
+                        start[0] + fraction * (end[0] - start[0]),
+                        start[1] + fraction * (end[1] - start[1]),
+                        wrap_to_pi(float(start[2]) + fraction * yaw_delta),
+                    ],
+                    dtype=np.float64,
+                )
+                safety_state = lookahead_state(
+                    chassis_state,
+                    lookahead_distance=self.config.lookahead_distance,
+                )
+                is_unsafe = self.paper_filter.is_unsafe_configuration(
+                    query_position_grid_xy=safety_state[:2],
+                    query_yaw_radians=float(safety_state[2]),
+                    configuration_space=configuration_space,
+                    h_full=h_full,
+                )
+                if is_unsafe:
+                    unsafe[interval + 1] = True
+                    break
+        return np.ascontiguousarray(unsafe, dtype=bool)
 
     def _trajectory_is_safe(
         self,

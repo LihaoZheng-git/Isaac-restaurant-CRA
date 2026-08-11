@@ -562,6 +562,49 @@ def test_prediction_never_accepts_an_unsafe_configuration_cell() -> None:
     assert all(evaluation.unsafe_reason is None for evaluation in evaluations)
 
 
+def test_inter_sample_check_rejects_skipping_through_unsafe_cell() -> None:
+    configuration_space, h_full, guidance_fields = make_fields(
+        guidance=(0.0, 0.0),
+        gradient=(0.0, 0.0, 0.0),
+        safety_value=2.0,
+        unsafe_yaw_indices=(0, 1, 2, 3),
+    )
+    endpoint_only = make_mpc(
+        horizon_steps=1,
+        time_step=1.0,
+        maximum_linear_velocity=2.0,
+    )
+    dense_check = make_mpc(
+        horizon_steps=1,
+        time_step=1.0,
+        maximum_linear_velocity=2.0,
+        safety_substeps_per_interval=2,
+    )
+    initial_state = np.array([-1.1, 0.0, 0.0], dtype=np.float64)
+    nominal = np.array([2.0, 0.0], dtype=np.float64)
+
+    endpoint_result = endpoint_only.plan(
+        initial_state,
+        nominal,
+        configuration_space=configuration_space,
+        h_full=h_full,
+        guidance_fields=guidance_fields,
+    )
+    dense_result = dense_check.plan(
+        initial_state,
+        nominal,
+        configuration_space=configuration_space,
+        h_full=h_full,
+        guidance_fields=guidance_fields,
+    )
+
+    assert endpoint_result.success, endpoint_result.status
+    assert endpoint_result.linear_velocity == pytest.approx(2.0)
+    assert dense_result.success, dense_result.status
+    assert dense_result.linear_velocity < 2.0
+    assert "feasibility_recovered" in dense_result.status
+
+
 def test_result_shapes_and_arrays_are_read_only() -> None:
     result = plan_synthetic(
         guidance=(-1.0, 0.0),
@@ -601,6 +644,7 @@ def test_unsafe_current_configuration_fails_closed() -> None:
     "override",
     (
         {"horizon_steps": 0},
+        {"safety_substeps_per_interval": 0},
         {"time_step": 0.0},
         {"gamma": 0.0},
         {"lookahead_distance": 0.0},

@@ -417,6 +417,31 @@ def test_tiny_yaw_does_not_activate_distant_neighbor_boundary() -> None:
     assert not result.query_on_unsafe_boundary
 
 
+@pytest.mark.parametrize(
+    ("query_yaw", "expected_unsafe"),
+    [
+        (0.40 * np.pi, True),
+        (0.01, False),
+    ],
+)
+def test_lightweight_configuration_query_matches_full_filter(
+    query_yaw: float,
+    expected_unsafe: bool,
+) -> None:
+    configuration_space, h_full, _ = make_fields(
+        unsafe_yaw_indices=(3,),
+    )
+
+    is_unsafe = make_filter().is_unsafe_configuration(
+        query_position_grid_xy=np.zeros(2, dtype=np.float64),
+        query_yaw_radians=query_yaw,
+        configuration_space=configuration_space,
+        h_full=h_full,
+    )
+
+    assert is_unsafe is expected_unsafe
+
+
 def test_infeasible_constraint_triggers_emergency_stop() -> None:
     result = apply_filter(
         make_filter(),

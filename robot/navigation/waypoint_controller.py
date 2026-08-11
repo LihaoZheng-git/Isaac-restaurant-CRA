@@ -74,6 +74,7 @@ class WaypointControllerConfig:
     angular_gain: float = 1.50
 
     position_tolerance: float = 0.10
+    minimum_alignment_scale: float = 0.0
     rotate_in_place_threshold_radians: float = (
         math.radians(25.0)
     )
@@ -107,6 +108,12 @@ class WaypointControllerConfig:
             raise ValueError(
                 "rotate_in_place_threshold_radians cannot "
                 "exceed pi."
+            )
+        if not math.isfinite(self.minimum_alignment_scale):
+            raise ValueError("minimum_alignment_scale must be finite.")
+        if not 0.0 <= self.minimum_alignment_scale <= 1.0:
+            raise ValueError(
+                "minimum_alignment_scale must lie in [0, 1]."
             )
 
 
@@ -282,7 +289,7 @@ class WaypointController:
             )
 
             alignment_scale = max(
-                0.0,
+                self.config.minimum_alignment_scale,
                 math.cos(heading_error),
             )
 
