@@ -380,7 +380,8 @@ def create_motion_waypoint_controller() -> WaypointController:
             linear_gain=0.80,
             angular_gain=1.50,
             position_tolerance=0.10,
-            rotate_in_place_threshold_radians=math.pi,
+            minimum_alignment_scale=0.25,
+            rotate_in_place_threshold_radians=math.radians(100.0),
         ),
     )
 

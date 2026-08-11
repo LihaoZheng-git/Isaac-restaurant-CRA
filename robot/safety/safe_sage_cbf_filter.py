@@ -382,6 +382,74 @@ class SafeSAGECBFSafetyFilter:
             emergency_reason=None,
         )
 
+    def is_unsafe_configuration(
+        self,
+        *,
+        query_position_grid_xy: np.ndarray,
+        query_yaw_radians: float,
+        configuration_space: SafeSAGEConfigurationSpaceResult,
+        h_full: SafeSAGEHFullResult,
+    ) -> bool:
+        """Return whether one query lies on a discrete unsafe boundary.
+
+        This is the lightweight geometry-only portion of
+        :meth:`evaluate_constraint`.  Predictive controllers use it for
+        inter-sample checks without needlessly interpolating ``h_full``, its
+        gradients, temporal scaling, and semantic guidance.
+        """
+
+        query_position = _validated_point(
+            query_position_grid_xy,
+            name="query_position_grid_xy",
+        )
+        query_yaw = _validated_real(
+            query_yaw_radians,
+            name="query_yaw_radians",
+        )
+        if not isinstance(
+            configuration_space,
+            SafeSAGEConfigurationSpaceResult,
+        ):
+            raise TypeError(
+                "configuration_space must be a "
+                "SafeSAGEConfigurationSpaceResult."
+            )
+        if not isinstance(h_full, SafeSAGEHFullResult):
+            raise TypeError("h_full must be a SafeSAGEHFullResult.")
+        if configuration_space.yaw_slice_count != h_full.yaw_slice_count:
+            raise ValueError(
+                "configuration_space and h_full yaw counts must match."
+            )
+        reference_grid = configuration_space.occupancy_grids[0]
+        if h_full.dirichlet_boundary_masks.shape[1:] != reference_grid.shape:
+            raise ValueError(
+                "h_full boundary masks must match the occupancy-grid shape."
+            )
+        query_cell = reference_grid.robot_point_to_cell(query_position)
+        if query_cell is None:
+            raise ValueError("query_position_grid_xy lies outside the local grid.")
+        lower_yaw, upper_yaw, yaw_weight = _yaw_interpolation(
+            query_yaw,
+            yaw_slice_count=h_full.yaw_slice_count,
+        )
+        tolerance = self.config.numerical_tolerance
+        if yaw_weight < 0.5 - tolerance:
+            active_yaw_slices = (lower_yaw,)
+        elif yaw_weight > 0.5 + tolerance:
+            active_yaw_slices = (upper_yaw,)
+        else:
+            active_yaw_slices = (lower_yaw, upper_yaw)
+        return any(
+            bool(
+                h_full.dirichlet_boundary_masks[
+                    yaw_index,
+                    query_cell[0],
+                    query_cell[1],
+                ]
+            )
+            for yaw_index in active_yaw_slices
+        )
+
     def evaluate_constraint(
         self,
         *,
