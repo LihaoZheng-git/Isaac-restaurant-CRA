@@ -287,9 +287,7 @@ def evaluate_backup(
         configuration_space=field.pipeline.configuration_space,
         h_full=field.pipeline.h_full,
         guidance_fields=field.pipeline.guidance_fields,
-        temporal_safety_derivative=(
-            stationary.STATIC_TEMPORAL_SAFETY_DERIVATIVE
-        ),
+        temporal_safety_derivative=field.temporal_safety_derivative,
     )
 
 
@@ -567,9 +565,7 @@ def run_live_navigation(
             configuration_space=field.pipeline.configuration_space,
             h_full=field.pipeline.h_full,
             guidance_fields=field.pipeline.guidance_fields,
-            temporal_safety_derivative=(
-                stationary.STATIC_TEMPORAL_SAFETY_DERIVATIVE
-            ),
+            temporal_safety_derivative=field.temporal_safety_derivative,
             preferred_lateral_direction_grid_y=preferred_direction,
         )
         solve_wall_seconds = time.perf_counter() - solve_start
