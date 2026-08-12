@@ -24,7 +24,6 @@ close the rendered application after the report.  RTX LiDAR may not publish
 scans in a true no-window run on every Isaac Sim installation.
 """
 
-import copy
 import math
 import sys
 import time
@@ -57,28 +56,23 @@ from pxr import Gf, Usd, UsdGeom
 from robot.control.differential_drive import NovaCarterController
 from robot.navigation.waypoint_controller import RobotPose2D
 from robot.runtime.simulation_loop import advance_playing_steps, wait_until_playing
-from robot.safety.class_safety_policy import ClassSafetyPolicy
-from robot.safety.local_occupancy_grid import LocalOccupancyGridConfig
 from robot.safety.obstacle_detection import ObstacleDetectionConfig
 from robot.safety.obstacle_tracking import ObstacleTracker, ObstacleTrackerConfig
-from robot.safety.safe_sage_field_pipeline import SafeSAGEFieldPipelineConfig
-from robot.safety.safe_sage_guidance_policy import PassingSide, SafeSAGEGuidancePolicy
-from robot.safety.safe_sage_live_field import (
-    SafeSAGELiveFieldBuffer,
-    SafeSAGELiveFieldSnapshot,
+from robot.safety.safe_sage_guidance_policy import PassingSide
+from robot.safety.safe_sage_runtime import (
+    SafeSAGEControlRuntime,
+    SafeSAGEPerceptionRuntime,
+    SafeSAGERuntimeField,
 )
 from robot.safety.safe_sage_temporal_derivative import (
     SafeSAGETemporalDerivativeConfig,
     SafeSAGETemporalDerivativeEstimator,
     SafeSAGETemporalDerivativeResult,
 )
-from robot.safety.safe_sage_unicycle_cbf_filter import SafeSAGEUnicycleCBFFilter
-from robot.safety.safe_sage_unicycle_mpc import (
-    SafeSAGEUnicycleMPC,
-)
+from robot.safety.safe_sage_unicycle_mpc import SafeSAGEUnicycleMPC
 from robot.scene.loader import load_robot_scene
 from robot.scene.transforms import compute_relative_prim_transform
-from robot.sensor.lidar import LidarFrameInfo, NovaCarterLidar
+from robot.sensor.lidar import NovaCarterLidar
 
 
 DYNAMIC_PROXY_PRIM_PATH = "/World/SafeSAGEDynamicTestObstacle"
@@ -221,73 +215,6 @@ def create_dynamic_proxy(stage: Usd.Stage) -> DynamicProxyMotion:
     return DynamicProxyMotion(stage=stage, translate_op=translate_op)
 
 
-def build_dynamic_field(
-    *,
-    points_sensor_frame: np.ndarray,
-    frame_info: LidarFrameInfo,
-    robot_pose: RobotPose2D,
-    anchor_pose: RobotPose2D,
-    proxy_position_world_xy: np.ndarray,
-    obstacle_tracker: ObstacleTracker,
-    robot_from_lidar: np.ndarray,
-    detection_config: ObstacleDetectionConfig,
-    class_policy: ClassSafetyPolicy,
-    guidance_policy: SafeSAGEGuidancePolicy,
-    grid_config: LocalOccupancyGridConfig,
-    field_config: SafeSAGEFieldPipelineConfig,
-) -> motion.MotionPipelineFrame:
-    """Build one complete candidate from real perception."""
-
-    return motion.build_motion_pipeline_frame(
-        points_sensor_frame=points_sensor_frame,
-        frame_info=frame_info,
-        robot_pose=robot_pose,
-        field_anchor_pose=anchor_pose,
-        obstacle_tracker=obstacle_tracker,
-        robot_from_lidar=robot_from_lidar,
-        detection_config=detection_config,
-        class_policy=class_policy,
-        guidance_policy=guidance_policy,
-        grid_config=grid_config,
-        field_config=field_config,
-        controlled_proxy_position_world_xy=proxy_position_world_xy,
-    )
-
-
-def attach_temporal_derivative(
-    candidate: motion.MotionPipelineFrame,
-    *,
-    previous_snapshot: SafeSAGELiveFieldSnapshot[motion.MotionPipelineFrame],
-    estimator: SafeSAGETemporalDerivativeEstimator,
-    grid_config: LocalOccupancyGridConfig,
-) -> motion.MotionPipelineFrame:
-    """Estimate ``dh_full/dt`` in the shared fixed field frame."""
-
-    previous_field = previous_snapshot.payload
-    previous_temporal = previous_field.temporal_safety_derivative
-    previous_estimate = (
-        previous_temporal
-        if isinstance(
-            previous_temporal,
-            SafeSAGETemporalDerivativeResult,
-        )
-        else None
-    )
-    derivative = estimator.estimate(
-        previous_h_full=previous_field.pipeline.h_full,
-        current_h_full=candidate.pipeline.h_full,
-        grid_config=grid_config,
-        time_delta_seconds=(
-            candidate.sensor_timestamp_seconds
-            - previous_snapshot.sensor_timestamp_seconds
-        ),
-        # Every field is already expressed in the immutable first-scan frame.
-        egomotion_translation_grid_xy=(0.0, 0.0),
-        previous_estimate=previous_estimate,
-    )
-    return replace(candidate, temporal_safety_derivative=derivative)
-
-
 def dynamic_clearance(
     pose: RobotPose2D,
     proxy_motion: DynamicProxyMotion,
@@ -301,7 +228,7 @@ def dynamic_clearance(
 
 
 def temporal_diagnostics(
-    field: motion.MotionPipelineFrame,
+    field: SafeSAGERuntimeField,
 ) -> tuple[float, float, float, float]:
     """Return sampled-field extrema and validity diagnostics."""
 
@@ -322,24 +249,23 @@ def run_dynamic_navigation(
     proxy_motion: DynamicProxyMotion,
     lidar: NovaCarterLidar,
     robot_controller: NovaCarterController,
-    field_buffer: SafeSAGELiveFieldBuffer[motion.MotionPipelineFrame],
-    obstacle_tracker: ObstacleTracker,
-    temporal_estimator: SafeSAGETemporalDerivativeEstimator,
+    perception_runtime: SafeSAGEPerceptionRuntime,
+    control_runtime: SafeSAGEControlRuntime,
     robot_from_lidar: np.ndarray,
     detection_config: ObstacleDetectionConfig,
-    class_policy: ClassSafetyPolicy,
-    guidance_policy: SafeSAGEGuidancePolicy,
-    grid_config: LocalOccupancyGridConfig,
-    field_config: SafeSAGEFieldPipelineConfig,
-    mpc: SafeSAGEUnicycleMPC,
-    backup_filter: SafeSAGEUnicycleCBFFilter,
     passing_side: PassingSide,
 ) -> DynamicNavigationResult:
     """Run direct dynamic-field MPC and the full-rate analytical CBF."""
 
     initial_pose = stationary.read_robot_pose(stage)
-    anchor_pose = field_buffer.snapshot.payload.anchor_pose_world
-    initial_frame_id = field_buffer.snapshot.sensor_frame_id
+    initial_field = perception_runtime.field
+    anchor_pose = RobotPose2D(
+        x=float(initial_field.anchor_position_world_xy[0]),
+        y=float(initial_field.anchor_position_world_xy[1]),
+        yaw=initial_field.anchor_yaw,
+    )
+    initial_frame_id = initial_field.sensor_frame_id
+    mpc = control_runtime.mpc
     waypoint_controller = fixed.create_motion_waypoint_controller()
     clearance_threshold = motion.proxy_clearance_forward_threshold(
         initial_pose,
@@ -358,7 +284,7 @@ def run_dynamic_navigation(
     temporal_updates = 0
     reused_cycles = 0
     update_failures = 0
-    proxy_track_ids = {field_buffer.snapshot.payload.proxy_track_id}
+    proxy_track_ids = {initial_field.primary_track_id}
     maximum_track_speed = 0.0
     minimum_sampled_temporal = math.inf
     maximum_sampled_temporal = -math.inf
@@ -370,7 +296,7 @@ def run_dynamic_navigation(
     minimum_predicted_margin = math.inf
     minimum_backup_safety = math.inf
     minimum_backup_margin = math.inf
-    field_build_times = [field_buffer.snapshot.build_wall_seconds]
+    field_build_times = [initial_field.build_wall_seconds]
     solve_times: list[float] = []
 
     cleared_proxy = False
@@ -393,7 +319,10 @@ def run_dynamic_navigation(
     print("  Temporal method:                motion-compensated field difference")
     print("  Field frame:                    fixed first-scan frame")
     print("  Ego-motion grid shift:          (0.000, 0.000) m")
-    print(f"  Temporal low-pass alpha:        {temporal_estimator.config.smoothing_factor:.3f}")
+    print(
+        "  Temporal low-pass alpha:        "
+        f"{perception_runtime.temporal_estimator.config.smoothing_factor:.3f}"
+    )
     print(f"  Proxy speed:                    {DYNAMIC_PROXY_SPEED_METERS_PER_SECOND:.3f} m/s")
     print(f"  Proxy-clear threshold:          {clearance_threshold:.3f} m")
     print("  Runtime:                        diagnostic only")
@@ -417,7 +346,9 @@ def run_dynamic_navigation(
         try:
             new_frame = live.newest_lidar_frame(
                 lidar,
-                previous_frame_id=field_buffer.snapshot.sensor_frame_id,
+                previous_frame_id=(
+                    perception_runtime.field_buffer.snapshot.sensor_frame_id
+                ),
             )
         except (RuntimeError, TypeError, ValueError) as error:
             perception_failure_seen = True
@@ -428,7 +359,7 @@ def run_dynamic_navigation(
         if new_frame is None:
             reused_cycles += 1
             try:
-                field_status = field_buffer.reuse(
+                field_status = perception_runtime.reuse(
                     current_simulation_time_seconds=live.simulation_time_seconds(),
                 )
             except (RuntimeError, TypeError, ValueError) as error:
@@ -438,31 +369,17 @@ def run_dynamic_navigation(
         else:
             points_sensor_frame, frame_info = new_frame
             try:
-                candidate_tracker = copy.deepcopy(obstacle_tracker)
-                candidate = build_dynamic_field(
+                observation = live.make_perception_observation(
                     points_sensor_frame=points_sensor_frame,
                     frame_info=frame_info,
                     robot_pose=robot_pose,
-                    anchor_pose=anchor_pose,
-                    proxy_position_world_xy=proxy_motion.position_world[:2],
-                    obstacle_tracker=candidate_tracker,
                     robot_from_lidar=robot_from_lidar,
                     detection_config=detection_config,
-                    class_policy=class_policy,
-                    guidance_policy=guidance_policy,
-                    grid_config=grid_config,
-                    field_config=field_config,
                 )
-                candidate = attach_temporal_derivative(
-                    candidate,
-                    previous_snapshot=field_buffer.snapshot,
-                    estimator=temporal_estimator,
-                    grid_config=grid_config,
-                )
-                field_status = field_buffer.commit(
-                    live.make_field_snapshot(
-                        frame_info=frame_info,
-                        payload=candidate,
+                field_status = perception_runtime.update(
+                    observation,
+                    live.controlled_proxy_label_provider(
+                        proxy_motion.position_world[:2]
                     )
                 )
             except (RuntimeError, TypeError, ValueError) as error:
@@ -472,11 +389,11 @@ def run_dynamic_navigation(
                     "Fail-closed perception/temporal update stop: " f"{error}"
                 )
                 break
-            obstacle_tracker = candidate_tracker
+            candidate = field_status.snapshot.payload
             successful_updates += 1
             temporal_updates += 1
             field_build_times.append(candidate.build_wall_seconds)
-            proxy_track_ids.add(candidate.proxy_track_id)
+            proxy_track_ids.add(candidate.primary_track_id)
 
         if field_status.fail_closed:
             stale_field_stop_seen = True
@@ -487,7 +404,7 @@ def run_dynamic_navigation(
             break
 
         field = field_status.snapshot.payload
-        track_speed = float(np.linalg.norm(field.proxy_velocity_world_xy))
+        track_speed = field.maximum_selected_track_speed
         maximum_track_speed = max(maximum_track_speed, track_speed)
         temporal_minimum, temporal_maximum, temporal_magnitude, valid_fraction = (
             temporal_diagnostics(field)
@@ -511,14 +428,11 @@ def run_dynamic_navigation(
             anchor_pose=anchor_pose,
         )
         solve_start = time.perf_counter()
-        mpc_result = mpc.plan(
+        mpc_result = control_runtime.plan(
             chassis_state,
             nominal_commands,
+            field,
             initial_command_guess=warm_start,
-            configuration_space=field.pipeline.configuration_space,
-            h_full=field.pipeline.h_full,
-            guidance_fields=field.pipeline.guidance_fields,
-            temporal_safety_derivative=field.temporal_safety_derivative,
             preferred_lateral_direction_grid_y=preferred_direction,
         )
         solve_time = time.perf_counter() - solve_start
@@ -534,7 +448,7 @@ def run_dynamic_navigation(
             termination_reason = f"Fail-closed MPC stop: {mpc_result.status}"
             break
 
-        warm_start = live.shifted_warm_start(mpc_result)
+        warm_start = control_runtime.shifted_warm_start(mpc_result)
         mpc_intervention_seen |= mpc_result.intervention_active
         minimum_predicted_safety = min(
             minimum_predicted_safety,
@@ -548,11 +462,10 @@ def run_dynamic_navigation(
             [mpc_result.linear_velocity, mpc_result.angular_velocity],
             dtype=np.float64,
         )
-        backup_result = live.evaluate_backup(
-            command=selected_command,
-            chassis_state=chassis_state,
-            field=field,
-            backup_filter=backup_filter,
+        backup_result = control_runtime.filter_command(
+            selected_command,
+            chassis_state,
+            field,
         )
         backup_valid = fixed.backup_result_is_valid(backup_result)
         all_backup_valid &= backup_valid
@@ -613,15 +526,27 @@ def run_dynamic_navigation(
             termination_reason = "The robot cleared the crossing plane."
             break
 
+        execution_steps = perception_runtime.fresh_execution_step_budget(
+            current_simulation_time_seconds=live.simulation_time_seconds(),
+            physics_time_step_seconds=stationary.PHYSICS_DT,
+            requested_steps=fixed.CONTROL_PHYSICS_STEPS,
+        )
+        if execution_steps == 0:
+            robot_controller.stop()
+            proxy_motion.advance(stationary.PHYSICS_DT)
+            simulation_app.update()
+            completed_physics_steps += 1
+            continue
+
         segment_interrupted = False
-        for _ in range(fixed.CONTROL_PHYSICS_STEPS):
+        for _ in range(execution_steps):
             if not simulation_app.is_running():
                 application_stopped = True
                 termination_reason = "Isaac Sim stopped during command execution."
                 segment_interrupted = True
                 break
             try:
-                step_status = field_buffer.inspect(
+                step_status = perception_runtime.inspect(
                     current_simulation_time_seconds=live.simulation_time_seconds(),
                 )
             except (RuntimeError, TypeError, ValueError) as error:
@@ -642,11 +567,10 @@ def run_dynamic_navigation(
                 monitored_pose,
                 anchor_pose=anchor_pose,
             )
-            step_backup = live.evaluate_backup(
-                command=selected_command,
-                chassis_state=monitored_state,
-                field=step_status.snapshot.payload,
-                backup_filter=backup_filter,
+            step_backup = control_runtime.filter_command(
+                selected_command,
+                monitored_state,
+                step_status.snapshot.payload,
             )
             step_valid = fixed.backup_result_is_valid(step_backup)
             all_backup_valid &= step_valid
@@ -740,7 +664,9 @@ def run_dynamic_navigation(
             dtype=np.float64,
         ),
         initial_sensor_frame_id=initial_frame_id,
-        final_sensor_frame_id=field_buffer.snapshot.sensor_frame_id,
+        final_sensor_frame_id=(
+            perception_runtime.field_buffer.snapshot.sensor_frame_id
+        ),
         successful_field_updates=successful_updates,
         temporal_field_updates=temporal_updates,
         reused_field_cycles=reused_cycles,
@@ -977,6 +903,18 @@ def main() -> None:
             ),
         )
     )
+    perception_runtime = SafeSAGEPerceptionRuntime(
+        obstacle_tracker=obstacle_tracker,
+        class_policy=class_policy,
+        guidance_policy=guidance_policy,
+        grid_config=grid_config,
+        field_config=field_config,
+        temporal_estimator=SafeSAGETemporalDerivativeEstimator(
+            TEMPORAL_CONFIG
+        ),
+        live_field_config=live.LIVE_FIELD_CONFIG,
+        enable_temporal_updates=True,
+    )
 
     print(
         "\nHolding the robot and proxy still for "
@@ -994,29 +932,24 @@ def main() -> None:
         lidar,
         robot_controller,
     )
-    initial_field = build_dynamic_field(
-        points_sensor_frame=points_sensor_frame,
-        frame_info=frame_info,
-        robot_pose=anchor_pose,
-        anchor_pose=anchor_pose,
-        proxy_position_world_xy=proxy_motion.position_world[:2],
-        obstacle_tracker=obstacle_tracker,
-        robot_from_lidar=robot_from_lidar,
-        detection_config=detection_config,
-        class_policy=class_policy,
-        guidance_policy=guidance_policy,
-        grid_config=grid_config,
-        field_config=field_config,
-    )
-    field_buffer: SafeSAGELiveFieldBuffer[motion.MotionPipelineFrame] = (
-        SafeSAGELiveFieldBuffer(live.LIVE_FIELD_CONFIG)
-    )
-    field_buffer.initialize(
-        live.make_field_snapshot(
+    initial_status = perception_runtime.initialize(
+        live.make_perception_observation(
+            points_sensor_frame=points_sensor_frame,
             frame_info=frame_info,
-            payload=initial_field,
-        )
+            robot_pose=anchor_pose,
+            robot_from_lidar=robot_from_lidar,
+            detection_config=detection_config,
+        ),
+        live.controlled_proxy_label_provider(
+            proxy_motion.position_world[:2]
+        ),
+        anchor_position_world_xy=np.array(
+            [anchor_pose.x, anchor_pose.y],
+            dtype=np.float64,
+        ),
+        anchor_yaw=anchor_pose.yaw,
     )
+    initial_field = initial_status.snapshot.payload
     print(
         f"Initial field committed from frame {frame_info.sensor_frame_id} "
         f"in {initial_field.build_wall_seconds:.3f} s."
@@ -1032,22 +965,19 @@ def main() -> None:
             ),
         ),
     )
+    control_runtime = SafeSAGEControlRuntime(
+        mpc=mpc,
+        backup_filter=backup_filter,
+    )
     result = run_dynamic_navigation(
         stage=loaded_scene.stage,
         proxy_motion=proxy_motion,
         lidar=lidar,
         robot_controller=robot_controller,
-        field_buffer=field_buffer,
-        obstacle_tracker=obstacle_tracker,
-        temporal_estimator=SafeSAGETemporalDerivativeEstimator(TEMPORAL_CONFIG),
+        perception_runtime=perception_runtime,
+        control_runtime=control_runtime,
         robot_from_lidar=robot_from_lidar,
         detection_config=detection_config,
-        class_policy=class_policy,
-        guidance_policy=guidance_policy,
-        grid_config=grid_config,
-        field_config=field_config,
-        mpc=mpc,
-        backup_filter=backup_filter,
         passing_side=passing_side,
     )
     live.create_executed_path_markers(
