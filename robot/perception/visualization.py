@@ -5,6 +5,7 @@ import zlib
 import numpy as np
 from PIL import Image, ImageDraw
 
+from robot.perception.camera_lidar_fusion import CameraLidarFusionResult
 from robot.perception.semantic_detection import SemanticDetectionFrame
 from robot.perception.yolo_detector import rgb_to_bgr_uint8
 
@@ -93,4 +94,71 @@ def render_semantic_detection_overlay(
             label,
             fill=(0, 0, 0),
         )
+    return np.asarray(pil_image, dtype=np.uint8).copy()
+
+
+def render_camera_lidar_fusion_overlay(
+    image_rgb: object,
+    frame: SemanticDetectionFrame,
+    fusion: CameraLidarFusionResult,
+    *,
+    point_radius: int = 3,
+) -> np.ndarray:
+    """Return masks, boxes, projected LiDAR points, and fused track labels."""
+
+    if not isinstance(fusion, CameraLidarFusionResult):
+        raise TypeError("fusion must be a CameraLidarFusionResult.")
+    if isinstance(point_radius, bool) or not isinstance(point_radius, int):
+        raise TypeError("point_radius must be an integer.")
+    if point_radius <= 0:
+        raise ValueError("point_radius must be greater than zero.")
+    annotated = render_semantic_detection_overlay(image_rgb, frame)
+    pil_image = Image.fromarray(annotated)
+    draw = ImageDraw.Draw(pil_image)
+    association_by_track = {
+        association.track_id: association
+        for association in fusion.associations
+    }
+    obstacle_by_track = {
+        obstacle.track_id: obstacle
+        for obstacle in fusion.semantic_labels.semantic_obstacles
+    }
+    for pixel_xy, track_id_value in zip(
+        fusion.projection.pixel_xy,
+        fusion.projected_track_ids,
+        strict=True,
+    ):
+        track_id = int(track_id_value)
+        association = association_by_track.get(track_id)
+        color = (60, 255, 80) if association and association.is_matched else (
+            255,
+            255,
+            255,
+        )
+        x_position = float(pixel_xy[0])
+        y_position = float(pixel_xy[1])
+        draw.ellipse(
+            (
+                x_position - point_radius,
+                y_position - point_radius,
+                x_position + point_radius,
+                y_position + point_radius,
+            ),
+            fill=color,
+            outline=(0, 0, 0),
+        )
+    for track_id in sorted(association_by_track):
+        if not association_by_track[track_id].is_matched:
+            continue
+        track_mask = fusion.projected_track_ids == track_id
+        if not np.any(track_mask):
+            continue
+        center = np.median(fusion.projection.pixel_xy[track_mask], axis=0)
+        obstacle = obstacle_by_track[track_id]
+        text = f"T{track_id}: {obstacle.semantic_class}"
+        color = (60, 255, 80)
+        text_origin = (float(center[0]) + 5.0, float(center[1]) + 5.0)
+        text_box = draw.textbbox(text_origin, text)
+        draw.rectangle(text_box, fill=(0, 0, 0))
+        draw.text(text_origin, text, fill=color)
     return np.asarray(pil_image, dtype=np.uint8).copy()

@@ -4,6 +4,7 @@ import pytest
 from robot.safety.obstacle_detection import (
     ObstacleDetectionConfig,
     detect_obstacle_points,
+    detect_obstacle_points_3d,
 )
 
 
@@ -209,6 +210,50 @@ def test_angular_bins_keep_nearest_point() -> None:
         obstacles,
         expected,
     )
+
+
+def test_three_dimensional_detection_preserves_height_and_alignment() -> None:
+    points = np.array(
+        [
+            [2.0, 0.0, 0.8],
+            [1.0, 0.0, 0.4],
+            [1.0, 1.0, 0.7],
+        ],
+        dtype=np.float32,
+    )
+
+    obstacles_3d = detect_obstacle_points_3d(
+        points,
+        make_config(angular_bin_size_degrees=10.0),
+    )
+    obstacles_2d = detect_obstacle_points(
+        points,
+        make_config(angular_bin_size_degrees=10.0),
+    )
+
+    np.testing.assert_allclose(
+        obstacles_3d,
+        np.array(
+            [
+                [1.0, 0.0, 0.4],
+                [1.0, 1.0, 0.7],
+            ],
+            dtype=np.float32,
+        ),
+    )
+    np.testing.assert_array_equal(obstacles_2d, obstacles_3d[:, :2])
+    assert obstacles_3d.flags.c_contiguous
+
+
+def test_three_dimensional_detection_returns_shaped_empty_array() -> None:
+    obstacles = detect_obstacle_points_3d(
+        np.array([[-1.0, 0.0, 0.5]], dtype=np.float32),
+        make_config(),
+    )
+
+    assert obstacles.shape == (0, 3)
+    assert obstacles.dtype == np.float32
+    assert obstacles.flags.c_contiguous
 
 
 def test_returns_shaped_empty_array_when_no_points_remain() -> None:
