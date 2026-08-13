@@ -97,10 +97,33 @@ def detect_obstacle_points(
         obstacle ``[x, y]`` positions in the robot base frame.
     """
 
+    points = detect_obstacle_points_3d(points_robot_frame, config)
+
+    return np.ascontiguousarray(
+        points[:, :2],
+        dtype=np.float32,
+    )
+
+
+def detect_obstacle_points_3d(
+    points_robot_frame: np.ndarray,
+    config: ObstacleDetectionConfig,
+) -> np.ndarray:
+    """Extract obstacle points while preserving their measured heights.
+
+    This applies exactly the same geometric filtering and angular reduction
+    as :func:`detect_obstacle_points`, but returns ``[x, y, z]``.  The
+    retained 3D points can therefore remain index-aligned with tracker point
+    IDs during camera--LiDAR projection.
+    """
+
+    if not isinstance(config, ObstacleDetectionConfig):
+        raise TypeError("config must be an ObstacleDetectionConfig.")
+
     points = filter_valid_points(points_robot_frame)
 
     if points.shape[0] == 0:
-        return _empty_obstacle_points()
+        return _empty_obstacle_points_3d()
 
     height_mask = (
         (points[:, 2] >= config.minimum_height)
@@ -110,7 +133,7 @@ def detect_obstacle_points(
     points = points[height_mask]
 
     if points.shape[0] == 0:
-        return _empty_obstacle_points()
+        return _empty_obstacle_points_3d()
 
     points_xy = points[:, :2]
 
@@ -127,37 +150,35 @@ def detect_obstacle_points(
     if config.forward_only:
         range_mask &= points_xy[:, 0] >= 0.0
 
-    points_xy = points_xy[range_mask]
+    points = points[range_mask]
 
-    if points_xy.shape[0] == 0:
-        return _empty_obstacle_points()
+    if points.shape[0] == 0:
+        return _empty_obstacle_points_3d()
 
     if config.angular_bin_size_degrees is not None:
-        points_xy = _keep_nearest_per_angular_bin(
-            points_xy,
+        nearest_indices = _nearest_per_angular_bin_indices(
+            points[:, :2],
             bin_size_degrees=(
                 config.angular_bin_size_degrees
             ),
         )
+        points = points[nearest_indices]
 
     return np.ascontiguousarray(
-        points_xy,
+        points,
         dtype=np.float32,
     )
 
 
-def _keep_nearest_per_angular_bin(
+def _nearest_per_angular_bin_indices(
     points_xy: np.ndarray,
     *,
     bin_size_degrees: float,
 ) -> np.ndarray:
-    """Keep the nearest point in each horizontal angular sector."""
+    """Return source indices of the nearest point in every angular bin."""
 
     if points_xy.shape[0] <= 1:
-        return np.ascontiguousarray(
-            points_xy,
-            dtype=np.float32,
-        )
+        return np.arange(points_xy.shape[0], dtype=np.int64)
 
     angles = np.arctan2(
         points_xy[:, 1],
@@ -196,16 +217,10 @@ def _keep_nearest_per_angular_bin(
 
     nearest_indices = sorted_indices[nearest_mask]
 
-    return np.ascontiguousarray(
-        points_xy[nearest_indices],
-        dtype=np.float32,
-    )
+    return np.ascontiguousarray(nearest_indices, dtype=np.int64)
 
 
-def _empty_obstacle_points() -> np.ndarray:
-    """Create a correctly shaped empty CBF obstacle array."""
+def _empty_obstacle_points_3d() -> np.ndarray:
+    """Create a correctly shaped empty 3D obstacle array."""
 
-    return np.empty(
-        (0, 2),
-        dtype=np.float32,
-    )
+    return np.empty((0, 3), dtype=np.float32)
