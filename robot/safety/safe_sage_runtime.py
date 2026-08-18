@@ -17,6 +17,7 @@ remain at the scenario boundary.
 import copy
 import math
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from numbers import Real
 from typing import Sequence
@@ -354,9 +355,37 @@ class SafeSAGEPerceptionRuntime:
     ) -> SafeSAGELiveFieldStatus[SafeSAGERuntimeField]:
         """Build and commit the first field in one immutable anchor frame."""
 
+        if not isinstance(label_provider, SemanticLabelProvider):
+            raise TypeError("label_provider must implement SemanticLabelProvider.")
+        return self.initialize_from_tracking(
+            observation,
+            lambda tracking_result: label_provider.assign(
+                tracking_result.tracked_obstacles
+            ),
+            anchor_position_world_xy=anchor_position_world_xy,
+            anchor_yaw=anchor_yaw,
+        )
+
+    def initialize_from_tracking(
+        self,
+        observation: SafeSAGEPerceptionObservation,
+        label_resolver: Callable[[ObstacleTrackingResult], SemanticLabelResult],
+        *,
+        anchor_position_world_xy: object | None = None,
+        anchor_yaw: float | None = None,
+    ) -> SafeSAGELiveFieldStatus[SafeSAGERuntimeField]:
+        """Initialize with labels resolved from the exact tracking result.
+
+        This entry point is intended for camera--LiDAR fusion. The callback
+        receives the tracking result produced by the runtime's cloned
+        candidate tracker, so semantic association cannot accidentally use a
+        second tracker update or misaligned point-to-track identifiers.
+        """
+
         if self.initialized:
             raise RuntimeError("The Safe-SAGE perception runtime is initialized.")
         self._validate_observation(observation)
+        self._validate_label_resolver(label_resolver)
         anchor_position = (
             observation.robot_position_world_xy
             if anchor_position_world_xy is None
@@ -374,7 +403,7 @@ class SafeSAGEPerceptionRuntime:
         candidate_tracker = copy.deepcopy(self._obstacle_tracker)
         field = self._build_candidate(
             observation,
-            label_provider,
+            label_resolver,
             obstacle_tracker=candidate_tracker,
             anchor_position_world_xy=anchor_position,
             anchor_yaw=resolved_anchor_yaw,
@@ -394,7 +423,24 @@ class SafeSAGEPerceptionRuntime:
     ) -> SafeSAGELiveFieldStatus[SafeSAGERuntimeField]:
         """Atomically accept one newer complete field and tracker state."""
 
+        if not isinstance(label_provider, SemanticLabelProvider):
+            raise TypeError("label_provider must implement SemanticLabelProvider.")
+        return self.update_from_tracking(
+            observation,
+            lambda tracking_result: label_provider.assign(
+                tracking_result.tracked_obstacles
+            ),
+        )
+
+    def update_from_tracking(
+        self,
+        observation: SafeSAGEPerceptionObservation,
+        label_resolver: Callable[[ObstacleTrackingResult], SemanticLabelResult],
+    ) -> SafeSAGELiveFieldStatus[SafeSAGERuntimeField]:
+        """Update using semantic labels resolved on the candidate tracks."""
+
         self._validate_observation(observation)
+        self._validate_label_resolver(label_resolver)
         if not self.initialized:
             raise RuntimeError("Initialize the perception runtime before update.")
         if self._anchor_position_world_xy is None or self._anchor_yaw is None:
@@ -402,7 +448,7 @@ class SafeSAGEPerceptionRuntime:
         candidate_tracker = copy.deepcopy(self._obstacle_tracker)
         field = self._build_candidate(
             observation,
-            label_provider,
+            label_resolver,
             obstacle_tracker=candidate_tracker,
             anchor_position_world_xy=self._anchor_position_world_xy,
             anchor_yaw=self._anchor_yaw,
@@ -488,10 +534,18 @@ class SafeSAGEPerceptionRuntime:
                 "observation must be a SafeSAGEPerceptionObservation."
             )
 
+    @staticmethod
+    def _validate_label_resolver(label_resolver: object) -> None:
+        if not callable(label_resolver):
+            raise TypeError("label_resolver must be callable.")
+
     def _build_candidate(
         self,
         observation: SafeSAGEPerceptionObservation,
-        label_provider: SemanticLabelProvider,
+        label_resolver: Callable[
+            [ObstacleTrackingResult],
+            SemanticLabelResult,
+        ],
         *,
         obstacle_tracker: ObstacleTracker,
         anchor_position_world_xy: np.ndarray,
@@ -500,8 +554,6 @@ class SafeSAGEPerceptionRuntime:
             SafeSAGELiveFieldSnapshot[SafeSAGERuntimeField] | None
         ),
     ) -> SafeSAGERuntimeField:
-        if not isinstance(label_provider, SemanticLabelProvider):
-            raise TypeError("label_provider must implement SemanticLabelProvider.")
         if observation.obstacle_points_robot_xy.shape[0] == 0:
             raise RuntimeError("The observation contains no obstacle points.")
         start_wall_time = time.perf_counter()
@@ -511,10 +563,10 @@ class SafeSAGEPerceptionRuntime:
             robot_yaw=observation.robot_yaw,
             timestamp_seconds=observation.sensor_timestamp_seconds,
         )
-        label_result = label_provider.assign(tracking_result.tracked_obstacles)
+        label_result = label_resolver(tracking_result)
         if not isinstance(label_result, SemanticLabelResult):
             raise TypeError(
-                "SemanticLabelProvider.assign must return SemanticLabelResult."
+                "label_resolver must return SemanticLabelResult."
             )
         if not label_result.assignments:
             raise RuntimeError(

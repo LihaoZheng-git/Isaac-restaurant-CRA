@@ -418,6 +418,68 @@ def test_overlapping_buffers_are_rejected() -> None:
         )
 
 
+def test_dense_scene_arbitration_resolves_overlapping_buffers() -> None:
+    first = make_semantic_obstacle(2, "chair")
+    second = make_semantic_obstacle(8, "person")
+    grid = make_grid(
+        size=21,
+        points=np.array([[7.5, 10.5], [12.5, 10.5]]),
+        track_ids=np.array([2, 8]),
+        semantics=(first, second),
+    )
+
+    result = solve_tangential_laplace_guidance_field(
+        grid,
+        guidance_policy=make_guidance_policy(),
+        semantic_obstacles=(first, second),
+        config=TangentialLaplaceGuidanceFieldConfig(
+            tangential_buffer_radius=3.0,
+            allow_dense_scene_arbitration=True,
+            convergence_tolerance=1e-6,
+            maximum_iterations=10_000,
+            residual_check_interval=5,
+        ),
+    )
+
+    assert result.tangential_interface_cell_count > 0
+    assert np.all(np.isfinite(result.vectors_robot_xy))
+    assert not np.any(
+        result.tangential_interface_mask
+        & result.obstacle_interface_mask
+    )
+
+
+def test_dense_scene_arbitration_accepts_symmetric_normal_saddle() -> None:
+    first = make_semantic_obstacle(2, "chair")
+    second = make_semantic_obstacle(8, "person")
+    grid = make_grid(
+        size=21,
+        points=np.array([[9.5, 10.5], [11.5, 10.5]]),
+        track_ids=np.array([2, 8]),
+        semantics=(first, second),
+    )
+
+    result = solve_tangential_laplace_guidance_field(
+        grid,
+        guidance_policy=make_guidance_policy(),
+        semantic_obstacles=(first, second),
+        config=TangentialLaplaceGuidanceFieldConfig(
+            tangential_buffer_radius=3.0,
+            allow_dense_scene_arbitration=True,
+            convergence_tolerance=1e-6,
+            maximum_iterations=10_000,
+            residual_check_interval=5,
+        ),
+    )
+
+    assert result.obstacle_interface_mask[10, 10]
+    np.testing.assert_allclose(
+        result.obstacle_normals_robot_xy[10, 10],
+        0.0,
+    )
+    np.testing.assert_allclose(result.vectors_robot_xy[10, 10], 0.0)
+
+
 def test_buffer_reaching_outer_boundary_is_rejected() -> None:
     semantic = make_semantic_obstacle(4, "chair")
     grid = make_grid(

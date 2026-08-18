@@ -73,6 +73,7 @@ class TangentialLaplaceGuidanceFieldConfig(LaplaceGuidanceFieldConfig):
     """Numerical settings and physical radius of the tangential interface."""
 
     tangential_buffer_radius: float = 0.6
+    allow_dense_scene_arbitration: bool = False
 
     def __post_init__(self) -> None:
         super().__post_init__()
@@ -84,6 +85,10 @@ class TangentialLaplaceGuidanceFieldConfig(LaplaceGuidanceFieldConfig):
         if radius <= 0.0:
             raise ValueError(
                 "tangential_buffer_radius must be greater than zero."
+            )
+        if not isinstance(self.allow_dense_scene_arbitration, bool):
+            raise TypeError(
+                "allow_dense_scene_arbitration must be a boolean."
             )
 
         object.__setattr__(self, "tangential_buffer_radius", radius)
@@ -171,6 +176,9 @@ def solve_tangential_laplace_guidance_field(
         occupancy_grid,
         component_labels=component_labels,
         components=components,
+        allow_dense_scene_arbitration=(
+            solver_config.allow_dense_scene_arbitration
+        ),
     )
 
     outer_boundary_mask = _outer_boundary_mask(occupancy_grid.shape)
@@ -184,6 +192,9 @@ def solve_tangential_laplace_guidance_field(
         obstacle_interface_mask=obstacle_interface_mask,
         outer_boundary_mask=outer_boundary_mask,
         buffer_radius=solver_config.tangential_buffer_radius,
+        allow_dense_scene_arbitration=(
+            solver_config.allow_dense_scene_arbitration
+        ),
     )
 
     fixed_mask = outer_boundary_mask.copy()
@@ -360,6 +371,7 @@ def _normal_interface_data(
     *,
     component_labels: np.ndarray,
     components: tuple[_ObstacleComponent, ...],
+    allow_dense_scene_arbitration: bool,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Construct normal boundary data on free cells beside obstacles."""
 
@@ -405,6 +417,14 @@ def _normal_interface_data(
 
             normal_magnitude = float(np.linalg.norm(normal_sum))
             if normal_magnitude <= 1e-12:
+                if allow_dense_scene_arbitration:
+                    # Opposing equal obstacle contacts define a harmonic
+                    # saddle: no unique normal direction exists. Keep the
+                    # cell as a fixed zero-guidance interface. Configuration
+                    # occupancy and h_full remain unchanged and continue to
+                    # carry the geometric safety constraint.
+                    interface_mask[row_index, column_index] = True
+                    continue
                 raise ValueError(
                     "Cannot determine a unique obstacle normal at cell "
                     f"({row_index}, {column_index}); increase obstacle "
@@ -430,6 +450,7 @@ def _tangential_interface_data(
     obstacle_interface_mask: np.ndarray,
     outer_boundary_mask: np.ndarray,
     buffer_radius: float,
+    allow_dense_scene_arbitration: bool,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Construct buffered tangential Dirichlet cells and vectors."""
 
@@ -477,20 +498,25 @@ def _tangential_interface_data(
         coverage_count[coverage_mask] += 1
 
     overlap_cells = np.argwhere(coverage_count > 1)
-    if overlap_cells.size:
+    if overlap_cells.size and not allow_dense_scene_arbitration:
         row_index, column_index = overlap_cells[0]
         raise ValueError(
             "Tangential obstacle buffers overlap at grid cell "
             f"({int(row_index)}, {int(column_index)})."
         )
 
+    selected_priorities: np.ndarray = np.empty(shape, dtype=object)
+    selected_priorities.fill(None)
     for component in active_components:
         distances, nearest_normal_sums = distance_data[component.label]
         coverage_mask = (
             ~occupancy_grid.occupied_mask
             & (distances <= buffer_radius + half_width + 1e-12)
         )
-        if np.any(coverage_mask & outer_boundary_mask):
+        if (
+            np.any(coverage_mask & outer_boundary_mask)
+            and not allow_dense_scene_arbitration
+        ):
             raise ValueError(
                 "A tangential obstacle buffer reaches the outer grid "
                 "boundary; enlarge the local grid or reduce the buffer."
@@ -501,12 +527,23 @@ def _tangential_interface_data(
             & (distances >= buffer_radius - half_width - 1e-12)
             & (distances <= buffer_radius + half_width + 1e-12)
         )
+        if allow_dense_scene_arbitration:
+            # Dense restaurant geometry commonly makes semantic buffers meet.
+            # Normal obstacle boundaries and the finite grid boundary retain
+            # priority; only valid free ring cells participate in arbitration.
+            ring_mask &= ~outer_boundary_mask
+            ring_mask &= ~obstacle_interface_mask
         if not np.any(ring_mask):
+            if allow_dense_scene_arbitration:
+                continue
             raise ValueError(
                 "No grid cells represent a requested tangential buffer; "
                 "increase the grid resolution or buffer radius."
             )
-        if np.any(ring_mask & obstacle_interface_mask):
+        if (
+            np.any(ring_mask & obstacle_interface_mask)
+            and not allow_dense_scene_arbitration
+        ):
             raise ValueError(
                 "The tangential buffer intersects the normal obstacle "
                 "interface; increase tangential_buffer_radius."
@@ -517,12 +554,16 @@ def _tangential_interface_data(
             axis=2,
         )
         ambiguous_mask = ring_mask & (normal_magnitudes <= 1e-12)
-        if np.any(ambiguous_mask):
+        if np.any(ambiguous_mask) and not allow_dense_scene_arbitration:
             row_index, column_index = np.argwhere(ambiguous_mask)[0]
             raise ValueError(
                 "Cannot determine a unique buffered-interface normal at "
                 f"cell ({int(row_index)}, {int(column_index)})."
             )
+        if allow_dense_scene_arbitration:
+            ring_mask &= ~ambiguous_mask
+            if not np.any(ring_mask):
+                continue
 
         component_normals = np.zeros_like(normals)
         component_normals[ring_mask] = (
@@ -534,12 +575,67 @@ def _tangential_interface_data(
             passing_side=component.parameters.passing_side,
         )
 
-        interface_mask[ring_mask] = True
-        normals[ring_mask] = component_normals[ring_mask]
-        prescribed_vectors[ring_mask] = (
-            component.parameters.tangential_strength
-            * component_tangents[ring_mask]
-        )
+        if allow_dense_scene_arbitration:
+            # A single Dirichlet vector can be prescribed at each grid cell.
+            # When multiple buffers request the same cell, choose the most
+            # conservative class by risk, then normal-flux magnitude, then
+            # tangential strength. The component label breaks exact ties so
+            # the result is deterministic across runs.
+            priority = (
+                component.parameters.risk,
+                component.parameters.boundary_flux_magnitude,
+                component.parameters.tangential_strength,
+                -component.label,
+            )
+            candidate_indices = np.argwhere(ring_mask)
+            selected_indices = [
+                (int(row), int(column))
+                for row, column in candidate_indices
+                if selected_priorities[int(row), int(column)] is None
+                or priority
+                > selected_priorities[int(row), int(column)]
+            ]
+            if not selected_indices:
+                continue
+            selected_rows, selected_columns = zip(
+                *selected_indices,
+                strict=True,
+            )
+            selected_rows_array = np.asarray(selected_rows, dtype=np.int64)
+            selected_columns_array = np.asarray(
+                selected_columns,
+                dtype=np.int64,
+            )
+            for row_index, column_index in selected_indices:
+                selected_priorities[row_index, column_index] = priority
+            interface_mask[
+                selected_rows_array,
+                selected_columns_array,
+            ] = True
+            normals[
+                selected_rows_array,
+                selected_columns_array,
+            ] = component_normals[
+                selected_rows_array,
+                selected_columns_array,
+            ]
+            prescribed_vectors[
+                selected_rows_array,
+                selected_columns_array,
+            ] = (
+                component.parameters.tangential_strength
+                * component_tangents[
+                    selected_rows_array,
+                    selected_columns_array,
+                ]
+            )
+        else:
+            interface_mask[ring_mask] = True
+            normals[ring_mask] = component_normals[ring_mask]
+            prescribed_vectors[ring_mask] = (
+                component.parameters.tangential_strength
+                * component_tangents[ring_mask]
+            )
 
     return interface_mask, normals, prescribed_vectors
 
