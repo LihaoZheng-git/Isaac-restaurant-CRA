@@ -144,6 +144,10 @@ from robot.safety.safe_sage_runtime import (
     SafeSAGEPerceptionObservation,
     SafeSAGEPerceptionRuntime,
 )
+from robot.safety.safe_sage_temporal_derivative import (
+    SafeSAGETemporalDerivativeConfig,
+    SafeSAGETemporalDerivativeEstimator,
+)
 from robot.safety.safe_sage_unicycle_cbf_filter import (
     SafeSAGEUnicycleCBFConfig,
     SafeSAGEUnicycleCBFFilter,
@@ -342,7 +346,12 @@ def wait_for_new_sensor_pair(
     )
 
 
-def create_policies_and_runtime() -> tuple[
+def create_policies_and_runtime(
+    *,
+    temporal_smoothing_factor: float | None = None,
+    tangential_buffer_radius: float = 0.60,
+    enable_temporal_updates: bool = True,
+) -> tuple[
     ClassSafetyPolicy,
     SafeSAGEGuidancePolicy,
     SafeSAGEPerceptionRuntime,
@@ -385,7 +394,7 @@ def create_policies_and_runtime() -> tuple[
         ),
         guidance_field_config=TangentialLaplaceGuidanceFieldConfig(
             convergence_tolerance=1e-6,
-            tangential_buffer_radius=0.60,
+            tangential_buffer_radius=tangential_buffer_radius,
             allow_dense_scene_arbitration=True,
         ),
         h_full_config=SafeSAGEHFullConfig(
@@ -396,6 +405,15 @@ def create_policies_and_runtime() -> tuple[
                 convergence_tolerance=1e-6,
             ),
         ),
+    )
+    temporal_estimator = (
+        None
+        if temporal_smoothing_factor is None
+        else SafeSAGETemporalDerivativeEstimator(
+            SafeSAGETemporalDerivativeConfig(
+                smoothing_factor=temporal_smoothing_factor,
+            )
+        )
     )
     runtime = SafeSAGEPerceptionRuntime(
         obstacle_tracker=ObstacleTracker(
@@ -409,6 +427,7 @@ def create_policies_and_runtime() -> tuple[
         guidance_policy=guidance_policy,
         grid_config=grid_config,
         field_config=field_config,
+        temporal_estimator=temporal_estimator,
         live_field_config=SafeSAGELiveFieldConfig(
             # YOLO inference and a 10-slice dense-scene field currently take
             # longer than one control interval. Age is measured in simulated
@@ -416,7 +435,7 @@ def create_policies_and_runtime() -> tuple[
             maximum_field_age_seconds=2.50,
             maximum_reused_control_cycles=2,
         ),
-        enable_temporal_updates=True,
+        enable_temporal_updates=enable_temporal_updates,
     )
     return class_policy, guidance_policy, runtime
 
@@ -488,12 +507,17 @@ def chassis_state_in_anchor(
 
 def create_control_runtime(
     controller: NovaCarterController,
+    *,
+    gamma: float = 1.0,
+    mpc_horizon_steps: int = MOTION_MPC_HORIZON_STEPS,
+    mpc_angular_velocity_weight: float = 0.02,
+    backup_angular_velocity_weight: float = 1.0,
 ) -> SafeSAGEControlRuntime:
     """Create direct-unicycle MPC and the full-rate analytical CBF."""
 
     paper_filter = SafeSAGECBFSafetyFilter(
         SafeSAGECBFConfig(
-            gamma=1.0,
+            gamma=gamma,
             minimum_planar_velocity=-controller.config.max_linear_speed,
             maximum_planar_velocity=controller.config.max_linear_speed,
             minimum_angular_velocity=-controller.config.max_angular_speed,
@@ -505,16 +529,16 @@ def create_control_runtime(
     mpc = SafeSAGEUnicycleMPC(
         paper_filter,
         SafeSAGEUnicycleMPCConfig(
-            horizon_steps=MOTION_MPC_HORIZON_STEPS,
+            horizon_steps=mpc_horizon_steps,
             time_step=MOTION_MPC_TIME_STEP,
-            gamma=1.0,
+            gamma=gamma,
             lookahead_distance=UNICYCLE_LOOKAHEAD_DISTANCE,
             minimum_linear_velocity=0.0,
             maximum_linear_velocity=controller.config.max_linear_speed,
             minimum_angular_velocity=-controller.config.max_angular_speed,
             maximum_angular_velocity=controller.config.max_angular_speed,
             linear_velocity_weight=1.0,
-            angular_velocity_weight=0.02,
+            angular_velocity_weight=mpc_angular_velocity_weight,
             command_smoothness_weight=0.005,
             maximum_sqp_iterations=12,
             maximum_solver_iterations=4000,
@@ -530,7 +554,7 @@ def create_control_runtime(
             minimum_angular_velocity=-controller.config.max_angular_speed,
             maximum_angular_velocity=controller.config.max_angular_speed,
             linear_velocity_weight=1.0,
-            angular_velocity_weight=1.0,
+            angular_velocity_weight=backup_angular_velocity_weight,
         ),
     )
     return SafeSAGEControlRuntime(mpc=mpc, backup_filter=backup)
