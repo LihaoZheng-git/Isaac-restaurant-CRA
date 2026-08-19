@@ -26,6 +26,11 @@ from robot.safety.semantic_obstacle import (
     UNKNOWN_SEMANTIC_CLASS,
     make_unknown_semantic_obstacle,
 )
+from robot.perception.track_reassociation import (
+    TrackGeometrySnapshot,
+    TrackReassociationConfig,
+    reassociate_track_snapshots,
+)
 
 
 TEMPORAL_LABEL_SOURCE = "temporal_camera_lidar_fusion"
@@ -65,6 +70,7 @@ class SemanticTrackMemoryConfig:
     minimum_class_evidence_margin: float = 0.05
     track_retention_seconds: float = 2.0
     minimum_time_delta: float = 1e-6
+    enable_track_reassociation: bool = True
 
     def __post_init__(self) -> None:
         positive_values = (
@@ -95,6 +101,8 @@ class SemanticTrackMemoryConfig:
             value = _finite_real(getattr(self, name), name=name)
             if not 0.0 <= value <= 1.0:
                 raise ValueError(f"{name} must lie in [0, 1].")
+        if not isinstance(self.enable_track_reassociation, bool):
+            raise TypeError("enable_track_reassociation must be a boolean.")
 
 
 @dataclass(frozen=True)
@@ -111,6 +119,7 @@ class TemporalSemanticTrack:
     evidence_score: float
     evidence_margin: float
     evidence_age_seconds: float | None
+    reassociated_from_track_id: int | None = None
 
     @property
     def is_confirmed(self) -> bool:
@@ -122,7 +131,13 @@ class TemporalSemanticTrack:
     def is_persisted(self) -> bool:
         """Return whether memory bridged a missing or different observation."""
 
-        return self.status == "persisted"
+        return self.status in {"persisted", "reassociated"}
+
+    @property
+    def is_reassociated(self) -> bool:
+        """Return whether evidence followed an unambiguous replacement ID."""
+
+        return self.status == "reassociated"
 
 
 @dataclass(frozen=True)
@@ -145,6 +160,12 @@ class SemanticTrackMemoryResult:
 
         return sum(track.is_persisted for track in self.tracks)
 
+    @property
+    def reassociated_track_count(self) -> int:
+        """Return the number of labels transferred to replacement IDs."""
+
+        return sum(track.is_reassociated for track in self.tracks)
+
 
 @dataclass(frozen=True)
 class _SemanticObservation:
@@ -161,6 +182,9 @@ class _TrackMemoryState:
 
     track_id: int
     last_seen_timestamp: float
+    centroid_world_xy: tuple[float, float]
+    velocity_world_xy: tuple[float, float]
+    point_count: int
     observations: list[_SemanticObservation] = field(default_factory=list)
 
 
@@ -181,8 +205,20 @@ class SemanticTrackMemory:
     def __init__(
         self,
         config: SemanticTrackMemoryConfig | None = None,
+        *,
+        reassociation_config: TrackReassociationConfig | None = None,
     ) -> None:
         self.config = config or SemanticTrackMemoryConfig()
+        if (
+            reassociation_config is not None
+            and not isinstance(reassociation_config, TrackReassociationConfig)
+        ):
+            raise TypeError(
+                "reassociation_config must be a TrackReassociationConfig."
+            )
+        self.reassociation_config = (
+            reassociation_config or TrackReassociationConfig()
+        )
         self._states: dict[int, _TrackMemoryState] = {}
         self._last_update_timestamp: float | None = None
 
@@ -210,6 +246,10 @@ class SemanticTrackMemory:
             raise TypeError("semantic_labels must be a SemanticLabelResult.")
         timestamp = self._validate_timestamp(timestamp_seconds)
         self._prune_states(timestamp)
+        reassociated_from = self._reassociate_replacement_ids(
+            semantic_labels,
+            timestamp=timestamp,
+        )
         output_assignments: list[SemanticTrackAssignment] = []
         diagnostics: list[TemporalSemanticTrack] = []
         for assignment in semantic_labels.assignments:
@@ -220,9 +260,15 @@ class SemanticTrackMemory:
                 state = _TrackMemoryState(
                     track_id=track_id,
                     last_seen_timestamp=timestamp,
+                    centroid_world_xy=track.centroid_world_xy,
+                    velocity_world_xy=track.velocity_world_xy,
+                    point_count=track.point_count,
                 )
                 self._states[track_id] = state
             state.last_seen_timestamp = timestamp
+            state.centroid_world_xy = track.centroid_world_xy
+            state.velocity_world_xy = track.velocity_world_xy
+            state.point_count = track.point_count
             observed_class = assignment.obstacle.semantic_class
             observed_confidence = assignment.obstacle.semantic_confidence
             if (
@@ -251,6 +297,11 @@ class SemanticTrackMemory:
                 timestamp=timestamp,
                 observed_class=observed_class,
             )
+            previous_track_id = reassociated_from.get(track_id)
+            if previous_track_id is not None and output_class != (
+                UNKNOWN_SEMANTIC_CLASS
+            ):
+                status = "reassociated"
             if output_class == UNKNOWN_SEMANTIC_CLASS:
                 output_obstacle = make_unknown_semantic_obstacle(track)
             else:
@@ -277,6 +328,7 @@ class SemanticTrackMemory:
                     evidence_score=evidence_score,
                     evidence_margin=evidence_margin,
                     evidence_age_seconds=evidence_age,
+                    reassociated_from_track_id=previous_track_id,
                 )
             )
         self._last_update_timestamp = timestamp
@@ -288,6 +340,76 @@ class SemanticTrackMemory:
             ),
             tracks=tuple(diagnostics),
         )
+
+    def _reassociate_replacement_ids(
+        self,
+        semantic_labels: SemanticLabelResult,
+        *,
+        timestamp: float,
+    ) -> dict[int, int]:
+        """Move confirmed evidence to unambiguous unlabeled replacement IDs."""
+
+        if not self.config.enable_track_reassociation:
+            return {}
+        current_track_ids = {
+            assignment.track_id for assignment in semantic_labels.assignments
+        }
+        source_snapshots: list[TrackGeometrySnapshot] = []
+        source_classes: dict[int, str] = {}
+        for state in self._states.values():
+            if state.track_id in current_track_ids:
+                continue
+            output_class = self._evaluate_state(
+                state,
+                timestamp=timestamp,
+                observed_class=UNKNOWN_SEMANTIC_CLASS,
+            )[0]
+            if output_class == UNKNOWN_SEMANTIC_CLASS:
+                continue
+            source_classes[state.track_id] = output_class
+            source_snapshots.append(
+                TrackGeometrySnapshot(
+                    track_id=state.track_id,
+                    timestamp_seconds=state.last_seen_timestamp,
+                    centroid_world_xy=state.centroid_world_xy,
+                    velocity_world_xy=state.velocity_world_xy,
+                    point_count=state.point_count,
+                )
+            )
+        new_assignments = [
+            assignment
+            for assignment in semantic_labels.assignments
+            if assignment.track_id not in self._states
+        ]
+        target_snapshots = [
+            TrackGeometrySnapshot.from_tracked_obstacle(
+                assignment.obstacle.tracked_obstacle,
+                timestamp_seconds=timestamp,
+            )
+            for assignment in new_assignments
+        ]
+        compatible_pairs = {
+            (source_id, assignment.track_id)
+            for source_id, source_class in source_classes.items()
+            for assignment in new_assignments
+            if assignment.obstacle.semantic_class
+            in {UNKNOWN_SEMANTIC_CLASS, source_class}
+        }
+        result = reassociate_track_snapshots(
+            source_snapshots,
+            target_snapshots,
+            config=self.reassociation_config,
+            compatible_id_pairs=compatible_pairs,
+        )
+        reassociated_from: dict[int, int] = {}
+        for match in result.matches:
+            state = self._states.pop(match.previous_track_id)
+            state.track_id = match.current_track_id
+            self._states[match.current_track_id] = state
+            reassociated_from[match.current_track_id] = (
+                match.previous_track_id
+            )
+        return reassociated_from
 
     def _evaluate_state(
         self,
