@@ -60,7 +60,10 @@ OBSTACLE_POINTS_SOURCE_XYZ = np.array(
 )
 
 
-def make_bridge() -> SafeSAGESemanticPerceptionBridge:
+def make_bridge(
+    *,
+    maximum_missed_updates: int = 3,
+) -> SafeSAGESemanticPerceptionBridge:
     unknown = ClassSafetyParameters(
         risk=1.0,
         boundary_flux_magnitude=4.0,
@@ -91,6 +94,7 @@ def make_bridge() -> SafeSAGESemanticPerceptionBridge:
                 minimum_cluster_points=2,
                 maximum_association_distance=0.8,
                 velocity_smoothing_factor=1.0,
+                maximum_missed_updates=maximum_missed_updates,
             )
         ),
         class_policy=class_policy,
@@ -180,6 +184,7 @@ def make_observation(
     timestamp: float,
     *,
     points_robot_xy: np.ndarray = OBSTACLE_POINTS_ROBOT_XY,
+    points_source_xyz: np.ndarray = OBSTACLE_POINTS_SOURCE_XYZ,
     detection_timestamp: float | None = None,
     include_chair: bool = True,
 ) -> SafeSAGECameraLidarObservation:
@@ -195,7 +200,7 @@ def make_observation(
             robot_position_world_xy=np.zeros(2),
             robot_yaw=0.0,
         ),
-        obstacle_points_source_xyz=OBSTACLE_POINTS_SOURCE_XYZ,
+        obstacle_points_source_xyz=points_source_xyz,
         detection_frame=make_detection_frame(
             frame_id,
             resolved_detection_timestamp,
@@ -253,6 +258,34 @@ def test_short_camera_dropout_persists_label_on_same_geometry() -> None:
     assert dropout.known_semantic_track_count == 1
     assert dropout.temporal_semantics.tracks[0].status == "persisted"
     assert dropout.field_status.snapshot.payload.selected_track_ids == (0,)
+
+
+def test_bridge_reassociates_semantics_after_tracker_id_replacement() -> None:
+    bridge = make_bridge(maximum_missed_updates=0)
+    bridge.initialize(make_observation(1, 1.0))
+    bridge.update(make_observation(2, 1.1))
+    distant_points = OBSTACLE_POINTS_ROBOT_XY + np.array([3.0, 3.0])
+    bridge.update(
+        make_observation(
+            3,
+            1.2,
+            points_robot_xy=distant_points,
+            include_chair=False,
+        )
+    )
+
+    replacement = bridge.update(
+        make_observation(4, 1.3, include_chair=False)
+    )
+
+    diagnostic = replacement.temporal_semantics.tracks[0]
+    assert diagnostic.track_id == 2
+    assert diagnostic.semantic_class == "chair"
+    assert diagnostic.status == "reassociated"
+    assert diagnostic.reassociated_from_track_id == 0
+    assert replacement.known_semantic_track_count == 1
+    assert replacement.unknown_semantic_track_count == 0
+    assert np.allclose(occupied_risks(replacement), 0.4)
 
 
 def test_sensor_synchronization_failure_preserves_committed_state() -> None:

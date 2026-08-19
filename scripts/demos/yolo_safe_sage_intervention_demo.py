@@ -168,6 +168,8 @@ class ControlledTrackDiagnostic:
     semantic_class: str
     semantic_confidence: float
     temporal_status: str
+    current_observation_class: str
+    reassociated_from_track_id: int | None
 
     @property
     def is_confirmed_chair(self) -> bool:
@@ -175,7 +177,8 @@ class ControlledTrackDiagnostic:
 
         return (
             self.semantic_class == EXPECTED_SEMANTIC_CLASS
-            and self.temporal_status in {"confirmed", "persisted"}
+            and self.temporal_status
+            in {"confirmed", "persisted", "reassociated"}
         )
 
 
@@ -186,6 +189,8 @@ class InterventionMotionResult:
     completed_control_cycles: int
     successful_field_updates: int
     chair_semantic_updates: int
+    reassociated_semantic_updates: int
+    controlled_track_id_changes: int
     forward_displacement: float
     maximum_rightward_displacement: float
     minimum_ground_truth_clearance: float
@@ -255,6 +260,16 @@ def controlled_track_diagnostic(
         semantic_class=nearest.semantic_class,
         semantic_confidence=nearest.semantic_confidence,
         temporal_status=temporal_status,
+        current_observation_class=(
+            "missing"
+            if temporal is None
+            else temporal.current_observation_class
+        ),
+        reassociated_from_track_id=(
+            None
+            if temporal is None
+            else temporal.reassociated_from_track_id
+        ),
     )
 
 
@@ -390,6 +405,13 @@ def run_intervention_motion(
     completed_cycles = 0
     successful_updates = 0
     chair_semantic_updates = 0
+    reassociated_semantic_updates = 0
+    controlled_track_id_changes = 0
+    initial_diagnostic = controlled_track_diagnostic(
+        bridge.last_result,
+        chair_bounds=chair_bounds,
+    )
+    previous_controlled_track_id = initial_diagnostic.track_id
     mpc_intervention_seen = False
     backup_intervention_seen = False
     all_predictive_valid = True
@@ -559,11 +581,18 @@ def run_intervention_motion(
                 chair_bounds=chair_bounds,
             )
             semantic_text = diagnostic.semantic_class
+            track_text = str(diagnostic.track_id)
+            status_text = diagnostic.temporal_status
+            observation_text = diagnostic.current_observation_class
         except RuntimeError:
             semantic_text = "none"
+            track_text = "-"
+            status_text = "missing"
+            observation_text = "none"
         print(
             f"  cycle={cycle:<3} field={field.sensor_frame_id:<4} "
-            f"class={semantic_text:<8} "
+            f"track={track_text:<3} class={semantic_text:<8} "
+            f"status={status_text:<12} obs={observation_text:<8} "
             f"q=({state[0]:.3f},{state[1]:.3f},"
             f"{math.degrees(state[2]):.1f}deg) "
             f"clear={current_clearance:.3f} "
@@ -690,6 +719,13 @@ def run_intervention_motion(
                 and updated_diagnostic.association_error
                 <= MAXIMUM_CHAIR_TRACK_ASSOCIATION_ERROR
             )
+            reassociated_semantic_updates += int(
+                updated_diagnostic.temporal_status == "reassociated"
+            )
+            controlled_track_id_changes += int(
+                updated_diagnostic.track_id != previous_controlled_track_id
+            )
+            previous_controlled_track_id = updated_diagnostic.track_id
         except RuntimeError:
             pass
 
@@ -717,6 +753,8 @@ def run_intervention_motion(
             completed_control_cycles=completed_cycles,
             successful_field_updates=successful_updates,
             chair_semantic_updates=chair_semantic_updates,
+            reassociated_semantic_updates=reassociated_semantic_updates,
+            controlled_track_id_changes=controlled_track_id_changes,
             forward_displacement=float(final_state[0]),
             maximum_rightward_displacement=maximum_rightward,
             minimum_ground_truth_clearance=minimum_clearance,
@@ -1058,6 +1096,14 @@ def main() -> None:
     print(f"  Live semantic field updates:    {motion_result.successful_field_updates}")
     print(f"  Confirmed chair updates:        {motion_result.chair_semantic_updates}")
     print(
+        "  Reassociated semantic updates: "
+        f"{motion_result.reassociated_semantic_updates}"
+    )
+    print(
+        "  Controlled track-ID changes:    "
+        f"{motion_result.controlled_track_id_changes}"
+    )
+    print(
         "  Conservative fallback updates: "
         f"{motion_result.successful_field_updates - motion_result.chair_semantic_updates}"
     )
@@ -1094,6 +1140,14 @@ def main() -> None:
             "  When the chair left the camera view, unlabeled LiDAR tracks "
             "used the configured conservative unknown-class policy."
         )
+        if (
+            motion_result.controlled_track_id_changes > 0
+            and motion_result.reassociated_semantic_updates == 0
+        ):
+            print(
+                "  Observed ID changes were ambiguous cluster fragments, so "
+                "semantic evidence was not transferred between them."
+            )
     else:
         print(
             "  [WARNING] The controlled intervention did not pass every "
