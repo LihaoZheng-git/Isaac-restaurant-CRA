@@ -14,7 +14,7 @@ This module is pure NumPy and has no Isaac Sim dependency.
 """
 
 import math
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 from numbers import Real
 
@@ -246,14 +246,19 @@ def build_local_occupancy_grid(
     class_safety_policy: ClassSafetyPolicy,
     point_track_ids: np.ndarray | None = None,
     semantic_obstacles: Iterable[SemanticObstacle] = (),
+    track_safety_parameters: (
+        Mapping[int, ClassSafetyParameters] | None
+    ) = None,
     config: LocalOccupancyGridConfig | None = None,
 ) -> LocalOccupancyGrid:
     """Rasterize tracked obstacle points and semantic PSF parameters.
 
     Points without a valid semantic association use the policy's conservative
-    unknown-class parameters. Points outside the configured local bounds are
-    discarded. If inflated obstacles overlap, the cell retains the parameters
-    with the greater risk and then the greater flux magnitude.
+    unknown-class parameters. Explicit per-track parameters, when supplied,
+    take priority over semantic-class lookup. Points outside the configured
+    local bounds are discarded. If inflated obstacles overlap, the cell
+    retains the parameters with the greater risk and then the greater flux
+    magnitude.
     """
 
     if not isinstance(class_safety_policy, ClassSafetyPolicy):
@@ -272,6 +277,9 @@ def build_local_occupancy_grid(
     )
     semantic_by_track_id = _semantic_obstacles_by_track_id(
         semantic_obstacles
+    )
+    safety_by_track_id = _validated_track_safety_parameters(
+        track_safety_parameters
     )
 
     occupied_mask = np.zeros(grid_config.shape, dtype=bool)
@@ -308,6 +316,7 @@ def build_local_occupancy_grid(
         parameters = _parameters_for_track(
             track_id,
             semantic_by_track_id=semantic_by_track_id,
+            safety_by_track_id=safety_by_track_id,
             class_safety_policy=class_safety_policy,
             unknown_parameters=unknown_parameters,
         )
@@ -454,10 +463,15 @@ def _parameters_for_track(
     track_id: int,
     *,
     semantic_by_track_id: dict[int, SemanticObstacle],
+    safety_by_track_id: dict[int, ClassSafetyParameters],
     class_safety_policy: ClassSafetyPolicy,
     unknown_parameters: ClassSafetyParameters,
 ) -> ClassSafetyParameters:
     """Return semantic parameters for one point-to-track association."""
+
+    explicit_parameters = safety_by_track_id.get(track_id)
+    if explicit_parameters is not None:
+        return explicit_parameters
 
     semantic_obstacle = semantic_by_track_id.get(track_id)
     if semantic_obstacle is None:
@@ -466,6 +480,32 @@ def _parameters_for_track(
     return class_safety_policy.parameters_for_obstacle(
         semantic_obstacle
     )
+
+
+def _validated_track_safety_parameters(
+    value: Mapping[int, ClassSafetyParameters] | None,
+) -> dict[int, ClassSafetyParameters]:
+    """Return validated per-track source-grid parameter overrides."""
+
+    if value is None:
+        return {}
+    if not isinstance(value, Mapping):
+        raise TypeError("track_safety_parameters must be a mapping.")
+    parameters: dict[int, ClassSafetyParameters] = {}
+    for track_id, track_parameters in value.items():
+        if isinstance(track_id, bool) or not isinstance(track_id, int):
+            raise TypeError("Track safety-parameter IDs must be integers.")
+        if track_id < 0:
+            raise ValueError(
+                "Track safety-parameter IDs cannot be negative."
+            )
+        if not isinstance(track_parameters, ClassSafetyParameters):
+            raise TypeError(
+                "Every track safety override must be "
+                "ClassSafetyParameters."
+            )
+        parameters[track_id] = track_parameters
+    return parameters
 
 
 def _point_is_in_bounds(

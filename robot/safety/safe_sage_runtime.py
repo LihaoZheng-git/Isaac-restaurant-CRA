@@ -26,6 +26,12 @@ import numpy as np
 
 from robot.control.unicycle_model import lookahead_state
 from robot.safety.class_safety_policy import ClassSafetyPolicy
+from robot.safety.cra_safe_sage_policy import CRASafeSAGEPolicy
+from robot.safety.cra_track_policy import (
+    CRARiskProfileProvider,
+    CRATrackPolicyResult,
+    resolve_cra_track_policy,
+)
 from robot.safety.local_occupancy_grid import (
     LocalOccupancyGridConfig,
     build_local_occupancy_grid,
@@ -179,6 +185,7 @@ class SafeSAGERuntimeField:
     pipeline: SafeSAGEFieldPipelineResult
     temporal_safety_derivative: TemporalSafetyDerivativeInput
     build_wall_seconds: float
+    cra_policy_result: CRATrackPolicyResult | None = None
 
     def __post_init__(self) -> None:
         frame_id = _nonnegative_integer(
@@ -227,6 +234,13 @@ class SafeSAGERuntimeField:
             )
         if build_time < 0.0:
             raise ValueError("build_wall_seconds cannot be negative.")
+        if self.cra_policy_result is not None and not isinstance(
+            self.cra_policy_result,
+            CRATrackPolicyResult,
+        ):
+            raise TypeError(
+                "cra_policy_result must be a CRATrackPolicyResult or None."
+            )
         object.__setattr__(self, "sensor_frame_id", frame_id)
         object.__setattr__(self, "sensor_timestamp_seconds", sensor_time)
         object.__setattr__(self, "all_obstacle_point_count", all_count)
@@ -280,6 +294,28 @@ class SafeSAGERuntimeField:
         )
         return 0.0 if not speeds else max(speeds)
 
+    @property
+    def has_cra_policy(self) -> bool:
+        """Return whether this field used per-track CRA parameters."""
+
+        return self.cra_policy_result is not None
+
+    @property
+    def cra_track_ids(self) -> tuple[int, ...]:
+        """Return tracks carrying CRA policy data in this field."""
+
+        if self.cra_policy_result is None:
+            return ()
+        return self.cra_policy_result.track_ids
+
+    @property
+    def cra_fallback_track_ids(self) -> tuple[int, ...]:
+        """Return tracks whose unavailable CRA profile failed closed."""
+
+        if self.cra_policy_result is None:
+            return ()
+        return self.cra_policy_result.fallback_track_ids
+
 
 class SafeSAGEPerceptionRuntime:
     """Build and commit complete live Safe-SAGE fields transactionally."""
@@ -295,6 +331,7 @@ class SafeSAGEPerceptionRuntime:
         temporal_estimator: SafeSAGETemporalDerivativeEstimator | None = None,
         live_field_config: SafeSAGELiveFieldConfig | None = None,
         enable_temporal_updates: bool = True,
+        cra_policy: CRASafeSAGEPolicy | None = None,
     ) -> None:
         if not isinstance(obstacle_tracker, ObstacleTracker):
             raise TypeError("obstacle_tracker must be an ObstacleTracker.")
@@ -314,6 +351,11 @@ class SafeSAGEPerceptionRuntime:
             )
         if not isinstance(enable_temporal_updates, bool):
             raise TypeError("enable_temporal_updates must be a boolean.")
+        if cra_policy is not None and not isinstance(
+            cra_policy,
+            CRASafeSAGEPolicy,
+        ):
+            raise TypeError("cra_policy must be a CRASafeSAGEPolicy or None.")
         self._obstacle_tracker = obstacle_tracker
         self.class_policy = class_policy
         self.guidance_policy = guidance_policy
@@ -321,6 +363,7 @@ class SafeSAGEPerceptionRuntime:
         self.field_config = field_config
         self.temporal_estimator = estimator
         self.enable_temporal_updates = enable_temporal_updates
+        self.cra_policy = cra_policy
         self.field_buffer: SafeSAGELiveFieldBuffer[SafeSAGERuntimeField] = (
             SafeSAGELiveFieldBuffer(live_field_config)
         )
@@ -416,6 +459,88 @@ class SafeSAGEPerceptionRuntime:
         self._anchor_yaw = resolved_anchor_yaw
         return status
 
+    def initialize_with_cra(
+        self,
+        observation: SafeSAGEPerceptionObservation,
+        label_provider: SemanticLabelProvider,
+        risk_profile_provider: CRARiskProfileProvider,
+        *,
+        anchor_position_world_xy: object | None = None,
+        anchor_yaw: float | None = None,
+    ) -> SafeSAGELiveFieldStatus[SafeSAGERuntimeField]:
+        """Build the first field using per-track CRA parameters."""
+
+        if not isinstance(label_provider, SemanticLabelProvider):
+            raise TypeError(
+                "label_provider must implement SemanticLabelProvider."
+            )
+        return self.initialize_from_tracking_with_cra(
+            observation,
+            lambda tracking_result: label_provider.assign(
+                tracking_result.tracked_obstacles
+            ),
+            risk_profile_provider,
+            anchor_position_world_xy=anchor_position_world_xy,
+            anchor_yaw=anchor_yaw,
+        )
+
+    def initialize_from_tracking_with_cra(
+        self,
+        observation: SafeSAGEPerceptionObservation,
+        label_resolver: Callable[
+            [ObstacleTrackingResult],
+            SemanticLabelResult,
+        ],
+        risk_profile_provider: CRARiskProfileProvider,
+        *,
+        anchor_position_world_xy: object | None = None,
+        anchor_yaw: float | None = None,
+    ) -> SafeSAGELiveFieldStatus[SafeSAGERuntimeField]:
+        """Initialize from candidate tracks, labels, and contextual risk."""
+
+        self._validate_cra_profile_provider(risk_profile_provider)
+        if self.initialized:
+            raise RuntimeError(
+                "The Safe-SAGE perception runtime is initialized."
+            )
+        self._validate_observation(observation)
+        self._validate_label_resolver(label_resolver)
+        anchor_position = (
+            observation.robot_position_world_xy
+            if anchor_position_world_xy is None
+            else _finite_vector(
+                anchor_position_world_xy,
+                size=2,
+                name="anchor_position_world_xy",
+            )
+        )
+        resolved_anchor_yaw = (
+            observation.robot_yaw
+            if anchor_yaw is None
+            else _finite_real(anchor_yaw, name="anchor_yaw")
+        )
+        candidate_tracker = copy.deepcopy(self._obstacle_tracker)
+        field = self._build_candidate(
+            observation,
+            label_resolver,
+            obstacle_tracker=candidate_tracker,
+            anchor_position_world_xy=anchor_position,
+            anchor_yaw=resolved_anchor_yaw,
+            previous_snapshot=None,
+            risk_profile_provider=risk_profile_provider,
+        )
+        status = self.field_buffer.initialize(
+            self._snapshot(observation, field)
+        )
+        self._obstacle_tracker = candidate_tracker
+        self._anchor_position_world_xy = np.array(
+            anchor_position,
+            copy=True,
+        )
+        self._anchor_position_world_xy.setflags(write=False)
+        self._anchor_yaw = resolved_anchor_yaw
+        return status
+
     def update(
         self,
         observation: SafeSAGEPerceptionObservation,
@@ -455,6 +580,64 @@ class SafeSAGEPerceptionRuntime:
             previous_snapshot=self.field_buffer.snapshot,
         )
         status = self.field_buffer.commit(self._snapshot(observation, field))
+        self._obstacle_tracker = candidate_tracker
+        return status
+
+    def update_with_cra(
+        self,
+        observation: SafeSAGEPerceptionObservation,
+        label_provider: SemanticLabelProvider,
+        risk_profile_provider: CRARiskProfileProvider,
+    ) -> SafeSAGELiveFieldStatus[SafeSAGERuntimeField]:
+        """Atomically update tracking, semantics, CRA, and the live field."""
+
+        if not isinstance(label_provider, SemanticLabelProvider):
+            raise TypeError(
+                "label_provider must implement SemanticLabelProvider."
+            )
+        return self.update_from_tracking_with_cra(
+            observation,
+            lambda tracking_result: label_provider.assign(
+                tracking_result.tracked_obstacles
+            ),
+            risk_profile_provider,
+        )
+
+    def update_from_tracking_with_cra(
+        self,
+        observation: SafeSAGEPerceptionObservation,
+        label_resolver: Callable[
+            [ObstacleTrackingResult],
+            SemanticLabelResult,
+        ],
+        risk_profile_provider: CRARiskProfileProvider,
+    ) -> SafeSAGELiveFieldStatus[SafeSAGERuntimeField]:
+        """Update from the exact candidate tracks, labels, and CRA profiles."""
+
+        self._validate_cra_profile_provider(risk_profile_provider)
+        self._validate_observation(observation)
+        self._validate_label_resolver(label_resolver)
+        if not self.initialized:
+            raise RuntimeError(
+                "Initialize the perception runtime before update."
+            )
+        if self._anchor_position_world_xy is None or self._anchor_yaw is None:
+            raise RuntimeError(
+                "The perception runtime anchor is unavailable."
+            )
+        candidate_tracker = copy.deepcopy(self._obstacle_tracker)
+        field = self._build_candidate(
+            observation,
+            label_resolver,
+            obstacle_tracker=candidate_tracker,
+            anchor_position_world_xy=self._anchor_position_world_xy,
+            anchor_yaw=self._anchor_yaw,
+            previous_snapshot=self.field_buffer.snapshot,
+            risk_profile_provider=risk_profile_provider,
+        )
+        status = self.field_buffer.commit(
+            self._snapshot(observation, field)
+        )
         self._obstacle_tracker = candidate_tracker
         return status
 
@@ -539,6 +722,20 @@ class SafeSAGEPerceptionRuntime:
         if not callable(label_resolver):
             raise TypeError("label_resolver must be callable.")
 
+    def _validate_cra_profile_provider(
+        self,
+        profile_provider: object,
+    ) -> None:
+        if self.cra_policy is None:
+            raise RuntimeError(
+                "Configure cra_policy before using CRA runtime entry points."
+            )
+        if not isinstance(profile_provider, CRARiskProfileProvider):
+            raise TypeError(
+                "risk_profile_provider must implement "
+                "CRARiskProfileProvider."
+            )
+
     def _build_candidate(
         self,
         observation: SafeSAGEPerceptionObservation,
@@ -553,6 +750,7 @@ class SafeSAGEPerceptionRuntime:
         previous_snapshot: (
             SafeSAGELiveFieldSnapshot[SafeSAGERuntimeField] | None
         ),
+        risk_profile_provider: CRARiskProfileProvider | None = None,
     ) -> SafeSAGERuntimeField:
         if observation.obstacle_points_robot_xy.shape[0] == 0:
             raise RuntimeError("The observation contains no obstacle points.")
@@ -571,6 +769,17 @@ class SafeSAGEPerceptionRuntime:
         if not label_result.assignments:
             raise RuntimeError(
                 "No geometric track received a semantic label in this frame."
+            )
+        cra_policy_result: CRATrackPolicyResult | None = None
+        if risk_profile_provider is not None:
+            if self.cra_policy is None:
+                raise RuntimeError(
+                    "Internal CRA runtime call has no configured policy."
+                )
+            cra_policy_result = resolve_cra_track_policy(
+                label_result.semantic_obstacles,
+                profile_provider=risk_profile_provider,
+                policy=self.cra_policy,
             )
         selected_track_ids = np.asarray(
             label_result.selected_track_ids,
@@ -602,6 +811,11 @@ class SafeSAGEPerceptionRuntime:
             point_track_ids=selected_point_track_ids,
             semantic_obstacles=label_result.semantic_obstacles,
             class_safety_policy=self.class_policy,
+            track_safety_parameters=(
+                None
+                if cra_policy_result is None
+                else cra_policy_result.safety_parameters_by_track_id
+            ),
             config=self.grid_config,
         )
         pipeline = build_safe_sage_field_pipeline(
@@ -609,6 +823,11 @@ class SafeSAGEPerceptionRuntime:
             guidance_policy=self.guidance_policy,
             config=self.field_config,
             semantic_obstacles=label_result.semantic_obstacles,
+            track_guidance_parameters=(
+                None
+                if cra_policy_result is None
+                else cra_policy_result.guidance_parameters_by_track_id
+            ),
         )
         temporal_derivative: TemporalSafetyDerivativeInput = 0.0
         if previous_snapshot is not None and self.enable_temporal_updates:
@@ -649,6 +868,7 @@ class SafeSAGEPerceptionRuntime:
             pipeline=pipeline,
             temporal_safety_derivative=temporal_derivative,
             build_wall_seconds=time.perf_counter() - start_wall_time,
+            cra_policy_result=cra_policy_result,
         )
 
     @staticmethod

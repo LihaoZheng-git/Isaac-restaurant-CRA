@@ -18,7 +18,7 @@ Semantic propagation through ``div(v)`` into ``h_full`` is a later step.
 
 import math
 from collections import deque
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from numbers import Real
 
@@ -125,6 +125,9 @@ def solve_tangential_laplace_guidance_field(
     *,
     guidance_policy: SafeSAGEGuidancePolicy,
     semantic_obstacles: Iterable[SemanticObstacle] = (),
+    track_guidance_parameters: (
+        Mapping[int, SafeSAGEGuidanceParameters] | None
+    ) = None,
     config: TangentialLaplaceGuidanceFieldConfig | None = None,
 ) -> TangentialLaplaceGuidanceFieldResult:
     """Solve a Laplace field with normal and tangential interfaces.
@@ -162,10 +165,14 @@ def solve_tangential_laplace_guidance_field(
     semantic_by_track_id = _semantic_obstacles_by_track_id(
         semantic_obstacles
     )
+    guidance_by_track_id = _validated_track_guidance_parameters(
+        track_guidance_parameters
+    )
     component_labels, components = _obstacle_components(
         occupancy_grid,
         guidance_policy=guidance_policy,
         semantic_by_track_id=semantic_by_track_id,
+        guidance_by_track_id=guidance_by_track_id,
     )
 
     (
@@ -274,6 +281,7 @@ def _obstacle_components(
     *,
     guidance_policy: SafeSAGEGuidancePolicy,
     semantic_by_track_id: dict[int, SemanticObstacle],
+    guidance_by_track_id: dict[int, SafeSAGEGuidanceParameters],
 ) -> tuple[np.ndarray, tuple[_ObstacleComponent, ...]]:
     """Group occupied cells by track and connected unknown regions."""
 
@@ -298,14 +306,16 @@ def _obstacle_components(
             occupancy_grid.occupied_mask
             & (occupancy_grid.cell_track_ids == track_id)
         )
-        semantic_obstacle = semantic_by_track_id.get(track_id)
-        parameters = (
-            guidance_policy.parameters_for_obstacle(semantic_obstacle)
-            if semantic_obstacle is not None
-            else guidance_policy.parameters_for(
-                guidance_policy.unknown_class
+        parameters = guidance_by_track_id.get(track_id)
+        if parameters is None:
+            semantic_obstacle = semantic_by_track_id.get(track_id)
+            parameters = (
+                guidance_policy.parameters_for_obstacle(semantic_obstacle)
+                if semantic_obstacle is not None
+                else guidance_policy.parameters_for(
+                    guidance_policy.unknown_class
+                )
             )
-        )
         label = len(components)
         labels[occupied_indices[:, 0], occupied_indices[:, 1]] = label
         components.append(
@@ -364,6 +374,32 @@ def _obstacle_components(
         )
 
     return labels, tuple(components)
+
+
+def _validated_track_guidance_parameters(
+    value: Mapping[int, SafeSAGEGuidanceParameters] | None,
+) -> dict[int, SafeSAGEGuidanceParameters]:
+    """Return validated per-track parameter overrides."""
+
+    if value is None:
+        return {}
+    if not isinstance(value, Mapping):
+        raise TypeError("track_guidance_parameters must be a mapping.")
+    parameters: dict[int, SafeSAGEGuidanceParameters] = {}
+    for track_id, track_parameters in value.items():
+        if isinstance(track_id, bool) or not isinstance(track_id, int):
+            raise TypeError("Track guidance-parameter IDs must be integers.")
+        if track_id < 0:
+            raise ValueError(
+                "Track guidance-parameter IDs cannot be negative."
+            )
+        if not isinstance(track_parameters, SafeSAGEGuidanceParameters):
+            raise TypeError(
+                "Every track guidance override must be "
+                "SafeSAGEGuidanceParameters."
+            )
+        parameters[track_id] = track_parameters
+    return parameters
 
 
 def _normal_interface_data(

@@ -14,7 +14,7 @@ convergence separately.
 """
 
 import math
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 
 import numpy as np
@@ -26,6 +26,7 @@ from robot.safety.safe_sage_configuration_space import (
     build_safe_sage_configuration_space,
 )
 from robot.safety.safe_sage_guidance_policy import (
+    SafeSAGEGuidanceParameters,
     SafeSAGEGuidancePolicy,
 )
 from robot.safety.safe_sage_h_full import (
@@ -137,6 +138,9 @@ def build_safe_sage_field_pipeline(
     guidance_policy: SafeSAGEGuidancePolicy,
     config: SafeSAGEFieldPipelineConfig,
     semantic_obstacles: Iterable[SemanticObstacle] = (),
+    track_guidance_parameters: (
+        Mapping[int, SafeSAGEGuidanceParameters] | None
+    ) = None,
 ) -> SafeSAGEFieldPipelineResult:
     """Construct all yaw-dependent Safe-SAGE fields in one checked call."""
 
@@ -154,10 +158,14 @@ def build_safe_sage_field_pipeline(
     semantic_sequence = _validated_semantic_obstacles(
         semantic_obstacles
     )
+    guidance_by_track_id = _validated_track_guidance_parameters(
+        track_guidance_parameters
+    )
     _validate_source_semantic_metadata(
         source_grid,
         guidance_policy=guidance_policy,
         semantic_obstacles=semantic_sequence,
+        guidance_by_track_id=guidance_by_track_id,
     )
 
     configuration_space = build_safe_sage_configuration_space(
@@ -173,6 +181,7 @@ def build_safe_sage_field_pipeline(
             ),
             guidance_policy=guidance_policy,
             semantic_obstacles=semantic_sequence,
+            guidance_by_track_id=guidance_by_track_id,
             config=config.guidance_field_config,
         )
         for yaw_index, occupancy_grid in enumerate(
@@ -216,6 +225,7 @@ def _solve_guidance_slice(
     yaw_radians: float,
     guidance_policy: SafeSAGEGuidancePolicy,
     semantic_obstacles: tuple[SemanticObstacle, ...],
+    guidance_by_track_id: dict[int, SafeSAGEGuidanceParameters],
     config: TangentialLaplaceGuidanceFieldConfig,
 ) -> TangentialLaplaceGuidanceFieldResult:
     """Solve one yaw slice and attach useful context to failures."""
@@ -225,6 +235,7 @@ def _solve_guidance_slice(
             occupancy_grid,
             guidance_policy=guidance_policy,
             semantic_obstacles=semantic_obstacles,
+            track_guidance_parameters=guidance_by_track_id,
             config=config,
         )
     except (ValueError, RuntimeError) as error:
@@ -267,6 +278,7 @@ def _validate_source_semantic_metadata(
     *,
     guidance_policy: SafeSAGEGuidancePolicy,
     semantic_obstacles: tuple[SemanticObstacle, ...],
+    guidance_by_track_id: dict[int, SafeSAGEGuidanceParameters],
 ) -> None:
     """Require grid metadata and guidance policy to describe one policy."""
 
@@ -281,15 +293,17 @@ def _validate_source_semantic_metadata(
     for raw_track_id in occupied_track_ids:
         track_id = int(raw_track_id)
         semantic_obstacle = semantic_by_track_id.get(track_id)
-        parameters = (
-            guidance_policy.parameters_for_obstacle(
-                semantic_obstacle
+        parameters = guidance_by_track_id.get(track_id)
+        if parameters is None:
+            parameters = (
+                guidance_policy.parameters_for_obstacle(
+                    semantic_obstacle
+                )
+                if semantic_obstacle is not None
+                else guidance_policy.parameters_for(
+                    guidance_policy.unknown_class
+                )
             )
-            if semantic_obstacle is not None
-            else guidance_policy.parameters_for(
-                guidance_policy.unknown_class
-            )
-        )
         track_mask = (
             source_grid.occupied_mask
             & (source_grid.cell_track_ids == track_id)
@@ -317,3 +331,29 @@ def _validate_source_semantic_metadata(
                 "Source-grid boundary-flux metadata disagrees with the "
                 f"Safe-SAGE guidance policy for track ID {track_id}."
             )
+
+
+def _validated_track_guidance_parameters(
+    value: Mapping[int, SafeSAGEGuidanceParameters] | None,
+) -> dict[int, SafeSAGEGuidanceParameters]:
+    """Return validated per-track guidance-parameter overrides."""
+
+    if value is None:
+        return {}
+    if not isinstance(value, Mapping):
+        raise TypeError("track_guidance_parameters must be a mapping.")
+    parameters: dict[int, SafeSAGEGuidanceParameters] = {}
+    for track_id, track_parameters in value.items():
+        if isinstance(track_id, bool) or not isinstance(track_id, int):
+            raise TypeError("Track guidance-parameter IDs must be integers.")
+        if track_id < 0:
+            raise ValueError(
+                "Track guidance-parameter IDs cannot be negative."
+            )
+        if not isinstance(track_parameters, SafeSAGEGuidanceParameters):
+            raise TypeError(
+                "Every track guidance override must be "
+                "SafeSAGEGuidanceParameters."
+            )
+        parameters[track_id] = track_parameters
+    return parameters
