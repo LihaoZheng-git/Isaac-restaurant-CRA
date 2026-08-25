@@ -29,7 +29,10 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from robot.risk.cra import PhysicalRiskProfile, RiskFactorEstimate
+from robot.risk.cra_oracle_scenarios import (
+    exposed_knife_profile,
+    ordinary_chair_profile,
+)
 from robot.safety.class_safety_policy import (
     ClassSafetyParameters,
     ClassSafetyPolicy,
@@ -61,70 +64,6 @@ from robot.safety.semantic_label_provider import (
 from robot.safety.tangential_laplace_guidance_field import (
     TangentialLaplaceGuidanceFieldConfig,
 )
-
-
-def absent(reason: str) -> RiskFactorEstimate:
-    """Return one confidently absent physical factor."""
-
-    return RiskFactorEstimate.known_absent(
-        source="controlled_oracle",
-        evidence=(reason,),
-    )
-
-
-def estimate(
-    severity: float,
-    interaction_likelihood: float,
-    *,
-    evidence: str,
-) -> RiskFactorEstimate:
-    """Return one controlled high-confidence factor estimate."""
-
-    return RiskFactorEstimate(
-        severity=severity,
-        interaction_likelihood=interaction_likelihood,
-        confidence=1.0,
-        source="controlled_oracle",
-        evidence=(evidence,),
-    )
-
-
-def ordinary_chair_profile() -> PhysicalRiskProfile:
-    """Return the controlled low-risk profile."""
-
-    return PhysicalRiskProfile(
-        thermal=absent("no heat source"),
-        contact=estimate(
-            0.20,
-            0.20,
-            evidence="rounded furniture surface",
-        ),
-        potential=estimate(
-            0.30,
-            0.20,
-            evidence="chair is supported and stable",
-        ),
-        kinetic=absent("chair is stationary"),
-    )
-
-
-def exposed_knife_profile() -> PhysicalRiskProfile:
-    """Return the controlled high-contact-risk profile."""
-
-    return PhysicalRiskProfile(
-        thermal=absent("no heat source"),
-        contact=estimate(
-            0.95,
-            0.85,
-            evidence="unsheathed blade is exposed",
-        ),
-        potential=estimate(
-            0.15,
-            0.20,
-            evidence="knife is close to the floor",
-        ),
-        kinetic=absent("knife is stationary"),
-    )
 
 
 def make_runtime() -> SafeSAGEPerceptionRuntime:
