@@ -12,6 +12,16 @@ from robot.risk.cra import (
     PhysicalRiskVector,
     RiskFactorEstimate,
 )
+from robot.risk.cra_oracle_scenarios import (
+    CRAOracleScenario,
+    ORACLE_SOURCE,
+    controlled_cra_oracle_scenarios,
+    cra_oracle_scenario,
+    exposed_knife_profile,
+    fast_crossing_person_profile,
+    hot_soup_waiter_profile,
+    ordinary_chair_profile,
+)
 
 
 __all__ = [
@@ -25,4 +35,12 @@ __all__ = [
     "PhysicalRiskProfile",
     "PhysicalRiskVector",
     "RiskFactorEstimate",
+    "CRAOracleScenario",
+    "ORACLE_SOURCE",
+    "controlled_cra_oracle_scenarios",
+    "cra_oracle_scenario",
+    "exposed_knife_profile",
+    "fast_crossing_person_profile",
+    "hot_soup_waiter_profile",
+    "ordinary_chair_profile",
 ]
