@@ -13,6 +13,18 @@ from robot.perception.physical_attributes import (
     StabilityAttributes,
     ThermalAttributes,
 )
+from robot.perception.physical_geometry import (
+    GEOMETRY_SOURCE,
+    LidarGeometryConfig,
+    estimate_track_geometry,
+)
+from robot.perception.motion_attributes import (
+    MOTION_SOURCE,
+    ROUTE_SOURCE,
+    MotionAttributeConfig,
+    RouteMotionContext,
+    estimate_track_motion,
+)
 from robot.perception.semantic_detection import (
     PixelBoundingBox,
     SemanticDetection,
@@ -30,10 +42,16 @@ __all__ = [
     "ContactAttributes",
     "EstimateStatus",
     "GeometryAttributes",
+    "GEOMETRY_SOURCE",
+    "LidarGeometryConfig",
     "MassAttributes",
+    "MOTION_SOURCE",
+    "MotionAttributeConfig",
     "MotionAttributes",
     "PhysicalAttributes",
     "PixelBoundingBox",
+    "ROUTE_SOURCE",
+    "RouteMotionContext",
     "ScalarEstimate",
     "SemanticDetection",
     "SemanticDetectionFrame",
@@ -41,4 +59,6 @@ __all__ = [
     "ThermalAttributes",
     "YoloSegmentationConfig",
     "YoloSegmentationDetector",
+    "estimate_track_geometry",
+    "estimate_track_motion",
 ]
