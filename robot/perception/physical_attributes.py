@@ -374,7 +374,11 @@ class GeometryAttributes:
 
 @dataclass(frozen=True)
 class MotionAttributes:
-    """Tracked motion evidence needed by kinetic-risk estimation."""
+    """Tracked motion evidence needed by kinetic-risk estimation.
+
+    Velocity components use the world frame so they remain stable while the
+    robot turns.  Estimator provenance should repeat the frame explicitly.
+    """
 
     velocity_x_mps: ScalarEstimate
     velocity_y_mps: ScalarEstimate
