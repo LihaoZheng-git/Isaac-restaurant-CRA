@@ -22,9 +22,19 @@ from robot.risk.cra_oracle_scenarios import (
     hot_soup_waiter_profile,
     ordinary_chair_profile,
 )
+from robot.risk.physical_factor_adapter import (
+    PhysicalFactorAdapterConfig,
+    PhysicalFactorAdapterResult,
+    PhysicalFactorDiagnostic,
+    adapt_physical_factors,
+)
 
 
 __all__ = [
+    "PhysicalFactorAdapterConfig",
+    "PhysicalFactorAdapterResult",
+    "PhysicalFactorDiagnostic",
+    "adapt_physical_factors",
     "CRA_SCHEMA_VERSION",
     "CRAAggregation",
     "CRAAssessment",
