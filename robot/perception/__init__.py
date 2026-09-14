@@ -1,5 +1,19 @@
 """Camera-based semantic perception interfaces and adapters."""
 
+from robot.perception.mass_estimation import (
+    MASS_FUSION_SOURCE,
+    MASS_PRIOR_SCHEMA_VERSION,
+    MASS_PRIOR_SOURCE,
+    VOLUME_DENSITY_MASS_SOURCE,
+    VOLUME_SOURCE,
+    BoxVolumeConfig,
+    ClassMassPrior,
+    ClassMassPriorTable,
+    estimate_box_volume,
+    estimate_mass_from_volume_density,
+    estimate_track_mass,
+    fuse_mass_estimates,
+)
 from robot.perception.physical_attributes import (
     PHYSICAL_ATTRIBUTE_SCHEMA_VERSION,
     CategoricalEstimate,
@@ -37,8 +51,16 @@ from robot.perception.yolo_detector import (
 
 
 __all__ = [
+    "MASS_FUSION_SOURCE",
+    "MASS_PRIOR_SCHEMA_VERSION",
+    "MASS_PRIOR_SOURCE",
     "PHYSICAL_ATTRIBUTE_SCHEMA_VERSION",
+    "VOLUME_DENSITY_MASS_SOURCE",
+    "VOLUME_SOURCE",
+    "BoxVolumeConfig",
     "CategoricalEstimate",
+    "ClassMassPrior",
+    "ClassMassPriorTable",
     "ContactAttributes",
     "EstimateStatus",
     "GeometryAttributes",
@@ -59,6 +81,10 @@ __all__ = [
     "ThermalAttributes",
     "YoloSegmentationConfig",
     "YoloSegmentationDetector",
+    "estimate_box_volume",
+    "estimate_mass_from_volume_density",
     "estimate_track_geometry",
+    "estimate_track_mass",
     "estimate_track_motion",
+    "fuse_mass_estimates",
 ]
