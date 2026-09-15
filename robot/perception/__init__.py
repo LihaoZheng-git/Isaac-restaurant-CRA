@@ -1,5 +1,15 @@
 """Camera-based semantic perception interfaces and adapters."""
 
+from robot.perception.fall_height import (
+    FALL_HEIGHT_SOURCE as FALL_HEIGHT_SOURCE,
+    FallSurfaceEvidence as FallSurfaceEvidence,
+    estimate_fall_height as estimate_fall_height,
+)
+from robot.perception.live_physical_evidence import (
+    LivePhysicalEvidenceContext as LivePhysicalEvidenceContext,
+    build_live_physical_attributes as build_live_physical_attributes,
+)
+
 from robot.perception.mass_estimation import (
     MASS_FUSION_SOURCE,
     MASS_PRIOR_SCHEMA_VERSION,

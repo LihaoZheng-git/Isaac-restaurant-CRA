@@ -57,6 +57,7 @@ class RouteMotionContext:
     robot_position_world_xy: tuple[float, float]
     waypoint_world_xy: tuple[float, float]
     nominal_robot_speed_mps: float
+    measured_robot_velocity_world_xy: tuple[float, float] | None = None
 
     def __post_init__(self) -> None:
         robot_position = _vector2(
@@ -73,9 +74,15 @@ class RouteMotionContext:
         )
         if speed < 0.0:
             raise ValueError("nominal_robot_speed_mps cannot be negative.")
+        measured_velocity = self.measured_robot_velocity_world_xy
+        if measured_velocity is not None:
+            measured_velocity = _vector2(
+                measured_velocity, name="measured_robot_velocity_world_xy"
+            )
         object.__setattr__(self, "robot_position_world_xy", robot_position)
         object.__setattr__(self, "waypoint_world_xy", waypoint)
         object.__setattr__(self, "nominal_robot_speed_mps", speed)
+        object.__setattr__(self, "measured_robot_velocity_world_xy", measured_velocity)
 
 
 @dataclass(frozen=True)
@@ -132,8 +139,7 @@ class MotionAttributeConfig:
             )
         if self.minimum_velocity_confidence > self.maximum_velocity_confidence:
             raise ValueError(
-                "minimum_velocity_confidence cannot exceed "
-                "maximum_velocity_confidence."
+                "minimum_velocity_confidence cannot exceed maximum_velocity_confidence."
             )
 
 
@@ -193,13 +199,20 @@ def estimate_track_motion(
     route_end = np.asarray(route_context.waypoint_world_xy, dtype=np.float64)
     route_vector = route_end - route_start
     route_length = float(np.linalg.norm(route_vector))
-    if route_length >= settings.minimum_route_length_m:
+    if route_context.measured_robot_velocity_world_xy is not None:
+        robot_velocity = np.asarray(
+            route_context.measured_robot_velocity_world_xy, dtype=np.float64
+        )
+        relative_velocity_evidence = "obstacle velocity minus measured robot velocity"
+    elif route_length >= settings.minimum_route_length_m:
         route_direction = route_vector / route_length
-        robot_velocity = (
-            route_context.nominal_robot_speed_mps * route_direction
+        robot_velocity = route_context.nominal_robot_speed_mps * route_direction
+        relative_velocity_evidence = (
+            "obstacle velocity minus waypoint-aligned nominal robot velocity"
         )
     else:
         robot_velocity = np.zeros(2, dtype=np.float64)
+        relative_velocity_evidence = "obstacle velocity minus zero robot velocity"
 
     if velocity_is_confirmed:
         velocity_confidence = _observation_confidence(
@@ -220,9 +233,7 @@ def estimate_track_motion(
             settings=settings,
             component="world y",
         )
-        relative_speed = float(
-            np.linalg.norm(obstacle_velocity - robot_velocity)
-        )
+        relative_speed = float(np.linalg.norm(obstacle_velocity - robot_velocity))
         speed_uncertainty = math.sqrt(2.0) * settings.velocity_uncertainty_mps
         relative = ScalarEstimate(
             value=relative_speed,
@@ -234,7 +245,7 @@ def estimate_track_motion(
             timestamp_seconds=timestamp,
             status=EstimateStatus.INFERRED,
             evidence=(
-                "obstacle velocity minus waypoint-aligned nominal robot velocity",
+                relative_velocity_evidence,
                 f"tracker observation count={observation_count}",
             ),
         )
@@ -301,20 +312,17 @@ def _observation_confidence(
     """Map track history monotonically into velocity confidence."""
 
     support_span = (
-        settings.full_confidence_observation_count
-        - settings.minimum_observation_count
+        settings.full_confidence_observation_count - settings.minimum_observation_count
     )
     if support_span == 0:
         fraction = 1.0
     else:
         fraction = min(
             1.0,
-            (observation_count - settings.minimum_observation_count)
-            / support_span,
+            (observation_count - settings.minimum_observation_count) / support_span,
         )
     return settings.minimum_velocity_confidence + fraction * (
-        settings.maximum_velocity_confidence
-        - settings.minimum_velocity_confidence
+        settings.maximum_velocity_confidence - settings.minimum_velocity_confidence
     )
 
 
@@ -338,9 +346,7 @@ def _velocity_estimate(
         source=MOTION_SOURCE,
         timestamp_seconds=timestamp,
         status=EstimateStatus.INFERRED,
-        evidence=(
-            f"smoothed centroid velocity resolved along {component}",
-        ),
+        evidence=(f"smoothed centroid velocity resolved along {component}",),
     )
 
 
@@ -381,8 +387,7 @@ def _route_crossing_estimate(
             evidence=("robot-to-waypoint route segment has zero length",),
         )
     obstacle_end = (
-        obstacle_position
-        + settings.prediction_horizon_seconds * obstacle_velocity
+        obstacle_position + settings.prediction_horizon_seconds * obstacle_velocity
     )
     separation = _segment_distance(
         route_start,
@@ -418,10 +423,7 @@ def _route_crossing_estimate(
                 f"minimum segment separation={separation:.4f} m, "
                 f"corridor half-width={settings.route_corridor_half_width_m:.4f} m"
             ),
-            (
-                f"constant-velocity horizon="
-                f"{settings.prediction_horizon_seconds:.3f} s"
-            ),
+            (f"constant-velocity horizon={settings.prediction_horizon_seconds:.3f} s"),
             "this contextual score does not replace CBF clearance constraints",
             *motion_evidence,
         ),
@@ -476,8 +478,7 @@ def _segments_intersect(
         first_offset = first - origin
         second_offset = second - origin
         return float(
-            first_offset[0] * second_offset[1]
-            - first_offset[1] * second_offset[0]
+            first_offset[0] * second_offset[1] - first_offset[1] * second_offset[0]
         )
 
     def on_segment(start: np.ndarray, point: np.ndarray, end: np.ndarray) -> bool:
@@ -500,8 +501,20 @@ def _segments_intersect(
     ):
         return True
     return bool(
-        (abs(orientation_1) <= tolerance and on_segment(first_start, second_start, first_end))
-        or (abs(orientation_2) <= tolerance and on_segment(first_start, second_end, first_end))
-        or (abs(orientation_3) <= tolerance and on_segment(second_start, first_start, second_end))
-        or (abs(orientation_4) <= tolerance and on_segment(second_start, first_end, second_end))
+        (
+            abs(orientation_1) <= tolerance
+            and on_segment(first_start, second_start, first_end)
+        )
+        or (
+            abs(orientation_2) <= tolerance
+            and on_segment(first_start, second_end, first_end)
+        )
+        or (
+            abs(orientation_3) <= tolerance
+            and on_segment(second_start, first_start, second_end)
+        )
+        or (
+            abs(orientation_4) <= tolerance
+            and on_segment(second_start, first_end, second_end)
+        )
     )
