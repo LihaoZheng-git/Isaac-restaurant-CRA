@@ -64,9 +64,19 @@ def test_relative_speed_uses_waypoint_aligned_nominal_robot_velocity() -> None:
         timestamp_seconds=3.0,
     )
 
-    assert motion.relative_speed_mps.value == pytest.approx(
-        math.hypot(0.2, 0.5)
+    assert motion.relative_speed_mps.value == pytest.approx(math.hypot(0.2, 0.5))
+
+
+def test_relative_speed_prefers_measured_robot_velocity() -> None:
+    context = RouteMotionContext(
+        robot_position_world_xy=(0, 0),
+        waypoint_world_xy=(4, 0),
+        nominal_robot_speed_mps=9,
+        measured_robot_velocity_world_xy=(0.3, -0.1),
     )
+    motion = estimate_track_motion(track(), route_context=context, timestamp_seconds=3)
+    assert motion.relative_speed_mps.value == pytest.approx(math.hypot(0.3, 0.4))
+    assert "measured robot velocity" in motion.relative_speed_mps.evidence[0]
 
 
 def test_crossing_prediction_scores_route_center_intersection_high() -> None:

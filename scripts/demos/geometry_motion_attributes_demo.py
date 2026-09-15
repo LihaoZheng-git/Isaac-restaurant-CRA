@@ -37,7 +37,12 @@ from robot.perception.motion_attributes import (
     RouteMotionContext,
     estimate_track_motion,
 )
-from robot.perception.physical_attributes import PhysicalAttributes
+from robot.perception.fall_height import FallSurfaceEvidence, estimate_fall_height
+from robot.perception.physical_attributes import (
+    EstimateStatus,
+    PhysicalAttributes,
+    ScalarEstimate,
+)
 from robot.perception.physical_geometry import estimate_track_geometry
 from robot.safety.obstacle_tracking import ObstacleTracker
 
@@ -117,12 +122,32 @@ def main() -> None:
         robot_position_world_xy=(0.0, 0.0),
         waypoint_world_xy=(4.0, 0.0),
         nominal_robot_speed_mps=0.2,
+        measured_robot_velocity_world_xy=(0.1, 0.0),
     )
     motion = estimate_track_motion(
         tracked_obstacle,
         route_context=route_context,
         timestamp_seconds=tracking_result.timestamp_seconds,
     )
+
+    def surface(value: float, source: str) -> ScalarEstimate:
+        return ScalarEstimate(
+            value=value,
+            lower_bound=max(0.0, value - 0.02),
+            upper_bound=value + 0.02,
+            confidence=0.8,
+            unit="m",
+            source=source,
+            timestamp_seconds=tracking_result.timestamp_seconds,
+            status=EstimateStatus.MEASURED,
+            evidence=("synthetic calibrated surface fixture",),
+        )
+
+    fall_height = estimate_fall_height(
+        FallSurfaceEvidence(surface(1.0, "support_plane"), surface(0.0, "floor_plane")),
+        timestamp_seconds=tracking_result.timestamp_seconds,
+    )
+    geometry = replace(geometry, fall_height_m=fall_height)
     unknown = PhysicalAttributes.unknown(
         track_id=tracked_obstacle.track_id,
         semantic_class="person",
@@ -158,7 +183,7 @@ def main() -> None:
     )
     checks = {
         "LiDAR geometry available": geometry_available,
-        "Fall height withheld": not geometry.fall_height_m.is_available,
+        "Surface-derived fall height available": geometry.fall_height_m.is_available,
         "Tracked world-Y velocity": (
             abs(float(motion.velocity_y_mps.value) + 0.5) < 1e-9
         ),
@@ -166,7 +191,7 @@ def main() -> None:
             float(motion.route_crossing_likelihood.value) > 0.95
         ),
         "Specialist fields withheld": specialist_fields_unavailable,
-        "Expected available count": attributes.available_estimate_count == 8,
+        "Expected available count": attributes.available_estimate_count == 9,
     }
 
     print("\n" + "=" * 72)
@@ -175,28 +200,16 @@ def main() -> None:
     print("\nInput boundaries:")
     print(f"  Track ID:                    {attributes.track_id}")
     print(f"  Semantic class:              {attributes.semantic_class}")
-    print(
-        "  Camera-LiDAR overlap:       "
-        f"{association.overlap_fraction:.3f}"
-    )
+    print(f"  Camera-LiDAR overlap:       {association.overlap_fraction:.3f}")
     print(f"  LiDAR track points:          {tracked_obstacle.point_count}")
     print(f"  Tracker observations:        {tracked_obstacle.observation_count}")
 
     print("\nVisible LiDAR geometry:")
-    print(
-        "  Width (robot Y):             "
-        f"{geometry.width_m.value:.4f} m"
-    )
-    print(
-        "  Depth (robot X):             "
-        f"{geometry.depth_m.value:.4f} m"
-    )
+    print(f"  Width (robot Y):             {geometry.width_m.value:.4f} m")
+    print(f"  Depth (robot X):             {geometry.depth_m.value:.4f} m")
     print(f"  Visible height:              {geometry.height_m.value:.4f} m")
-    print(
-        "  Envelope-center height:      "
-        f"{geometry.center_height_m.value:.4f} m"
-    )
-    print("  Available fall height:       unavailable")
+    print(f"  Envelope-center height:      {geometry.center_height_m.value:.4f} m")
+    print(f"  Surface-derived fall height: {geometry.fall_height_m.value:.4f} m")
 
     print("\nTracked motion and route context:")
     print(
@@ -204,21 +217,14 @@ def main() -> None:
         f"({motion.velocity_x_mps.value:.4f}, "
         f"{motion.velocity_y_mps.value:.4f}) m/s"
     )
+    print(f"  Relative speed:              {motion.relative_speed_mps.value:.4f} m/s")
     print(
-        "  Relative speed:              "
-        f"{motion.relative_speed_mps.value:.4f} m/s"
-    )
-    print(
-        "  Route-crossing likelihood:   "
-        f"{motion.route_crossing_likelihood.value:.4f}"
+        f"  Route-crossing likelihood:   {motion.route_crossing_likelihood.value:.4f}"
     )
     print("  Nominal waypoint route:      straight from (0, 0) to (4, 0)")
 
     print("\nAttribute record:")
-    print(
-        "  Available physical fields:   "
-        f"{attributes.available_estimate_count} / 24"
-    )
+    print(f"  Available physical fields:   {attributes.available_estimate_count} / 24")
     print("  Mass/contact/thermal/stability: explicitly unavailable")
 
     print("\nControlled checks:")

@@ -197,6 +197,35 @@ def test_runtime_initializes_complete_fixed_anchor_field() -> None:
     assert runtime.field.temporal_safety_derivative == 0.0
 
 
+def test_accepted_field_builds_live_geometry_motion_without_fall_substitution() -> None:
+    from robot.perception.live_physical_evidence import (
+        LivePhysicalEvidenceContext,
+        build_live_physical_attributes,
+    )
+
+    runtime = make_runtime()
+    observation = make_observation(1, 1.0)
+    runtime.initialize(observation, make_provider())
+    points_xyz = np.column_stack(
+        (observation.obstacle_points_robot_xy, np.full(4, 0.5))
+    )
+    records = build_live_physical_attributes(
+        runtime.field,
+        LivePhysicalEvidenceContext(
+            obstacle_points_robot_xyz=points_xyz,
+            floor_height_robot_m=0.0,
+            robot_position_world_xy=(0.0, 0.0),
+            waypoint_world_xy=(4.0, 0.0),
+            measured_robot_velocity_world_xy=(0.1, 0.0),
+        ),
+    )
+    assert len(records) == 1
+    assert records[0].geometry.width_m.is_available
+    assert not records[0].geometry.fall_height_m.is_available
+    assert not records[0].mass.mass_kg.is_available
+    assert not records[0].motion.relative_speed_mps.is_available  # new track
+
+
 def test_fixed_anchor_removes_robot_egomotion_from_static_field() -> None:
     runtime = make_runtime()
     runtime.initialize(make_observation(1, 1.0), make_provider())
