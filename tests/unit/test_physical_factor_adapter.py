@@ -70,7 +70,7 @@ def test_energy_equations_and_unknown_specialists():
     assert result.track_id == 7
     for factor in (result.profile.contact, result.profile.thermal):
         assert factor.confidence == 0.0
-        assert factor.source == "physical_adapter_unsupported"
+        assert factor.source == "physical_evidence_cra_adapter"
     # Honest integration: unknown specialists saturate default aggregation.
     assert CRARiskAssessor().assess(result.profile).phi == 1.0
 
@@ -250,6 +250,56 @@ def test_all_unavailable_remains_unknown():
     result = adapt(PhysicalAttributes.unknown(track_id=1, timestamp_seconds=2))
     assert result.profile.potential.confidence == result.profile.kinetic.confidence == 0
     assert not result.kinetic.energy_j.is_available
+
+
+def test_complete_contact_and_thermal_specialists_produce_all_four_factors():
+    item = attributes()
+    item = replace(
+        item,
+        contact=replace(
+            item.contact,
+            sharpness=scalar(0.9),
+            hardness=scalar(0.8),
+            dangerous_part_exposure=scalar(0.7),
+            orientation_toward_route=scalar(0.5),
+        ),
+        thermal=replace(item.thermal, heat_source_likelihood=scalar(0.8)),
+    )
+    result = adapt_physical_factors(
+        item,
+        timestamp_seconds=2,
+        potential_interaction_likelihood=scalar(0.5),
+        thermal_interaction_likelihood=scalar(0.4),
+    )
+    assert result.profile.contact.severity == pytest.approx(0.87)
+    assert result.profile.contact.interaction_likelihood == pytest.approx(0.35)
+    assert result.profile.thermal.severity == pytest.approx(0.8)
+    assert result.profile.thermal.interaction_likelihood == pytest.approx(0.4)
+    assert CRARiskAssessor().assess(result.profile).phi < 1
+
+
+def test_steam_without_heat_source_does_not_create_thermal_risk():
+    item = attributes()
+    item = replace(item, thermal=replace(item.thermal, steam_likelihood=scalar(1)))
+    result = adapt_physical_factors(
+        item, timestamp_seconds=2, thermal_interaction_likelihood=scalar(1)
+    )
+    assert result.profile.thermal.confidence == 0
+    assert "heat_source_likelihood: unavailable" in result.thermal.rejection_reasons
+
+
+def test_contact_missing_orientation_remains_unknown():
+    item = attributes()
+    item = replace(
+        item,
+        contact=replace(
+            item.contact,
+            sharpness=scalar(1),
+            hardness=scalar(1),
+            dangerous_part_exposure=scalar(1),
+        ),
+    )
+    assert adapt(item).profile.contact.confidence == 0
 
 
 def test_mass_contract_output_connects_without_claiming_measurement():

@@ -6,7 +6,7 @@ and accessibility where justified); instability alone is not that opportunity.
 Kinetic energy uses the supplied relative-speed reference, which the current
 motion estimator computes against waypoint-aligned nominal robot motion.
 Neither energy nor route crossing is a collision probability or safety proof.
-Contact and thermal remain unknown even if attribute placeholders are filled.
+Contact and thermal require complete specialist evidence; missing inputs remain unknown.
 """
 
 from dataclasses import dataclass, fields
@@ -50,6 +50,7 @@ class PhysicalFactorAdapterConfig:
     fallback_confidence_cap: float = 0.0
     use_upper_bounds: bool = True
     allow_priors: bool = True
+    contact_sharpness_weight: float = 0.7
 
     def __post_init__(self) -> None:
         for name in (
@@ -59,9 +60,10 @@ class PhysicalFactorAdapterConfig:
             "maximum_evidence_age_seconds",
             "prior_confidence_cap",
             "fallback_confidence_cap",
+            "contact_sharpness_weight",
         ):
             value = _number(getattr(self, name), name)
-            if name.endswith("cap"):
+            if name.endswith("cap") or name.endswith("weight"):
                 if not 0.0 <= value <= 1.0:
                     raise ValueError(f"{name} must lie in [0, 1]")
             elif value <= 0.0:
@@ -112,6 +114,8 @@ class PhysicalFactorAdapterResult:
     profile: PhysicalRiskProfile
     potential: PhysicalFactorDiagnostic
     kinetic: PhysicalFactorDiagnostic
+    contact: PhysicalFactorDiagnostic
+    thermal: PhysicalFactorDiagnostic
 
 
 def _factor(
@@ -205,11 +209,66 @@ def _factor(
     return PhysicalFactorDiagnostic(factor, inputs, energy, estimate, tuple(reasons))
 
 
+def _direct_factor(
+    factor: str,
+    inputs: tuple[tuple[str, ScalarEstimate], ...],
+    *,
+    timestamp: float,
+    config: PhysicalFactorAdapterConfig,
+    severity: float,
+    interaction: float,
+    assumption: str,
+) -> PhysicalFactorDiagnostic:
+    reasons = []
+    for name, item in inputs:
+        if item.is_available and not (0 <= item.lower_bound <= item.upper_bound <= 1):
+            raise ValueError(f"{name} bounds must lie in [0, 1]")
+        if not item.is_available:
+            reasons.append(f"{name}: unavailable")
+        elif item.timestamp_seconds > timestamp:
+            reasons.append(f"{name}: future evidence")
+        elif timestamp - item.timestamp_seconds > config.maximum_evidence_age_seconds:
+            reasons.append(f"{name}: stale evidence")
+        if item.status is EstimateStatus.PRIOR and not config.allow_priors:
+            reasons.append(f"{name}: priors disabled")
+    provenance = tuple(
+        f"{name}: status={item.status.value}, source={item.source}, "
+        f"timestamp={item.timestamp_seconds}, confidence={item.confidence}"
+        for name, item in inputs
+    )
+    energy = ScalarEstimate.unavailable(
+        unit="J",
+        source="not_energy_based",
+        timestamp_seconds=timestamp,
+        evidence=(f"{factor} uses normalized specialist cues",),
+    )
+    if reasons:
+        estimate = RiskFactorEstimate.unknown(
+            source=ADAPTER_SOURCE, evidence=provenance + tuple(reasons)
+        )
+    else:
+        confidence = min(
+            min(item.confidence, config.prior_confidence_cap)
+            if item.status is EstimateStatus.PRIOR
+            else item.confidence
+            for _, item in inputs
+        )
+        estimate = RiskFactorEstimate(
+            severity=min(1.0, max(0.0, severity)),
+            interaction_likelihood=min(1.0, max(0.0, interaction)),
+            confidence=confidence,
+            source=ADAPTER_SOURCE,
+            evidence=provenance + (assumption, "uncalibrated normalized cue mapping"),
+        )
+    return PhysicalFactorDiagnostic(factor, inputs, energy, estimate, tuple(reasons))
+
+
 def adapt_physical_factors(
     attributes: PhysicalAttributes,
     *,
     timestamp_seconds: float,
     potential_interaction_likelihood: ScalarEstimate | None = None,
+    thermal_interaction_likelihood: ScalarEstimate | None = None,
     config: PhysicalFactorAdapterConfig | None = None,
 ) -> PhysicalFactorAdapterResult:
     """Adapt one track without semantic-class or object-height substitutions.
@@ -261,17 +320,57 @@ def adapt_physical_factors(
         timestamp=timestamp,
         config=settings,
     )
-    unsupported = RiskFactorEstimate.unknown(
-        source="physical_adapter_unsupported",
-        evidence=("contact/thermal specialist adaptation is not implemented",),
+    bound = "upper_bound" if settings.use_upper_bounds else "value"
+    contact_inputs = (
+        ("sharpness", attributes.contact.sharpness),
+        ("hardness", attributes.contact.hardness),
+        ("dangerous_part_exposure", attributes.contact.dangerous_part_exposure),
+        ("orientation_toward_route", attributes.contact.orientation_toward_route),
+    )
+    sharpness, hardness, exposure, orientation = (item for _, item in contact_inputs)
+    contact = _direct_factor(
+        "contact",
+        contact_inputs,
+        timestamp=timestamp,
+        config=settings,
+        severity=(
+            settings.contact_sharpness_weight * (getattr(sharpness, bound) or 0)
+            + (1 - settings.contact_sharpness_weight) * (getattr(hardness, bound) or 0)
+        ),
+        interaction=(getattr(exposure, bound) or 0)
+        * (getattr(orientation, bound) or 0),
+        assumption="weighted sharpness/hardness severity; exposure times orientation interaction",
+    )
+    thermal_interaction = thermal_interaction_likelihood or ScalarEstimate.unavailable(
+        unit="1", source="thermal_interaction_unavailable", timestamp_seconds=timestamp
+    )
+    if (
+        not isinstance(thermal_interaction, ScalarEstimate)
+        or thermal_interaction.unit != "1"
+    ):
+        raise ValueError("thermal interaction must be a dimensionless ScalarEstimate")
+    thermal_inputs = (
+        ("heat_source_likelihood", attributes.thermal.heat_source_likelihood),
+        ("thermal_interaction_likelihood", thermal_interaction),
+    )
+    thermal = _direct_factor(
+        "thermal",
+        thermal_inputs,
+        timestamp=timestamp,
+        config=settings,
+        severity=getattr(attributes.thermal.heat_source_likelihood, bound) or 0,
+        interaction=getattr(thermal_interaction, bound) or 0,
+        assumption="heat-source cue severity with separately supplied contextual interaction",
     )
     return PhysicalFactorAdapterResult(
         attributes.track_id,
         timestamp,
         settings,
         PhysicalRiskProfile(
-            unsupported, unsupported, potential.estimate, kinetic.estimate
+            thermal.estimate, contact.estimate, potential.estimate, kinetic.estimate
         ),
         potential,
         kinetic,
+        contact,
+        thermal,
     )
