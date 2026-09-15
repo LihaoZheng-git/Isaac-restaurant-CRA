@@ -230,3 +230,4 @@ scenes/generated/
 outputs/
 
 .pytest_tmp/
+.pytest_tmp_*/
