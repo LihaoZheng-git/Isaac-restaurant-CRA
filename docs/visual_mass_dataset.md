@@ -17,3 +17,42 @@ and no verified repository license. CORSMAL is container-specific; some related
 components are noncommercial. Architecture selection waits until the dataset
 inventory demonstrates enough independent objects. Real-image evaluation is
 required before simulator-trained output can be called runtime evidence.
+
+## ABO restaurant subset
+
+The bounded real-image path uses the official Amazon Berkeley Objects (ABO)
+product listings and catalog images. The current ABO download page and archive
+README identify the release as CC BY 4.0. Preserve the archive license and give
+the required Amazon.com and dataset-author attribution in publications and
+derived-dataset documentation.
+
+Run `scripts/data/prepare_abo_visual_mass_subset.py` against the 16 official
+`listings_*.json.gz` shards and `images/metadata/images.csv.gz`. The selector:
+
+- uses exact product-type mappings for restaurant-relevant classes;
+- requires a positive catalog weight, all three catalog dimensions, and an
+  indexed main image;
+- converts normalized pounds and inches to kilograms and metres;
+- caps each class before training and assigns splits by product object ID; and
+- records the source license and provenance in every manifest row.
+
+ABO values are external catalog metadata claims. They are offline supervision,
+not scale measurements made by this project, and they remain unavailable to
+the CRA runtime. The selector does not turn object height into fall height.
+Raw archives, selected images, and generated manifests live under `outputs/`
+and are intentionally excluded from Git.
+
+Example:
+
+```powershell
+python scripts/data/prepare_abo_visual_mass_subset.py `
+  --listings-dir outputs/visual_mass_data/abo/raw/listings/metadata `
+  --image-metadata outputs/visual_mass_data/abo/raw/images.csv.gz `
+  --output-dir outputs/visual_mass_data/abo/subset `
+  --max-per-class 200
+```
+
+This branch prepares and inventories data only. It does not contain trained
+weights or claim general-object mass inference. A later training branch will
+choose a lightweight architecture after checking the selected class balance,
+image availability, pretrained-weight license, and real/Isaac validation plan.
