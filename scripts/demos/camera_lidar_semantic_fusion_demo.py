@@ -90,6 +90,11 @@ from robot.perception.camera_lidar_fusion import (
     CameraLidarFusionResult,
     CameraLidarSemanticFusion,
 )
+from robot.perception.live_physical_evidence import (
+    LivePhysicalEvidenceContext,
+    build_tracking_physical_attributes,
+)
+from robot.perception.physical_attributes import PhysicalAttributes
 from robot.perception.semantic_detection import SemanticDetectionFrame
 from robot.perception.visualization import (
     render_camera_lidar_fusion_overlay,
@@ -298,6 +303,7 @@ def print_report(
     tracking: ObstacleTrackingResult,
     detections: SemanticDetectionFrame,
     fusion: CameraLidarFusionResult,
+    physical_attributes: tuple[PhysicalAttributes, ...],
     raw_path: Path,
     semantic_path: Path,
     fusion_path: Path,
@@ -405,7 +411,34 @@ def print_report(
             f"median={median_text:<11} box={box_text:<23} "
             f"score={association.association_score:.3f}"
         )
-    print("\nStage C - controlled checks:")
+    print("\nStage C - physical evidence:")
+    attributes_by_track = {
+        item.track_id: item for item in physical_attributes
+    }
+    for association in fusion.associations:
+        if not association.is_matched:
+            continue
+        attributes = attributes_by_track[association.track_id]
+        geometry = attributes.geometry
+        motion = attributes.motion
+        print(
+            f"  T{attributes.track_id} {attributes.semantic_class}: "
+            f"width={geometry.width_m.value:.3f} m, "
+            f"depth={geometry.depth_m.value:.3f} m, "
+            f"height={geometry.height_m.value:.3f} m"
+        )
+        print(
+            "    sources: geometry="
+            f"{geometry.width_m.status.value}; mass="
+            f"{attributes.mass.mass_kg.status.value}; motion="
+            f"{motion.relative_speed_mps.status.value}; fall_height="
+            f"{geometry.fall_height_m.status.value}"
+        )
+        print(
+            "    single-frame motion and support-to-landing fall height "
+            "remain unavailable"
+        )
+    print("\nStage D - controlled checks:")
     print(f"  Projection inside image:     {projection_inside_image}")
     print(f"  At least one YOLO instance:  {bool(detections.detections)}")
     print(f"  At least one LiDAR track:    {bool(tracking.tracked_obstacles)}")
@@ -556,6 +589,28 @@ def main() -> None:
         camera_from_source=camera_from_robot,
         calibration=calibration,
     )
+    waypoint_world_xy = (
+        float(initial_pose[0] + math.cos(initial_pose[2])),
+        float(initial_pose[1] + math.sin(initial_pose[2])),
+    )
+    physical_attributes = build_tracking_physical_attributes(
+        tracking_result=tracking,
+        label_result=fusion.semantic_labels,
+        sensor_timestamp_seconds=(
+            lidar_info.sensor_timestamp_nanoseconds * 1e-9
+        ),
+        context=LivePhysicalEvidenceContext(
+            obstacle_points_robot_xyz=obstacle_points_3d,
+            floor_height_robot_m=floor_height,
+            robot_position_world_xy=(
+                float(initial_pose[0]),
+                float(initial_pose[1]),
+            ),
+            waypoint_world_xy=waypoint_world_xy,
+            measured_robot_velocity_world_xy=(0.0, 0.0),
+        ),
+        associations=fusion.associations,
+    )
     raw_path, semantic_path, fusion_path = save_images(
         image_rgb=image_rgb,
         detections=detections,
@@ -575,6 +630,7 @@ def main() -> None:
         tracking=tracking,
         detections=detections,
         fusion=fusion,
+        physical_attributes=physical_attributes,
         raw_path=raw_path,
         semantic_path=semantic_path,
         fusion_path=fusion_path,

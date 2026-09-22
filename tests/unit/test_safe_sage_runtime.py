@@ -201,6 +201,7 @@ def test_accepted_field_builds_live_geometry_motion_without_fall_substitution() 
     from robot.perception.live_physical_evidence import (
         LivePhysicalEvidenceContext,
         build_live_physical_attributes,
+        build_tracking_physical_attributes,
     )
 
     runtime = make_runtime()
@@ -224,6 +225,20 @@ def test_accepted_field_builds_live_geometry_motion_without_fall_substitution() 
     assert not records[0].geometry.fall_height_m.is_available
     assert not records[0].mass.mass_kg.is_available
     assert not records[0].motion.relative_speed_mps.is_available  # new track
+
+    direct_records = build_tracking_physical_attributes(
+        tracking_result=runtime.field.tracking_result,
+        label_result=runtime.field.label_result,
+        sensor_timestamp_seconds=runtime.field.sensor_timestamp_seconds,
+        context=LivePhysicalEvidenceContext(
+            obstacle_points_robot_xyz=points_xyz,
+            floor_height_robot_m=0.0,
+            robot_position_world_xy=(0.0, 0.0),
+            waypoint_world_xy=(4.0, 0.0),
+            measured_robot_velocity_world_xy=(0.1, 0.0),
+        ),
+    )
+    assert direct_records == records
 
 
 def test_fixed_anchor_removes_robot_egomotion_from_static_field() -> None:

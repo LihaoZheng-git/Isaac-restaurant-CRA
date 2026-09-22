@@ -8,6 +8,7 @@ from robot.perception.fall_height import (
 from robot.perception.live_physical_evidence import (
     LivePhysicalEvidenceContext as LivePhysicalEvidenceContext,
     build_live_physical_attributes as build_live_physical_attributes,
+    build_tracking_physical_attributes as build_tracking_physical_attributes,
 )
 
 from robot.perception.mass_estimation import (
@@ -91,6 +92,8 @@ __all__ = [
     "ThermalAttributes",
     "YoloSegmentationConfig",
     "YoloSegmentationDetector",
+    "build_live_physical_attributes",
+    "build_tracking_physical_attributes",
     "estimate_box_volume",
     "estimate_mass_from_volume_density",
     "estimate_track_geometry",
