@@ -11,6 +11,7 @@ from robot.perception.abo_visual_mass import (
     AboMassCandidate,
     iter_abo_listings,
     load_abo_image_paths,
+    read_abo_subset_manifest,
     select_abo_mass_subset,
     write_abo_subset_manifest,
 )
@@ -89,6 +90,24 @@ def test_missing_image_index_is_reported_not_fabricated():
     assert report.missing_image_index_records == 1
 
 
+def test_cross_market_duplicate_products_and_images_are_not_split_as_independent():
+    first = listing("same", image_id="shared")
+    second = listing("same", image_id="other")
+    second["domain_name"] = "amazon.ca"
+    third = listing("different", image_id="shared")
+    selected, report = select_abo_mass_subset(
+        [first, second, third],
+        {"shared": "aa/shared.jpg", "other": "bb/other.jpg"},
+        categories={"chair": ("CHAIR",)},
+    )
+    assert len(selected) == 2
+    assert len({item.item_id for item in selected}) == 2
+    assert len({item.image_id for item in selected}) == 2
+    assert all(item.split_group_id == item.item_id for item in selected)
+    rejections = dict(report.rejection_counts)
+    assert rejections["duplicate_product_id"] == 1
+
+
 def test_class_capping_does_not_bias_object_splits():
     items = [listing(str(index)) for index in range(1000)]
     paths = {
@@ -129,6 +148,7 @@ def test_gzip_jsonl_and_image_index_readers(tmp_path):
 def test_manifest_is_deterministic_and_rejects_duplicate_objects(tmp_path):
     candidate = AboMassCandidate(
         object_id="amazon.com:a",
+        split_group_id="a",
         item_id="a",
         domain_name="amazon.com",
         semantic_class="chair",
@@ -144,8 +164,9 @@ def test_manifest_is_deterministic_and_rejects_duplicate_objects(tmp_path):
     path = tmp_path / "manifest.jsonl"
     write_abo_subset_manifest([candidate], path)
     payload = json.loads(path.read_text(encoding="utf-8"))
-    assert payload["schema_version"] == 1
+    assert payload["schema_version"] == 2
     assert payload["runtime_evidence_status"] == "unavailable"
+    assert read_abo_subset_manifest(path) == (candidate,)
     with pytest.raises(ValueError, match="object_id"):
         write_abo_subset_manifest([candidate, candidate], path)
 
@@ -162,6 +183,7 @@ def test_manifest_is_deterministic_and_rejects_duplicate_objects(tmp_path):
 def test_candidate_provenance_and_paths_cannot_be_misrepresented(change):
     values = dict(
         object_id="amazon.com:a",
+        split_group_id="a",
         item_id="a",
         domain_name="amazon.com",
         semantic_class="chair",

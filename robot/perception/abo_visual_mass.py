@@ -21,7 +21,7 @@ from typing import Iterable, Iterator, Mapping, Sequence
 from robot.perception.visual_mass_dataset import deterministic_object_split
 
 
-ABO_SUBSET_SCHEMA_VERSION = 1
+ABO_SUBSET_SCHEMA_VERSION = 2
 ABO_DATASET_URL = "https://amazon-berkeley-objects.s3.amazonaws.com/index.html"
 ABO_LICENSE = "CC BY 4.0"
 ABO_MASS_PROVENANCE = "external_catalog_metadata"
@@ -84,6 +84,7 @@ class AboMassCandidate:
     """One selected catalog image with offline physical-property labels."""
 
     object_id: str
+    split_group_id: str
     item_id: str
     domain_name: str
     semantic_class: str
@@ -105,6 +106,7 @@ class AboMassCandidate:
     def __post_init__(self) -> None:
         for name in (
             "object_id",
+            "split_group_id",
             "item_id",
             "domain_name",
             "semantic_class",
@@ -310,6 +312,8 @@ def select_abo_mass_subset(
         grouped[parsed.semantic_class].append(parsed)
 
     chosen: list[_PhysicalListing] = []
+    selected_item_ids: set[str] = set()
+    selected_image_ids: set[str] = set()
     for semantic_class in sorted(grouped):
         ranked = sorted(
             grouped[semantic_class],
@@ -317,7 +321,20 @@ def select_abo_mass_subset(
                 f"selection:{salt}:{item.object_id}".encode()
             ).digest(),
         )
-        chosen.extend(ranked[:max_objects_per_class])
+        class_count = 0
+        for item in ranked:
+            if item.item_id in selected_item_ids:
+                rejections["duplicate_product_id"] += 1
+                continue
+            if item.image_id in selected_image_ids:
+                rejections["duplicate_image_id"] += 1
+                continue
+            chosen.append(item)
+            selected_item_ids.add(item.item_id)
+            selected_image_ids.add(item.image_id)
+            class_count += 1
+            if class_count == max_objects_per_class:
+                break
 
     candidates = []
     missing_images = 0
@@ -329,9 +346,10 @@ def select_abo_mass_subset(
         candidates.append(
             AboMassCandidate(
                 **asdict(item),
+                split_group_id=item.item_id,
                 image_path=path,
                 split=deterministic_object_split(
-                    item.object_id, salt=f"split:{salt}"
+                    item.item_id, salt=f"split:{salt}"
                 ),
             )
         )
@@ -371,6 +389,27 @@ def write_abo_subset_manifest(
                 )
                 + "\n"
             )
+
+
+def read_abo_subset_manifest(
+    manifest_path: Path,
+) -> tuple[AboMassCandidate, ...]:
+    """Read and validate a generated ABO subset manifest."""
+    items = []
+    with Path(manifest_path).open(encoding="utf-8") as handle:
+        for line_number, line in enumerate(handle, 1):
+            if not line.strip():
+                continue
+            payload = json.loads(line)
+            version = payload.pop("schema_version", None)
+            if version == 1:
+                payload.setdefault("split_group_id", payload.get("item_id"))
+            elif version != ABO_SUBSET_SCHEMA_VERSION:
+                raise ValueError(f"line {line_number}: unsupported schema version")
+            items.append(AboMassCandidate(**payload))
+    if len({item.object_id for item in items}) != len(items):
+        raise ValueError("object_id values must be unique")
+    return tuple(items)
 
 
 def write_abo_selection_report(

@@ -52,7 +52,41 @@ python scripts/data/prepare_abo_visual_mass_subset.py `
   --max-per-class 200
 ```
 
-This branch prepares and inventories data only. It does not contain trained
-weights or claim general-object mass inference. A later training branch will
-choose a lightweight architecture after checking the selected class balance,
-image availability, pretrained-weight license, and real/Isaac validation plan.
+The data-preparation step does not itself provide trained weights or claim
+general-object mass inference. Architecture selection follows the inventory,
+image-availability, pretrained-weight, and validation checks below.
+
+## Lightweight baseline
+
+The first bounded model is MobileNetV3 Small image features plus three positive
+SI dimensions, with a head that predicts log mass. The dataset size affects
+offline download and training; runtime cost depends on the fixed 2.54-million-
+parameter image encoder and small regression head. The training script compares
+the RGB-plus-dimensions model with a global training-median baseline and a
+log-dimensions least-squares baseline.
+
+The official Torchvision model page identifies the ImageNet-1K weights as
+`MobileNet_V3_Small_Weights.IMAGENET1K_V1` (9.8 MB). Torchvision source is
+BSD-3-Clause, but the installed weight enum has no explicit license metadata.
+Training reports therefore record the exact URL, SHA-256, size, upstream
+training dataset, and this unresolved weight-license field. Do not redistribute
+the checkpoint or call it deployment-ready without resolving that point.
+
+The local frozen-backbone diagnostic on the deduplicated 1,003-object subset
+selected epoch 12 of 12. On 152 held-out catalog objects it obtained 3.650 kg
+MAE and 102.0% MAPE, compared with 4.398 kg and 132.9% for log dimensions alone
+and 7.322 kg and 5305.6% for a global median. RGB therefore adds catalog-domain
+signal, while the large relative error and sparse bottle/knife samples prevent
+general-object or runtime claims. Fine-tuning all layers produced similar MAE
+(3.641 kg) but much worse MAPE (329.3%), so it is retained only as an ablation.
+Catalog item weights may also describe packaging or multi-item sets rather than
+the single visible object, and this label-quality risk needs a manual audit.
+The stationary single-image model-forward diagnostic measured median latency of
+4.00 ms on the local RTX 5070 Ti and 4.49 ms on the local CPU. These timings
+exclude detection, cropping, geometry estimation, and camera transfer.
+
+Checkpoints and evaluation reports stay under `outputs/`. Run
+`scripts/demos/visual_mass_model_diagnostic.py` for a stationary, offline
+inference and latency check. Isaac camera crops, live LiDAR dimensions, domain
+shift, calibration, and uncertainty rejection remain required before a model
+output can become inferred runtime evidence.
