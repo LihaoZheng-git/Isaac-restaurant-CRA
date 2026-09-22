@@ -36,3 +36,28 @@ images/120 masks, and 332 test images/540 masks. Even a successful blade mask
 would support dangerous-part exposure only. It would not measure edge radius,
 sharpness, material hardness, or contact severity, so those fields remain
 unavailable unless independently supported.
+
+## General contact geometry scope
+
+Contact risk is not restricted to restaurant utensils. The target visual
+geometry taxonomy is `exposed_edge`, `pointed_tip`, `protrusion`, and
+`jagged_surface`, which can cover hazards such as nails, screws, spikes, broken
+glass, exposed metal, and sharp structural corners. Geometry class and mask are
+still only inferred visual evidence; a class name does not establish physical
+sharpness, material hardness, route orientation, contact probability, or injury
+severity.
+
+`scripts/data/build_paco_hazard_manifest.py` streams the large annotation file
+with bounded memory and maps `knife:blade` and `scissors:blade` to
+`exposed_edge`, plus `screwdriver:tip` to `pointed_tip`. The generated manifest
+retains source labels, masks, parent-object masks, image metadata, dataset hash,
+and license status. PACO does not provide the required general protrusion or
+jagged-surface coverage, so those classes remain unavailable pending controlled
+synthetic or real supervision. PACO geometry labels also do not fill sharpness
+or hardness fields in the CRA factor.
+
+The verified manifests contain 3,528 geometry masks in 2,226 train images, 174
+masks in 108 validation images, and 794 masks in 448 test images. Only one
+validation screwdriver-tip mask is present, so `pointed_tip` performance cannot
+be treated as established; the current data chiefly supports an exposed-edge
+baseline.

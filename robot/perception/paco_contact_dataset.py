@@ -6,7 +6,7 @@ from dataclasses import asdict, dataclass
 import json
 import mmap
 from pathlib import Path
-from typing import Iterable
+from typing import Iterable, Iterator, Mapping
 
 
 PACO_LVIS_ANNOTATION_SHA256 = (
@@ -17,6 +17,22 @@ PACO_ANNOTATION_URL = (
     "https://dl.fbaipublicfiles.com/paco/annotations/paco_lvis_v1.zip"
 )
 PACO_CONTACT_REPORT_SCHEMA_VERSION = 1
+PACO_HAZARD_MANIFEST_SCHEMA_VERSION = 1
+
+GENERAL_CONTACT_GEOMETRIES = (
+    "exposed_edge",
+    "pointed_tip",
+    "protrusion",
+    "jagged_surface",
+)
+
+# These labels supervise visible geometry only. They do not establish sharpness,
+# material hardness, contact probability, or injury severity.
+DEFAULT_PACO_HAZARD_PARTS = {
+    "knife:blade": "exposed_edge",
+    "scissors:blade": "exposed_edge",
+    "screwdriver:tip": "pointed_tip",
+}
 
 
 @dataclass(frozen=True)
@@ -101,6 +117,189 @@ def read_paco_categories(annotation_path: Path) -> tuple[dict[str, object], ...]
     if not isinstance(values, list) or not all(isinstance(item, dict) for item in values):
         raise ValueError("PACO categories must be an array of objects")
     return tuple(values)
+
+
+def iter_paco_array_objects(
+    annotation_path: Path, key: str
+) -> Iterator[dict[str, object]]:
+    """Stream objects from one top-level PACO array with bounded memory."""
+    marker = json.dumps(key).encode("ascii")
+    with Path(annotation_path).open("rb") as handle, mmap.mmap(
+        handle.fileno(), length=0, access=mmap.ACCESS_READ
+    ) as data:
+        marker_index = data.find(marker)
+        if marker_index < 0:
+            raise ValueError(f"top-level key {key!r} was not found")
+        array_start = data.find(b"[", marker_index + len(marker))
+        if array_start < 0:
+            raise ValueError(f"top-level key {key!r} is not an array")
+        object_start = None
+        object_depth = 0
+        array_depth = 1
+        in_string = False
+        escaped = False
+        for index in range(array_start + 1, len(data)):
+            value = data[index]
+            if in_string:
+                if escaped:
+                    escaped = False
+                elif value == ord("\\"):
+                    escaped = True
+                elif value == ord('"'):
+                    in_string = False
+                continue
+            if value == ord('"'):
+                in_string = True
+            elif value == ord("["):
+                array_depth += 1
+            elif value == ord("]"):
+                array_depth -= 1
+                if array_depth == 0:
+                    if object_start is not None:
+                        raise ValueError(f"top-level array {key!r} is malformed")
+                    return
+            elif value == ord("{"):
+                if object_depth == 0:
+                    object_start = index
+                object_depth += 1
+            elif value == ord("}"):
+                object_depth -= 1
+                if object_depth < 0:
+                    raise ValueError(f"top-level array {key!r} is malformed")
+                if object_depth == 0 and object_start is not None:
+                    item = json.loads(data[object_start : index + 1])
+                    if not isinstance(item, dict):
+                        raise ValueError(f"{key!r} must contain objects")
+                    yield item
+                    object_start = None
+        raise ValueError(f"top-level array {key!r} is unterminated")
+
+
+def build_paco_hazard_manifest(
+    annotation_path: Path,
+    *,
+    part_mapping: Mapping[str, str] = DEFAULT_PACO_HAZARD_PARTS,
+) -> dict[str, object]:
+    """Build a provenance-rich geometry manifest without loading PACO in memory."""
+    mapping = dict(part_mapping)
+    if not mapping:
+        raise ValueError("part mapping cannot be empty")
+    invalid = set(mapping.values()) - set(GENERAL_CONTACT_GEOMETRIES)
+    if invalid:
+        raise ValueError(f"unsupported contact geometries: {sorted(invalid)}")
+
+    categories = read_paco_categories(annotation_path)
+    category_by_name = {str(item.get("name")): item for item in categories}
+    category_name_by_id = {int(item["id"]): str(item["name"]) for item in categories}
+    missing = sorted(set(mapping) - set(category_by_name))
+    if missing:
+        raise ValueError(f"missing PACO part categories: {missing}")
+    category_to_geometry = {
+        int(category_by_name[name]["id"]): geometry
+        for name, geometry in mapping.items()
+    }
+
+    hazards = []
+    parent_ids = set()
+    image_ids = set()
+    for annotation in iter_paco_array_objects(annotation_path, "annotations"):
+        category_id = int(annotation["category_id"])
+        if category_id not in category_to_geometry:
+            continue
+        parent_id = annotation.get("obj_ann_id")
+        if parent_id is not None:
+            parent_ids.add(int(parent_id))
+        image_ids.add(int(annotation["image_id"]))
+        hazards.append(
+            {
+                "annotation_id": int(annotation["id"]),
+                "image_id": int(annotation["image_id"]),
+                "source_part_category": category_name_by_id[category_id],
+                "geometry_class": category_to_geometry[category_id],
+                "part_segmentation": annotation.get("segmentation"),
+                "part_bbox_xywh": annotation.get("bbox"),
+                "part_area_pixels": annotation.get("area"),
+                "parent_annotation_id": (
+                    int(parent_id) if parent_id is not None else None
+                ),
+            }
+        )
+
+    parents = {}
+    if parent_ids:
+        for annotation in iter_paco_array_objects(annotation_path, "annotations"):
+            annotation_id = int(annotation["id"])
+            if annotation_id in parent_ids:
+                parents[annotation_id] = {
+                    "category": category_name_by_id[int(annotation["category_id"])],
+                    "segmentation": annotation.get("segmentation"),
+                    "bbox_xywh": annotation.get("bbox"),
+                }
+    image_fields = ("id", "width", "height", "file_name", "coco_url", "license")
+    images = {
+        int(image["id"]): {
+            name: image[name] for name in image_fields if name in image
+        }
+        for image in iter_paco_array_objects(annotation_path, "images")
+        if int(image["id"]) in image_ids
+    }
+    if set(images) != image_ids:
+        raise ValueError("one or more selected PACO image records are missing")
+
+    records = []
+    for hazard in hazards:
+        parent_id = hazard.pop("parent_annotation_id")
+        records.append(
+            {
+                **hazard,
+                "image": images[int(hazard["image_id"])],
+                "parent_object": parents.get(parent_id),
+            }
+        )
+    split = next(
+        (
+            name
+            for name in ("train", "val", "test")
+            if f"_{name}" in Path(annotation_path).stem.lower()
+        ),
+        Path(annotation_path).stem,
+    )
+    return {
+        "schema_version": PACO_HAZARD_MANIFEST_SCHEMA_VERSION,
+        "split": split,
+        "source": {
+            "dataset": "PACO-LVIS v1",
+            "annotation_path": str(Path(annotation_path)),
+            "annotation_archive_sha256": PACO_LVIS_ANNOTATION_SHA256,
+            "code_license": "MIT",
+            "annotation_license_status": (
+                "not_explicitly_stated_in_official_repository"
+            ),
+        },
+        "evidence_scope": {
+            "supported": ["visible_part_geometry_class", "part_mask"],
+            "unsupported": [
+                "physical_sharpness",
+                "material_hardness",
+                "contact_probability",
+                "injury_severity",
+                "route_orientation",
+            ],
+        },
+        "geometry_classes": list(GENERAL_CONTACT_GEOMETRIES),
+        "part_mapping": mapping,
+        "record_count": len(records),
+        "image_count": len(image_ids),
+        "records": records,
+    }
+
+
+def write_paco_hazard_manifest(manifest: Mapping[str, object], output_path: Path) -> None:
+    path = Path(output_path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
 
 
 def inventory_paco_contact_parts(
