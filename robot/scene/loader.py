@@ -11,12 +11,19 @@ import isaacsim.core.experimental.utils.stage as stage_utils
 
 from robot.config import (
     EXPECTED_METERS_PER_UNIT,
+    FRONT_HAWK_LEFT_CAMERA_PRIM_PATH,
+    PANDAR_XT32_LIDAR_PRIM_PATH,
+    ROBOT_BASE_PRIM_PATH,
     ROBOT_PRIM_PATH,
 )
+from robot.scene.contracts import find_missing_prim_paths
 
 UNIT_TOLERANCE = 1e-9
-
-
+REQUIRED_ROBOT_PRIM_PATHS = (
+    ROBOT_BASE_PRIM_PATH,
+    FRONT_HAWK_LEFT_CAMERA_PRIM_PATH,
+    PANDAR_XT32_LIDAR_PRIM_PATH,
+)
 @dataclass(frozen=True)
 class LoadedRobotScene:
     """Validated stage information returned by :func:`load_robot_scene`."""
@@ -122,6 +129,23 @@ def load_robot_scene(
     if not robot_prim.IsValid():
         raise RuntimeError(
             f"No robot was found at {robot_prim_path}."
+        )
+
+    unresolved_robot_paths = find_missing_prim_paths(
+        stage,
+        REQUIRED_ROBOT_PRIM_PATHS,
+    )
+    if unresolved_robot_paths:
+        formatted_paths = "\n".join(
+            f"  - {prim_path}" for prim_path in unresolved_robot_paths
+        )
+        raise RuntimeError(
+            "The Nova Carter reference did not compose its required robot "
+            "and sensor prims:\n"
+            f"{formatted_paths}\n\n"
+            "The generated scene references NVIDIA's official Isaac Sim "
+            "asset server. Verify that the process can access that server "
+            "and regenerate the robot scene if its asset URL is stale."
         )
 
     loaded_scene = LoadedRobotScene(
