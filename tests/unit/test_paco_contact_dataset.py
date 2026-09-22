@@ -3,9 +3,13 @@ import json
 import pytest
 
 from robot.perception.paco_contact_dataset import (
+    DEFAULT_PACO_HAZARD_PARTS,
     PACO_LVIS_ANNOTATION_SHA256,
+    build_paco_hazard_manifest,
     inventory_paco_contact_parts,
+    iter_paco_array_objects,
     read_paco_categories,
+    write_paco_hazard_manifest,
     write_paco_contact_inventory,
 )
 
@@ -68,3 +72,94 @@ def test_report_writer_records_schema_and_provenance(tmp_path):
     assert payload["schema_version"] == 1
     assert payload["code_license"] == "MIT"
     assert payload["runtime_model_status"] == "unavailable"
+
+
+def hazard_annotation(path):
+    target = path / "paco_lvis_v1_val.json"
+    target.write_text(
+        json.dumps(
+            {
+                "images": [
+                    {
+                        "id": 7,
+                        "width": 20,
+                        "height": 10,
+                        "coco_url": "https://example.invalid/image.jpg",
+                    }
+                ],
+                "annotations": [
+                    {
+                        "id": 10,
+                        "image_id": 7,
+                        "category_id": 615,
+                        "bbox": [1, 2, 8, 4],
+                        "segmentation": [[1, 2, 9, 2, 9, 6]],
+                    },
+                    {
+                        "id": 11,
+                        "image_id": 7,
+                        "category_id": 2041,
+                        "obj_ann_id": 10,
+                        "bbox": [2, 3, 6, 1],
+                        "area": 6,
+                        "segmentation": {"size": [10, 20], "counts": "abc"},
+                    },
+                ],
+                "categories": [
+                    {"id": 615, "name": "knife", "supercategory": "OBJECT"},
+                    {"id": 2041, "name": "knife:blade", "supercategory": "PART"},
+                    {
+                        "id": 2045,
+                        "name": "scissors:blade",
+                        "supercategory": "PART",
+                    },
+                    {
+                        "id": 2421,
+                        "name": "screwdriver:tip",
+                        "supercategory": "PART",
+                    },
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    return target
+
+
+def test_streaming_array_reader_handles_nested_arrays_and_objects(tmp_path):
+    path = hazard_annotation(tmp_path)
+    annotations = list(iter_paco_array_objects(path, "annotations"))
+    assert [item["id"] for item in annotations] == [10, 11]
+    assert annotations[1]["segmentation"]["size"] == [10, 20]
+
+
+def test_hazard_manifest_preserves_geometry_and_explicit_limits(tmp_path):
+    path = hazard_annotation(tmp_path)
+    manifest = build_paco_hazard_manifest(path)
+    assert manifest["schema_version"] == 1
+    assert manifest["split"] == "val"
+    assert manifest["record_count"] == 1
+    assert manifest["image_count"] == 1
+    assert manifest["part_mapping"] == DEFAULT_PACO_HAZARD_PARTS
+    record = manifest["records"][0]
+    assert record["geometry_class"] == "exposed_edge"
+    assert record["source_part_category"] == "knife:blade"
+    assert record["parent_object"]["category"] == "knife"
+    assert "physical_sharpness" in manifest["evidence_scope"]["unsupported"]
+
+
+def test_hazard_manifest_rejects_unsupported_geometry(tmp_path):
+    with pytest.raises(ValueError, match="unsupported contact geometries"):
+        build_paco_hazard_manifest(
+            hazard_annotation(tmp_path), part_mapping={"knife:blade": "knife"}
+        )
+
+
+def test_hazard_manifest_writer_records_provenance(tmp_path):
+    manifest = build_paco_hazard_manifest(hazard_annotation(tmp_path))
+    output = tmp_path / "hazards.json"
+    write_paco_hazard_manifest(manifest, output)
+    payload = json.loads(output.read_text(encoding="utf-8"))
+    assert payload["source"]["annotation_archive_sha256"] == (
+        PACO_LVIS_ANNOTATION_SHA256
+    )
