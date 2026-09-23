@@ -90,3 +90,30 @@ Checkpoints and evaluation reports stay under `outputs/`. Run
 inference and latency check. Isaac camera crops, live LiDAR dimensions, domain
 shift, calibration, and uncertainty rejection remain required before a model
 output can become inferred runtime evidence.
+
+## Bounded fused-track runtime adapter
+
+`VisualMassRuntimeEstimator` now accepts a fused instance mask, its RGB crop,
+and live LiDAR width/depth/height. It supports only the nine classes represented
+in the ABO subset. Unsupported classes and missing dimensions remain
+unavailable. The crop background is masked before the existing MobileNet
+forward pass; no catalog metadata or language reasoning enters inference.
+
+The adapter uses a configurable absolute-error bound (default 4.542 kg, the
+held-out catalog validation MAE) and caps confidence at 0.25 for unvalidated
+ABO-to-Isaac domain transfer. These are conservative engineering settings, not
+calibrated uncertainty. The checkpoint hash, catalog error, sensor inputs, and
+domain limitation are retained in evidence. Configure
+`VISUAL_MASS_CHECKPOINT` when running the stationary camera/LiDAR fusion demo;
+if it is absent, mass stays unavailable. A successful Isaac forward pass is
+still a sensor-pipeline diagnostic, not proof of mass accuracy.
+
+The first stationary Isaac run used checkpoint SHA-256
+`92d437580efb283071e0ac0cd7c16de77f76ef3017a243329e4bf826e0e5a31e`.
+The live camera detected a chair, calibrated projection associated its mask to
+LiDAR track T3, and LiDAR inferred dimensions 0.229 x 0.292 x 0.426 m. The
+adapter returned 8.522 kg with configured bounds [3.980, 13.064] kg and
+confidence 0.25. Robot drift was 0.000136 m and 0.0004 degrees. No simulator
+mass or prim label entered the estimate, and no wheel command was issued. Since
+the scene object's reference mass was not read, this result validates data flow
+and provenance only; it provides no Isaac-domain accuracy measurement.
