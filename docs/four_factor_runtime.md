@@ -19,10 +19,14 @@ live geometric track after optional visual-mass inference. It prints each
 factor's accepted values or exact rejection reasons, followed by nominal and
 conservative `phi`, boundary flux, and lambda. These parameters are diagnostic
 only: they do not enter the field, CBF, MPC, or wheel controller in this demo.
-On a single frame, motion and fall height remain unavailable; contact and
-thermal also remain unavailable without their specialist evidence. The
-resulting conservative saturation is reported explicitly rather than treating
-missing factors as zero.
+The diagnostic now waits for a second, strictly newer LiDAR timestamp before
+building the evaluation frame. Its tracker uses a configurable 0.15 m/s
+stationary gate and requires two consecutive motion updates before publishing
+nonzero obstacle velocity. A matched two-frame track can therefore contribute
+sensor-derived stationary motion evidence without turning a one-frame centroid
+jump into motion. Fall height remains unavailable; contact and thermal also
+remain unavailable without their specialist evidence. Conservative saturation
+is reported explicitly rather than treating missing factors as zero.
 
 The first end-to-end stationary run associated a live chair track, inferred
 5.495 kg with the visual-mass adapter's wide cross-domain bounds, and retained
@@ -32,3 +36,13 @@ conservative `phi=1.0`, producing boundary flux -1.7 with lambda fixed at
 1.25. The robot drifted 0.000136 m and 0.0004 degrees, and no wheel command was
 issued. This run validates plumbing and unknown propagation, not calibrated
 factor accuracy or closed-loop safety.
+
+The subsequent two-frame stationary run inferred motion for the same live
+chair track. With 7.781 kg mass and stationary-gated track velocity, kinetic
+CRA accepted severity 0.001 and route interaction 0.150 at confidence 0.25.
+Potential stayed unknown because neither fall height nor harmful-fall
+interaction was observed. Contact and thermal also stayed unknown, so
+conservative `phi` remained 1.0 while nominal `phi` was near zero. Robot drift
+was 0.000234 m and 0.0003 degrees. This establishes temporal sensor plumbing;
+moving-object accuracy and the 0.15 m/s stationary threshold still require a
+separate controlled calibration.
