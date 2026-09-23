@@ -110,6 +110,9 @@ from robot.perception.yolo_detector import (
     YoloSegmentationDetector,
     rgb_to_bgr_uint8,
 )
+from robot.risk.physical_profile_provider import (
+    PhysicalAttributeCRARiskProfileProvider,
+)
 from robot.runtime.simulation_loop import (
     advance_playing_steps,
     wait_until_playing,
@@ -123,6 +126,11 @@ from robot.safety.obstacle_tracking import (
     ObstacleTrackerConfig,
     ObstacleTrackingResult,
 )
+from robot.safety.cra_track_policy import (
+    CRATrackPolicyResult,
+    resolve_cra_track_policy,
+)
+from robot.safety.cra_safe_sage_policy import CRASafeSAGEPolicy
 from robot.scene.camera_calibration import (
     read_fisheye_polynomial_calibration,
 )
@@ -351,6 +359,8 @@ def print_report(
     detections: SemanticDetectionFrame,
     fusion: CameraLidarFusionResult,
     physical_attributes: tuple[PhysicalAttributes, ...],
+    physical_profile_provider: PhysicalAttributeCRARiskProfileProvider,
+    cra_policy_result: CRATrackPolicyResult,
     raw_path: Path,
     semantic_path: Path,
     fusion_path: Path,
@@ -386,6 +396,15 @@ def print_report(
         position_drift <= MAXIMUM_ALLOWED_POSITION_DRIFT
         and yaw_drift <= MAXIMUM_ALLOWED_YAW_DRIFT
     )
+    fixed_lambda_valid = bool(cra_policy_result.assignments) and all(
+        math.isclose(
+            assignment.guidance_parameters.tangential_strength,
+            1.25,
+            rel_tol=0.0,
+            abs_tol=1e-12,
+        )
+        for assignment in cra_policy_result.assignments
+    )
     sensor_age_valid = sensor_data_age <= MAXIMUM_SENSOR_DATA_AGE_SECONDS
     passed = (
         projection_inside_image
@@ -395,6 +414,7 @@ def print_report(
         and matched_count > 0
         and sensor_age_valid
         and robot_stationary
+        and fixed_lambda_valid
     )
 
     print("\n" + "=" * 78)
@@ -497,6 +517,34 @@ def print_report(
             "    single-frame motion and support-to-landing fall height "
             "remain unavailable"
         )
+        diagnostic = physical_profile_provider.diagnostics_by_track_id[
+            attributes.track_id
+        ]
+        assignment = cra_policy_result.assignment_for(attributes.track_id)
+        print("    CRA factor diagnostics:")
+        for factor in (
+            diagnostic.potential,
+            diagnostic.kinetic,
+            diagnostic.contact,
+            diagnostic.thermal,
+        ):
+            estimate = factor.estimate
+            if factor.rejection_reasons:
+                detail = "unknown: " + "; ".join(factor.rejection_reasons)
+            else:
+                detail = (
+                    f"severity={estimate.severity:.3f}, "
+                    f"interaction={estimate.interaction_likelihood:.3f}, "
+                    f"confidence={estimate.confidence:.2f}"
+                )
+            print(f"      {factor.factor:<9} {detail}")
+        assessment = assignment.policy_result.assessment
+        print(
+            f"    aggregate: nominal_phi={assessment.nominal_phi:.3f}, "
+            f"conservative_phi={assessment.phi:.3f}, "
+            f"flux={assignment.guidance_parameters.boundary_flux:.3f}, "
+            f"lambda={assignment.guidance_parameters.tangential_strength:.2f}"
+        )
     print("\nStage D - controlled checks:")
     print(f"  Projection inside image:     {projection_inside_image}")
     print(f"  At least one YOLO instance:  {bool(detections.detections)}")
@@ -507,6 +555,7 @@ def print_report(
     print(f"  Position drift:              {position_drift:.6f} m")
     print(f"  Yaw drift:                   {math.degrees(yaw_drift):.4f} degrees")
     print(f"  Robot remained stationary:   {robot_stationary}")
+    print(f"  Fixed lambda=1.25:            {fixed_lambda_valid}")
     print("\nSaved validation artifacts:")
     print(f"  Raw camera frame:            {raw_path}")
     print(f"  YOLO overlay:                {semantic_path}")
@@ -515,7 +564,8 @@ def print_report(
     print("  LiDAR clustering alone established geometry and track IDs.")
     print("  YOLO masks only attached labels to those existing tracks.")
     print("  Scene prim names and simulator ground truth supplied no label.")
-    print("  No semantic result reached Safe-SAGE, CBF, MPC, or the wheels.")
+    print("  CRA policy parameters were computed for diagnosis only.")
+    print("  No policy parameter reached the field, CBF, MPC, or wheels.")
     print("\nInterpretation:")
     if passed:
         print(
@@ -679,6 +729,16 @@ def main() -> None:
         estimator=visual_mass_estimator,
         timestamp_seconds=lidar_info.sensor_timestamp_nanoseconds * 1e-9,
     )
+    sensor_timestamp_seconds = lidar_info.sensor_timestamp_nanoseconds * 1e-9
+    physical_profile_provider = PhysicalAttributeCRARiskProfileProvider(
+        {item.track_id: item for item in physical_attributes},
+        timestamp_seconds=sensor_timestamp_seconds,
+    )
+    cra_policy_result = resolve_cra_track_policy(
+        fusion.semantic_labels.semantic_obstacles,
+        profile_provider=physical_profile_provider,
+        policy=CRASafeSAGEPolicy(),
+    )
     raw_path, semantic_path, fusion_path = save_images(
         image_rgb=image_rgb,
         detections=detections,
@@ -699,6 +759,8 @@ def main() -> None:
         detections=detections,
         fusion=fusion,
         physical_attributes=physical_attributes,
+        physical_profile_provider=physical_profile_provider,
+        cra_policy_result=cra_policy_result,
         raw_path=raw_path,
         semantic_path=semantic_path,
         fusion_path=fusion_path,
