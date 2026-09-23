@@ -35,6 +35,7 @@ import math
 import os
 import sys
 import traceback
+from dataclasses import replace
 from datetime import datetime
 from pathlib import Path
 
@@ -99,6 +100,10 @@ from robot.perception.semantic_detection import SemanticDetectionFrame
 from robot.perception.visualization import (
     render_camera_lidar_fusion_overlay,
     render_semantic_detection_overlay,
+)
+from robot.perception.visual_mass_runtime import (
+    VisualMassRuntimeConfig,
+    VisualMassRuntimeEstimator,
 )
 from robot.perception.yolo_detector import (
     YoloSegmentationConfig,
@@ -177,6 +182,48 @@ def resolve_model_path() -> Path:
     if not path.is_file():
         raise FileNotFoundError(f"YOLO model weights were not found: {path}")
     return path
+
+
+def make_visual_mass_estimator() -> VisualMassRuntimeEstimator | None:
+    """Load an explicitly configured local checkpoint, or leave mass unknown."""
+    configured_path = os.environ.get("VISUAL_MASS_CHECKPOINT", "").strip()
+    if not configured_path:
+        return None
+    path = Path(configured_path).expanduser().resolve()
+    print(f"Loading bounded ABO visual-mass checkpoint: {path}")
+    return VisualMassRuntimeEstimator(
+        VisualMassRuntimeConfig(checkpoint_path=path, device=YOLO_DEVICE)
+    )
+
+
+def attach_visual_mass_estimates(
+    attributes: tuple[PhysicalAttributes, ...],
+    *,
+    image_rgb: np.ndarray,
+    detections: SemanticDetectionFrame,
+    fusion: CameraLidarFusionResult,
+    estimator: VisualMassRuntimeEstimator | None,
+    timestamp_seconds: float,
+) -> tuple[PhysicalAttributes, ...]:
+    """Attach supported RGB-plus-LiDAR mass estimates by fused track ID."""
+    if estimator is None:
+        return attributes
+    associations = {item.track_id: item for item in fusion.associations}
+    results = []
+    for item in attributes:
+        association = associations.get(item.track_id)
+        if association is None or association.detection_index is None:
+            results.append(item)
+            continue
+        detection = detections.detections[association.detection_index]
+        mass = estimator.estimate(
+            image_rgb,
+            detection,
+            item.geometry,
+            timestamp_seconds=timestamp_seconds,
+        )
+        results.append(replace(item, mass=mass))
+    return tuple(results)
 
 
 def read_chassis_pose(stage: Usd.Stage) -> np.ndarray:
@@ -307,6 +354,7 @@ def print_report(
     raw_path: Path,
     semantic_path: Path,
     fusion_path: Path,
+    visual_mass_checkpoint: Path | None,
     initial_pose: np.ndarray,
     final_pose: np.ndarray,
 ) -> bool:
@@ -412,6 +460,10 @@ def print_report(
             f"score={association.association_score:.3f}"
         )
     print("\nStage C - physical evidence:")
+    print(
+        "  Visual mass checkpoint:      "
+        + (str(visual_mass_checkpoint) if visual_mass_checkpoint else "not configured")
+    )
     attributes_by_track = {
         item.track_id: item for item in physical_attributes
     }
@@ -434,6 +486,13 @@ def print_report(
             f"{motion.relative_speed_mps.status.value}; fall_height="
             f"{geometry.fall_height_m.status.value}"
         )
+        if attributes.mass.mass_kg.is_available:
+            mass = attributes.mass.mass_kg
+            print(
+                f"    mass={mass.value:.3f} kg "
+                f"[{mass.lower_bound:.3f}, {mass.upper_bound:.3f}], "
+                f"confidence={mass.confidence:.2f}, status={mass.status.value}"
+            )
         print(
             "    single-frame motion and support-to-landing fall height "
             "remain unavailable"
@@ -563,6 +622,7 @@ def main() -> None:
     )
 
     detector = make_detector(model_path)
+    visual_mass_estimator = make_visual_mass_estimator()
     detections = detector.detect(
         image_rgb,
         source_frame_id=camera_info.read_index,
@@ -611,6 +671,14 @@ def main() -> None:
         ),
         associations=fusion.associations,
     )
+    physical_attributes = attach_visual_mass_estimates(
+        physical_attributes,
+        image_rgb=image_rgb,
+        detections=detections,
+        fusion=fusion,
+        estimator=visual_mass_estimator,
+        timestamp_seconds=lidar_info.sensor_timestamp_nanoseconds * 1e-9,
+    )
     raw_path, semantic_path, fusion_path = save_images(
         image_rgb=image_rgb,
         detections=detections,
@@ -634,6 +702,11 @@ def main() -> None:
         raw_path=raw_path,
         semantic_path=semantic_path,
         fusion_path=fusion_path,
+        visual_mass_checkpoint=(
+            visual_mass_estimator.config.checkpoint_path
+            if visual_mass_estimator is not None
+            else None
+        ),
         initial_pose=initial_pose,
         final_pose=final_pose,
     )
