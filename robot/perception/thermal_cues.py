@@ -18,17 +18,26 @@ THERMAL_CUE_SOURCE = "temporal_fixed_label_thermal_cues"
 @dataclass(frozen=True)
 class ThermalCueFrame:
     timestamp_seconds: float
-    flame_likelihood: float
-    steam_likelihood: float
+    flame_likelihood: float | None
+    steam_likelihood: float | None
     model_id: str
+    smoke_likelihood: float | None = None
 
     def __post_init__(self):
-        for name in ("timestamp_seconds", "flame_likelihood", "steam_likelihood"):
-            value = float(getattr(self, name))
+        for name in ("flame_likelihood", "steam_likelihood", "smoke_likelihood"):
+            raw = getattr(self, name)
+            if raw is None:
+                continue
+            value = float(raw)
             if not math.isfinite(value) or value < 0:
                 raise ValueError(f"{name} must be finite and nonnegative")
-            if name != "timestamp_seconds" and value > 1:
+            if value > 1:
                 raise ValueError(f"{name} must lie in [0, 1]")
+            object.__setattr__(self, name, value)
+        timestamp = float(self.timestamp_seconds)
+        if not math.isfinite(timestamp) or timestamp < 0:
+            raise ValueError("timestamp_seconds must be finite and nonnegative")
+        object.__setattr__(self, "timestamp_seconds", timestamp)
         if not isinstance(self.model_id, str) or not self.model_id.strip():
             raise ValueError("model_id must be nonempty")
 
@@ -70,11 +79,12 @@ def estimate_thermal_cues(
         )
 
     def temporal(name):
-        if len(recent) < settings.minimum_frame_count:
+        supported = tuple(frame for frame in recent if getattr(frame, name) is not None)
+        if len(supported) < settings.minimum_frame_count:
             return unavailable(THERMAL_CUE_SOURCE)
-        values = tuple(getattr(frame, name) for frame in recent)
+        values = tuple(float(getattr(frame, name)) for frame in supported)
         value = median(values)
-        confidence = min(1.0, len(recent) / (2 * settings.minimum_frame_count))
+        confidence = min(1.0, len(supported) / (2 * settings.minimum_frame_count))
         uncertainty = settings.score_uncertainty + (1 - confidence) * 0.2
         return ScalarEstimate(
             value,
@@ -86,8 +96,8 @@ def estimate_thermal_cues(
             timestamp,
             EstimateStatus.INFERRED,
             (
-                f"temporal median over {len(recent)} frames",
-                f"model_ids={','.join(sorted({frame.model_id for frame in recent}))}",
+                f"temporal median over {len(supported)} supported frames",
+                f"model_ids={','.join(sorted({frame.model_id for frame in supported}))}",
                 "visual cue is not a temperature measurement",
             ),
         )
