@@ -155,6 +155,12 @@ DETECTION_HEIGHT_ABOVE_FLOOR = (0.05, 1.50)
 DETECTION_MAXIMUM_RANGE = 8.0
 DETECTION_ANGULAR_BIN_DEGREES = 0.25
 SEMANTIC_CLUSTER_RADIUS = 0.07
+STATIONARY_TRACK_SPEED_THRESHOLD_MPS = float(
+    os.environ.get("STATIONARY_TRACK_SPEED_THRESHOLD_MPS", "0.15")
+)
+STATIONARY_TRACK_MINIMUM_MOTION_UPDATES = int(
+    os.environ.get("STATIONARY_TRACK_MINIMUM_MOTION_UPDATES", "2")
+)
 FUSION_MINIMUM_MASK_HITS = 4
 FUSION_MINIMUM_OVERLAP_FRACTION = 0.10
 FUSION_MASK_DILATION_PIXELS = 6
@@ -261,6 +267,7 @@ def wait_for_sensor_pair(
     camera: NovaCarterCamera,
     lidar: NovaCarterLidar,
     controller: NovaCarterController,
+    minimum_lidar_timestamp_nanoseconds: int | None = None,
 ) -> tuple[np.ndarray, CameraFrameInfo, np.ndarray, LidarFrameInfo, int]:
     """Read camera and LiDAR data without an intervening rendered update."""
 
@@ -283,6 +290,12 @@ def wait_for_sensor_pair(
                 last_error = error
                 continue
             raise
+        if (
+            minimum_lidar_timestamp_nanoseconds is not None
+            and lidar_info.sensor_timestamp_nanoseconds
+            <= minimum_lidar_timestamp_nanoseconds
+        ):
+            continue
         return (
             image_rgb,
             camera_info,
@@ -513,10 +526,7 @@ def print_report(
                 f"[{mass.lower_bound:.3f}, {mass.upper_bound:.3f}], "
                 f"confidence={mass.confidence:.2f}, status={mass.status.value}"
             )
-        print(
-            "    single-frame motion and support-to-landing fall height "
-            "remain unavailable"
-        )
+        print("    support-to-landing fall height remains unavailable")
         diagnostic = physical_profile_provider.diagnostics_by_track_id[
             attributes.track_id
         ]
@@ -633,15 +643,65 @@ def main() -> None:
     initial_pose = read_chassis_pose(loaded_scene.stage)
     print("\nWaiting for a paired camera and LiDAR observation...")
     (
+        _,
+        _,
+        priming_points_lidar,
+        priming_lidar_info,
+        priming_waited_updates,
+    ) = wait_for_sensor_pair(camera=camera, lidar=lidar, controller=controller)
+    floor_height = estimate_floor_height_in_robot_frame(loaded_scene.stage)
+    priming_points_robot = transform_points(priming_points_lidar, robot_from_lidar)
+    priming_obstacle_points_3d = detect_obstacle_points_3d(
+        priming_points_robot,
+        ObstacleDetectionConfig(
+            minimum_height=floor_height + DETECTION_HEIGHT_ABOVE_FLOOR[0],
+            maximum_height=floor_height + DETECTION_HEIGHT_ABOVE_FLOOR[1],
+            maximum_range=DETECTION_MAXIMUM_RANGE,
+            forward_only=True,
+            angular_bin_size_degrees=DETECTION_ANGULAR_BIN_DEGREES,
+        ),
+    )
+    if priming_obstacle_points_3d.shape[0] == 0:
+        raise RuntimeError("The priming LiDAR scan produced no obstacle points.")
+    tracker = ObstacleTracker(
+        ObstacleTrackerConfig(
+            # The safety demos use 0.35 m to group nearby geometry. Semantic
+            # instance association needs finer clusters so neighboring chairs,
+            # tables, and walls do not become one mixed single-link component.
+            cluster_radius=SEMANTIC_CLUSTER_RADIUS,
+            minimum_cluster_points=2,
+            maximum_association_distance=0.50,
+            stationary_speed_threshold=STATIONARY_TRACK_SPEED_THRESHOLD_MPS,
+            minimum_consecutive_motion_updates=(
+                STATIONARY_TRACK_MINIMUM_MOTION_UPDATES
+            ),
+        )
+    )
+    tracker.update(
+        priming_obstacle_points_3d[:, :2],
+        robot_position_world_xy=initial_pose[:2],
+        robot_yaw=float(initial_pose[2]),
+        timestamp_seconds=(
+            priming_lidar_info.sensor_timestamp_nanoseconds * 1e-9
+        ),
+    )
+    print("Waiting for a later LiDAR frame to establish temporal motion evidence...")
+    (
         image_rgb,
         camera_info,
         points_lidar,
         lidar_info,
-        waited_updates,
-    ) = wait_for_sensor_pair(camera=camera, lidar=lidar, controller=controller)
-
+        temporal_waited_updates,
+    ) = wait_for_sensor_pair(
+        camera=camera,
+        lidar=lidar,
+        controller=controller,
+        minimum_lidar_timestamp_nanoseconds=(
+            priming_lidar_info.sensor_timestamp_nanoseconds
+        ),
+    )
+    waited_updates = priming_waited_updates + temporal_waited_updates
     points_robot = transform_points(points_lidar, robot_from_lidar)
-    floor_height = estimate_floor_height_in_robot_frame(loaded_scene.stage)
     obstacle_points_3d = detect_obstacle_points_3d(
         points_robot,
         ObstacleDetectionConfig(
@@ -653,17 +713,7 @@ def main() -> None:
         ),
     )
     if obstacle_points_3d.shape[0] == 0:
-        raise RuntimeError("The paired LiDAR scan produced no obstacle points.")
-    tracker = ObstacleTracker(
-        ObstacleTrackerConfig(
-            # The safety demos use 0.35 m to group nearby geometry. Semantic
-            # instance association needs finer clusters so neighboring chairs,
-            # tables, and walls do not become one mixed single-link component.
-            cluster_radius=SEMANTIC_CLUSTER_RADIUS,
-            minimum_cluster_points=2,
-            maximum_association_distance=0.50,
-        )
-    )
+        raise RuntimeError("The evaluation LiDAR scan produced no obstacle points.")
     tracking = tracker.update(
         obstacle_points_3d[:, :2],
         robot_position_world_xy=initial_pose[:2],
