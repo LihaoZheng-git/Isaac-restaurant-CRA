@@ -61,3 +61,33 @@ masks in 108 validation images, and 794 masks in 448 test images. Only one
 validation screwdriver-tip mask is present, so `pointed_tip` performance cannot
 be treated as established; the current data chiefly supports an exposed-edge
 baseline.
+
+`scripts/data/prepare_paco_contact_segmentation.py` converts polygon and
+compressed COCO RLE masks into normalized YOLO segmentation labels without
+requiring `pycocotools`. On the verified manifests it writes 3,881 train
+polygons from 2,224 images, 204 validation polygons from 108 images, and 877
+test polygons from 446 images. Seventeen records with no usable exterior
+contour are reported as skipped rather than silently used. The image downloader
+retains only the selected COCO images and writes a failure report.
+
+`scripts/training/train_contact_segmentation.py` fine-tunes a local lightweight
+Ultralytics segmentation checkpoint with deterministic settings. The resulting
+checkpoint is a PACO geometry baseline, stays under ignored local outputs, and
+must be evaluated before any runtime-integration claim. Its unsupervised output
+classes are not evidence that protrusion or jagged-surface perception exists.
+
+The local baseline used Ultralytics 8.4.104 (package metadata: AGPL-3.0) and the
+existing `yolo11n-seg.pt` checkpoint with SHA-256
+`55ed65c56c91713d23e8402371c6c49a6fd84f257f7dce452e8d70e41dcbe152`.
+No package or environment version was changed. The 30-epoch checkpoint has
+SHA-256 `4c5b7b6b60067c0339d21694c861db5dac6f41457f9075bd937dfefe61dc8949`
+and remains in ignored local output because PACO annotation redistribution terms
+are not explicit and the Ultralytics license must be respected.
+
+On the held-out PACO test split, exposed-edge mask mAP50 is 0.358 and mask
+mAP50-95 is 0.194 across 845 instances. The model scores zero on 32
+screwdriver-tip instances, so pointed-tip perception is not supported. A
+30-repeat fixed-frame diagnostic produced identical masks and confidences each
+time, with 11.61 ms median and 12.05 ms p95 wall time on the RTX 5070 Ti. These
+results establish a reproducible blade-edge baseline only; they do not justify
+runtime CRA integration or a general-contact claim.
