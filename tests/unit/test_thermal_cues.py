@@ -26,6 +26,17 @@ def test_persistent_steam_stays_separate_from_heat_source():
     assert result.steam_likelihood.value == 0.9
 
 
+def test_unsupported_steam_is_unavailable_instead_of_zero():
+    items = tuple(
+        ThermalCueFrame(t, 0.8, None, "fire_smoke_only", smoke_likelihood=0.9)
+        for t in (1.0, 1.2, 1.4)
+    )
+    result = estimate_thermal_cues(items, timestamp_seconds=1.5)
+    assert result.heat_source_likelihood.value == 0.8
+    assert not result.steam_likelihood.is_available
+    assert result.source_type.value == "visible_flame"
+
+
 def test_too_few_or_stale_frames_are_unavailable():
     assert not estimate_thermal_cues(
         frames()[:2], timestamp_seconds=1.5
