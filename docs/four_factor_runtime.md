@@ -14,6 +14,12 @@ aggregate `phi`, especially when conservative unknown fallbacks saturate it.
 The default Safe-SAGE policy maps `phi` to normal flux and keeps lambda fixed at
 1.25. Risk-dependent lambda is reserved for a separate evaluation ablation.
 
+The live evidence builder accepts explicit per-track contact and thermal
+specialist providers alongside mass and fall-surface providers. Their returned
+attributes retain their own measured or inferred provenance. If either
+specialist is absent, that group stays unavailable; the fusion layer never
+turns a missing detector result into a zero hazard score.
+
 The stationary camera/LiDAR fusion demo now performs this mapping for every
 live geometric track after optional visual-mass inference. It prints each
 factor's accepted values or exact rejection reasons, followed by nominal and

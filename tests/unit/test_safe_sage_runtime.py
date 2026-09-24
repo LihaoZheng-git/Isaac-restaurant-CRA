@@ -241,6 +241,65 @@ def test_accepted_field_builds_live_geometry_motion_without_fall_substitution() 
     assert direct_records == records
 
 
+def test_live_attributes_accept_explicit_contact_and_thermal_specialists() -> None:
+    from robot.perception.live_physical_evidence import (
+        LivePhysicalEvidenceContext,
+        build_live_physical_attributes,
+    )
+    from robot.perception.physical_attributes import PhysicalAttributes
+
+    runtime = make_runtime()
+    observation = make_observation(1, 1.0)
+    runtime.initialize(observation, make_provider())
+    unknown = PhysicalAttributes.unknown(track_id=0, timestamp_seconds=1.0)
+    context = LivePhysicalEvidenceContext(
+        obstacle_points_robot_xyz=np.column_stack(
+            (observation.obstacle_points_robot_xy, np.full(4, 0.5))
+        ),
+        floor_height_robot_m=0.0,
+        robot_position_world_xy=(0.0, 0.0),
+        waypoint_world_xy=(4.0, 0.0),
+        measured_robot_velocity_world_xy=(0.0, 0.0),
+    )
+
+    records = build_live_physical_attributes(
+        runtime.field,
+        context,
+        contact_provider=lambda track_id, timestamp: unknown.contact,
+        thermal_provider=lambda track_id, timestamp: unknown.thermal,
+    )
+
+    assert records[0].contact is unknown.contact
+    assert records[0].thermal is unknown.thermal
+
+
+def test_live_specialist_provider_types_are_enforced() -> None:
+    from robot.perception.live_physical_evidence import (
+        LivePhysicalEvidenceContext,
+        build_live_physical_attributes,
+    )
+
+    runtime = make_runtime()
+    observation = make_observation(1, 1.0)
+    runtime.initialize(observation, make_provider())
+    context = LivePhysicalEvidenceContext(
+        obstacle_points_robot_xyz=np.column_stack(
+            (observation.obstacle_points_robot_xy, np.full(4, 0.5))
+        ),
+        floor_height_robot_m=0.0,
+        robot_position_world_xy=(0.0, 0.0),
+        waypoint_world_xy=(4.0, 0.0),
+        measured_robot_velocity_world_xy=(0.0, 0.0),
+    )
+
+    with pytest.raises(TypeError, match="ContactAttributes"):
+        build_live_physical_attributes(
+            runtime.field,
+            context,
+            contact_provider=lambda track_id, timestamp: None,
+        )
+
+
 def test_fixed_anchor_removes_robot_egomotion_from_static_field() -> None:
     runtime = make_runtime()
     runtime.initialize(make_observation(1, 1.0), make_provider())
