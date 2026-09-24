@@ -26,19 +26,25 @@ branch.
 [The Isaac Sim 5.0 Replicator Incident documentation](https://docs.isaacsim.omniverse.nvidia.com/5.0.0/action_and_event_data_generation/tutorial_replicator_incident.html)
 describes fire and smoke event generation. The installed Isaac Sim 6.0
 environment does not contain the `isaacsim.replicator.incident` extension, so
-the stationary diagnostic authors
-a small USD visual proxy: translucent plume geometry above a bowl. This tests
-scene construction for future detector input, not aerosol physics or detector
-accuracy.
+the stationary diagnostic authors a small USD visual proxy: translucent plume
+geometry above a bowl. The capture step renders RGB and Replicator tight 2D
+boxes. Boxes from the authored plume and container prims are unioned per class
+and recorded as `isaac_authored_oracle`. This tests the synthetic data path,
+not aerosol physics or detector accuracy.
 
 ## Validation boundary
 
 `hot_soup_cues_demo.py` uses synthetic prior fixtures and verifies the context
 gate plus the separate CRA interaction requirement. The Isaac demo exports a
-stationary visual plume scene without wheel commands. A development capture
-visually showed the bowl, soup surface, and plume, but repeated automated
-headless capture was not reliable in the installed Isaac 6.0 environment and
-is not treated as a passing regression. Actual perception still needs
+stationary visual plume scene and captures RGB plus oracle boxes without wheel
+commands. A successful run writes the image and manifest under the ignored
+`outputs/hot_soup_steam_isaac/dataset` directory; the run fails rather than
+fabricating either required class when Replicator returns no visible box. On
+the current Isaac Sim 6.0 host, the visible renderer produced a 640 by 480
+frame with both classes, while three headless attempts returned an empty RGB
+buffer. The script therefore defaults to the validated visible stationary mode;
+`ISAAC_SIM_HEADLESS=1` remains available for retesting this environment issue.
+Actual perception still needs
 a steam/cooking-vapor dataset, restaurant-domain negative examples, trained
 weights with a compatible license, an open-container detector, and spatial
 association validation on real and Isaac images.
