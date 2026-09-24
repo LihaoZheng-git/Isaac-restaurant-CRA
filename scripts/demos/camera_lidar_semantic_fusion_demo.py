@@ -99,6 +99,10 @@ from robot.perception.lidar_fall_surfaces import (
     LidarFallSurfaceResult,
     estimate_lidar_fall_surfaces,
 )
+from robot.perception.motion_calibration import (
+    StationaryMotionCalibration,
+    calibrate_stationary_motion_threshold,
+)
 from robot.perception.physical_attributes import PhysicalAttributes
 from robot.perception.semantic_detection import SemanticDetectionFrame
 from robot.perception.visualization import (
@@ -163,7 +167,16 @@ STATIONARY_TRACK_SPEED_THRESHOLD_MPS = float(
     os.environ.get("STATIONARY_TRACK_SPEED_THRESHOLD_MPS", "0.15")
 )
 STATIONARY_TRACK_MINIMUM_MOTION_UPDATES = int(
-    os.environ.get("STATIONARY_TRACK_MINIMUM_MOTION_UPDATES", "2")
+    os.environ.get("STATIONARY_TRACK_MINIMUM_MOTION_UPDATES", "3")
+)
+MOTION_CALIBRATION_FRAME_COUNT = int(
+    os.environ.get("MOTION_CALIBRATION_FRAME_COUNT", "12")
+)
+MOTION_CALIBRATION_MINIMUM_TRACK_POINTS = int(
+    os.environ.get("MOTION_CALIBRATION_MINIMUM_TRACK_POINTS", "8")
+)
+MOTION_CALIBRATION_MINIMUM_OBSERVATIONS = int(
+    os.environ.get("MOTION_CALIBRATION_MINIMUM_OBSERVATIONS", "4")
 )
 FUSION_MINIMUM_MASK_HITS = 4
 FUSION_MINIMUM_OVERLAP_FRACTION = 0.10
@@ -399,6 +412,9 @@ def print_report(
     physical_profile_provider: PhysicalAttributeCRARiskProfileProvider,
     cra_policy_result: CRATrackPolicyResult,
     fall_surface_results: dict[int, LidarFallSurfaceResult],
+    motion_calibration: StationaryMotionCalibration,
+    published_motion_count: int,
+    published_motion_sample_count: int,
     raw_path: Path,
     semantic_path: Path,
     fusion_path: Path,
@@ -443,6 +459,11 @@ def print_report(
         )
         for assignment in cra_policy_result.assignments
     )
+    stationary_threshold_valid = (
+        STATIONARY_TRACK_SPEED_THRESHOLD_MPS
+        >= motion_calibration.recommended_stationary_threshold_mps
+    )
+    stationary_publication_valid = published_motion_count == 0
     sensor_age_valid = sensor_data_age <= MAXIMUM_SENSOR_DATA_AGE_SECONDS
     passed = (
         projection_inside_image
@@ -453,6 +474,8 @@ def print_report(
         and sensor_age_valid
         and robot_stationary
         and fixed_lambda_valid
+        and stationary_threshold_valid
+        and stationary_publication_valid
     )
 
     print("\n" + "=" * 78)
@@ -609,6 +632,37 @@ def print_report(
     print(f"  Yaw drift:                   {math.degrees(yaw_drift):.4f} degrees")
     print(f"  Robot remained stationary:   {robot_stationary}")
     print(f"  Fixed lambda=1.25:            {fixed_lambda_valid}")
+    print("\nStationary motion calibration:")
+    print(f"  Raw matched-track samples:    {motion_calibration.sample_count}")
+    print(
+        "  Calibration track gate:      "
+        f">={MOTION_CALIBRATION_MINIMUM_TRACK_POINTS} points, "
+        f">={MOTION_CALIBRATION_MINIMUM_OBSERVATIONS} observations"
+    )
+    print(
+        f"  Median / p95 speed:           "
+        f"{motion_calibration.median_speed_mps:.4f} / "
+        f"{motion_calibration.p95_speed_mps:.4f} m/s"
+    )
+    print(
+        f"  calibrated quantile / max:    "
+        f"{motion_calibration.configured_quantile_speed_mps:.4f} / "
+        f"{motion_calibration.maximum_speed_mps:.4f} m/s"
+    )
+    print(
+        f"  Recommended threshold:        "
+        f"{motion_calibration.recommended_stationary_threshold_mps:.4f} m/s"
+    )
+    print(
+        f"  Configured threshold:         "
+        f"{STATIONARY_TRACK_SPEED_THRESHOLD_MPS:.4f} m/s"
+    )
+    print(f"  Configured gate accepted:     {stationary_threshold_valid}")
+    print(
+        f"  Nonzero gated publications:   {published_motion_count} / "
+        f"{published_motion_sample_count}"
+    )
+    print(f"  Stationary publication gate:  {stationary_publication_valid}")
     print("\nSaved validation artifacts:")
     print(f"  Raw camera frame:            {raw_path}")
     print(f"  YOLO overlay:                {semantic_path}")
@@ -720,6 +774,15 @@ def main() -> None:
             ),
         )
     )
+    calibration_tracker = ObstacleTracker(
+        ObstacleTrackerConfig(
+            cluster_radius=SEMANTIC_CLUSTER_RADIUS,
+            minimum_cluster_points=2,
+            maximum_association_distance=0.50,
+            stationary_speed_threshold=0.0,
+            minimum_consecutive_motion_updates=1,
+        )
+    )
     tracker.update(
         priming_obstacle_points_3d[:, :2],
         robot_position_world_xy=initial_pose[:2],
@@ -728,40 +791,85 @@ def main() -> None:
             priming_lidar_info.sensor_timestamp_nanoseconds * 1e-9
         ),
     )
-    print("Waiting for a later LiDAR frame to establish temporal motion evidence...")
-    (
-        image_rgb,
-        camera_info,
-        points_lidar,
-        lidar_info,
-        temporal_waited_updates,
-    ) = wait_for_sensor_pair(
-        camera=camera,
-        lidar=lidar,
-        controller=controller,
-        minimum_lidar_timestamp_nanoseconds=(
-            priming_lidar_info.sensor_timestamp_nanoseconds
-        ),
-    )
-    waited_updates = priming_waited_updates + temporal_waited_updates
-    points_robot = transform_points(points_lidar, robot_from_lidar)
-    obstacle_points_3d = detect_obstacle_points_3d(
-        points_robot,
-        ObstacleDetectionConfig(
-            minimum_height=floor_height + DETECTION_HEIGHT_ABOVE_FLOOR[0],
-            maximum_height=floor_height + DETECTION_HEIGHT_ABOVE_FLOOR[1],
-            maximum_range=DETECTION_MAXIMUM_RANGE,
-            forward_only=True,
-            angular_bin_size_degrees=DETECTION_ANGULAR_BIN_DEGREES,
-        ),
-    )
-    if obstacle_points_3d.shape[0] == 0:
-        raise RuntimeError("The evaluation LiDAR scan produced no obstacle points.")
-    tracking = tracker.update(
-        obstacle_points_3d[:, :2],
+    calibration_tracker.update(
+        priming_obstacle_points_3d[:, :2],
         robot_position_world_xy=initial_pose[:2],
         robot_yaw=float(initial_pose[2]),
-        timestamp_seconds=lidar_info.sensor_timestamp_nanoseconds * 1e-9,
+        timestamp_seconds=(
+            priming_lidar_info.sensor_timestamp_nanoseconds * 1e-9
+        ),
+    )
+    print(
+        f"Collecting {MOTION_CALIBRATION_FRAME_COUNT} later LiDAR frames "
+        "for stationary motion calibration..."
+    )
+    waited_updates = priming_waited_updates
+    previous_lidar_timestamp = priming_lidar_info.sensor_timestamp_nanoseconds
+    raw_stationary_speeds = []
+    published_motion_count = 0
+    published_motion_sample_count = 0
+    for _ in range(MOTION_CALIBRATION_FRAME_COUNT):
+        (
+            image_rgb,
+            camera_info,
+            points_lidar,
+            lidar_info,
+            temporal_waited_updates,
+        ) = wait_for_sensor_pair(
+            camera=camera,
+            lidar=lidar,
+            controller=controller,
+            minimum_lidar_timestamp_nanoseconds=previous_lidar_timestamp,
+        )
+        waited_updates += temporal_waited_updates
+        previous_lidar_timestamp = lidar_info.sensor_timestamp_nanoseconds
+        points_robot = transform_points(points_lidar, robot_from_lidar)
+        obstacle_points_3d = detect_obstacle_points_3d(
+            points_robot,
+            ObstacleDetectionConfig(
+                minimum_height=floor_height + DETECTION_HEIGHT_ABOVE_FLOOR[0],
+                maximum_height=floor_height + DETECTION_HEIGHT_ABOVE_FLOOR[1],
+                maximum_range=DETECTION_MAXIMUM_RANGE,
+                forward_only=True,
+                angular_bin_size_degrees=DETECTION_ANGULAR_BIN_DEGREES,
+            ),
+        )
+        if obstacle_points_3d.shape[0] == 0:
+            raise RuntimeError("A calibration LiDAR scan produced no obstacle points.")
+        timestamp_seconds = lidar_info.sensor_timestamp_nanoseconds * 1e-9
+        tracking = tracker.update(
+            obstacle_points_3d[:, :2],
+            robot_position_world_xy=initial_pose[:2],
+            robot_yaw=float(initial_pose[2]),
+            timestamp_seconds=timestamp_seconds,
+        )
+        raw_tracking = calibration_tracker.update(
+            obstacle_points_3d[:, :2],
+            robot_position_world_xy=initial_pose[:2],
+            robot_yaw=float(initial_pose[2]),
+            timestamp_seconds=timestamp_seconds,
+        )
+        raw_stationary_speeds.extend(
+            math.hypot(*track.velocity_world_xy)
+            for track in raw_tracking.tracked_obstacles
+            if track.matched_previous_track
+            and track.point_count >= MOTION_CALIBRATION_MINIMUM_TRACK_POINTS
+            and track.observation_count >= MOTION_CALIBRATION_MINIMUM_OBSERVATIONS
+        )
+        accepted_tracks = tuple(
+            track
+            for track in tracking.tracked_obstacles
+            if track.matched_previous_track
+            and track.point_count >= MOTION_CALIBRATION_MINIMUM_TRACK_POINTS
+            and track.observation_count >= MOTION_CALIBRATION_MINIMUM_OBSERVATIONS
+        )
+        published_motion_sample_count += len(accepted_tracks)
+        published_motion_count += sum(
+            math.hypot(*track.velocity_world_xy) > 1e-9
+            for track in accepted_tracks
+        )
+    motion_calibration = calibrate_stationary_motion_threshold(
+        np.asarray(raw_stationary_speeds, dtype=np.float64)
     )
 
     detector = make_detector(model_path)
@@ -864,6 +972,9 @@ def main() -> None:
         physical_profile_provider=physical_profile_provider,
         cra_policy_result=cra_policy_result,
         fall_surface_results=fall_surface_results,
+        motion_calibration=motion_calibration,
+        published_motion_count=published_motion_count,
+        published_motion_sample_count=published_motion_sample_count,
         raw_path=raw_path,
         semantic_path=semantic_path,
         fusion_path=fusion_path,
