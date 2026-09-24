@@ -49,6 +49,7 @@ from robot.perception.physical_attributes import (
     ScalarEstimate,
     StabilityAttributes,
     ThermalAttributes,
+    combine_estimate_statuses,
 )
 from robot.perception.physical_geometry import (
     GEOMETRY_SOURCE,
@@ -112,6 +113,7 @@ __all__ = [
     "YoloSegmentationDetector",
     "build_live_physical_attributes",
     "build_tracking_physical_attributes",
+    "combine_estimate_statuses",
     "estimate_box_volume",
     "estimate_hot_soup_cues",
     "estimate_mass_from_volume_density",

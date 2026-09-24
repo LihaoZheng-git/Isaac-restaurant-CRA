@@ -2,7 +2,10 @@
 
 from dataclasses import dataclass
 
-from robot.perception.physical_attributes import EstimateStatus, ScalarEstimate
+from robot.perception.physical_attributes import (
+    ScalarEstimate,
+    combine_estimate_statuses,
+)
 
 
 FALL_HEIGHT_SOURCE = "support_to_landing_surface_geometry"
@@ -50,16 +53,7 @@ def estimate_fall_height(
     value = max(0.0, support.value - landing.value)
     lower = max(0.0, support.lower_bound - landing.upper_bound)
     upper = max(0.0, support.upper_bound - landing.lower_bound)
-    statuses = {support.status, landing.status}
-    status = (
-        EstimateStatus.MEASURED
-        if statuses == {EstimateStatus.MEASURED}
-        else EstimateStatus.PRIOR
-        if statuses <= {EstimateStatus.PRIOR}
-        else EstimateStatus.FALLBACK
-        if EstimateStatus.FALLBACK in statuses
-        else EstimateStatus.INFERRED
-    )
+    status = combine_estimate_statuses((support.status, landing.status))
     return ScalarEstimate(
         value,
         lower,

@@ -23,6 +23,7 @@ from robot.perception.physical_attributes import (
     GeometryAttributes,
     MassAttributes,
     ScalarEstimate,
+    combine_estimate_statuses,
 )
 
 
@@ -414,13 +415,7 @@ def fuse_mass_estimates(
         for weight, candidate in zip(weights, available, strict=True)
     ) / weight_sum
     confidence = weighted_confidence * agreement
-    source_statuses = {candidate.status for candidate in available}
-    if source_statuses <= {EstimateStatus.PRIOR}:
-        status = EstimateStatus.PRIOR
-    elif source_statuses <= {EstimateStatus.FALLBACK}:
-        status = EstimateStatus.FALLBACK
-    else:
-        status = EstimateStatus.INFERRED
+    status = combine_estimate_statuses(candidate.status for candidate in available)
     return MassAttributes(
         mass_kg=ScalarEstimate(
             value=nominal,

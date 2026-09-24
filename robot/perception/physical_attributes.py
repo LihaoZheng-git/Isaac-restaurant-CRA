@@ -93,8 +93,34 @@ class EstimateStatus(str, Enum):
     MEASURED = "measured"
     INFERRED = "inferred"
     PRIOR = "prior"
+    ORACLE = "oracle"
     FALLBACK = "fallback"
     UNAVAILABLE = "unavailable"
+
+
+def combine_estimate_statuses(
+    statuses: Iterable[EstimateStatus],
+) -> EstimateStatus:
+    """Return a conservative provenance status for a derived estimate.
+
+    A derived value must retain any fallback, oracle, or prior dependency so it
+    cannot later be mislabeled as sensor-only evidence.
+    """
+
+    items = frozenset(EstimateStatus(item) for item in statuses)
+    if not items:
+        raise ValueError("at least one estimate status is required")
+    for status in (
+        EstimateStatus.UNAVAILABLE,
+        EstimateStatus.FALLBACK,
+        EstimateStatus.ORACLE,
+        EstimateStatus.PRIOR,
+        EstimateStatus.INFERRED,
+        EstimateStatus.MEASURED,
+    ):
+        if status in items:
+            return status
+    raise AssertionError("unreachable estimate status combination")
 
 
 @dataclass(frozen=True)

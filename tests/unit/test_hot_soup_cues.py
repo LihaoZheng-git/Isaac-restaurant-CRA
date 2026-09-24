@@ -81,6 +81,28 @@ def test_stale_required_evidence_rejects_context():
     assert result.rejection_reasons == ("plume_likelihood: stale evidence",)
 
 
+def test_prior_dependency_remains_prior_in_derived_heat_proxy():
+    original = cue(0.8)
+    prior = ScalarEstimate(
+        original.value,
+        original.lower_bound,
+        original.upper_bound,
+        original.confidence,
+        original.unit,
+        original.source,
+        original.timestamp_seconds,
+        EstimateStatus.PRIOR,
+    )
+    result = estimate_hot_soup_cues(
+        plume_likelihood=cue(0.9),
+        open_container_likelihood=prior,
+        plume_above_container_likelihood=cue(0.85),
+        timestamp_seconds=2.1,
+    )
+    assert result.thermal.heat_source_likelihood.status is EstimateStatus.PRIOR
+    assert result.thermal.source_type.status is EstimateStatus.PRIOR
+
+
 def test_weak_but_supported_context_is_numeric_without_semantic_claim():
     result = estimate_hot_soup_cues(
         plume_likelihood=cue(0.2),

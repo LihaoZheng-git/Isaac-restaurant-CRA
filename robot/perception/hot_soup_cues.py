@@ -13,9 +13,9 @@ import math
 
 from robot.perception.physical_attributes import (
     CategoricalEstimate,
-    EstimateStatus,
     ScalarEstimate,
     ThermalAttributes,
+    combine_estimate_statuses,
 )
 
 
@@ -162,7 +162,7 @@ def estimate_hot_soup_cues(
             unit="1",
             source=HOT_SOUP_SOURCE,
             timestamp_seconds=timestamp,
-            status=EstimateStatus.INFERRED,
+            status=combine_estimate_statuses(cue.status for cue in cues),
             evidence=provenance
             + ambiguity
             + ("minimum of plume, open-container, and above-container cues",),
@@ -173,7 +173,7 @@ def estimate_hot_soup_cues(
                 confidence=heat_source.confidence,
                 source=HOT_SOUP_SOURCE,
                 timestamp_seconds=timestamp,
-                status=EstimateStatus.INFERRED,
+                status=heat_source.status,
                 evidence=heat_source.evidence,
             )
 
