@@ -16,3 +16,12 @@ This branch implements the protocol and validators, not completed restaurant
 experiments. Actual sensor trials remain blocked on collected mass data and
 verified contact/thermal model weights. Wheel motion should only begin after
 stationary scenario-specific perception acceptance checks pass.
+
+The stationary readiness gate enforces that requirement. Sensor trials accept
+only measured or inferred inputs; prior demonstrations may additionally use
+explicit priors; oracle trials require the explicit `oracle` estimate status.
+Fallback and unavailable evidence never pass readiness. Four-factor scope
+requires all four diagnostics before aggregate `phi` can be reported.
+Factor-specific scope can validate one hazard family, but explicitly leaves
+aggregate `phi` unreportable so unknown factors are not silently treated as
+zero.

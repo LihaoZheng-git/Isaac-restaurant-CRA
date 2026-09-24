@@ -360,6 +360,31 @@ def test_mass_fusion_keeps_interval_hull_and_penalizes_disagreement() -> None:
     assert result.source == MASS_FUSION_SOURCE
 
 
+@pytest.mark.parametrize(
+    ("dependency_status", "expected_status"),
+    [
+        (EstimateStatus.PRIOR, EstimateStatus.PRIOR),
+        (EstimateStatus.ORACLE, EstimateStatus.ORACLE),
+        (EstimateStatus.FALLBACK, EstimateStatus.FALLBACK),
+    ],
+)
+def test_mass_fusion_retains_non_sensor_dependency(
+    dependency_status: EstimateStatus,
+    expected_status: EstimateStatus,
+) -> None:
+    sensor = scalar(4.0, unit="kg", source="sensor")
+    dependency = scalar(
+        5.0,
+        unit="kg",
+        source="dependency",
+        status=dependency_status,
+    )
+    result = fuse_mass_estimates(
+        [sensor, dependency], timestamp_seconds=2.0
+    ).mass_kg
+    assert result.status is expected_status
+
+
 def test_no_mass_candidates_returns_unavailable_not_zero() -> None:
     result = fuse_mass_estimates([], timestamp_seconds=2.0).mass_kg
 

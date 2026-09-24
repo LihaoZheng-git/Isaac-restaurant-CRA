@@ -56,6 +56,17 @@ def test_prior_surfaces_stay_prior():
     assert result.status is EstimateStatus.PRIOR
 
 
+def test_oracle_surface_dependency_remains_oracle():
+    result = estimate_fall_height(
+        FallSurfaceEvidence(
+            scalar(1, 1, 1, status=EstimateStatus.ORACLE),
+            scalar(0, 0, 0, status=EstimateStatus.MEASURED),
+        ),
+        timestamp_seconds=2,
+    )
+    assert result.status is EstimateStatus.ORACLE
+
+
 def test_units_and_future_timestamp_rejected():
     wrong = ScalarEstimate(1, 1, 1, 1, "kg", "bad", 2)
     with pytest.raises(ValueError):
