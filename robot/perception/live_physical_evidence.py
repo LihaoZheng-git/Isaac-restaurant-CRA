@@ -7,7 +7,12 @@ import numpy as np
 
 from robot.perception.fall_height import FallSurfaceEvidence, estimate_fall_height
 from robot.perception.motion_attributes import RouteMotionContext, estimate_track_motion
-from robot.perception.physical_attributes import MassAttributes, PhysicalAttributes
+from robot.perception.physical_attributes import (
+    ContactAttributes,
+    MassAttributes,
+    PhysicalAttributes,
+    ThermalAttributes,
+)
 from robot.perception.camera_lidar_fusion import TrackSemanticAssociation
 from robot.perception.physical_geometry import estimate_track_geometry
 from robot.safety.obstacle_tracking import ObstacleTrackingResult
@@ -33,6 +38,8 @@ def build_live_physical_attributes(
     *,
     mass_provider: Callable[[str, float], MassAttributes] | None = None,
     fall_surface_provider: Callable[[int], FallSurfaceEvidence | None] | None = None,
+    contact_provider: Callable[[int, float], ContactAttributes] | None = None,
+    thermal_provider: Callable[[int, float], ThermalAttributes] | None = None,
 ) -> tuple[PhysicalAttributes, ...]:
     """Build selected track records; absent optional providers stay unavailable."""
     from robot.safety.safe_sage_runtime import SafeSAGERuntimeField
@@ -46,6 +53,8 @@ def build_live_physical_attributes(
         context=context,
         mass_provider=mass_provider,
         fall_surface_provider=fall_surface_provider,
+        contact_provider=contact_provider,
+        thermal_provider=thermal_provider,
     )
 
 
@@ -58,6 +67,8 @@ def build_tracking_physical_attributes(
     associations: tuple[TrackSemanticAssociation, ...] = (),
     mass_provider: Callable[[str, float], MassAttributes] | None = None,
     fall_surface_provider: Callable[[int], FallSurfaceEvidence | None] | None = None,
+    contact_provider: Callable[[int, float], ContactAttributes] | None = None,
+    thermal_provider: Callable[[int, float], ThermalAttributes] | None = None,
 ) -> tuple[PhysicalAttributes, ...]:
     """Build physical evidence directly from accepted tracking and labels."""
     if not isinstance(tracking_result, ObstacleTrackingResult):
@@ -119,5 +130,28 @@ def build_tracking_physical_attributes(
             if mass_provider is None
             else mass_provider(obstacle.semantic_class, timestamp)
         )
-        results.append(replace(base, mass=mass, geometry=geometry, motion=motion))
+        contact = (
+            base.contact
+            if contact_provider is None
+            else contact_provider(track.track_id, timestamp)
+        )
+        thermal = (
+            base.thermal
+            if thermal_provider is None
+            else thermal_provider(track.track_id, timestamp)
+        )
+        if not isinstance(contact, ContactAttributes):
+            raise TypeError("contact_provider must return ContactAttributes")
+        if not isinstance(thermal, ThermalAttributes):
+            raise TypeError("thermal_provider must return ThermalAttributes")
+        results.append(
+            replace(
+                base,
+                mass=mass,
+                geometry=geometry,
+                motion=motion,
+                contact=contact,
+                thermal=thermal,
+            )
+        )
     return tuple(results)
