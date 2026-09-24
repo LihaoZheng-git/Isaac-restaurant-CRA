@@ -10,6 +10,12 @@ from robot.perception.live_physical_evidence import (
     build_live_physical_attributes as build_live_physical_attributes,
     build_tracking_physical_attributes as build_tracking_physical_attributes,
 )
+from robot.perception.hot_soup_cues import (
+    HOT_SOUP_SOURCE,
+    HotSoupCueConfig,
+    HotSoupCueResult,
+    estimate_hot_soup_cues,
+)
 from robot.perception.lidar_fall_surfaces import (
     LIDAR_SURFACE_SOURCE,
     LidarFallSurfaceConfig,
@@ -82,6 +88,9 @@ __all__ = [
     "EstimateStatus",
     "GeometryAttributes",
     "GEOMETRY_SOURCE",
+    "HOT_SOUP_SOURCE",
+    "HotSoupCueConfig",
+    "HotSoupCueResult",
     "LidarGeometryConfig",
     "LIDAR_SURFACE_SOURCE",
     "LidarFallSurfaceConfig",
@@ -104,6 +113,7 @@ __all__ = [
     "build_live_physical_attributes",
     "build_tracking_physical_attributes",
     "estimate_box_volume",
+    "estimate_hot_soup_cues",
     "estimate_mass_from_volume_density",
     "estimate_lidar_fall_surfaces",
     "estimate_track_geometry",

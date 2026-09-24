@@ -25,3 +25,7 @@ This branch adds no dataset, dependency, or weight. A 3 GB-class D-Fire download
 and model training remain separate work, followed by restaurant-domain tests
 against visually similar lights, reflections, cooking vapor, and smoke. Until
 then, thermal remains unavailable in sensor-derived four-factor CRA runs.
+
+The project thermal scope is now the bounded hot-soup plume example described
+in `docs/hot_soup_thermal_perception.md`. The contextual adapter and synthetic
+stationary diagnostic do not make the missing detector sensor-derived.
