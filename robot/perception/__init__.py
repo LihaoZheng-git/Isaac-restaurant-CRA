@@ -10,6 +10,12 @@ from robot.perception.live_physical_evidence import (
     build_live_physical_attributes as build_live_physical_attributes,
     build_tracking_physical_attributes as build_tracking_physical_attributes,
 )
+from robot.perception.lidar_fall_surfaces import (
+    LIDAR_SURFACE_SOURCE,
+    LidarFallSurfaceConfig,
+    LidarFallSurfaceResult,
+    estimate_lidar_fall_surfaces,
+)
 
 from robot.perception.mass_estimation import (
     MASS_FUSION_SOURCE,
@@ -77,6 +83,9 @@ __all__ = [
     "GeometryAttributes",
     "GEOMETRY_SOURCE",
     "LidarGeometryConfig",
+    "LIDAR_SURFACE_SOURCE",
+    "LidarFallSurfaceConfig",
+    "LidarFallSurfaceResult",
     "MassAttributes",
     "MOTION_SOURCE",
     "MotionAttributeConfig",
@@ -96,6 +105,7 @@ __all__ = [
     "build_tracking_physical_attributes",
     "estimate_box_volume",
     "estimate_mass_from_volume_density",
+    "estimate_lidar_fall_surfaces",
     "estimate_track_geometry",
     "estimate_track_mass",
     "estimate_track_motion",
