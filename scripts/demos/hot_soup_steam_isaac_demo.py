@@ -1,8 +1,8 @@
-"""Author a stationary hot-soup plume proxy in Isaac Sim.
+"""Render a stationary hot-soup plume proxy in Isaac Sim.
 
 This scene uses translucent USD spheres, not fluid simulation, temperature,
-or a trained steam detector. It exports a fixed-camera USD scene for future
-perception-data and false-positive work. No robot or wheel command is created.
+or a trained steam detector. It exports a fixed-camera USD scene, one rendered
+RGB frame, and authored-scene oracle boxes. No robot or wheel command is created.
 """
 
 from __future__ import annotations
@@ -25,16 +25,31 @@ os.environ.setdefault(
 from isaacsim import SimulationApp
 
 
-HEADLESS = os.environ.get("ISAAC_SIM_HEADLESS", "1") != "0"
+# The installed Isaac 6.0 build returns an empty Replicator RGB buffer in
+# headless mode for this standalone scene. Default to the validated visible
+# stationary diagnostic; callers can still set ISAAC_SIM_HEADLESS=1 to retest.
+HEADLESS = os.environ.get("ISAAC_SIM_HEADLESS", "0") != "0"
 simulation_app = SimulationApp({"headless": HEADLESS})
 
 
 import isaacsim.core.experimental.utils.stage as stage_utils
+import isaacsim.core.experimental.utils.semantics as semantics_utils
+import omni.replicator.core as rep
+import numpy as np
+from PIL import Image
 from pxr import Gf, Sdf, UsdGeom, UsdLux, UsdShade
+
+from robot.perception.hot_soup_dataset import write_hot_soup_manifest
+from robot.perception.hot_soup_isaac_capture import (
+    build_isaac_hot_soup_sample,
+    oracle_boxes_from_replicator,
+)
 
 
 OUTPUT_DIRECTORY = ROOT / "outputs" / "hot_soup_steam_isaac"
 CAMERA_PATH = "/World/Camera"
+CAPTURE_WIDTH = 640
+CAPTURE_HEIGHT = 480
 
 
 def material(stage, path: str, color: tuple[float, float, float], opacity=1.0):
@@ -82,6 +97,9 @@ def create_scene():
     bowl.CreateHeightAttr(0.18)
     set_transform(bowl.GetPrim(), (0.0, 0.0, 0.58))
     bind(bowl.GetPrim(), blue)
+    semantics_utils.add_labels(
+        bowl.GetPrim(), labels=["open_container"], taxonomy="class"
+    )
 
     surface = UsdGeom.Cylinder.Define(stage, "/World/HotSoup/SoupSurface")
     surface.CreateRadiusAttr(0.29)
@@ -94,6 +112,9 @@ def create_scene():
     rim.CreateHeightAttr(0.035)
     set_transform(rim.GetPrim(), (0.0, 0.0, 0.695))
     bind(rim.GetPrim(), blue)
+    semantics_utils.add_labels(
+        rim.GetPrim(), labels=["open_container"], taxonomy="class"
+    )
 
     plume_specs = (
         ((-0.09, 0.00, 0.86), (0.10, 0.08, 0.14)),
@@ -107,6 +128,11 @@ def create_scene():
         sphere.CreateRadiusAttr(1.0)
         set_transform(sphere.GetPrim(), position, scale)
         bind(sphere.GetPrim(), plume)
+        semantics_utils.add_labels(
+            sphere.GetPrim(),
+            labels=["visible_hot_soup_plume"],
+            taxonomy="class",
+        )
 
     light = UsdLux.DistantLight.Define(stage, "/World/KeyLight")
     light.CreateIntensityAttr(1000.0)
@@ -124,6 +150,85 @@ def create_scene():
     )
     UsdGeom.Xformable(camera.GetPrim()).AddTransformOp().Set(view.GetInverse())
     return stage
+
+
+def capture_stationary_dataset_frame(stage_path: Path) -> Path:
+    """Capture RGB plus Isaac-authored oracle boxes from the fixed camera."""
+
+    dataset_root = OUTPUT_DIRECTORY / "dataset"
+    image_path = dataset_root / "images" / "isaac-hot-soup-0001.png"
+    image_path.parent.mkdir(parents=True, exist_ok=True)
+    capture_camera = rep.create.camera(
+        position=(2.3, -3.2, 1.75),
+        look_at=(0.0, 0.0, 0.95),
+        focal_length=38.0,
+        name="HotSoupCaptureCamera",
+    )
+    render_product = rep.create.render_product(
+        capture_camera, (CAPTURE_WIDTH, CAPTURE_HEIGHT), name="HotSoupStationary"
+    )
+    rgb_annotator = rep.AnnotatorRegistry.get_annotator("rgb")
+    box_annotator = rep.AnnotatorRegistry.get_annotator(
+        "bounding_box_2d_tight_fast", init_params={"semanticTypes": ["class"]}
+    )
+    rgb_annotator.attach(render_product)
+    box_annotator.attach(render_product)
+    try:
+        rep.orchestrator.preview()
+        for _ in range(10):
+            simulation_app.update()
+        rgb = np.asarray(())
+        for _ in range(8):
+            rep.orchestrator.step(
+                delta_time=0.0,
+                rt_subframes=16,
+                pause_timeline=False,
+                wait_for_render=True,
+            )
+            simulation_app.update()
+            rgb = np.asarray(rgb_annotator.get_data())
+            if rgb.ndim == 3 and rgb.size:
+                break
+        if (
+            rgb.ndim != 3
+            or rgb.shape[0] != CAPTURE_HEIGHT
+            or rgb.shape[1] != CAPTURE_WIDTH
+        ):
+            raise RuntimeError(f"unexpected RGB capture shape: {rgb.shape}")
+        Image.fromarray(rgb[:, :, :3].astype(np.uint8), mode="RGB").save(image_path)
+
+        box_data = box_annotator.get_data()
+        boxes = oracle_boxes_from_replicator(
+            box_data.get("data", ()),
+            box_data.get("info", {}).get("idToLabels", {}),
+            width=CAPTURE_WIDTH,
+            height=CAPTURE_HEIGHT,
+        )
+        visible_classes = {box.class_name for box in boxes}
+        required = {"visible_hot_soup_plume", "open_container"}
+        if visible_classes != required:
+            raise RuntimeError(
+                "expected visible authored plume and container oracle boxes; "
+                f"got {sorted(visible_classes)}"
+            )
+        sample = build_isaac_hot_soup_sample(
+            image_path,
+            dataset_root,
+            boxes,
+            sample_id="isaac-hot-soup-0001",
+            capture_group_id="isaac-hot-soup-stationary-v1",
+            width=CAPTURE_WIDTH,
+            height=CAPTURE_HEIGHT,
+            source_reference=(
+                "scripts/demos/hot_soup_steam_isaac_demo.py::" + stage_path.name
+            ),
+        )
+        manifest = dataset_root / "manifest.jsonl"
+        write_hot_soup_manifest([sample], manifest)
+        return manifest
+    finally:
+        rgb_annotator.detach(render_product)
+        box_annotator.detach(render_product)
 
 
 def author_stationary_scene() -> Path:
@@ -153,7 +258,11 @@ def author_stationary_scene() -> Path:
 
 if __name__ == "__main__":
     try:
-        author_stationary_scene()
+        scene_path = author_stationary_scene()
+        manifest_path = capture_stationary_dataset_frame(scene_path)
+        print(f"rgb_and_oracle_manifest={manifest_path}")
+        print("annotation=isaac_authored_oracle; detector=none")
+        print("PASS: Isaac rendered the stationary RGB diagnostic", flush=True)
     except Exception:
         traceback.print_exc()
         raise
