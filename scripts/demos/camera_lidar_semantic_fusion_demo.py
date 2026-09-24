@@ -95,6 +95,10 @@ from robot.perception.live_physical_evidence import (
     LivePhysicalEvidenceContext,
     build_tracking_physical_attributes,
 )
+from robot.perception.lidar_fall_surfaces import (
+    LidarFallSurfaceResult,
+    estimate_lidar_fall_surfaces,
+)
 from robot.perception.physical_attributes import PhysicalAttributes
 from robot.perception.semantic_detection import SemanticDetectionFrame
 from robot.perception.visualization import (
@@ -240,6 +244,26 @@ def attach_visual_mass_estimates(
     return tuple(results)
 
 
+def estimate_fall_surfaces_by_track(
+    *,
+    scene_points_robot_xyz: np.ndarray,
+    obstacle_points_robot_xyz: np.ndarray,
+    tracking: ObstacleTrackingResult,
+    timestamp_seconds: float,
+) -> dict[int, LidarFallSurfaceResult]:
+    """Infer local support/landing bands without using object height as drop."""
+    return {
+        track.track_id: estimate_lidar_fall_surfaces(
+            scene_points_robot_xyz,
+            obstacle_points_robot_xyz[
+                tracking.point_track_ids == track.track_id
+            ],
+            timestamp_seconds=timestamp_seconds,
+        )
+        for track in tracking.tracked_obstacles
+    }
+
+
 def read_chassis_pose(stage: Usd.Stage) -> np.ndarray:
     """Return the current world-frame ``(x, y, yaw)`` chassis pose."""
 
@@ -374,6 +398,7 @@ def print_report(
     physical_attributes: tuple[PhysicalAttributes, ...],
     physical_profile_provider: PhysicalAttributeCRARiskProfileProvider,
     cra_policy_result: CRATrackPolicyResult,
+    fall_surface_results: dict[int, LidarFallSurfaceResult],
     raw_path: Path,
     semantic_path: Path,
     fusion_path: Path,
@@ -526,7 +551,25 @@ def print_report(
                 f"[{mass.lower_bound:.3f}, {mass.upper_bound:.3f}], "
                 f"confidence={mass.confidence:.2f}, status={mass.status.value}"
             )
-        print("    support-to-landing fall height remains unavailable")
+        surface_result = fall_surface_results[attributes.track_id]
+        if geometry.fall_height_m.is_available:
+            fall = geometry.fall_height_m
+            surfaces = surface_result.evidence
+            print(
+                f"    fall_height={fall.value:.3f} m "
+                f"[{fall.lower_bound:.3f}, {fall.upper_bound:.3f}], "
+                f"status={fall.status.value}"
+            )
+            print(
+                f"    support_z={surfaces.support_height_m.value:.3f} m; "
+                f"landing_z={surfaces.landing_height_m.value:.3f} m; "
+                f"direction={surface_result.fall_direction_robot_xy}"
+            )
+        else:
+            print(
+                "    fall-height unavailable: "
+                + "; ".join(surface_result.rejection_reasons)
+            )
         diagnostic = physical_profile_provider.diagnostics_by_track_id[
             attributes.track_id
         ]
@@ -753,6 +796,13 @@ def main() -> None:
         float(initial_pose[0] + math.cos(initial_pose[2])),
         float(initial_pose[1] + math.sin(initial_pose[2])),
     )
+    sensor_timestamp_seconds = lidar_info.sensor_timestamp_nanoseconds * 1e-9
+    fall_surface_results = estimate_fall_surfaces_by_track(
+        scene_points_robot_xyz=points_robot,
+        obstacle_points_robot_xyz=obstacle_points_3d,
+        tracking=tracking,
+        timestamp_seconds=sensor_timestamp_seconds,
+    )
     physical_attributes = build_tracking_physical_attributes(
         tracking_result=tracking,
         label_result=fusion.semantic_labels,
@@ -770,6 +820,9 @@ def main() -> None:
             measured_robot_velocity_world_xy=(0.0, 0.0),
         ),
         associations=fusion.associations,
+        fall_surface_provider=(
+            lambda track_id: fall_surface_results[track_id].evidence
+        ),
     )
     physical_attributes = attach_visual_mass_estimates(
         physical_attributes,
@@ -779,7 +832,6 @@ def main() -> None:
         estimator=visual_mass_estimator,
         timestamp_seconds=lidar_info.sensor_timestamp_nanoseconds * 1e-9,
     )
-    sensor_timestamp_seconds = lidar_info.sensor_timestamp_nanoseconds * 1e-9
     physical_profile_provider = PhysicalAttributeCRARiskProfileProvider(
         {item.track_id: item for item in physical_attributes},
         timestamp_seconds=sensor_timestamp_seconds,
@@ -811,6 +863,7 @@ def main() -> None:
         physical_attributes=physical_attributes,
         physical_profile_provider=physical_profile_provider,
         cra_policy_result=cra_policy_result,
+        fall_surface_results=fall_surface_results,
         raw_path=raw_path,
         semantic_path=semantic_path,
         fusion_path=fusion_path,
