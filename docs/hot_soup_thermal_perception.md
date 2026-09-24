@@ -42,3 +42,26 @@ is not treated as a passing regression. Actual perception still needs
 a steam/cooking-vapor dataset, restaurant-domain negative examples, trained
 weights with a compatible license, an open-container detector, and spatial
 association validation on real and Isaac images.
+
+## Project-owned dataset path
+
+`collect_hot_soup_data.py` ingests project-owned stationary images or samples
+frames from a project-owned video. Every capture records its source reference,
+usage rights, domain, content hash, and capture group. Collected frames remain
+`pending`; an unlabeled frame is never treated as a negative example.
+
+The annotation contract in `robot/perception/hot_soup_dataset.py` requires
+explicit present/absent decisions for both `visible_hot_soup_plume` and
+`open_container`. Real labels are human visual annotations. Isaac labels remain
+`isaac_authored_oracle`. Hard-negative tags cover smoke, glare, haze, white
+backgrounds, and empty containers. They supervise visual discrimination only;
+they do not say that an object is thermally safe.
+
+Capture groups receive deterministic train/validation/test splits so adjacent
+video frames cannot cross splits. Validation also rejects the same image hash
+across splits. `prepare_hot_soup_detection_dataset.py` exports validated boxes
+and explicit empty negative labels to an Ultralytics-compatible detection
+layout. No checkpoint is trained or integrated by this dataset branch. Before
+training, the project still needs owned real hot-soup footage, completed human
+annotations, a documented train/evaluation protocol, and a final license check
+for the selected pretrained backbone and released derivative weights.
