@@ -65,3 +65,26 @@ layout. No checkpoint is trained or integrated by this dataset branch. Before
 training, the project still needs owned real hot-soup footage, completed human
 annotations, a documented train/evaluation protocol, and a final license check
 for the selected pretrained backbone and released derivative weights.
+
+## Fixed-label runtime boundary
+
+`robot/perception/hot_soup_detector.py` accepts detector boxes only for
+`visible_hot_soup_plume` and `open_container`. It computes a configurable
+spatial association from horizontal overlap, vertical ordering, and vertical
+gap, then invokes the existing thermal cue contract. Missing detections remain
+unavailable because detector non-response is not proof that a hazard is absent.
+An observed plume/container pair with incompatible geometry can provide a zero
+association score. Detector confidence is recorded as an uncalibrated model
+score, not temperature or a physical probability.
+
+The optional YOLO boundary does not bundle or download a checkpoint. The local
+`yolo11n-seg.pt` file has SHA-256
+`55ed65c56c91713d23e8402371c6c49a6fd84f257f7dce452e8d70e41dcbe152`,
+but its acquisition provenance was not recorded and its COCO classes do not
+include the two project labels. It is therefore not a hot-soup model and should
+not be redistributed from this repository. Ultralytics states that its
+open-source software and models use AGPL-3.0, with a separate enterprise
+license for proprietary use ([official licensing documentation](https://docs.ultralytics.com/)).
+This thesis repository can evaluate that technique under its applicable terms,
+but trained project weights still require documented base-weight provenance,
+owned labeled footage, and a release decision consistent with those terms.
