@@ -11,5 +11,9 @@
   knife/fork specialist is a bounded demonstration, not the full contact model.
   Keep unsupported sharpness, material consequence, exposure, and route
   orientation evidence unavailable rather than inferring safety from class names.
+- Keep the bounded thermal demonstration to a visible steam/smoke-like plume
+  spatially associated with an open soup container. Generic smoke alone is not
+  hot-soup evidence, and a visible plume is not a temperature measurement or
+  proof that the aerosol is steam.
 - Validate perception stationary before enabling new wheel-motion experiments. Report oracle/prior demonstrations separately from sensor-derived results.
 - Preserve user changes. Do not force-push, rewrite history, bypass checks, upgrade dependencies silently, or merge unvalidated work.
