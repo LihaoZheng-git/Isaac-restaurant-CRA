@@ -78,6 +78,12 @@ from robot.perception.semantic_detection import (
     SemanticDetection,
     SemanticDetectionFrame,
 )
+from robot.perception.specialist_track_evidence import (
+    SpecialistAssociationFrame,
+    SpecialistTrackDiagnostics,
+    TrackSpecialistEvidence,
+    build_track_specialist_evidence,
+)
 from robot.perception.yolo_detector import (
     YoloSegmentationConfig,
     YoloSegmentationDetector,
@@ -124,12 +130,16 @@ __all__ = [
     "SemanticDetection",
     "SemanticDetectionFrame",
     "StabilityAttributes",
+    "SpecialistAssociationFrame",
+    "SpecialistTrackDiagnostics",
     "ThermalAttributes",
+    "TrackSpecialistEvidence",
     "YoloSegmentationConfig",
     "YoloSegmentationDetector",
     "YoloHotSoupDetector",
     "build_live_physical_attributes",
     "build_tracking_physical_attributes",
+    "build_track_specialist_evidence",
     "combine_estimate_statuses",
     "estimate_box_volume",
     "estimate_hot_soup_cues",
