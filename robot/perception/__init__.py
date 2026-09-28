@@ -5,6 +5,12 @@ from robot.perception.fall_height import (
     FallSurfaceEvidence as FallSurfaceEvidence,
     estimate_fall_height as estimate_fall_height,
 )
+from robot.perception.contact_detection_adapter import (
+    ContactPartAssociationConfig,
+    ContactPartAssociationDiagnostics,
+    ContactPartAssociationResult,
+    associate_contact_parts_to_objects,
+)
 from robot.perception.live_physical_evidence import (
     LivePhysicalEvidenceContext as LivePhysicalEvidenceContext,
     build_live_physical_attributes as build_live_physical_attributes,
@@ -102,6 +108,9 @@ __all__ = [
     "ClassMassPrior",
     "ClassMassPriorTable",
     "ContactAttributes",
+    "ContactPartAssociationConfig",
+    "ContactPartAssociationDiagnostics",
+    "ContactPartAssociationResult",
     "EstimateStatus",
     "GeometryAttributes",
     "GEOMETRY_SOURCE",
@@ -141,6 +150,7 @@ __all__ = [
     "build_tracking_physical_attributes",
     "build_track_specialist_evidence",
     "combine_estimate_statuses",
+    "associate_contact_parts_to_objects",
     "estimate_box_volume",
     "estimate_hot_soup_cues",
     "estimate_hot_soup_from_detections",

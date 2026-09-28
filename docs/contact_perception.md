@@ -100,3 +100,13 @@ matched by the same timestamped camera association frame. Stale and unmatched
 results remain unavailable. This plumbing does not improve the trained
 baseline, infer physical sharpness or hardness, or turn its authored diagnostic
 fixtures into sensor-derived evidence.
+
+`robot/perception/contact_detection_adapter.py` adds the fixed-label runtime
+boundary needed before that transfer. It requires the part-model frame and the
+parent-object segmentation frame to identify the same camera capture, then
+associates a part only when most of its pixels lie inside one unambiguous
+object mask. The supported runtime vocabulary defaults to `exposed_edge`
+because that is the only class with nonzero held-out performance in the local
+baseline. A missing model detection creates no segmentation record and is not
+converted to zero exposure. Pointed tips, protrusions, jagged surfaces,
+sharpness, and hardness remain unsupported.
