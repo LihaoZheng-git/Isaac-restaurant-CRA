@@ -124,6 +124,11 @@ and provenance only; it provides no Isaac-domain accuracy measurement.
 adapter on persisted test RGB arrays, instance masks, and captured dimensions.
 It constructs every prediction before reading the sample's authored mass for
 offline scoring. Oracle mass therefore cannot enter the runtime estimate.
+The controlled manifest dimensions are also identified as offline authored
+geometry with `oracle` provenance. They do not count as live LiDAR measurements.
+The evaluator therefore blocks its sensor-domain readiness flag by default.
+Only captures whose dimensions came from the sensor pipeline may pass
+`--sensor-derived-geometry`; this switch does not convert authored dimensions.
 
 Repeated views are averaged per physical `object_id` before MAE, median error,
 MAPE, and interval coverage are computed. This prevents many camera views of
@@ -133,3 +138,19 @@ The default minimums of ten independent test objects and two per reported class
 are functional evaluation gates, not a publication-scale sufficiency claim.
 Until a persisted Isaac test inventory satisfies them, visual mass remains an
 uncalibrated inferred input with its existing confidence cap.
+
+`scripts/demos/visual_mass_isaac_fixture.py` creates a stationary controlled
+minimum inventory: ten independent authored primitive proxies, two views each,
+and two objects in each of five supported classes. Replicator supplies RGB and
+semantic masks; explicit USD mass and authored dimensions remain offline
+oracle labels. The fixture exercises capture, masks, repeated-view aggregation,
+and checkpoint evaluation. It is not realistic restaurant imagery and cannot
+validate live geometry or general-object mass accuracy.
+
+On the local frozen ABO checkpoint with SHA-256 `92d437580efb283071e0ac0cd7c16de77f76ef3017a243329e4bf826e0e5a31e`,
+the ten-object proxy run produced 0.523 kg MAE, 0.159 kg median absolute error,
+63.3% MAPE, and 100% coverage by the deliberately wide catalog-domain interval.
+The evaluator correctly keeps `ready_for_sensor_domain_claim` false because its
+geometry is authored oracle data. The pan proxy was the weakest class at 1.936
+kg MAE, underscoring that these simple shapes are a plumbing diagnostic rather
+than a mass-model validation result.
