@@ -5,6 +5,8 @@ from enum import Enum
 import math
 from statistics import mean
 
+from robot.risk.cra import PhysicalRiskFactor
+
 
 class CRABaseline(str, Enum):
     GEOMETRIC_VELOCITY_CBF = "geometric_velocity_cbf"
@@ -83,6 +85,91 @@ class BaselineSummary:
     mean_fallback_count: float
 
 
+@dataclass(frozen=True)
+class FactorSensorReadiness:
+    """Evidence required before a factor enters wheel-motion experiments."""
+
+    factor: PhysicalRiskFactor
+    stationary_pipeline_validated: bool
+    runtime_provenance_validated: bool
+    sensor_domain_accuracy_validated: bool
+    limitations: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.factor, PhysicalRiskFactor):
+            raise TypeError("factor must be PhysicalRiskFactor")
+        for name in (
+            "stationary_pipeline_validated",
+            "runtime_provenance_validated",
+            "sensor_domain_accuracy_validated",
+        ):
+            if not isinstance(getattr(self, name), bool):
+                raise TypeError(f"{name} must be bool")
+        limitations = tuple(self.limitations)
+        if any(not isinstance(item, str) or not item.strip() for item in limitations):
+            raise ValueError("limitations must contain nonempty text")
+        object.__setattr__(self, "limitations", limitations)
+
+    @property
+    def ready_for_motion(self) -> bool:
+        return (
+            self.stationary_pipeline_validated
+            and self.runtime_provenance_validated
+            and self.sensor_domain_accuracy_validated
+        )
+
+
+@dataclass(frozen=True)
+class RestaurantMotionReadiness:
+    """Factor-specific gate for sensor-derived restaurant motion trials."""
+
+    factors: tuple[FactorSensorReadiness, ...]
+    blocking_reasons: tuple[str, ...]
+
+    @property
+    def ready(self) -> bool:
+        return not self.blocking_reasons
+
+
+def assess_restaurant_motion_readiness(
+    factors: tuple[FactorSensorReadiness, ...],
+) -> RestaurantMotionReadiness:
+    """Require all four factor pipelines without converting gaps to zero."""
+
+    items = tuple(factors)
+    by_factor = {item.factor: item for item in items}
+    if len(by_factor) != len(items):
+        raise ValueError("factor readiness contains duplicates")
+    missing = tuple(factor for factor in PhysicalRiskFactor if factor not in by_factor)
+    reasons = [f"{factor.value}: readiness record unavailable" for factor in missing]
+    for factor in PhysicalRiskFactor:
+        item = by_factor.get(factor)
+        if item is None or item.ready_for_motion:
+            continue
+        if not item.stationary_pipeline_validated:
+            reasons.append(f"{factor.value}: stationary pipeline not validated")
+        if not item.runtime_provenance_validated:
+            reasons.append(f"{factor.value}: runtime provenance not validated")
+        if not item.sensor_domain_accuracy_validated:
+            reasons.append(f"{factor.value}: sensor-domain accuracy not validated")
+        reasons.extend(f"{factor.value}: {text}" for text in item.limitations)
+    return RestaurantMotionReadiness(items, tuple(reasons))
+
+
+def require_sensor_motion_readiness(
+    report: RestaurantMotionReadiness,
+) -> None:
+    """Fail before wheel motion when any physical factor is unsupported."""
+
+    if not isinstance(report, RestaurantMotionReadiness):
+        raise TypeError("report must be RestaurantMotionReadiness")
+    if not report.ready:
+        raise RuntimeError(
+            "sensor-derived restaurant motion is not ready: "
+            + "; ".join(report.blocking_reasons)
+        )
+
+
 def validate_matched_trials(results: tuple[RestaurantTrialResult, ...]) -> None:
     """Require every scenario/seed/mode cell for every primary baseline."""
     cells: dict[tuple[str, int, EvidenceMode], set[CRABaseline]] = {}
@@ -138,8 +225,11 @@ def primary_restaurant_scenarios(
                 "potential",
                 "object above a localized landing surface",
             ),
-            ("exposed_utensil", "contact", "fixed-label exposed blade or tines"),
-            ("carried_hot_liquid", "thermal", "open carried container with steam cue"),
-            ("stove_flame", "thermal", "visible flame source"),
+            ("exposed_edge", "contact", "fixed-label exposed blade edge"),
+            (
+                "carried_hot_soup",
+                "thermal",
+                "open carried soup container with a visible-plume cue",
+            ),
         )
     )

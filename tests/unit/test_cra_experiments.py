@@ -3,12 +3,16 @@ import pytest
 from robot.evaluation.cra_experiments import (
     CRABaseline,
     EvidenceMode,
+    FactorSensorReadiness,
     PRIMARY_BASELINES,
     RestaurantTrialResult,
+    assess_restaurant_motion_readiness,
     primary_restaurant_scenarios,
+    require_sensor_motion_readiness,
     summarize_trials,
     validate_matched_trials,
 )
+from robot.risk.cra import PhysicalRiskFactor
 
 
 def result(baseline, **changes):
@@ -81,3 +85,83 @@ def test_oracle_and_prior_modes_remain_explicit():
         primary_restaurant_scenarios(evidence_mode=EvidenceMode.PRIOR)[0].evidence_mode
         is EvidenceMode.PRIOR
     )
+
+
+def readiness(factor, **changes):
+    values = dict(
+        factor=factor,
+        stationary_pipeline_validated=True,
+        runtime_provenance_validated=True,
+        sensor_domain_accuracy_validated=True,
+    )
+    values.update(changes)
+    return FactorSensorReadiness(**values)
+
+
+def test_all_four_sensor_factors_are_required_before_motion():
+    report = assess_restaurant_motion_readiness(
+        tuple(readiness(factor) for factor in PhysicalRiskFactor)
+    )
+    assert report.ready
+    require_sensor_motion_readiness(report)
+
+
+def test_unvalidated_models_block_motion_with_factor_specific_reasons():
+    report = assess_restaurant_motion_readiness(
+        (
+            readiness(
+                PhysicalRiskFactor.POTENTIAL,
+                sensor_domain_accuracy_validated=False,
+                limitations=("visual mass is not calibrated in Isaac",),
+            ),
+            readiness(
+                PhysicalRiskFactor.KINETIC,
+                sensor_domain_accuracy_validated=False,
+            ),
+            readiness(
+                PhysicalRiskFactor.CONTACT,
+                sensor_domain_accuracy_validated=False,
+                limitations=("only exposed-edge masks are supported",),
+            ),
+            readiness(
+                PhysicalRiskFactor.THERMAL,
+                stationary_pipeline_validated=False,
+                sensor_domain_accuracy_validated=False,
+                limitations=("no trained hot-soup checkpoint",),
+            ),
+        )
+    )
+    assert not report.ready
+    assert any(reason.startswith("thermal:") for reason in report.blocking_reasons)
+    assert any("visual mass" in reason for reason in report.blocking_reasons)
+    with pytest.raises(RuntimeError, match="not ready"):
+        require_sensor_motion_readiness(report)
+
+
+def test_missing_factor_readiness_is_not_treated_as_safe():
+    report = assess_restaurant_motion_readiness(
+        (readiness(PhysicalRiskFactor.POTENTIAL),)
+    )
+    assert not report.ready
+    assert "thermal: readiness record unavailable" in report.blocking_reasons
+
+
+def test_readiness_gate_rejects_invalid_report():
+    with pytest.raises(TypeError):
+        require_sensor_motion_readiness(object())
+    with pytest.raises(ValueError, match="duplicates"):
+        assess_restaurant_motion_readiness(
+            (
+                readiness(PhysicalRiskFactor.CONTACT),
+                readiness(PhysicalRiskFactor.CONTACT),
+            )
+        )
+
+
+def test_primary_scope_matches_current_hot_soup_and_contact_decisions():
+    scenarios = primary_restaurant_scenarios()
+    descriptions = {item.scenario_id: item.description for item in scenarios}
+    assert "carried_hot_soup" in descriptions
+    assert "visible-plume" in descriptions["carried_hot_soup"]
+    assert descriptions["exposed_edge"] == "fixed-label exposed blade edge"
+    assert "stove_flame" not in descriptions
