@@ -32,6 +32,19 @@ from robot.perception.hot_soup_detector import (
     YoloHotSoupDetector,
     estimate_hot_soup_from_detections,
 )
+from robot.perception.hot_soup_evaluation import (
+    HotSoupClassMetrics,
+    HotSoupEvaluationReport,
+    HotSoupPrediction,
+    evaluate_hot_soup_predictions,
+    predictions_from_hot_soup_frame,
+)
+from robot.perception.hot_soup_training import (
+    HotSoupTrainingReadiness,
+    HotSoupTrainingReadinessConfig,
+    assess_hot_soup_training_readiness,
+    write_hot_soup_training_provenance,
+)
 from robot.perception.lidar_fall_surfaces import (
     LIDAR_SURFACE_SOURCE,
     LidarFallSurfaceConfig,
@@ -123,6 +136,11 @@ __all__ = [
     "HotSoupDetectionCueResult",
     "HotSoupDetectionFrame",
     "HotSoupDetectorConfig",
+    "HotSoupClassMetrics",
+    "HotSoupEvaluationReport",
+    "HotSoupPrediction",
+    "HotSoupTrainingReadiness",
+    "HotSoupTrainingReadinessConfig",
     "LidarGeometryConfig",
     "LIDAR_SURFACE_SOURCE",
     "LidarFallSurfaceConfig",
@@ -149,15 +167,19 @@ __all__ = [
     "build_live_physical_attributes",
     "build_tracking_physical_attributes",
     "build_track_specialist_evidence",
+    "assess_hot_soup_training_readiness",
     "combine_estimate_statuses",
     "associate_contact_parts_to_objects",
     "estimate_box_volume",
     "estimate_hot_soup_cues",
     "estimate_hot_soup_from_detections",
+    "evaluate_hot_soup_predictions",
     "estimate_mass_from_volume_density",
     "estimate_lidar_fall_surfaces",
     "estimate_track_geometry",
     "estimate_track_mass",
     "estimate_track_motion",
     "fuse_mass_estimates",
+    "predictions_from_hot_soup_frame",
+    "write_hot_soup_training_provenance",
 ]
