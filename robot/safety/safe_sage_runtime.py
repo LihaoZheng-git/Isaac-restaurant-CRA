@@ -541,6 +541,66 @@ class SafeSAGEPerceptionRuntime:
         self._anchor_yaw = resolved_anchor_yaw
         return status
 
+    def initialize_from_tracking_with_cra_resolver(
+        self,
+        observation: SafeSAGEPerceptionObservation,
+        label_resolver: Callable[
+            [ObstacleTrackingResult],
+            SemanticLabelResult,
+        ],
+        risk_profile_resolver: Callable[
+            [ObstacleTrackingResult, SemanticLabelResult],
+            CRARiskProfileProvider,
+        ],
+        *,
+        anchor_position_world_xy: object | None = None,
+        anchor_yaw: float | None = None,
+    ) -> SafeSAGELiveFieldStatus[SafeSAGERuntimeField]:
+        """Build CRA profiles from the exact candidate tracks and labels."""
+
+        self._validate_cra_profile_resolver(risk_profile_resolver)
+        if self.initialized:
+            raise RuntimeError(
+                "The Safe-SAGE perception runtime is initialized."
+            )
+        self._validate_observation(observation)
+        self._validate_label_resolver(label_resolver)
+        anchor_position = (
+            observation.robot_position_world_xy
+            if anchor_position_world_xy is None
+            else _finite_vector(
+                anchor_position_world_xy,
+                size=2,
+                name="anchor_position_world_xy",
+            )
+        )
+        resolved_anchor_yaw = (
+            observation.robot_yaw
+            if anchor_yaw is None
+            else _finite_real(anchor_yaw, name="anchor_yaw")
+        )
+        candidate_tracker = copy.deepcopy(self._obstacle_tracker)
+        field = self._build_candidate(
+            observation,
+            label_resolver,
+            obstacle_tracker=candidate_tracker,
+            anchor_position_world_xy=anchor_position,
+            anchor_yaw=resolved_anchor_yaw,
+            previous_snapshot=None,
+            risk_profile_resolver=risk_profile_resolver,
+        )
+        status = self.field_buffer.initialize(
+            self._snapshot(observation, field)
+        )
+        self._obstacle_tracker = candidate_tracker
+        self._anchor_position_world_xy = np.array(
+            anchor_position,
+            copy=True,
+        )
+        self._anchor_position_world_xy.setflags(write=False)
+        self._anchor_yaw = resolved_anchor_yaw
+        return status
+
     def update(
         self,
         observation: SafeSAGEPerceptionObservation,
@@ -634,6 +694,47 @@ class SafeSAGEPerceptionRuntime:
             anchor_yaw=self._anchor_yaw,
             previous_snapshot=self.field_buffer.snapshot,
             risk_profile_provider=risk_profile_provider,
+        )
+        status = self.field_buffer.commit(
+            self._snapshot(observation, field)
+        )
+        self._obstacle_tracker = candidate_tracker
+        return status
+
+    def update_from_tracking_with_cra_resolver(
+        self,
+        observation: SafeSAGEPerceptionObservation,
+        label_resolver: Callable[
+            [ObstacleTrackingResult],
+            SemanticLabelResult,
+        ],
+        risk_profile_resolver: Callable[
+            [ObstacleTrackingResult, SemanticLabelResult],
+            CRARiskProfileProvider,
+        ],
+    ) -> SafeSAGELiveFieldStatus[SafeSAGERuntimeField]:
+        """Atomically resolve current tracks, labels, CRA, and the field."""
+
+        self._validate_cra_profile_resolver(risk_profile_resolver)
+        self._validate_observation(observation)
+        self._validate_label_resolver(label_resolver)
+        if not self.initialized:
+            raise RuntimeError(
+                "Initialize the perception runtime before update."
+            )
+        if self._anchor_position_world_xy is None or self._anchor_yaw is None:
+            raise RuntimeError(
+                "The perception runtime anchor is unavailable."
+            )
+        candidate_tracker = copy.deepcopy(self._obstacle_tracker)
+        field = self._build_candidate(
+            observation,
+            label_resolver,
+            obstacle_tracker=candidate_tracker,
+            anchor_position_world_xy=self._anchor_position_world_xy,
+            anchor_yaw=self._anchor_yaw,
+            previous_snapshot=self.field_buffer.snapshot,
+            risk_profile_resolver=risk_profile_resolver,
         )
         status = self.field_buffer.commit(
             self._snapshot(observation, field)
@@ -736,6 +837,14 @@ class SafeSAGEPerceptionRuntime:
                 "CRARiskProfileProvider."
             )
 
+    def _validate_cra_profile_resolver(self, resolver: object) -> None:
+        if self.cra_policy is None:
+            raise RuntimeError(
+                "Configure cra_policy before using CRA runtime entry points."
+            )
+        if not callable(resolver):
+            raise TypeError("risk_profile_resolver must be callable.")
+
     def _build_candidate(
         self,
         observation: SafeSAGEPerceptionObservation,
@@ -751,7 +860,16 @@ class SafeSAGEPerceptionRuntime:
             SafeSAGELiveFieldSnapshot[SafeSAGERuntimeField] | None
         ),
         risk_profile_provider: CRARiskProfileProvider | None = None,
+        risk_profile_resolver: Callable[
+            [ObstacleTrackingResult, SemanticLabelResult],
+            CRARiskProfileProvider,
+        ]
+        | None = None,
     ) -> SafeSAGERuntimeField:
+        if risk_profile_provider is not None and risk_profile_resolver is not None:
+            raise ValueError(
+                "risk profile provider and resolver cannot both be supplied."
+            )
         if observation.obstacle_points_robot_xy.shape[0] == 0:
             raise RuntimeError("The observation contains no obstacle points.")
         start_wall_time = time.perf_counter()
@@ -770,6 +888,16 @@ class SafeSAGEPerceptionRuntime:
             raise RuntimeError(
                 "No geometric track received a semantic label in this frame."
             )
+        if risk_profile_resolver is not None:
+            risk_profile_provider = risk_profile_resolver(
+                tracking_result,
+                label_result,
+            )
+            if not isinstance(risk_profile_provider, CRARiskProfileProvider):
+                raise TypeError(
+                    "risk_profile_resolver must return a "
+                    "CRARiskProfileProvider."
+                )
         cra_policy_result: CRATrackPolicyResult | None = None
         if risk_profile_provider is not None:
             if self.cra_policy is None:

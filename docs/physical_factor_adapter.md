@@ -42,17 +42,26 @@ are labeled inferred, and diagnostics retain every original input status,
 source, interval, confidence, timestamp, and evidence statement. Input status
 labels are producer assertions, not independently verified observations.
 
-Contact and thermal are explicitly unknown, even if their attribute groups
-contain values. The existing CRA assessor subsequently applies its conservative
-uncertainty handling. Its default fallback risk of 1 for unknown contact and
-thermal saturates overall `phi` at 1. This is expected and must not be hidden
-by declaring those hazards absent or silently lowering fallback risks. Inspect
-potential/kinetic factor diagnostics for incremental validation.
+Contact requires sharpness, hardness, dangerous-part exposure, and orientation
+toward the route. Thermal requires a heat-source likelihood plus a separate
+route-interaction likelihood. A factor is adapted only when every required
+specialist input is available and fresh. Otherwise the existing CRA assessor
+applies conservative uncertainty handling; its default fallback risk of 1 can
+saturate overall `phi`. This must not be hidden by declaring unsupported
+hazards absent or silently lowering fallback risks. Inspect each factor's
+diagnostics during incremental validation.
+
+`SafeSAGEPerceptionRuntime.initialize_from_tracking_with_cra_resolver` and its
+update counterpart let a caller construct current-frame profiles after the
+runtime's cloned candidate tracker and semantic resolver have completed. The
+profile resolver receives those exact tracking and label results. Tracking,
+labels, physical CRA profiles, and the Safe-SAGE field commit atomically; a
+resolver failure preserves the previously accepted tracker and field. The
+resolver does not relax provenance or freshness requirements.
 
 Run `python scripts/demos/physical_factor_adapter_demo.py` from the repository
 root. This stationary diagnostic uses synthetic contract fixtures only, not
 live sensing, a trained model, simulator truth, or wheel motion. It exercises
 prior mass, missing fall height, missing interaction, stale inputs, and fully
-unavailable evidence. Calibration, live evidence assembly, sensor evaluation,
-specialist contact/thermal adaptation, and closed-loop validation remain future
-work.
+unavailable evidence. Live sensor accuracy, calibrated factor mappings, and
+closed-loop restaurant validation remain future work.

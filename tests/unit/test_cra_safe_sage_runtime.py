@@ -361,6 +361,178 @@ def test_contextual_risk_can_change_on_new_accepted_frame() -> None:
     assert_grid_track_policy(runtime, track_id=1, risk=0.4)
 
 
+def test_cra_resolver_uses_exact_candidate_tracks_and_labels() -> None:
+    runtime = make_runtime()
+    seen = []
+
+    def resolve_profiles(tracking_result, label_result):
+        seen.append(
+            (
+                tuple(item.track_id for item in tracking_result.tracked_obstacles),
+                label_result.selected_track_ids,
+            )
+        )
+        return make_risk_provider(0.2, 0.8)
+
+    runtime.initialize_from_tracking_with_cra_resolver(
+        make_observation(),
+        lambda tracking: make_label_provider().assign(
+            tracking.tracked_obstacles
+        ),
+        resolve_profiles,
+    )
+
+    assert seen == [((0, 1), (0, 1))]
+    assert runtime.field.cra_policy_result.assignment_for(
+        0
+    ).policy_result.risk == pytest.approx(0.2)
+    assert runtime.field.cra_policy_result.assignment_for(
+        1
+    ).policy_result.risk == pytest.approx(0.8)
+
+
+def test_cra_resolver_update_is_transactional_on_failure() -> None:
+    runtime = make_runtime()
+
+    def labels(tracking):
+        return make_label_provider().assign(tracking.tracked_obstacles)
+
+    runtime.initialize_from_tracking_with_cra_resolver(
+        make_observation(1, 1.0),
+        labels,
+        lambda tracking, label_result: make_risk_provider(),
+    )
+    original_field = runtime.field
+
+    with pytest.raises(TypeError, match="must return"):
+        runtime.update_from_tracking_with_cra_resolver(
+            make_observation(2, 1.2),
+            labels,
+            lambda tracking, label_result: object(),
+        )
+
+    assert runtime.field is original_field
+    assert runtime.field_buffer.generation == 1
+    assert runtime.active_track_count == 2
+
+
+def test_physical_four_factor_provider_resolves_inside_runtime() -> None:
+    from robot.perception.physical_attributes import (
+        EstimateStatus,
+        MassAttributes,
+        PhysicalAttributes,
+        ScalarEstimate,
+    )
+    from robot.risk.physical_profile_provider import (
+        PhysicalAttributeCRARiskProfileProvider,
+    )
+
+    runtime = make_runtime()
+    resolved_provider = None
+
+    def scalar(value, unit, source, status=EstimateStatus.INFERRED):
+        return ScalarEstimate(
+            value,
+            value,
+            value,
+            0.8,
+            unit,
+            source,
+            1.0,
+            status,
+        )
+
+    def resolve_profiles(tracking_result, label_result):
+        del label_result
+        nonlocal resolved_provider
+        records = {}
+        interactions = {}
+        for track in tracking_result.tracked_obstacles:
+            base = PhysicalAttributes.unknown(
+                track_id=track.track_id,
+                timestamp_seconds=1.0,
+            )
+            records[track.track_id] = replace(
+                base,
+                mass=MassAttributes(scalar(2.0, "kg", "visual_mass")),
+                geometry=replace(
+                    base.geometry,
+                    fall_height_m=scalar(
+                        0.2,
+                        "m",
+                        "lidar_support_surface",
+                        EstimateStatus.MEASURED,
+                    ),
+                ),
+                motion=replace(
+                    base.motion,
+                    relative_speed_mps=scalar(0.5, "m/s", "lidar_motion"),
+                    route_crossing_likelihood=scalar(
+                        0.4,
+                        "1",
+                        "route_geometry",
+                    ),
+                ),
+                contact=replace(
+                    base.contact,
+                    sharpness=scalar(0.5, "1", "contact_specialist"),
+                    hardness=scalar(0.5, "1", "material_specialist"),
+                    dangerous_part_exposure=scalar(
+                        0.3,
+                        "1",
+                        "part_segmentation",
+                    ),
+                    orientation_toward_route=scalar(
+                        0.4,
+                        "1",
+                        "calibrated_orientation",
+                    ),
+                ),
+                thermal=replace(
+                    base.thermal,
+                    heat_source_likelihood=scalar(
+                        0.6,
+                        "1",
+                        "hot_soup_visual_cue",
+                    ),
+                ),
+            )
+            interactions[track.track_id] = scalar(
+                0.5,
+                "1",
+                "controlled_interaction_fixture",
+            )
+        resolved_provider = PhysicalAttributeCRARiskProfileProvider(
+            records,
+            timestamp_seconds=1.0,
+            potential_interactions=interactions,
+            thermal_interactions=interactions,
+        )
+        return resolved_provider
+
+    runtime.initialize_from_tracking_with_cra_resolver(
+        make_observation(1, 1.0),
+        lambda tracking: make_label_provider().assign(
+            tracking.tracked_obstacles
+        ),
+        resolve_profiles,
+    )
+
+    assert resolved_provider is not None
+    diagnostics = resolved_provider.diagnostics_by_track_id[0]
+    assert all(
+        factor.estimate.confidence > 0
+        for factor in (
+            diagnostics.potential,
+            diagnostics.kinetic,
+            diagnostics.contact,
+            diagnostics.thermal,
+        )
+    )
+    assignment = runtime.field.cra_policy_result.assignment_for(0)
+    assert assignment.policy_result.assessment.phi < 1.0
+
+
 class InvalidRiskProfileProvider:
     """Protocol-shaped provider returning an invalid candidate value."""
 
