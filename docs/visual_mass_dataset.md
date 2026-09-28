@@ -117,3 +117,19 @@ confidence 0.25. Robot drift was 0.000136 m and 0.0004 degrees. No simulator
 mass or prim label entered the estimate, and no wheel command was issued. Since
 the scene object's reference mass was not read, this result validates data flow
 and provenance only; it provides no Isaac-domain accuracy measurement.
+
+## Isaac-domain offline evaluation
+
+`scripts/evaluation/evaluate_visual_mass_isaac.py` runs the existing runtime
+adapter on persisted test RGB arrays, instance masks, and captured dimensions.
+It constructs every prediction before reading the sample's authored mass for
+offline scoring. Oracle mass therefore cannot enter the runtime estimate.
+
+Repeated views are averaged per physical `object_id` before MAE, median error,
+MAPE, and interval coverage are computed. This prevents many camera views of
+one asset from inflating the independent-object count. Per-class results have a
+separate minimum object gate, and one report cannot mix checkpoint hashes.
+The default minimums of ten independent test objects and two per reported class
+are functional evaluation gates, not a publication-scale sufficiency claim.
+Until a persisted Isaac test inventory satisfies them, visual mass remains an
+uncalibrated inferred input with its existing confidence cap.

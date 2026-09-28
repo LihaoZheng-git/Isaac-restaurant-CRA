@@ -103,6 +103,13 @@ from robot.perception.specialist_track_evidence import (
     TrackSpecialistEvidence,
     build_track_specialist_evidence,
 )
+from robot.perception.visual_mass_evaluation import (
+    VisualMassClassEvaluation,
+    VisualMassDomainEvaluation,
+    VisualMassDomainEvaluationConfig,
+    VisualMassDomainPrediction,
+    evaluate_visual_mass_isaac_domain,
+)
 from robot.perception.yolo_detector import (
     YoloSegmentationConfig,
     YoloSegmentationDetector,
@@ -161,6 +168,10 @@ __all__ = [
     "SpecialistTrackDiagnostics",
     "ThermalAttributes",
     "TrackSpecialistEvidence",
+    "VisualMassClassEvaluation",
+    "VisualMassDomainEvaluation",
+    "VisualMassDomainEvaluationConfig",
+    "VisualMassDomainPrediction",
     "YoloSegmentationConfig",
     "YoloSegmentationDetector",
     "YoloHotSoupDetector",
@@ -174,6 +185,7 @@ __all__ = [
     "estimate_hot_soup_cues",
     "estimate_hot_soup_from_detections",
     "evaluate_hot_soup_predictions",
+    "evaluate_visual_mass_isaac_domain",
     "estimate_mass_from_volume_density",
     "estimate_lidar_fall_surfaces",
     "estimate_track_geometry",
