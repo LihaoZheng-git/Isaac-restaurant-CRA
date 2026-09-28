@@ -44,6 +44,10 @@ from robot.perception.hot_soup_isaac_capture import (
     build_isaac_hot_soup_sample,
     oracle_boxes_from_replicator,
 )
+from robot.perception.hot_soup_isaac_variants import (
+    HotSoupIsaacVariant,
+    select_hot_soup_isaac_variants,
+)
 
 
 OUTPUT_DIRECTORY = ROOT / "outputs" / "hot_soup_steam_isaac"
@@ -78,15 +82,20 @@ def set_transform(prim, position, scale=None) -> None:
         xform.AddScaleOp().Set(Gf.Vec3f(*scale))
 
 
-def create_scene():
+def create_scene(variant: HotSoupIsaacVariant):
     stage = stage_utils.create_new_stage(template="empty")
     stage_utils.set_stage_units(meters_per_unit=1.0, kilograms_per_unit=1.0)
     stage_utils.set_stage_up_axis("Z")
 
     blue = material(stage, "/World/Looks/Bowl", (0.08, 0.22, 0.55))
     soup = material(stage, "/World/Looks/Soup", (0.82, 0.22, 0.04))
-    plume = material(stage, "/World/Looks/Plume", (0.92, 0.94, 0.97), 0.28)
-    table = material(stage, "/World/Looks/Table", (0.35, 0.16, 0.06))
+    plume = material(
+        stage,
+        "/World/Looks/Plume",
+        variant.plume_color,
+        variant.plume_opacity,
+    )
+    table = material(stage, "/World/Looks/Table", variant.table_color)
 
     tabletop = UsdGeom.Cube.Define(stage, "/World/Table").GetPrim()
     set_transform(tabletop, (0.0, 0.0, 0.36), (1.2, 0.85, 0.08))
@@ -126,7 +135,13 @@ def create_scene():
     for index, (position, scale) in enumerate(plume_specs):
         sphere = UsdGeom.Sphere.Define(stage, f"/World/HotSoup/Plume_{index:02d}")
         sphere.CreateRadiusAttr(1.0)
-        set_transform(sphere.GetPrim(), position, scale)
+        varied_position = (
+            position[0] + variant.plume_lateral_offset_m * (index + 1) / len(plume_specs),
+            position[1],
+            position[2],
+        )
+        varied_scale = tuple(component * variant.plume_scale for component in scale)
+        set_transform(sphere.GetPrim(), varied_position, varied_scale)
         bind(sphere.GetPrim(), plume)
         semantics_utils.add_labels(
             sphere.GetPrim(),
@@ -135,7 +150,7 @@ def create_scene():
         )
 
     light = UsdLux.DistantLight.Define(stage, "/World/KeyLight")
-    light.CreateIntensityAttr(1000.0)
+    light.CreateIntensityAttr(variant.light_intensity)
     light.CreateAngleAttr(2.0)
     UsdGeom.Xformable(light.GetPrim()).AddRotateXYZOp().Set(Gf.Vec3f(45, 0, 35))
 
@@ -152,11 +167,15 @@ def create_scene():
     return stage
 
 
-def capture_stationary_dataset_frame(stage_path: Path) -> Path:
+def capture_stationary_dataset_frame(
+    stage_path: Path,
+    variant: HotSoupIsaacVariant,
+):
     """Capture RGB plus Isaac-authored oracle boxes from the fixed camera."""
 
     dataset_root = OUTPUT_DIRECTORY / "dataset"
-    image_path = dataset_root / "images" / "isaac-hot-soup-0001.png"
+    sample_id = f"isaac-hot-soup-{variant.variant_id}"
+    image_path = dataset_root / "images" / f"{sample_id}.png"
     image_path.parent.mkdir(parents=True, exist_ok=True)
     capture_camera = rep.create.camera(
         position=(2.3, -3.2, 1.75),
@@ -211,30 +230,29 @@ def capture_stationary_dataset_frame(stage_path: Path) -> Path:
                 "expected visible authored plume and container oracle boxes; "
                 f"got {sorted(visible_classes)}"
             )
-        sample = build_isaac_hot_soup_sample(
+        return build_isaac_hot_soup_sample(
             image_path,
             dataset_root,
             boxes,
-            sample_id="isaac-hot-soup-0001",
+            sample_id=sample_id,
             capture_group_id="isaac-hot-soup-stationary-v1",
             width=CAPTURE_WIDTH,
             height=CAPTURE_HEIGHT,
             source_reference=(
-                "scripts/demos/hot_soup_steam_isaac_demo.py::" + stage_path.name
+                "scripts/demos/hot_soup_steam_isaac_demo.py::"
+                + stage_path.name
+                + f"#{variant.variant_id}"
             ),
         )
-        manifest = dataset_root / "manifest.jsonl"
-        write_hot_soup_manifest([sample], manifest)
-        return manifest
     finally:
         rgb_annotator.detach(render_product)
         box_annotator.detach(render_product)
 
 
-def author_stationary_scene() -> Path:
+def author_stationary_scene(variant: HotSoupIsaacVariant) -> Path:
     OUTPUT_DIRECTORY.mkdir(parents=True, exist_ok=True)
-    stage = create_scene()
-    usd_path = OUTPUT_DIRECTORY / "hot_soup_plume_proxy.usda"
+    stage = create_scene(variant)
+    usd_path = OUTPUT_DIRECTORY / f"hot_soup_plume_proxy_{variant.variant_id}.usda"
     stage.GetRootLayer().Export(str(usd_path))
 
     plume_prims = tuple(
@@ -248,7 +266,7 @@ def author_stationary_scene() -> Path:
         raise RuntimeError("stationary diagnostic camera was not authored")
     if not stage.GetPrimAtPath("/World/HotSoup/SoupSurface").IsValid():
         raise RuntimeError("soup surface was not authored")
-    print("STATIONARY ISAAC HOT-SOUP PLUME FIXTURE")
+    print(f"STATIONARY ISAAC HOT-SOUP PLUME FIXTURE: {variant.variant_id}")
     print(f"stage={usd_path}")
     print(f"plume_proxy_prims={len(plume_prims)}; camera={CAMERA_PATH}")
     print("robot_motion=none; detector=none; temperature=unavailable")
@@ -258,9 +276,17 @@ def author_stationary_scene() -> Path:
 
 if __name__ == "__main__":
     try:
-        scene_path = author_stationary_scene()
-        manifest_path = capture_stationary_dataset_frame(scene_path)
+        variants = select_hot_soup_isaac_variants(os.environ.get("HOT_SOUP_VARIANTS"))
+        samples = []
+        for selected_variant in variants:
+            scene_path = author_stationary_scene(selected_variant)
+            samples.append(
+                capture_stationary_dataset_frame(scene_path, selected_variant)
+            )
+        manifest_path = OUTPUT_DIRECTORY / "dataset" / "manifest.jsonl"
+        write_hot_soup_manifest(samples, manifest_path)
         print(f"rgb_and_oracle_manifest={manifest_path}")
+        print(f"variants={','.join(variant.variant_id for variant in variants)}")
         print("annotation=isaac_authored_oracle; detector=none")
         print("PASS: Isaac rendered the stationary RGB diagnostic", flush=True)
     except Exception:
