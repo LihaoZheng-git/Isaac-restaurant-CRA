@@ -102,3 +102,25 @@ through the track's projected camera median. Exactly one projected track must
 fall inside the box. Zero matches stay unassigned, and multiple matches are
 reported as ambiguous. Frame ID, timestamp, and image dimensions must agree;
 freshness is checked again when the per-track thermal provider is queried.
+
+## Training and held-out evaluation
+
+`assess_hot_soup_training_readiness` now blocks training unless the dataset is
+internally valid and contains group-separated, project-owned real positives
+and negatives in train, validation, and test splits, plus real evaluation hard
+negatives. Isaac synthetic samples are counted and may supplement training,
+but they do not satisfy the real-data minimums. These defaults are a functional
+pipeline gate, not a claim that the dataset is publication-scale.
+
+`scripts/training/train_hot_soup_detector.py` exports the validated two-class
+dataset and trains a local Ultralytics checkpoint without downloading or
+bundling weights. The resulting provenance report records manifest, base
+checkpoint, trained checkpoint, package version, reported package license, and
+training arguments with hashes. A blocked dataset cannot produce a trained
+provenance report.
+
+Held-out evaluation reports plume and open-container precision, recall, and F1
+separately at configurable confidence and IoU thresholds. It also counts real
+hard-negative images that produce plume false positives. These metrics assess
+fixed-label visual detection only; they do not measure temperature, prove
+steam, or validate CRA thermal severity.
