@@ -60,7 +60,7 @@ def test_repeated_views_are_averaged_per_independent_object():
     report = evaluate_visual_mass_isaac_domain(
         samples,
         predictions,
-        config=VisualMassDomainEvaluationConfig(2, 1),
+        config=VisualMassDomainEvaluationConfig(2, 1, sensor_derived_geometry=True),
     )
     assert report.ready_for_sensor_domain_claim
     assert report.independent_object_count == 2
@@ -82,6 +82,21 @@ def test_missing_predictions_and_small_object_inventory_block_claim():
     assert not report.ready_for_sensor_domain_claim
     assert any("missing predictions" in item for item in report.blockers)
     assert any("independent test objects" in item for item in report.blockers)
+
+
+def test_authored_geometry_blocks_sensor_domain_claim_even_when_counts_pass():
+    samples = (
+        sample("chair-a", "chair-a", "chair", 5),
+        sample("chair-b", "chair-b", "chair", 6),
+    )
+    report = evaluate_visual_mass_isaac_domain(
+        samples,
+        (prediction("chair-a", 5), prediction("chair-b", 6)),
+        config=VisualMassDomainEvaluationConfig(2, 2),
+    )
+
+    assert not report.ready_for_sensor_domain_claim
+    assert "geometry inputs are not identified as sensor-derived" in report.blockers
 
 
 def test_multiple_checkpoints_block_one_evaluation_claim():

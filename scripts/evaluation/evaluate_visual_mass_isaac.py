@@ -41,19 +41,30 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--device", default="cpu")
     parser.add_argument("--minimum-test-objects", type=int, default=10)
     parser.add_argument("--minimum-per-class", type=int, default=2)
+    parser.add_argument(
+        "--sensor-derived-geometry",
+        action="store_true",
+        help="identify manifest dimensions as sensor-derived rather than authored oracle",
+    )
     return parser.parse_args()
 
 
-def _scalar(value: float) -> ScalarEstimate:
+def _scalar(value: float, *, sensor_derived: bool) -> ScalarEstimate:
+    status = EstimateStatus.MEASURED if sensor_derived else EstimateStatus.ORACLE
+    source = (
+        "isaac_capture_sensor_geometry"
+        if sensor_derived
+        else "isaac_authored_geometry_offline"
+    )
     return ScalarEstimate(
         value,
         value,
         value,
         1.0,
         "m",
-        "isaac_capture_geometry",
+        source,
         0.0,
-        EstimateStatus.MEASURED,
+        status,
     )
 
 
@@ -89,9 +100,15 @@ def main() -> None:
         base = PhysicalAttributes.unknown(track_id=0, timestamp_seconds=0.0)
         geometry = replace(
             base.geometry,
-            width_m=_scalar(item.width_m),
-            depth_m=_scalar(item.depth_m),
-            height_m=_scalar(item.height_m),
+            width_m=_scalar(
+                item.width_m, sensor_derived=args.sensor_derived_geometry
+            ),
+            depth_m=_scalar(
+                item.depth_m, sensor_derived=args.sensor_derived_geometry
+            ),
+            height_m=_scalar(
+                item.height_m, sensor_derived=args.sensor_derived_geometry
+            ),
         )
         attributes = estimator.estimate(
             image,
@@ -112,6 +129,7 @@ def main() -> None:
         config=VisualMassDomainEvaluationConfig(
             args.minimum_test_objects,
             args.minimum_per_class,
+            args.sensor_derived_geometry,
         ),
     )
     payload = asdict(report)
@@ -119,6 +137,9 @@ def main() -> None:
         payload["overall_metrics"] = asdict(report.overall_metrics)
     payload["oracle_boundary"] = (
         "authored mass read only after runtime prediction for offline scoring"
+    )
+    payload["geometry_evidence"] = (
+        "sensor_derived" if args.sensor_derived_geometry else "isaac_authored_oracle"
     )
     payload["ready_for_sensor_domain_claim"] = (
         report.ready_for_sensor_domain_claim

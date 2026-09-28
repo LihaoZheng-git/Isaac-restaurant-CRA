@@ -89,6 +89,7 @@ class VisualMassClassEvaluation:
 class VisualMassDomainEvaluationConfig:
     minimum_independent_test_objects: int = 10
     minimum_objects_per_reported_class: int = 2
+    sensor_derived_geometry: bool = False
 
     def __post_init__(self) -> None:
         for name in (
@@ -98,6 +99,8 @@ class VisualMassDomainEvaluationConfig:
             value = getattr(self, name)
             if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
                 raise ValueError(f"{name} must be a positive integer")
+        if not isinstance(self.sensor_derived_geometry, bool):
+            raise TypeError("sensor_derived_geometry must be boolean")
 
 
 @dataclass(frozen=True)
@@ -133,6 +136,8 @@ def evaluate_visual_mass_isaac_domain(
     extra = set(by_sample) - expected_ids
     missing = expected_ids - set(by_sample)
     blockers = []
+    if not settings.sensor_derived_geometry:
+        blockers.append("geometry inputs are not identified as sensor-derived")
     if extra:
         blockers.append(f"predictions contain non-test samples: {sorted(extra)}")
     if missing:
