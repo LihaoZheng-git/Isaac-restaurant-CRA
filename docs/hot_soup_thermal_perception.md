@@ -94,3 +94,11 @@ license for proprietary use ([official licensing documentation](https://docs.ult
 This thesis repository can evaluate that technique under its applicable terms,
 but trained project weights still require documented base-weight provenance,
 owned labeled footage, and a release decision consistent with those terms.
+
+## Track association boundary
+
+The selected open-container box can be assigned to an existing LiDAR track
+through the track's projected camera median. Exactly one projected track must
+fall inside the box. Zero matches stay unassigned, and multiple matches are
+reported as ambiguous. Frame ID, timestamp, and image dimensions must agree;
+freshness is checked again when the per-track thermal provider is queried.

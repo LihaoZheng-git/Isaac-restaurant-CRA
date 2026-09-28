@@ -91,3 +91,12 @@ screwdriver-tip instances, so pointed-tip perception is not supported. A
 time, with 11.61 ms median and 12.05 ms p95 wall time on the RTX 5070 Ti. These
 results establish a reproducible blade-edge baseline only; they do not justify
 runtime CRA integration or a general-contact claim.
+
+## Track association boundary
+
+`robot/perception/specialist_track_evidence.py` transfers a fixed-label contact
+segmentation to an existing LiDAR track only when its detection index was
+matched by the same timestamped camera association frame. Stale and unmatched
+results remain unavailable. This plumbing does not improve the trained
+baseline, infer physical sharpness or hardness, or turn its authored diagnostic
+fixtures into sensor-derived evidence.
