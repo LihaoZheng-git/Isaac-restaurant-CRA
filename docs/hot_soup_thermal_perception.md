@@ -38,7 +38,11 @@ not aerosol physics or detector accuracy.
 gate plus the separate CRA interaction requirement. The Isaac demo exports a
 stationary visual plume scene and captures RGB plus oracle boxes without wheel
 commands. A successful run writes the image and manifest under the ignored
-`outputs/hot_soup_steam_isaac/dataset` directory; the run fails rather than
+`outputs/hot_soup_steam_isaac/dataset` directory. By default it renders the
+deterministic `baseline`, `wispy-right`, and `broad-left` appearance variants;
+set `HOT_SOUP_VARIANTS` to a comma-separated subset when debugging one scene.
+All variants share a capture group so dataset splitting cannot leak near-duplicate
+synthetic views across train and evaluation. The run fails rather than
 fabricating either required class when Replicator returns no visible box. On
 the current Isaac Sim 6.0 host, the visible renderer produced a 640 by 480
 frame with both classes, while three headless attempts returned an empty RGB
