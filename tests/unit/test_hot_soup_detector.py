@@ -79,6 +79,50 @@ def test_observed_bad_geometry_is_zero_relation_not_missing_evidence():
     assert not result.cue_result.thermal.source_type.is_available
 
 
+def test_partial_horizontal_overlap_retains_continuous_evidence():
+    weak = estimate_hot_soup_from_detections(
+        frame(
+            detection(0, "visible_hot_soup_plume", 0.9, (68, 10, 88, 45)),
+            detection(1, "open_container", 0.8, (30, 45, 70, 80)),
+        ),
+        timestamp_seconds=2.1,
+    )
+    stronger = estimate_hot_soup_from_detections(
+        frame(
+            detection(0, "visible_hot_soup_plume", 0.9, (66, 10, 86, 45)),
+            detection(1, "open_container", 0.8, (30, 45, 70, 80)),
+        ),
+        timestamp_seconds=2.1,
+    )
+
+    assert weak.spatial_association_score == pytest.approx(0.4)
+    assert stronger.spatial_association_score == pytest.approx(0.8)
+    assert weak.cue_result.thermal.heat_source_likelihood.value == pytest.approx(0.4)
+    assert stronger.cue_result.thermal.heat_source_likelihood.value == pytest.approx(
+        0.8
+    )
+
+
+def test_vertical_relation_changes_smoothly_with_plume_position():
+    near = estimate_hot_soup_from_detections(
+        frame(
+            detection(0, "visible_hot_soup_plume", 0.9, (40, 35, 60, 65)),
+            detection(1, "open_container", 0.8, (30, 45, 70, 80)),
+        ),
+        timestamp_seconds=2.1,
+    )
+    clearly_above = estimate_hot_soup_from_detections(
+        frame(
+            detection(0, "visible_hot_soup_plume", 0.9, (40, 20, 60, 50)),
+            detection(1, "open_container", 0.8, (30, 45, 70, 80)),
+        ),
+        timestamp_seconds=2.1,
+    )
+
+    assert 0 < near.spatial_association_score < clearly_above.spatial_association_score
+    assert clearly_above.spatial_association_score == pytest.approx(1.0)
+
+
 def test_stale_detection_frame_is_rejected_by_existing_cue_contract():
     result = estimate_hot_soup_from_detections(
         frame(
