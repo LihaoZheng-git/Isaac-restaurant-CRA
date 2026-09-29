@@ -17,6 +17,14 @@ or disabled-prior inputs leave only that factor unknown. Steam alone cannot
 create thermal severity. Factor diagnostics should be inspected alongside
 aggregate `phi`, especially when conservative unknown fallbacks saturate it.
 
+`diagnose_factor_specific_cra` reports each factor's accepted inputs,
+provenance, rejection reasons, nominal risk, conservative fallback uplift, and
+confidence beside the separately labeled four-factor aggregate. A
+factor-specific entry never reports aggregate `phi`. If the aggregate crosses
+the configured saturation threshold while factors remain unknown, the report
+lists those unknown fallback factors explicitly; it does not rerun them as
+zero-risk evidence.
+
 The default Safe-SAGE policy maps `phi` to normal flux and keeps lambda fixed at
 1.25. Risk-dependent lambda is reserved for a separate evaluation ablation.
 

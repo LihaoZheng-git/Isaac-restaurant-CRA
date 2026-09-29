@@ -18,6 +18,13 @@ remain pending. The thermal scenario is carried hot soup with a visible-plume
 cue above an open container. It does not claim that a visual plume is measured
 steam or temperature.
 
+Before any motion comparison, stationary outputs are recorded twice: a
+factor-specific diagnostic for the scenario's named hazard family and a
+separately labeled four-factor aggregate. The factor-specific result cannot be
+presented as aggregate `phi`. Unknown factors remain unknown; if their
+conservative fallbacks saturate aggregate `phi`, the saturation report names
+them and preserves their rejection reasons.
+
 The present repository is not ready for sensor-derived wheel-motion trials.
 Visual mass lacks Isaac-domain accuracy calibration, the contact model has
 limited geometry coverage, and no trained hot-soup checkpoint has been
