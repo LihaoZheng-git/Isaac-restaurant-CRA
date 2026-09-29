@@ -96,6 +96,11 @@ from robot.perception.motion_attributes import (
     RouteMotionContext,
     estimate_track_motion,
 )
+from robot.perception.motion_diagnostic import (
+    LIDAR_TRACK_VELOCITY_SOURCE,
+    MotionDiagnosticReport,
+    evaluate_motion_diagnostic,
+)
 from robot.perception.semantic_detection import (
     PixelBoundingBox,
     SemanticDetection,
@@ -155,12 +160,14 @@ __all__ = [
     "HotSoupTrainingReadinessConfig",
     "LidarGeometryConfig",
     "LIDAR_SURFACE_SOURCE",
+    "LIDAR_TRACK_VELOCITY_SOURCE",
     "LidarFallSurfaceConfig",
     "LidarFallSurfaceResult",
     "MassAttributes",
     "MOTION_SOURCE",
     "MotionAttributeConfig",
     "MotionAttributes",
+    "MotionDiagnosticReport",
     "PhysicalAttributes",
     "PixelBoundingBox",
     "ROUTE_SOURCE",
@@ -191,6 +198,7 @@ __all__ = [
     "estimate_hot_soup_from_detections",
     "evaluate_hot_soup_predictions",
     "evaluate_fall_height_diagnostic",
+    "evaluate_motion_diagnostic",
     "evaluate_visual_mass_isaac_domain",
     "estimate_mass_from_volume_density",
     "estimate_lidar_fall_surfaces",

@@ -19,10 +19,14 @@ Run from the project root:
 
     python -u scripts/demos/obstacle_tracking_demo.py
 
-Press Play in Isaac Sim when requested.
+The demo starts playback automatically and closes after writing its report by
+default. Set ``ISAAC_SIM_AUTOCLOSE=0`` to keep the window open for inspection.
 """
 
+from dataclasses import asdict
+import json
 import math
+import os
 import sys
 import traceback
 from pathlib import Path
@@ -70,6 +74,10 @@ from pxr import Gf, Usd, UsdGeom
 
 from robot.control.differential_drive import NovaCarterController
 from robot.navigation.waypoint_controller import RobotPose2D
+from robot.perception.motion_diagnostic import (
+    MotionDiagnosticReport,
+    evaluate_motion_diagnostic,
+)
 from robot.runtime.simulation_loop import (
     advance_playing_steps,
     wait_until_playing,
@@ -167,6 +175,12 @@ MINIMUM_MOVING_ESTIMATE_COUNT = 10
 MAXIMUM_MEDIAN_MOVING_VELOCITY_ERROR = 0.25
 MAXIMUM_FINAL_STATIONARY_SPEED = 0.15
 MAXIMUM_PROXY_TRACK_ID_SWITCHES = 2
+MAXIMUM_CONFIRMATION_LATENCY_SECONDS = 1.0
+MAXIMUM_ROBOT_POSITION_DRIFT_M = 0.01
+MAXIMUM_ROBOT_YAW_DRIFT_DEGREES = 0.1
+
+OUTPUT_DIRECTORY = PROJECT_ROOT / "outputs" / "lidar_motion_isaac"
+AUTOCLOSE = os.environ.get("ISAAC_SIM_AUTOCLOSE", "1") != "0"
 
 MINIMUM_HEIGHT_ABOVE_FLOOR = 0.05
 MAXIMUM_HEIGHT_ABOVE_FLOOR = 1.00
@@ -695,7 +709,7 @@ def run_tracking_experiment(
     detection_config: ObstacleDetectionConfig,
     robot_from_lidar: np.ndarray,
     initial_frame_id: int,
-) -> None:
+) -> MotionDiagnosticReport:
     """Move the proxy and validate LiDAR-only velocity estimates."""
 
     completed_steps = 0
@@ -709,7 +723,9 @@ def run_tracking_experiment(
 
     moving_velocity_errors: list[float] = []
     moving_estimated_speeds: list[float] = []
+    moving_estimated_velocities: list[np.ndarray] = []
     stationary_estimated_speeds: list[float] = []
+    first_confirmed_motion_seconds: float | None = None
 
     final_proxy_track: TrackedObstacle | None = None
     minimum_proxy_association_error = math.inf
@@ -908,6 +924,16 @@ def run_tracking_experiment(
                 moving_estimated_speeds.append(
                     estimated_speed
                 )
+                moving_estimated_velocities.append(
+                    estimated_velocity_world.copy()
+                )
+
+            if (
+                first_confirmed_motion_seconds is None
+                and elapsed_seconds < TRAJECTORY_DURATION_SECONDS
+                and estimated_speed > 0.0
+            ):
+                first_confirmed_motion_seconds = elapsed_seconds
 
             stationary_evaluation_active = (
                 elapsed_seconds
@@ -983,30 +1009,25 @@ def run_tracking_experiment(
         else math.inf
     )
 
-    enough_moving_estimates = (
-        moving_estimate_count
-        >= MINIMUM_MOVING_ESTIMATE_COUNT
+    report = evaluate_motion_diagnostic(
+        np.asarray(moving_estimated_velocities, dtype=np.float64).reshape(-1, 2),
+        expected_velocity_world_xy=(0.0, -OBSTACLE_SPEED_METERS_PER_SECOND),
+        first_confirmed_motion_seconds=first_confirmed_motion_seconds,
+        final_stationary_speed_mps=final_stationary_speed,
+        proxy_track_id_switches=proxy_track_id_switches,
+        minimum_association_error_m=minimum_proxy_association_error,
+        minimum_estimates=MINIMUM_MOVING_ESTIMATE_COUNT,
+        maximum_median_velocity_error_mps=MAXIMUM_MEDIAN_MOVING_VELOCITY_ERROR,
+        maximum_confirmation_latency_seconds=MAXIMUM_CONFIRMATION_LATENCY_SECONDS,
+        maximum_final_stationary_speed_mps=MAXIMUM_FINAL_STATIONARY_SPEED,
+        maximum_track_id_switches=MAXIMUM_PROXY_TRACK_ID_SWITCHES,
     )
+    enough_moving_estimates = moving_estimate_count >= MINIMUM_MOVING_ESTIMATE_COUNT
     moving_accuracy_passed = (
-        median_moving_velocity_error
-        <= MAXIMUM_MEDIAN_MOVING_VELOCITY_ERROR
+        median_moving_velocity_error <= MAXIMUM_MEDIAN_MOVING_VELOCITY_ERROR
     )
-    stationary_accuracy_passed = (
-        final_stationary_speed
-        <= MAXIMUM_FINAL_STATIONARY_SPEED
-    )
-    identity_stability_passed = (
-        proxy_track_id_switches
-        <= MAXIMUM_PROXY_TRACK_ID_SWITCHES
-    )
-
-    validation_passed = (
-        enough_moving_estimates
-        and moving_accuracy_passed
-        and stationary_accuracy_passed
-        and identity_stability_passed
-        and proxy_track_scan_count > 0
-    )
+    stationary_accuracy_passed = final_stationary_speed <= MAXIMUM_FINAL_STATIONARY_SPEED
+    identity_stability_passed = proxy_track_id_switches <= MAXIMUM_PROXY_TRACK_ID_SWITCHES
 
     print("\n" + "=" * 70)
     print("OBSTACLE TRACKING VALIDATION RESULT")
@@ -1037,6 +1058,10 @@ def run_tracking_experiment(
         "Final estimated stationary speed: "
         f"{format_value(final_stationary_speed)} m/s"
     )
+    print(
+        "Time to first confirmed motion:    "
+        f"{format_value(first_confirmed_motion_seconds if first_confirmed_motion_seconds is not None else math.inf)} s"
+    )
 
     if final_proxy_track is None:
         print("Final proxy track:               none")
@@ -1066,7 +1091,7 @@ def run_tracking_experiment(
 
     print("\nInterpretation:")
 
-    if validation_passed:
+    if report.passed:
         print(
             "  [PASS] LiDAR-only tracking recovered the proxy motion, "
             "maintained a stable identity, and returned toward zero "
@@ -1080,6 +1105,7 @@ def run_tracking_experiment(
         )
 
     print("=" * 70)
+    return report
 
 
 # ---------------------------------------------------------------------------
@@ -1119,7 +1145,8 @@ def main() -> None:
         device=PHYSICS_DEVICE,
     )
 
-    print("\nPress Play in Isaac Sim to begin.")
+    print("\nStarting Isaac Sim playback automatically...")
+    app_utils.play()
 
     if not wait_until_playing(simulation_app):
         return
@@ -1274,7 +1301,7 @@ def main() -> None:
         ),
     )
 
-    run_tracking_experiment(
+    report = run_tracking_experiment(
         stage=loaded_scene.stage,
         obstacle_translate_op=(
             obstacle_translate_op
@@ -1291,13 +1318,50 @@ def main() -> None:
 
     robot_controller.stop()
     app_utils.update_app(steps=5)
+    final_pose = read_robot_pose(loaded_scene.stage)
+    robot_drift_m = math.hypot(
+        final_pose.x - initial_pose.x,
+        final_pose.y - initial_pose.y,
+    )
+    robot_yaw_drift_degrees = math.degrees(
+        abs(
+            math.atan2(
+                math.sin(final_pose.yaw - initial_pose.yaw),
+                math.cos(final_pose.yaw - initial_pose.yaw),
+            )
+        )
+    )
+    blockers = list(report.blockers)
+    if robot_drift_m > MAXIMUM_ROBOT_POSITION_DRIFT_M:
+        blockers.append("robot position drift exceeded the stationary tolerance")
+    if robot_yaw_drift_degrees > MAXIMUM_ROBOT_YAW_DRIFT_DEGREES:
+        blockers.append("robot yaw drift exceeded the stationary tolerance")
+    payload = {
+        **asdict(report),
+        "blockers": blockers,
+        "passed": not blockers,
+        "robot_motion_command": "zero",
+        "robot_position_drift_m": robot_drift_m,
+        "robot_yaw_drift_degrees": robot_yaw_drift_degrees,
+        "runtime_tracker_config_changed": False,
+        "slow_motion_validated": False,
+    }
+    OUTPUT_DIRECTORY.mkdir(parents=True, exist_ok=True)
+    (OUTPUT_DIRECTORY / "report.json").write_text(
+        json.dumps(payload, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    print(json.dumps(payload, indent=2, sort_keys=True), flush=True)
     app_utils.stop()
 
-    print("\nThe GUI will remain open for inspection.")
-    print("Close the Isaac Sim window when finished.")
+    if blockers:
+        raise RuntimeError("stationary-robot LiDAR motion diagnostic did not pass")
 
-    while simulation_app.is_running():
-        simulation_app.update()
+    if not AUTOCLOSE:
+        print("\nThe GUI will remain open for inspection.")
+        print("Close the Isaac Sim window when finished.")
+        while simulation_app.is_running():
+            simulation_app.update()
 
 
 if __name__ == "__main__":
@@ -1309,5 +1373,6 @@ if __name__ == "__main__":
         print("=" * 70)
         print(error)
         traceback.print_exc()
+        raise
     finally:
         simulation_app.close()
