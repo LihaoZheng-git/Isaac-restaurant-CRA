@@ -37,6 +37,7 @@ import sys
 import traceback
 from dataclasses import replace
 from datetime import datetime
+import hashlib
 from pathlib import Path
 
 
@@ -91,6 +92,14 @@ from robot.perception.camera_lidar_fusion import (
     CameraLidarFusionResult,
     CameraLidarSemanticFusion,
 )
+from robot.perception.contact_detection_adapter import (
+    ContactPartAssociationResult,
+    associate_contact_parts_to_objects,
+)
+from robot.perception.contact_live_diagnostic import (
+    LiveContactDiagnostic,
+    evaluate_live_contact_dataflow,
+)
 from robot.perception.live_physical_evidence import (
     LivePhysicalEvidenceContext,
     build_tracking_physical_attributes,
@@ -105,6 +114,11 @@ from robot.perception.motion_calibration import (
 )
 from robot.perception.physical_attributes import PhysicalAttributes
 from robot.perception.semantic_detection import SemanticDetectionFrame
+from robot.perception.specialist_track_evidence import (
+    SpecialistAssociationFrame,
+    TrackSpecialistEvidence,
+    build_track_specialist_evidence,
+)
 from robot.perception.visualization import (
     render_camera_lidar_fusion_overlay,
     render_semantic_detection_overlay,
@@ -192,6 +206,9 @@ YOLO_CONFIDENCE_THRESHOLD = 0.35
 YOLO_IOU_THRESHOLD = 0.70
 YOLO_IMAGE_SIZE = 640
 YOLO_DEVICE = os.environ.get("YOLO_DEVICE", "0").strip() or "0"
+CONTACT_CONFIDENCE_THRESHOLD = float(
+    os.environ.get("CONTACT_CONFIDENCE_THRESHOLD", "0.25")
+)
 
 RUN_TIMESTAMP = datetime.now().strftime("%Y%m%d_%H%M%S")
 OUTPUT_DIRECTORY = (
@@ -230,6 +247,31 @@ def make_visual_mass_estimator() -> VisualMassRuntimeEstimator | None:
     return VisualMassRuntimeEstimator(
         VisualMassRuntimeConfig(checkpoint_path=path, device=YOLO_DEVICE)
     )
+
+
+def make_contact_detector(
+) -> tuple[YoloSegmentationDetector | None, Path | None, str | None]:
+    """Load the optional evaluated exposed-edge checkpoint."""
+
+    configured_path = os.environ.get("CONTACT_SEGMENTATION_CHECKPOINT", "").strip()
+    if not configured_path:
+        return None, None, None
+    path = Path(configured_path).expanduser().resolve()
+    if not path.is_file():
+        raise FileNotFoundError(f"contact segmentation weights were not found: {path}")
+    detector = YoloSegmentationDetector(
+        YoloSegmentationConfig(
+            model_path=path,
+            confidence_threshold=CONTACT_CONFIDENCE_THRESHOLD,
+            iou_threshold=YOLO_IOU_THRESHOLD,
+            image_size=YOLO_IMAGE_SIZE,
+            device=YOLO_DEVICE,
+            allowed_classes=("exposed_edge",),
+        )
+    )
+    print(f"Loading bounded exposed-edge checkpoint: {path}")
+    detector.initialize()
+    return detector, path, hashlib.sha256(path.read_bytes()).hexdigest()
 
 
 def attach_visual_mass_estimates(
@@ -427,6 +469,11 @@ def print_report(
     visual_mass_checkpoint: Path | None,
     visual_mass_diagnostic: LiveVisualMassDiagnostic | None,
     visual_mass_diagnostic_path: Path | None,
+    contact_checkpoint: Path | None,
+    contact_frame: SemanticDetectionFrame | None,
+    contact_association: ContactPartAssociationResult | None,
+    contact_diagnostic: LiveContactDiagnostic | None,
+    contact_diagnostic_path: Path | None,
     initial_pose: np.ndarray,
     final_pose: np.ndarray,
 ) -> bool:
@@ -477,6 +524,7 @@ def print_report(
         visual_mass_diagnostic is None
         or visual_mass_diagnostic.live_dataflow_valid
     )
+    contact_valid = contact_diagnostic is None or contact_diagnostic.pipeline_valid
     passed = (
         projection_inside_image
         and bool(detections.detections)
@@ -489,6 +537,7 @@ def print_report(
         and stationary_threshold_valid
         and stationary_publication_valid
         and visual_mass_valid
+        and contact_valid
     )
 
     print("\n" + "=" * 78)
@@ -656,6 +705,31 @@ def print_report(
         )
         for reason in visual_mass_diagnostic.accuracy_claim_blockers:
             print(f"    accuracy blocker: {reason}")
+    if contact_diagnostic is not None:
+        print(f"  Contact checkpoint:          {contact_checkpoint}")
+        print(
+            "  Contact part detections:     "
+            f"{contact_diagnostic.part_detection_count}"
+        )
+        print(
+            "  Contact parts / tracks:      "
+            f"{contact_diagnostic.accepted_part_count} / "
+            f"{len(contact_diagnostic.contact_track_ids)}"
+        )
+        print(f"  Contact evidence status:     {contact_diagnostic.evidence_status}")
+        print(f"  Contact dataflow valid:      {contact_diagnostic.pipeline_valid}")
+        print(
+            "  Complete contact factor:     "
+            f"{contact_diagnostic.ready_for_complete_contact_factor}"
+        )
+        if contact_frame is not None and contact_association is not None:
+            print(f"  Contact inference wall time: {contact_frame.inference_wall_seconds:.4f} s")
+            print(
+                "  Rejected contact parts:      "
+                f"unsupported={contact_association.diagnostics.unsupported_part_indices}, "
+                f"unmatched={contact_association.diagnostics.unmatched_part_indices}, "
+                f"ambiguous={contact_association.diagnostics.ambiguous_part_indices}"
+            )
     print("\nStationary motion calibration:")
     print(f"  Raw matched-track samples:    {motion_calibration.sample_count}")
     print(
@@ -693,6 +767,8 @@ def print_report(
     print(f"  Fusion overlay:              {fusion_path}")
     if visual_mass_diagnostic_path is not None:
         print(f"  Visual-mass diagnostic:      {visual_mass_diagnostic_path}")
+    if contact_diagnostic_path is not None:
+        print(f"  Contact diagnostic:          {contact_diagnostic_path}")
     print("\nControlled-data boundary:")
     print("  LiDAR clustering alone established geometry and track IDs.")
     print("  YOLO masks only attached labels to those existing tracks.")
@@ -900,6 +976,9 @@ def main() -> None:
 
     detector = make_detector(model_path)
     visual_mass_estimator = make_visual_mass_estimator()
+    contact_detector, contact_checkpoint, contact_checkpoint_sha256 = (
+        make_contact_detector()
+    )
     detections = detector.detect(
         image_rgb,
         source_frame_id=camera_info.read_index,
@@ -926,23 +1005,61 @@ def main() -> None:
         camera_from_source=camera_from_robot,
         calibration=calibration,
     )
+    contact_frame = None
+    contact_association = None
+    contact_specialist: TrackSpecialistEvidence | None = None
+    contact_diagnostic = None
+    contact_diagnostic_path = None
+    if contact_detector is not None:
+        contact_frame = contact_detector.detect(
+            image_rgb,
+            source_frame_id=camera_info.read_index,
+            source_timestamp_seconds=camera_info.simulation_time_seconds,
+        )
+        contact_association = associate_contact_parts_to_objects(
+            detections,
+            contact_frame,
+        )
+        contact_specialist = build_track_specialist_evidence(
+            SpecialistAssociationFrame(
+                camera_info.read_index,
+                camera_info.simulation_time_seconds,
+                camera_info.height,
+                camera_info.width,
+                fusion.associations,
+            ),
+            contact_segmentations=(
+                contact_association.segmentations_by_object_detection_index
+            ),
+        )
+        assert contact_checkpoint_sha256 is not None
+        contact_diagnostic = evaluate_live_contact_dataflow(
+            contact_frame,
+            contact_association,
+            contact_specialist,
+            checkpoint_sha256=contact_checkpoint_sha256,
+        )
+        contact_diagnostic_path = OUTPUT_DIRECTORY / "contact_diagnostic.json"
+        contact_diagnostic.write_json(contact_diagnostic_path)
     waypoint_world_xy = (
         float(initial_pose[0] + math.cos(initial_pose[2])),
         float(initial_pose[1] + math.sin(initial_pose[2])),
     )
-    sensor_timestamp_seconds = lidar_info.sensor_timestamp_nanoseconds * 1e-9
+    lidar_timestamp_seconds = lidar_info.sensor_timestamp_nanoseconds * 1e-9
+    sensor_timestamp_seconds = max(
+        lidar_timestamp_seconds,
+        camera_info.simulation_time_seconds,
+    )
     fall_surface_results = estimate_fall_surfaces_by_track(
         scene_points_robot_xyz=points_robot,
         obstacle_points_robot_xyz=obstacle_points_3d,
         tracking=tracking,
-        timestamp_seconds=sensor_timestamp_seconds,
+        timestamp_seconds=lidar_timestamp_seconds,
     )
     physical_attributes = build_tracking_physical_attributes(
         tracking_result=tracking,
         label_result=fusion.semantic_labels,
-        sensor_timestamp_seconds=(
-            lidar_info.sensor_timestamp_nanoseconds * 1e-9
-        ),
+        sensor_timestamp_seconds=sensor_timestamp_seconds,
         context=LivePhysicalEvidenceContext(
             obstacle_points_robot_xyz=obstacle_points_3d,
             floor_height_robot_m=floor_height,
@@ -957,6 +1074,11 @@ def main() -> None:
         fall_surface_provider=(
             lambda track_id: fall_surface_results[track_id].evidence
         ),
+        contact_provider=(
+            contact_specialist.contact_for
+            if contact_specialist is not None
+            else None
+        ),
     )
     physical_attributes = attach_visual_mass_estimates(
         physical_attributes,
@@ -964,7 +1086,7 @@ def main() -> None:
         detections=detections,
         fusion=fusion,
         estimator=visual_mass_estimator,
-        timestamp_seconds=lidar_info.sensor_timestamp_nanoseconds * 1e-9,
+        timestamp_seconds=sensor_timestamp_seconds,
     )
     visual_mass_diagnostic = None
     visual_mass_diagnostic_path = None
@@ -1020,6 +1142,11 @@ def main() -> None:
         ),
         visual_mass_diagnostic=visual_mass_diagnostic,
         visual_mass_diagnostic_path=visual_mass_diagnostic_path,
+        contact_checkpoint=contact_checkpoint,
+        contact_frame=contact_frame,
+        contact_association=contact_association,
+        contact_diagnostic=contact_diagnostic,
+        contact_diagnostic_path=contact_diagnostic_path,
         initial_pose=initial_pose,
         final_pose=final_pose,
     )

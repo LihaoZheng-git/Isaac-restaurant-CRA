@@ -110,3 +110,21 @@ because that is the only class with nonzero held-out performance in the local
 baseline. A missing model detection creates no segmentation record and is not
 converted to zero exposure. Pointed tips, protrusions, jagged surfaces,
 sharpness, and hardness remain unsupported.
+
+## Stationary live invocation
+
+The camera--LiDAR fusion demo can load the evaluated local exposed-edge
+checkpoint through `CONTACT_SEGMENTATION_CHECKPOINT`. It invokes the specialist
+on the same stationary Hawk frame as parent-object segmentation, associates
+only contained part masks to accepted object detections, transfers them only to
+accepted LiDAR tracks, and writes `contact_diagnostic.json`. A model
+non-response stays `unavailable`; it is not recorded as zero exposure.
+
+In the first restaurant run, the specialist completed in 63.6 ms and returned
+no exposed-edge detections in the chair view. The dataflow diagnostic passed,
+while contact evidence and the complete contact CRA factor stayed unavailable.
+The robot drifted 0.001188 m and 0.0228 degrees, published no nonzero motion,
+and received no wheel command. This negative stationary invocation does not
+validate knife, nail, protrusion, or general outdoor hazard performance. A
+positive live track-level Isaac example remains required, as do independent
+sharpness, hardness, and route-orientation methods.
