@@ -88,7 +88,7 @@ def test_aligned_specialists_become_fresh_per_track_providers():
     assert contact.dangerous_part.value == "exposed_edge"
     assert contact.dangerous_part_exposure.value == pytest.approx(0.25)
     assert not contact.sharpness.is_available
-    assert thermal.source_type.value == "visible_hot_soup_plume_proxy"
+    assert thermal.source_type.value == "contextual_visible_plume_proxy"
     assert not thermal.steam_likelihood.is_available
     assert evidence.diagnostics.contact_track_ids == (4,)
     assert evidence.diagnostics.thermal_track_ids == (4,)

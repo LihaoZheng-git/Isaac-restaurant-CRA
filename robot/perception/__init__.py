@@ -15,6 +15,12 @@ from robot.perception.contact_detection_adapter import (
     ContactPartAssociationResult,
     associate_contact_parts_to_objects,
 )
+from robot.perception.contextual_thermal_cues import (
+    CONTEXTUAL_THERMAL_SOURCE,
+    ContextualThermalCueConfig,
+    ContextualThermalCueResult,
+    estimate_contextual_thermal_cues,
+)
 from robot.perception.live_physical_evidence import (
     LivePhysicalEvidenceContext as LivePhysicalEvidenceContext,
     build_live_physical_attributes as build_live_physical_attributes,
@@ -140,6 +146,9 @@ __all__ = [
     "ContactPartAssociationConfig",
     "ContactPartAssociationDiagnostics",
     "ContactPartAssociationResult",
+    "CONTEXTUAL_THERMAL_SOURCE",
+    "ContextualThermalCueConfig",
+    "ContextualThermalCueResult",
     "EstimateStatus",
     "FallHeightDiagnosticReport",
     "GeometryAttributes",
@@ -194,6 +203,7 @@ __all__ = [
     "combine_estimate_statuses",
     "associate_contact_parts_to_objects",
     "estimate_box_volume",
+    "estimate_contextual_thermal_cues",
     "estimate_hot_soup_cues",
     "estimate_hot_soup_from_detections",
     "evaluate_hot_soup_predictions",
