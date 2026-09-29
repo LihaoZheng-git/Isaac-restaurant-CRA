@@ -7,7 +7,14 @@ LiDAR track assignment, freshness, and conservative unknowns.
 
 from __future__ import annotations
 
+from pathlib import Path
+import sys
+
 import numpy as np
+
+ROOT = Path(__file__).resolve().parents[2]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 
 from robot.perception.camera_lidar_fusion import TrackSemanticAssociation
 from robot.perception.contact_cues import DangerousPartSegmentation
@@ -16,6 +23,7 @@ from robot.perception.hot_soup_detector import (
     HotSoupDetectionFrame,
     estimate_hot_soup_from_detections,
 )
+from robot.perception.physical_attributes import EstimateStatus
 from robot.perception.semantic_detection import PixelBoundingBox
 from robot.perception.specialist_track_evidence import (
     SpecialistAssociationFrame,
@@ -58,6 +66,7 @@ def main() -> None:
         ),
         "authored_oracle_fixture",
         0.0,
+        evidence_status=EstimateStatus.ORACLE,
     )
     association = TrackSemanticAssociation(
         track_id=4,
@@ -85,6 +94,7 @@ def main() -> None:
     stale_contact = evidence.contact_for(4, 3.0)
     assert attached_contact.dangerous_part.value == "exposed_edge"
     assert attached_thermal.source_type.value == "contextual_visible_plume_proxy"
+    assert attached_thermal.heat_source_likelihood.status is EstimateStatus.ORACLE
     assert not attached_contact.sharpness.is_available
     assert not attached_thermal.steam_likelihood.is_available
     assert not stale_contact.dangerous_part_exposure.is_available

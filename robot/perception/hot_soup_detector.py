@@ -126,6 +126,7 @@ class HotSoupDetectionFrame:
     model_name: str
     inference_wall_seconds: float
     checkpoint_sha256: str | None = None
+    evidence_status: EstimateStatus = EstimateStatus.INFERRED
 
     def __post_init__(self) -> None:
         if isinstance(self.source_frame_id, bool) or not isinstance(
@@ -157,6 +158,12 @@ class HotSoupDetectionFrame:
             digest = digest.lower()
             if len(digest) != 64 or any(char not in "0123456789abcdef" for char in digest):
                 raise ValueError("checkpoint_sha256 must be a hexadecimal SHA-256 digest")
+        try:
+            evidence_status = EstimateStatus(self.evidence_status)
+        except (TypeError, ValueError) as error:
+            raise ValueError("evidence_status must be an EstimateStatus") from error
+        if evidence_status is EstimateStatus.UNAVAILABLE:
+            raise ValueError("a detection frame cannot have unavailable provenance")
         object.__setattr__(self, "source_frame_id", frame_id)
         object.__setattr__(self, "source_timestamp_seconds", timestamp)
         object.__setattr__(self, "image_height", height)
@@ -165,6 +172,7 @@ class HotSoupDetectionFrame:
         object.__setattr__(self, "model_name", self.model_name.strip())
         object.__setattr__(self, "inference_wall_seconds", inference)
         object.__setattr__(self, "checkpoint_sha256", digest)
+        object.__setattr__(self, "evidence_status", evidence_status)
 
 
 @dataclass(frozen=True)
@@ -385,6 +393,7 @@ def _cue(
     timestamp: float,
     confidence: float,
     half_width: float,
+    status: EstimateStatus,
     evidence: tuple[str, ...],
 ) -> ScalarEstimate:
     return ScalarEstimate(
@@ -395,7 +404,7 @@ def _cue(
         unit="1",
         source=HOT_SOUP_DETECTOR_SOURCE,
         timestamp_seconds=timestamp,
-        status=EstimateStatus.INFERRED,
+        status=status,
         evidence=evidence,
     )
 
@@ -464,6 +473,7 @@ def estimate_hot_soup_from_detections(
             timestamp=frame.source_timestamp_seconds,
             confidence=plume.confidence,
             half_width=settings.detector_score_half_width,
+            status=frame.evidence_status,
             evidence=evidence,
         )
         container_cue = _cue(
@@ -471,6 +481,7 @@ def estimate_hot_soup_from_detections(
             timestamp=frame.source_timestamp_seconds,
             confidence=container.confidence,
             half_width=settings.detector_score_half_width,
+            status=frame.evidence_status,
             evidence=evidence,
         )
         above_cue = _cue(
@@ -478,6 +489,7 @@ def estimate_hot_soup_from_detections(
             timestamp=frame.source_timestamp_seconds,
             confidence=joint,
             half_width=settings.detector_score_half_width,
+            status=frame.evidence_status,
             evidence=evidence
             + (
                 "spatial score uses horizontal overlap and vertical box ordering",

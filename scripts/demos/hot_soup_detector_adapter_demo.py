@@ -12,6 +12,7 @@ from robot.perception.hot_soup_detector import (
     HotSoupDetectionFrame,
     estimate_hot_soup_from_detections,
 )
+from robot.perception.physical_attributes import EstimateStatus
 from robot.perception.semantic_detection import PixelBoundingBox
 
 
@@ -38,6 +39,7 @@ def main() -> None:
         ),
         model_name="oracle-box-fixture-no-checkpoint",
         inference_wall_seconds=0,
+        evidence_status=EstimateStatus.ORACLE,
     )
     result = estimate_hot_soup_from_detections(frame, timestamp_seconds=5.1)
     thermal = result.cue_result.thermal
