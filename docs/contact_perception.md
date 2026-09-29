@@ -128,3 +128,20 @@ and received no wheel command. This negative stationary invocation does not
 validate knife, nail, protrusion, or general outdoor hazard performance. A
 positive live track-level Isaac example remains required, as do independent
 sharpness, hardness, and route-orientation methods.
+
+## Positive held-out replay
+
+`scripts/demos/contact_positive_replay_demo.py` provides a reproducible
+positive test without relabeling it as live Isaac evidence. It runs the generic
+object segmenter and exposed-edge specialist on the same held-out PACO image,
+applies the conservative mask-containment association, records all three input
+hashes, and saves object and part overlays plus `diagnostic.json`.
+
+For held-out image `000000040248.jpg`, the generic checkpoint produced 22
+object instances and the contact checkpoint produced 13 exposed-edge masks.
+Four masks were accepted for three parent instances, all classified as knives;
+six ambiguous masks and three unmatched masks were rejected. This validates a
+positive visual part-to-object path on existing held-out imagery. It is not a
+live Hawk/LiDAR observation, does not add an Isaac-domain result, and does not
+infer sharpness, hardness, contact probability, nails, tips, protrusions, or
+jagged surfaces.
