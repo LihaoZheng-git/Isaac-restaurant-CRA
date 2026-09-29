@@ -1,3 +1,4 @@
+from dataclasses import replace
 from types import SimpleNamespace
 
 import numpy as np
@@ -12,6 +13,7 @@ from robot.perception.hot_soup_detector import (
     YoloHotSoupDetector,
     estimate_hot_soup_from_detections,
 )
+from robot.perception.physical_attributes import EstimateStatus
 from robot.perception.semantic_detection import PixelBoundingBox
 
 
@@ -50,6 +52,18 @@ def test_plume_above_container_produces_contextual_visual_proxy():
     assert thermal.heat_source_likelihood.source != HOT_SOUP_DETECTOR_SOURCE
     assert thermal.source_type.value == "contextual_visible_plume_proxy"
     assert not thermal.steam_likelihood.is_available
+
+
+def test_oracle_box_fixture_preserves_oracle_provenance():
+    item = frame(
+        detection(0, "visible_hot_soup_plume", 0.9, (40, 10, 60, 45)),
+        detection(1, "open_container", 0.8, (30, 45, 70, 80)),
+    )
+    item = replace(item, evidence_status=EstimateStatus.ORACLE)
+    result = estimate_hot_soup_from_detections(item, timestamp_seconds=2.1)
+    assert result.cue_result.thermal.heat_source_likelihood.status is (
+        EstimateStatus.ORACLE
+    )
 
 
 def test_missing_container_remains_unavailable_instead_of_becoming_zero():

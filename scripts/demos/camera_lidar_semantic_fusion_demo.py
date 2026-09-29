@@ -27,6 +27,10 @@ Run from the project root in the cloned YOLO environment:
     $env:YOLO_MODEL_PATH = "C:\\path\\to\\yolo11n-seg.pt"
     python -u scripts/demos/camera_lidar_semantic_fusion_demo.py
 
+Optional specialist checkpoints can be enabled with
+``CONTACT_SEGMENTATION_CHECKPOINT`` and ``HOT_SOUP_DETECTION_CHECKPOINT``.
+The thermal checkpoint must use the project plume and open-container labels.
+
 Set ``ISAAC_SIM_HEADLESS=1`` for a headless run or ``FUSION_AUTOCLOSE=1`` to
 close a rendered run after the report.
 """
@@ -100,6 +104,13 @@ from robot.perception.contact_live_diagnostic import (
     LiveContactDiagnostic,
     evaluate_live_contact_dataflow,
 )
+from robot.perception.hot_soup_detector import (
+    HotSoupDetectionCueResult,
+    HotSoupDetectionFrame,
+    HotSoupDetectorConfig,
+    YoloHotSoupDetector,
+    estimate_hot_soup_from_detections,
+)
 from robot.perception.live_physical_evidence import (
     LivePhysicalEvidenceContext,
     build_tracking_physical_attributes,
@@ -118,6 +129,13 @@ from robot.perception.specialist_track_evidence import (
     SpecialistAssociationFrame,
     TrackSpecialistEvidence,
     build_track_specialist_evidence,
+)
+from robot.perception.thermal_interaction import (
+    estimate_thermal_route_interaction,
+)
+from robot.perception.thermal_live_diagnostic import (
+    LiveThermalDiagnostic,
+    evaluate_live_thermal_dataflow,
 )
 from robot.perception.visualization import (
     render_camera_lidar_fusion_overlay,
@@ -209,6 +227,9 @@ YOLO_DEVICE = os.environ.get("YOLO_DEVICE", "0").strip() or "0"
 CONTACT_CONFIDENCE_THRESHOLD = float(
     os.environ.get("CONTACT_CONFIDENCE_THRESHOLD", "0.25")
 )
+THERMAL_CONFIDENCE_THRESHOLD = float(
+    os.environ.get("THERMAL_CONFIDENCE_THRESHOLD", "0.25")
+)
 
 RUN_TIMESTAMP = datetime.now().strftime("%Y%m%d_%H%M%S")
 OUTPUT_DIRECTORY = (
@@ -272,6 +293,30 @@ def make_contact_detector(
     print(f"Loading bounded exposed-edge checkpoint: {path}")
     detector.initialize()
     return detector, path, hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def make_thermal_detector(
+) -> tuple[YoloHotSoupDetector | None, Path | None, str | None]:
+    """Load an explicitly configured two-label thermal checkpoint."""
+
+    configured_path = os.environ.get("HOT_SOUP_DETECTION_CHECKPOINT", "").strip()
+    if not configured_path:
+        return None, None, None
+    path = Path(configured_path).expanduser().resolve()
+    if not path.is_file():
+        raise FileNotFoundError(f"hot-soup detection weights were not found: {path}")
+    detector = YoloHotSoupDetector(
+        HotSoupDetectorConfig(
+            model_path=path,
+            confidence_threshold=THERMAL_CONFIDENCE_THRESHOLD,
+            iou_threshold=YOLO_IOU_THRESHOLD,
+            image_size=YOLO_IMAGE_SIZE,
+            device=YOLO_DEVICE,
+        )
+    )
+    print(f"Loading bounded plume/source checkpoint: {path}")
+    detector.initialize()
+    return detector, path, detector.checkpoint_sha256
 
 
 def attach_visual_mass_estimates(
@@ -474,6 +519,11 @@ def print_report(
     contact_association: ContactPartAssociationResult | None,
     contact_diagnostic: LiveContactDiagnostic | None,
     contact_diagnostic_path: Path | None,
+    thermal_checkpoint: Path | None,
+    thermal_frame: HotSoupDetectionFrame | None,
+    thermal_result: HotSoupDetectionCueResult | None,
+    thermal_diagnostic: LiveThermalDiagnostic | None,
+    thermal_diagnostic_path: Path | None,
     initial_pose: np.ndarray,
     final_pose: np.ndarray,
 ) -> bool:
@@ -525,6 +575,7 @@ def print_report(
         or visual_mass_diagnostic.live_dataflow_valid
     )
     contact_valid = contact_diagnostic is None or contact_diagnostic.pipeline_valid
+    thermal_valid = thermal_diagnostic is None or thermal_diagnostic.pipeline_valid
     passed = (
         projection_inside_image
         and bool(detections.detections)
@@ -538,6 +589,7 @@ def print_report(
         and stationary_publication_valid
         and visual_mass_valid
         and contact_valid
+        and thermal_valid
     )
 
     print("\n" + "=" * 78)
@@ -730,6 +782,38 @@ def print_report(
                 f"unmatched={contact_association.diagnostics.unmatched_part_indices}, "
                 f"ambiguous={contact_association.diagnostics.ambiguous_part_indices}"
             )
+    if thermal_diagnostic is not None:
+        print(f"  Thermal checkpoint:          {thermal_checkpoint}")
+        print(
+            "  Plume / container boxes:     "
+            f"{thermal_diagnostic.plume_detection_count} / "
+            f"{thermal_diagnostic.container_detection_count}"
+        )
+        print(
+            "  Candidate context pairs:     "
+            f"{thermal_diagnostic.candidate_pair_count}"
+        )
+        print(
+            "  Thermal tracks / ambiguous:  "
+            f"{thermal_diagnostic.thermal_track_ids} / "
+            f"{thermal_diagnostic.ambiguous_thermal_track_ids}"
+        )
+        print(f"  Thermal evidence status:     {thermal_diagnostic.evidence_status}")
+        print(f"  Thermal dataflow valid:      {thermal_diagnostic.pipeline_valid}")
+        print(
+            "  Sensor accuracy claim:       "
+            f"{thermal_diagnostic.ready_for_sensor_domain_accuracy_claim}"
+        )
+        if thermal_frame is not None:
+            print(
+                "  Thermal inference wall time: "
+                f"{thermal_frame.inference_wall_seconds:.4f} s"
+            )
+        if thermal_result is not None:
+            print(
+                "  Spatial association score:   "
+                f"{thermal_result.spatial_association_score}"
+            )
     print("\nStationary motion calibration:")
     print(f"  Raw matched-track samples:    {motion_calibration.sample_count}")
     print(
@@ -769,6 +853,8 @@ def print_report(
         print(f"  Visual-mass diagnostic:      {visual_mass_diagnostic_path}")
     if contact_diagnostic_path is not None:
         print(f"  Contact diagnostic:          {contact_diagnostic_path}")
+    if thermal_diagnostic_path is not None:
+        print(f"  Thermal diagnostic:          {thermal_diagnostic_path}")
     print("\nControlled-data boundary:")
     print("  LiDAR clustering alone established geometry and track IDs.")
     print("  YOLO masks only attached labels to those existing tracks.")
@@ -979,6 +1065,9 @@ def main() -> None:
     contact_detector, contact_checkpoint, contact_checkpoint_sha256 = (
         make_contact_detector()
     )
+    thermal_detector, thermal_checkpoint, thermal_checkpoint_sha256 = (
+        make_thermal_detector()
+    )
     detections = detector.detect(
         image_rgb,
         source_frame_id=camera_info.read_index,
@@ -1005,9 +1094,16 @@ def main() -> None:
         camera_from_source=camera_from_robot,
         calibration=calibration,
     )
+    specialist_frame = SpecialistAssociationFrame(
+        camera_info.read_index,
+        camera_info.simulation_time_seconds,
+        camera_info.height,
+        camera_info.width,
+        fusion.associations,
+    )
     contact_frame = None
     contact_association = None
-    contact_specialist: TrackSpecialistEvidence | None = None
+    contact_segmentations = {}
     contact_diagnostic = None
     contact_diagnostic_path = None
     if contact_detector is not None:
@@ -1020,27 +1116,59 @@ def main() -> None:
             detections,
             contact_frame,
         )
-        contact_specialist = build_track_specialist_evidence(
-            SpecialistAssociationFrame(
-                camera_info.read_index,
-                camera_info.simulation_time_seconds,
-                camera_info.height,
-                camera_info.width,
-                fusion.associations,
-            ),
-            contact_segmentations=(
-                contact_association.segmentations_by_object_detection_index
-            ),
+        contact_segmentations = dict(
+            contact_association.segmentations_by_object_detection_index
         )
+
+    thermal_frame = None
+    thermal_result = None
+    thermal_diagnostic = None
+    thermal_diagnostic_path = None
+    if thermal_detector is not None:
+        thermal_frame = thermal_detector.detect(
+            image_rgb,
+            source_frame_id=camera_info.read_index,
+            source_timestamp_seconds=camera_info.simulation_time_seconds,
+        )
+        thermal_result = estimate_hot_soup_from_detections(
+            thermal_frame,
+            timestamp_seconds=camera_info.simulation_time_seconds,
+        )
+
+    specialist: TrackSpecialistEvidence | None = None
+    if contact_detector is not None or thermal_detector is not None:
+        specialist = build_track_specialist_evidence(
+            specialist_frame,
+            contact_segmentations=contact_segmentations,
+            hot_soup_frame=thermal_frame,
+            hot_soup_result=thermal_result,
+        )
+    if contact_detector is not None:
+        assert contact_frame is not None
+        assert contact_association is not None
+        assert specialist is not None
         assert contact_checkpoint_sha256 is not None
         contact_diagnostic = evaluate_live_contact_dataflow(
             contact_frame,
             contact_association,
-            contact_specialist,
+            specialist,
             checkpoint_sha256=contact_checkpoint_sha256,
         )
         contact_diagnostic_path = OUTPUT_DIRECTORY / "contact_diagnostic.json"
         contact_diagnostic.write_json(contact_diagnostic_path)
+    if thermal_detector is not None:
+        assert thermal_frame is not None
+        assert thermal_result is not None
+        assert specialist is not None
+        assert thermal_checkpoint_sha256 is not None
+        thermal_diagnostic = evaluate_live_thermal_dataflow(
+            thermal_frame,
+            thermal_result,
+            specialist,
+            checkpoint_sha256=thermal_checkpoint_sha256,
+        )
+        thermal_diagnostic_path = OUTPUT_DIRECTORY / "thermal_diagnostic.json"
+        thermal_diagnostic.write_json(thermal_diagnostic_path)
     waypoint_world_xy = (
         float(initial_pose[0] + math.cos(initial_pose[2])),
         float(initial_pose[1] + math.sin(initial_pose[2])),
@@ -1075,8 +1203,13 @@ def main() -> None:
             lambda track_id: fall_surface_results[track_id].evidence
         ),
         contact_provider=(
-            contact_specialist.contact_for
-            if contact_specialist is not None
+            specialist.contact_for
+            if specialist is not None and contact_detector is not None
+            else None
+        ),
+        thermal_provider=(
+            specialist.thermal_for
+            if specialist is not None and thermal_detector is not None
             else None
         ),
     )
@@ -1097,9 +1230,19 @@ def main() -> None:
         )
         visual_mass_diagnostic_path = OUTPUT_DIRECTORY / "visual_mass_diagnostic.json"
         visual_mass_diagnostic.write_json(visual_mass_diagnostic_path)
+    thermal_interactions = {
+        item.track_id: estimate_thermal_route_interaction(
+            item.thermal,
+            item.motion.route_crossing_likelihood,
+            timestamp_seconds=sensor_timestamp_seconds,
+        )
+        for item in physical_attributes
+        if item.thermal.heat_source_likelihood.is_available
+    }
     physical_profile_provider = PhysicalAttributeCRARiskProfileProvider(
         {item.track_id: item for item in physical_attributes},
         timestamp_seconds=sensor_timestamp_seconds,
+        thermal_interactions=thermal_interactions,
     )
     cra_policy_result = resolve_cra_track_policy(
         fusion.semantic_labels.semantic_obstacles,
@@ -1147,6 +1290,11 @@ def main() -> None:
         contact_association=contact_association,
         contact_diagnostic=contact_diagnostic,
         contact_diagnostic_path=contact_diagnostic_path,
+        thermal_checkpoint=thermal_checkpoint,
+        thermal_frame=thermal_frame,
+        thermal_result=thermal_result,
+        thermal_diagnostic=thermal_diagnostic,
+        thermal_diagnostic_path=thermal_diagnostic_path,
         initial_pose=initial_pose,
         final_pose=final_pose,
     )

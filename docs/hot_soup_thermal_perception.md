@@ -151,6 +151,13 @@ fall inside the box. Zero matches stay unassigned, and multiple matches are
 reported as ambiguous. Frame ID, timestamp, and image dimensions must agree;
 freshness is checked again when the per-track thermal provider is queried.
 
+The stationary camera/LiDAR runtime accepts an optional local checkpoint via
+`HOT_SOUP_DETECTION_CHECKPOINT`. After unique track association, it derives a
+separate thermal interaction from the same track's waypoint-corridor score.
+That score expresses route accessibility only. Carried state and spill state
+remain unavailable unless separate specialists provide them. The integration
+does not make the current oracle fixtures or untrained data path sensor-derived.
+
 ## Training and held-out evaluation
 
 `assess_hot_soup_training_readiness` now blocks training unless the dataset is
