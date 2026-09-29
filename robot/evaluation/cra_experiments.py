@@ -75,6 +75,7 @@ class RestaurantTrialResult:
 
 @dataclass(frozen=True)
 class BaselineSummary:
+    evidence_mode: EvidenceMode
     baseline: CRABaseline
     trial_count: int
     completion_rate: float
@@ -190,25 +191,34 @@ def validate_matched_trials(results: tuple[RestaurantTrialResult, ...]) -> None:
 def summarize_trials(
     results: tuple[RestaurantTrialResult, ...],
 ) -> tuple[BaselineSummary, ...]:
+    """Summarize matched trials without pooling evidence modes."""
+
     validate_matched_trials(results)
     summaries = []
-    for baseline in CRABaseline:
-        items = tuple(item for item in results if item.baseline is baseline)
-        if not items:
-            continue
-        count = len(items)
-        summaries.append(
-            BaselineSummary(
-                baseline,
-                count,
-                mean(item.completed for item in items),
-                mean(item.collision for item in items),
-                mean(item.fail_closed for item in items),
-                mean(item.minimum_clearance_m for item in items),
-                mean(item.intervention_count for item in items),
-                mean(item.fallback_count for item in items),
+    for evidence_mode in EvidenceMode:
+        for baseline in CRABaseline:
+            items = tuple(
+                item
+                for item in results
+                if item.evidence_mode is evidence_mode
+                and item.baseline is baseline
             )
-        )
+            if not items:
+                continue
+            count = len(items)
+            summaries.append(
+                BaselineSummary(
+                    evidence_mode,
+                    baseline,
+                    count,
+                    mean(item.completed for item in items),
+                    mean(item.collision for item in items),
+                    mean(item.fail_closed for item in items),
+                    mean(item.minimum_clearance_m for item in items),
+                    mean(item.intervention_count for item in items),
+                    mean(item.fallback_count for item in items),
+                )
+            )
     return tuple(summaries)
 
 

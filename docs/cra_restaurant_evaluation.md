@@ -30,3 +30,5 @@ Visual mass lacks Isaac-domain accuracy calibration, the contact model has
 limited geometry coverage, and no trained hot-soup checkpoint has been
 validated. Oracle and prior trials may test controller plumbing, but their
 results must be reported separately from sensor-derived experiments.
+The result aggregator enforces that separation by emitting distinct baseline
+summaries for each evidence mode.

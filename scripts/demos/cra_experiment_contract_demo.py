@@ -46,7 +46,7 @@ def main():
             ),
             FactorSensorReadiness(
                 PhysicalRiskFactor.THERMAL,
-                False,
+                True,
                 True,
                 False,
                 ("no trained hot-soup checkpoint",),
@@ -57,8 +57,11 @@ def main():
     print("SENSOR MOTION READINESS: BLOCKED")
     for reason in readiness.blocking_reasons:
         print(f"  - {reason}")
-    scenarios = primary_restaurant_scenarios(evidence_mode=EvidenceMode.SENSOR)
-    print("STATIONARY EXPERIMENT CONTRACT: illustrative results; no wheel motion")
+    scenarios = primary_restaurant_scenarios(evidence_mode=EvidenceMode.ORACLE)
+    print(
+        "STATIONARY EXPERIMENT CONTRACT: illustrative oracle results; "
+        "no wheel motion"
+    )
     results = tuple(
         RestaurantTrialResult(
             scenario.scenario_id,
@@ -80,7 +83,8 @@ def main():
     )
     for summary in summarize_trials(results):
         print(
-            f"{summary.baseline.value}: trials={summary.trial_count}, lambda policy validated"
+            f"{summary.evidence_mode.value}/{summary.baseline.value}: "
+            f"trials={summary.trial_count}, lambda policy validated"
         )
     print(
         "PASS: sensor/oracle/prior labels and lambda ablation are structurally separated"

@@ -55,6 +55,24 @@ def test_matched_results_and_summary():
     summaries = summarize_trials(matched())
     assert len(summaries) == 3
     assert all(item.completion_rate == 1 for item in summaries)
+    assert {item.evidence_mode for item in summaries} == {EvidenceMode.SENSOR}
+
+
+def test_summaries_never_pool_oracle_and_sensor_results():
+    oracle = tuple(
+        result(baseline, evidence_mode=EvidenceMode.ORACLE)
+        for baseline in PRIMARY_BASELINES
+    )
+    summaries = summarize_trials(matched() + oracle)
+    assert len(summaries) == 6
+    assert {
+        (item.evidence_mode, item.baseline, item.trial_count)
+        for item in summaries
+    } == {
+        (mode, baseline, 1)
+        for mode in (EvidenceMode.ORACLE, EvidenceMode.SENSOR)
+        for baseline in PRIMARY_BASELINES
+    }
 
 
 def test_unmatched_and_duplicate_trials_rejected():
