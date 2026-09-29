@@ -45,7 +45,7 @@ def main() -> None:
     print(f"spatial_score={result.spatial_association_score:.3f}")
     print(f"heat_proxy={thermal.heat_source_likelihood.value:.3f}")
     print("temperature=unavailable; steam=unavailable; interaction=unavailable")
-    if thermal.source_type.value != "visible_hot_soup_plume_proxy":
+    if thermal.source_type.value != "contextual_visible_plume_proxy":
         raise RuntimeError("stationary detector adapter diagnostic failed")
     print("PASS: oracle boxes exercised context geometry without model claims")
 

@@ -27,7 +27,7 @@ def unavailable(*, timestamp=2.0):
     )
 
 
-def test_contextual_plume_produces_inferred_hot_soup_proxy():
+def test_restaurant_wrapper_produces_continuous_contextual_thermal_proxy():
     result = estimate_hot_soup_cues(
         plume_likelihood=cue(0.9),
         open_container_likelihood=cue(0.8),
@@ -38,9 +38,12 @@ def test_contextual_plume_produces_inferred_hot_soup_proxy():
     assert result.accepted_context
     assert result.thermal.heat_source_likelihood.value == pytest.approx(0.8)
     assert result.thermal.heat_source_likelihood.source == HOT_SOUP_SOURCE
-    assert result.thermal.source_type.value == "visible_hot_soup_plume_proxy"
+    assert result.thermal.source_type.value == "contextual_visible_plume_proxy"
     assert result.thermal.steam_likelihood.value == pytest.approx(0.9)
-    assert "not a temperature" in result.thermal.heat_source_likelihood.evidence[-3]
+    assert any(
+        "not a temperature" in item
+        for item in result.thermal.heat_source_likelihood.evidence
+    )
 
 
 def test_generic_smoke_like_plume_alone_stays_unavailable():
@@ -54,7 +57,7 @@ def test_generic_smoke_like_plume_alone_stays_unavailable():
     assert not result.accepted_context
     assert not result.thermal.heat_source_likelihood.is_available
     assert not result.thermal.steam_likelihood.is_available
-    assert "open_container_likelihood: unavailable" in result.rejection_reasons
+    assert "source_context_likelihood: unavailable" in result.rejection_reasons
 
 
 def test_smoke_like_context_can_support_proxy_but_is_not_relabeled_as_steam():
@@ -67,7 +70,10 @@ def test_smoke_like_context_can_support_proxy_but_is_not_relabeled_as_steam():
     )
     assert result.thermal.heat_source_likelihood.is_available
     assert not result.thermal.steam_likelihood.is_available
-    assert "does not prove steam" in result.thermal.heat_source_likelihood.evidence[-2]
+    assert any(
+        "does not prove steam" in item
+        for item in result.thermal.heat_source_likelihood.evidence
+    )
 
 
 def test_stale_required_evidence_rejects_context():

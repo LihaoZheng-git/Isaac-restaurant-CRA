@@ -84,7 +84,7 @@ def main() -> None:
     attached_thermal = evidence.thermal_for(4, 2.1)
     stale_contact = evidence.contact_for(4, 3.0)
     assert attached_contact.dangerous_part.value == "exposed_edge"
-    assert attached_thermal.source_type.value == "visible_hot_soup_plume_proxy"
+    assert attached_thermal.source_type.value == "contextual_visible_plume_proxy"
     assert not attached_contact.sharpness.is_available
     assert not attached_thermal.steam_likelihood.is_available
     assert not stale_contact.dangerous_part_exposure.is_available

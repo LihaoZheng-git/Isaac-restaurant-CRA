@@ -48,7 +48,7 @@ def test_plume_above_container_produces_contextual_visual_proxy():
     assert result.spatial_association_score == pytest.approx(1.0)
     assert thermal.heat_source_likelihood.value == pytest.approx(0.8)
     assert thermal.heat_source_likelihood.source != HOT_SOUP_DETECTOR_SOURCE
-    assert thermal.source_type.value == "visible_hot_soup_plume_proxy"
+    assert thermal.source_type.value == "contextual_visible_plume_proxy"
     assert not thermal.steam_likelihood.is_available
 
 
@@ -59,7 +59,9 @@ def test_missing_container_remains_unavailable_instead_of_becoming_zero():
     )
     assert result.candidate_pair_count == 0
     assert not result.cue_result.thermal.heat_source_likelihood.is_available
-    assert "open_container_likelihood: unavailable" in result.cue_result.rejection_reasons
+    assert "source_context_likelihood: unavailable" in (
+        result.cue_result.rejection_reasons
+    )
 
 
 def test_observed_bad_geometry_is_zero_relation_not_missing_evidence():

@@ -1,15 +1,18 @@
-# Hot-soup thermal cue scope
+# Contextual thermal cues and the hot-soup scenario
 
-The bounded thermal example is an open soup container with a visible plume.
-The runtime adapter requires three fresh visual inputs: plume likelihood,
-open-container likelihood, and the likelihood that the plume lies above the
-container. It uses their minimum as an inferred heat-source proxy, so a strong
-generic smoke detection cannot hide missing or weak container context.
+Hot soup is one restaurant evaluation scenario, not a runtime class. The
+general runtime contract requires three fresh visual inputs: plume likelihood,
+source-context likelihood, and plume-to-source spatial association. The
+restaurant adapter supplies an open-container cue as the source context and the
+likelihood that the plume lies above it. The contract uses their minimum as a
+continuous inferred heat-source proxy, so a strong generic plume detection
+cannot hide missing or weak source context.
 
-The output is not temperature, burn severity, fluid temperature, or proof that
-the plume is steam. A detector labeled `smoke_like` or `visible_plume` remains
-unavailable in the steam field. Only a fixed-label steam detector can populate
-that field, and even that remains a visual cue rather than a thermometer.
+The output is not a hot/not-hot decision, temperature, burn severity, fluid
+temperature, or proof that the plume is steam. A detector labeled `smoke_like`
+or `visible_plume` remains unavailable in the steam field. Only a fixed-label
+steam detector can populate that field, and even that remains a visual cue
+rather than a thermometer.
 Thermal interaction with the robot route is a separate input to the physical
 factor adapter. Without it, the CRA thermal factor remains unknown.
 
