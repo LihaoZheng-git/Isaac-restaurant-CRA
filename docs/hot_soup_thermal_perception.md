@@ -23,6 +23,31 @@ as a hard negative. It is therefore not a justified direct hot-soup steam
 detector. Neither model has been downloaded or claimed as integrated on this
 branch.
 
+[Kitchen Safety System](https://universe.roboflow.com/diploma-2023/kitchen-safety-system)
+is a closer visual-domain candidate. Its public Roboflow page reports a CC BY
+4.0 object-detection dataset with 3,998 images and classes that include
+`Steam`, `open_pot`, and `open_pot_boiling`. The hosted version-4 model reports
+aggregate mAP50, precision, and recall, but no per-class hot-soup result. These
+aggregate numbers are not evidence for the project's two-label contract.
+
+The public browser also exposes a split-validity problem. Frames named
+`höyry1_mp4-*.jpg` from one apparent source video occur in train, validation,
+and test (for example, frames 227, 224, and 247 respectively). A checked Steam
+frame (`höyry1_mp4-334.jpg`) contains one `Steam` annotation and no
+open-container annotation. The published splits therefore cannot serve as the
+project's held-out evaluation, and the labels do not directly satisfy the
+required plume-plus-container association. If this dataset is used later, it
+may only seed training after source-group reconstruction, annotation audit,
+container relabeling, and confirmation that the uploader had rights to license
+the source imagery. Project-owned capture groups must remain the independent
+validation and test evidence.
+
+Dataset download requires a Roboflow account and acceptance of Roboflow's
+terms. Hosted inference likewise requires an API key. No account was created,
+no terms were accepted, no data or weights were downloaded, and no hosted
+service was added to the runtime. This avoids making network availability or a
+third-party credential part of the robot safety path.
+
 [The Isaac Sim 5.0 Replicator Incident documentation](https://docs.isaacsim.omniverse.nvidia.com/5.0.0/action_and_event_data_generation/tutorial_replicator_incident.html)
 describes fire and smoke event generation. The installed Isaac Sim 6.0
 environment does not contain the `isaacsim.replicator.incident` extension, so
