@@ -20,7 +20,14 @@ from typing import Iterable
 HOT_SOUP_DATASET_SCHEMA_VERSION = 1
 HOT_SOUP_DETECTION_CLASSES = ("visible_hot_soup_plume", "open_container")
 ALLOWED_SPLITS = frozenset({"train", "val", "test"})
-ALLOWED_DOMAINS = frozenset({"real_user_owned", "isaac_synthetic"})
+ALLOWED_DOMAINS = frozenset(
+    {
+        "real_user_owned",
+        "external_training_candidate",
+        "licensed_external_training",
+        "isaac_synthetic",
+    }
+)
 ALLOWED_ANNOTATION_SOURCES = frozenset(
     {"human_visual_annotation", "isaac_authored_oracle"}
 )
@@ -154,6 +161,16 @@ class HotSoupSample:
             box.annotation_source == "isaac_authored_oracle" for box in boxes
         ):
             raise ValueError("real images cannot use Isaac oracle annotations")
+        if self.domain == "external_training_candidate":
+            raise ValueError(
+                "external training candidates cannot enter an annotated manifest"
+            )
+        if self.domain == "licensed_external_training" and self.split != "train":
+            raise ValueError("licensed external samples are training-only")
+        if self.domain == "licensed_external_training" and any(
+            box.annotation_source != "human_visual_annotation" for box in boxes
+        ):
+            raise ValueError("licensed external images require human relabeling")
         if self.hard_negative_tags and self.plume_state != "absent":
             raise ValueError("hard-negative tags require an absent hot-soup plume")
 
