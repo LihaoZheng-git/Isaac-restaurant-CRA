@@ -8,7 +8,9 @@ likelihood that the plume lies above it. The contract uses their minimum as a
 continuous inferred heat-source proxy, so a strong generic plume detection
 cannot hide missing or weak source context.
 
-The output is not a hot/not-hot decision, temperature, burn severity, fluid
+The output source type is descriptive metadata whenever the continuous cue is
+available; it is not gated by a hidden risk threshold. The output is not a
+hot/not-hot decision, temperature, burn severity, fluid
 temperature, or proof that the plume is steam. A detector labeled `smoke_like`
 or `visible_plume` remains unavailable in the steam field. Only a fixed-label
 steam detector can populate that field, and even that remains a visual cue

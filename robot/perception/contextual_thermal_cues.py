@@ -25,22 +25,15 @@ SUPPORTED_PLUME_LABELS = frozenset({"steam", "smoke_like", "visible_plume"})
 
 @dataclass(frozen=True)
 class ContextualThermalCueConfig:
-    """Configure evidence freshness and descriptive source publication."""
+    """Configure evidence freshness."""
 
     maximum_evidence_age_seconds: float = 1.0
-    source_type_lower_bound_threshold: float = 0.5
 
     def __post_init__(self) -> None:
         age = float(self.maximum_evidence_age_seconds)
-        threshold = float(self.source_type_lower_bound_threshold)
         if not math.isfinite(age) or age <= 0:
             raise ValueError("maximum_evidence_age_seconds must be positive")
-        if not math.isfinite(threshold) or not 0 <= threshold <= 1:
-            raise ValueError(
-                "source_type_lower_bound_threshold must lie in [0, 1]"
-            )
         object.__setattr__(self, "maximum_evidence_age_seconds", age)
-        object.__setattr__(self, "source_type_lower_bound_threshold", threshold)
 
 
 @dataclass(frozen=True)
@@ -184,15 +177,15 @@ def estimate_contextual_thermal_cues(
                 "minimum of plume, source-context, and spatial-association cues",
             ),
         )
-        if heat_source.lower_bound >= settings.source_type_lower_bound_threshold:
-            source_type = CategoricalEstimate(
-                value="contextual_visible_plume_proxy",
-                confidence=heat_source.confidence,
-                source=CONTEXTUAL_THERMAL_SOURCE,
-                timestamp_seconds=timestamp,
-                status=heat_source.status,
-                evidence=heat_source.evidence,
-            )
+        source_type = CategoricalEstimate(
+            value="contextual_visible_plume_proxy",
+            confidence=heat_source.confidence,
+            source=CONTEXTUAL_THERMAL_SOURCE,
+            timestamp_seconds=timestamp,
+            status=heat_source.status,
+            evidence=heat_source.evidence
+            + ("descriptive source metadata; not a risk threshold",),
+        )
 
     steam = (
         plume_likelihood

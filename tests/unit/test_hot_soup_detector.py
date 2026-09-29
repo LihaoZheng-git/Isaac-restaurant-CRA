@@ -76,7 +76,13 @@ def test_observed_bad_geometry_is_zero_relation_not_missing_evidence():
     assert result.spatial_association_score == 0
     assert result.cue_result.accepted_context
     assert result.cue_result.thermal.heat_source_likelihood.value == 0
-    assert not result.cue_result.thermal.source_type.is_available
+    assert (
+        result.cue_result.thermal.source_type.value
+        == "contextual_visible_plume_proxy"
+    )
+    assert "not a risk threshold" in (
+        result.cue_result.thermal.source_type.evidence[-1]
+    )
 
 
 def test_partial_horizontal_overlap_retains_continuous_evidence():

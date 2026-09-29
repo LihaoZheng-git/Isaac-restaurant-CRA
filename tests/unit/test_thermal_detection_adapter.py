@@ -31,9 +31,17 @@ def test_fire_and_smoke_detector_does_not_relabel_smoke_as_steam():
     assert result.steam_likelihood is None
 
 
-def test_no_fire_detection_is_zero_only_for_supported_flame_channel():
+def test_no_fire_detection_remains_unavailable():
     result = thermal_cue_frame_from_detections(frame(detection("smoke", 0.8, 1)))
-    assert result.flame_likelihood == 0
+    assert result.flame_likelihood is None
+    assert result.smoke_likelihood == 0.8
+    assert result.steam_likelihood is None
+
+
+def test_empty_detection_frame_does_not_fabricate_negative_evidence():
+    result = thermal_cue_frame_from_detections(frame())
+    assert result.flame_likelihood is None
+    assert result.smoke_likelihood is None
     assert result.steam_likelihood is None
 
 

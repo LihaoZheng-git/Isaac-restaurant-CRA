@@ -1,18 +1,25 @@
-"""Temporal aggregation for fixed-label flame and steam visual cues."""
+"""Temporal aggregation for continuous visual thermal evidence."""
+
+from __future__ import annotations
 
 from dataclasses import dataclass
 import math
 from statistics import median
 
+from robot.perception.contextual_thermal_cues import (
+    ContextualThermalCueConfig,
+    estimate_contextual_thermal_cues,
+)
 from robot.perception.physical_attributes import (
     CategoricalEstimate,
     EstimateStatus,
     ScalarEstimate,
     ThermalAttributes,
+    combine_estimate_statuses,
 )
 
 
-THERMAL_CUE_SOURCE = "temporal_fixed_label_thermal_cues"
+THERMAL_CUE_SOURCE = "temporal_visual_thermal_evidence"
 
 
 @dataclass(frozen=True)
@@ -23,15 +30,13 @@ class ThermalCueFrame:
     model_id: str
     smoke_likelihood: float | None = None
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         for name in ("flame_likelihood", "steam_likelihood", "smoke_likelihood"):
             raw = getattr(self, name)
             if raw is None:
                 continue
             value = float(raw)
-            if not math.isfinite(value) or value < 0:
-                raise ValueError(f"{name} must be finite and nonnegative")
-            if value > 1:
+            if not math.isfinite(value) or not 0 <= value <= 1:
                 raise ValueError(f"{name} must lie in [0, 1]")
             object.__setattr__(self, name, value)
         timestamp = float(self.timestamp_seconds)
@@ -49,16 +54,63 @@ class ThermalCueConfig:
     score_uncertainty: float = 0.15
 
 
+def _unavailable(timestamp: float, source: str = THERMAL_CUE_SOURCE) -> ScalarEstimate:
+    return ScalarEstimate.unavailable(
+        unit="1", source=source, timestamp_seconds=timestamp
+    )
+
+
+def _combine_heat_evidence(
+    flame: ScalarEstimate,
+    contextual_plume: ScalarEstimate,
+    *,
+    timestamp: float,
+) -> ScalarEstimate:
+    available = tuple(
+        item for item in (flame, contextual_plume) if item.is_available
+    )
+    if not available:
+        return _unavailable(timestamp)
+    if len(available) == 1:
+        return available[0]
+    return ScalarEstimate(
+        value=max(item.value for item in available),
+        lower_bound=max(item.lower_bound for item in available),
+        upper_bound=max(item.upper_bound for item in available),
+        confidence=min(item.confidence for item in available),
+        unit="1",
+        source=THERMAL_CUE_SOURCE,
+        timestamp_seconds=timestamp,
+        status=combine_estimate_statuses(item.status for item in available),
+        evidence=tuple(
+            f"candidate source={item.source}; value={item.value}; "
+            f"confidence={item.confidence}"
+            for item in available
+        )
+        + (
+            "maximum of direct-flame and contextual-plume visual evidence",
+            "visual evidence is not a temperature measurement",
+        ),
+    )
+
+
 def estimate_thermal_cues(
     frames: tuple[ThermalCueFrame, ...],
     *,
     timestamp_seconds: float,
     config: ThermalCueConfig | None = None,
     open_container_likelihood: ScalarEstimate | None = None,
+    plume_source_association_likelihood: ScalarEstimate | None = None,
     carried_likelihood: ScalarEstimate | None = None,
     spill_likelihood: ScalarEstimate | None = None,
 ) -> ThermalAttributes:
-    """Aggregate temporal evidence without treating smoke as steam/temperature."""
+    """Aggregate temporal evidence without binary hot-object classification.
+
+    A direct flame cue can support heat evidence on its own. A steam cue needs
+    source context and spatial association before it can support heat evidence.
+    Missing detector output stays unavailable rather than becoming zero.
+    """
+
     settings = config or ThermalCueConfig()
     timestamp = float(timestamp_seconds)
     if settings.minimum_frame_count <= 0 or settings.maximum_window_seconds <= 0:
@@ -73,15 +125,10 @@ def estimate_thermal_cues(
         if timestamp - frame.timestamp_seconds <= settings.maximum_window_seconds
     )
 
-    def unavailable(source):
-        return ScalarEstimate.unavailable(
-            unit="1", source=source, timestamp_seconds=timestamp
-        )
-
-    def temporal(name):
+    def temporal(name: str) -> ScalarEstimate:
         supported = tuple(frame for frame in recent if getattr(frame, name) is not None)
         if len(supported) < settings.minimum_frame_count:
-            return unavailable(THERMAL_CUE_SOURCE)
+            return _unavailable(timestamp)
         values = tuple(float(getattr(frame, name)) for frame in supported)
         value = median(values)
         confidence = min(1.0, len(supported) / (2 * settings.minimum_frame_count))
@@ -104,40 +151,66 @@ def estimate_thermal_cues(
 
     flame = temporal("flame_likelihood")
     steam = temporal("steam_likelihood")
-    optional = {
-        "open": open_container_likelihood or unavailable("container_state_unavailable"),
-        "carried": carried_likelihood or unavailable("carried_state_unavailable"),
-        "spill": spill_likelihood or unavailable("spill_specialist_unavailable"),
-    }
-    for name, item in optional.items():
+    container = open_container_likelihood or _unavailable(
+        timestamp, "container_state_unavailable"
+    )
+    association = plume_source_association_likelihood or _unavailable(
+        timestamp, "plume_source_association_unavailable"
+    )
+    carried = carried_likelihood or _unavailable(
+        timestamp, "carried_state_unavailable"
+    )
+    spill = spill_likelihood or _unavailable(
+        timestamp, "spill_specialist_unavailable"
+    )
+    for name, item in (
+        ("open_container", container),
+        ("plume_source_association", association),
+        ("carried", carried),
+        ("spill", spill),
+    ):
         if not isinstance(item, ScalarEstimate) or item.unit != "1":
             raise ValueError(f"{name} must be a dimensionless ScalarEstimate")
+
+    contextual = estimate_contextual_thermal_cues(
+        plume_likelihood=steam,
+        source_context_likelihood=container,
+        plume_source_association_likelihood=association,
+        timestamp_seconds=timestamp,
+        plume_label="steam",
+        open_container_likelihood=container,
+        carried_likelihood=carried,
+        spill_likelihood=spill,
+        config=ContextualThermalCueConfig(
+            maximum_evidence_age_seconds=settings.maximum_window_seconds
+        ),
+    )
+    contextual_heat = contextual.thermal.heat_source_likelihood
+    heat_source = _combine_heat_evidence(
+        flame, contextual_heat, timestamp=timestamp
+    )
+
     source_type = CategoricalEstimate.unavailable(
         source=THERMAL_CUE_SOURCE, timestamp_seconds=timestamp
     )
-    if flame.is_available and flame.lower_bound > 0.5:
-        source_type = CategoricalEstimate(
-            "visible_flame",
-            flame.confidence,
-            THERMAL_CUE_SOURCE,
-            timestamp,
-            EstimateStatus.INFERRED,
-            flame.evidence,
+    if heat_source.is_available:
+        use_flame = flame.is_available and (
+            not contextual_heat.is_available or flame.value >= contextual_heat.value
         )
-    elif steam.is_available and steam.lower_bound > 0.5:
         source_type = CategoricalEstimate(
-            "visible_steam",
-            steam.confidence,
+            "visible_flame_proxy" if use_flame else "contextual_visible_plume_proxy",
+            heat_source.confidence,
             THERMAL_CUE_SOURCE,
             timestamp,
-            EstimateStatus.INFERRED,
-            steam.evidence,
+            heat_source.status,
+            heat_source.evidence
+            + ("descriptive source metadata; not a risk threshold",),
         )
     return ThermalAttributes(
-        heat_source_likelihood=flame,
+        heat_source_likelihood=heat_source,
         steam_likelihood=steam,
-        open_container_likelihood=optional["open"],
-        carried_likelihood=optional["carried"],
-        spill_likelihood=optional["spill"],
+        open_container_likelihood=container,
+        carried_likelihood=carried,
+        spill_likelihood=spill,
         source_type=source_type,
     )
