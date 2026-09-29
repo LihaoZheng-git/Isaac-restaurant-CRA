@@ -44,6 +44,7 @@ class HotSoupTrainingReadiness:
     real_negative_by_split: tuple[tuple[str, int], ...]
     evaluation_hard_negative_count: int
     synthetic_sample_count: int
+    external_training_sample_count: int
     blockers: tuple[str, ...]
 
     @property
@@ -67,6 +68,9 @@ def assess_hot_soup_training_readiness(
         blockers.append("dataset integrity validation failed")
     real = tuple(item for item in items if item.domain == "real_user_owned")
     synthetic = tuple(item for item in items if item.domain == "isaac_synthetic")
+    external = tuple(
+        item for item in items if item.domain == "licensed_external_training"
+    )
     positive = {
         split: sum(item.split == split and item.plume_state == "present" for item in real)
         for split in sorted(ALLOWED_SPLITS)
@@ -109,6 +113,7 @@ def assess_hot_soup_training_readiness(
         real_negative_by_split=tuple(negative.items()),
         evaluation_hard_negative_count=evaluation_hard_negatives,
         synthetic_sample_count=len(synthetic),
+        external_training_sample_count=len(external),
         blockers=tuple(blockers),
     )
 

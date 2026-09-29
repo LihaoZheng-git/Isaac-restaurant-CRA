@@ -53,6 +53,18 @@ no terms were accepted, no data or weights were downloaded, and no hosted
 service was added to the runtime. This avoids making network availability or a
 third-party credential part of the robot safety path.
 
+`import_external_thermal_yolo.py` provides a local intake path after an
+authorized YOLO export is obtained. It reconstructs apparent source-video
+groups from filenames, reports groups leaked across the publisher's splits,
+counts candidate plume/source labels, and flags plume boxes lacking source
+context. Every copied image stays an `external_training_candidate` pending
+rights verification and project relabeling. A candidate cannot enter an
+annotated training manifest. Once verified and relabeled,
+`licensed_external_training` images are still training-only and cannot satisfy
+the project-owned real validation/test readiness gate. Candidate boxes are
+annotation aids; missing boxes are never accepted as evidence that a cue is
+absent.
+
 [The Isaac Sim 5.0 Replicator Incident documentation](https://docs.isaacsim.omniverse.nvidia.com/5.0.0/action_and_event_data_generation/tutorial_replicator_incident.html)
 describes fire and smoke event generation. The installed Isaac Sim 6.0
 environment does not contain the `isaacsim.replicator.incident` extension, so

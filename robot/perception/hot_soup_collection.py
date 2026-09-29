@@ -20,7 +20,14 @@ from robot.perception.hot_soup_dataset import (
 
 
 HOT_SOUP_COLLECTION_SCHEMA_VERSION = 1
-ALLOWED_SOURCE_KINDS = frozenset({"real_image", "real_video_frame", "isaac_render"})
+ALLOWED_SOURCE_KINDS = frozenset(
+    {
+        "real_image",
+        "real_video_frame",
+        "isaac_render",
+        "external_dataset_image",
+    }
+)
 
 
 def _text(value: object, name: str) -> str:
@@ -58,6 +65,14 @@ class HotSoupCollectedImage:
             raise ValueError("unsupported collection domain")
         if self.source_kind not in ALLOWED_SOURCE_KINDS:
             raise ValueError("unsupported source_kind")
+        if self.suggested_split not in {"train", "val", "test"}:
+            raise ValueError("unsupported suggested_split")
+        if (
+            self.domain
+            in {"external_training_candidate", "licensed_external_training"}
+            and self.suggested_split != "train"
+        ):
+            raise ValueError("external images are training-only")
         if self.annotation_status != "pending":
             raise ValueError("collected images must remain pending annotation")
         for name in ("width", "height"):
@@ -92,6 +107,7 @@ def _collected_item(
     source_reference: str,
     usage_rights: str,
     frame_index: int | None = None,
+    suggested_split: str | None = None,
 ) -> HotSoupCollectedImage:
     digest = sha256_file(path)
     width, height = _read_image_shape(path)
@@ -100,7 +116,11 @@ def _collected_item(
     return HotSoupCollectedImage(
         collection_id=f"{capture_group_id}{suffix}-{digest[:12]}",
         capture_group_id=capture_group_id,
-        suggested_split=deterministic_capture_group_split(capture_group_id),
+        suggested_split=(
+            deterministic_capture_group_split(capture_group_id)
+            if suggested_split is None
+            else suggested_split
+        ),
         image_path=relative,
         image_sha256=digest,
         width=width,
@@ -122,6 +142,7 @@ def collect_hot_soup_images(
     source_kind: str,
     source_reference: str,
     usage_rights: str,
+    suggested_split: str | None = None,
 ) -> tuple[HotSoupCollectedImage, ...]:
     """Copy owned/authorized images into a content-addressed raw directory."""
     if source_kind == "real_video_frame":
@@ -153,6 +174,7 @@ def collect_hot_soup_images(
                 source_kind=source_kind,
                 source_reference=source_reference,
                 usage_rights=usage_rights,
+                suggested_split=suggested_split,
             )
         )
     if not items:

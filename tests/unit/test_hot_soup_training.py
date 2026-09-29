@@ -96,6 +96,21 @@ def test_synthetic_samples_do_not_satisfy_real_training_gate(tmp_path):
     assert any("test: real positive" in item for item in readiness.blockers)
 
 
+def test_external_training_samples_do_not_satisfy_real_evaluation_gate(tmp_path):
+    external = sample(
+        tmp_path,
+        "external",
+        "train",
+        "present",
+        domain="licensed_external_training",
+    )
+    readiness = assess_hot_soup_training_readiness((external,), tmp_path)
+    assert not readiness.ready
+    assert readiness.external_training_sample_count == 1
+    assert readiness.real_sample_count == 0
+    assert any("real capture groups" in item for item in readiness.blockers)
+
+
 def test_invalid_dataset_integrity_blocks_training(tmp_path):
     items = ready_samples(tmp_path)
     (tmp_path / items[0].image_path).write_bytes(b"changed")
@@ -111,7 +126,7 @@ def test_training_provenance_hashes_manifest_and_weights(tmp_path):
     manifest.write_text("manifest\n", encoding="utf-8")
     base.write_bytes(b"base")
     trained.write_bytes(b"trained")
-    readiness = HotSoupTrainingReadiness(6, 6, (), (), 1, 0, ())
+    readiness = HotSoupTrainingReadiness(6, 6, (), (), 1, 0, 0, ())
     output = tmp_path / "provenance.json"
     write_hot_soup_training_provenance(
         output,
@@ -131,7 +146,7 @@ def test_training_provenance_hashes_manifest_and_weights(tmp_path):
 
 
 def test_blocked_dataset_cannot_write_trained_provenance(tmp_path):
-    blocked = HotSoupTrainingReadiness(0, 0, (), (), 0, 0, ("blocked",))
+    blocked = HotSoupTrainingReadiness(0, 0, (), (), 0, 0, 0, ("blocked",))
     with pytest.raises(ValueError, match="blocked"):
         write_hot_soup_training_provenance(
             tmp_path / "report.json",

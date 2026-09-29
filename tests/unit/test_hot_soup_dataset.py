@@ -147,6 +147,51 @@ def test_real_image_cannot_use_isaac_oracle_box(tmp_path):
         )
 
 
+def test_licensed_external_samples_are_human_relabeled_and_training_only(tmp_path):
+    training = sample(
+        tmp_path,
+        domain="licensed_external_training",
+        split="train",
+        usage_rights="verified research-use license",
+    )
+    assert training.domain == "licensed_external_training"
+    with pytest.raises(ValueError, match="training-only"):
+        sample(
+            tmp_path,
+            domain="licensed_external_training",
+            split="val",
+            usage_rights="verified research-use license",
+        )
+    with pytest.raises(ValueError, match="human relabeling"):
+        sample(
+            tmp_path,
+            domain="licensed_external_training",
+            split="train",
+            usage_rights="verified research-use license",
+            boxes=tuple(
+                HotSoupBox(
+                    box.class_name,
+                    box.x_min,
+                    box.y_min,
+                    box.x_max,
+                    box.y_max,
+                    "isaac_authored_oracle",
+                )
+                for box in training.boxes
+            ),
+        )
+
+
+def test_external_candidate_cannot_enter_annotated_manifest(tmp_path):
+    with pytest.raises(ValueError, match="cannot enter an annotated manifest"):
+        sample(
+            tmp_path,
+            domain="external_training_candidate",
+            split="train",
+            usage_rights="publisher license claim pending source-rights verification",
+        )
+
+
 def test_validation_detects_group_duplicate_and_hash_leakage(tmp_path):
     first = sample(tmp_path, split="train")
     second = sample(
