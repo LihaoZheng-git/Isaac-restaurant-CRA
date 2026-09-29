@@ -28,26 +28,20 @@ def thermal_cue_frame_from_detections(
     if overlap:
         raise ValueError(f"flame and smoke classes overlap: {sorted(overlap)}")
 
-    flame_score = max(
-        (
-            detection.confidence
-            for detection in frame.detections
-            if detection.semantic_class in flames
-        ),
-        default=0.0,
+    flame_scores = tuple(
+        detection.confidence
+        for detection in frame.detections
+        if detection.semantic_class in flames
     )
-    smoke_score = max(
-        (
-            detection.confidence
-            for detection in frame.detections
-            if detection.semantic_class in smoke
-        ),
-        default=0.0,
+    smoke_scores = tuple(
+        detection.confidence
+        for detection in frame.detections
+        if detection.semantic_class in smoke
     )
     return ThermalCueFrame(
         timestamp_seconds=frame.source_timestamp_seconds,
-        flame_likelihood=flame_score,
+        flame_likelihood=max(flame_scores) if flame_scores else None,
         steam_likelihood=None,
-        smoke_likelihood=smoke_score,
+        smoke_likelihood=max(smoke_scores) if smoke_scores else None,
         model_id=frame.model_name,
     )

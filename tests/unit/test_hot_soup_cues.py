@@ -109,7 +109,7 @@ def test_prior_dependency_remains_prior_in_derived_heat_proxy():
     assert result.thermal.source_type.status is EstimateStatus.PRIOR
 
 
-def test_weak_but_supported_context_is_numeric_without_semantic_claim():
+def test_weak_supported_context_keeps_numeric_score_and_descriptive_source():
     result = estimate_hot_soup_cues(
         plume_likelihood=cue(0.2),
         open_container_likelihood=cue(0.9),
@@ -117,7 +117,8 @@ def test_weak_but_supported_context_is_numeric_without_semantic_claim():
         timestamp_seconds=2.1,
     )
     assert result.thermal.heat_source_likelihood.value == pytest.approx(0.2)
-    assert not result.thermal.source_type.is_available
+    assert result.thermal.source_type.value == "contextual_visible_plume_proxy"
+    assert "not a risk threshold" in result.thermal.source_type.evidence[-1]
 
 
 @pytest.mark.parametrize("label", ["fire", "", "hot"])
