@@ -9,8 +9,10 @@ Risk-dependent lambda is a separately labeled ablation.
 Each trial records evidence mode (`sensor`, `prior`, or `oracle`), completion,
 collision, fail-closed state, minimum clearance and CBF margin, interventions,
 fallbacks, and elapsed time. Oracle/prior trials cannot be reported as sensor
-performance. Repeated seeds and uncertainty/domain-shift evaluations remain
-required before research conclusions.
+performance. Baseline summaries are grouped by evidence mode so oracle, prior,
+and sensor results cannot be pooled into one completion, collision, or
+clearance statistic. Repeated seeds and uncertainty/domain-shift evaluations
+remain required before research conclusions.
 
 This branch implements the protocol and validators, not completed restaurant
 experiments. Actual sensor trials remain blocked on collected mass data and
