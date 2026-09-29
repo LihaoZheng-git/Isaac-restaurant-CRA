@@ -118,6 +118,20 @@ mass or prim label entered the estimate, and no wheel command was issued. Since
 the scene object's reference mass was not read, this result validates data flow
 and provenance only; it provides no Isaac-domain accuracy measurement.
 
+The live-geometry validation now writes `visual_mass_diagnostic.json` beside
+the camera overlays. It records the checkpoint hash, accepted fused track,
+semantic source, three LiDAR dimension sources and statuses, inferred mass
+interval, and the missing reference-mass limitation. The adapter requires a
+fully accepted camera--LiDAR association; a best attempted detection from a
+rejected overlap test cannot drive mass estimation. In the validated
+stationary run, one accepted chair track used inferred LiDAR dimensions
+0.227 x 0.278 x 0.468 m and produced 9.814 kg with bounds [5.272, 14.357] kg
+and confidence 0.25. The robot drifted 0.001185 m and 0.0079 degrees, published
+no nonzero motion, and received no wheel command. This passes the live
+RGB-plus-LiDAR dataflow check. Sensor-domain accuracy remains explicitly
+blocked because there is no independently measured reference mass and the ABO
+checkpoint has not been calibrated on live Isaac restaurant imagery.
+
 ## Isaac-domain offline evaluation
 
 `scripts/evaluation/evaluate_visual_mass_isaac.py` runs the existing runtime

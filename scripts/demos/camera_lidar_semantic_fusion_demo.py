@@ -113,6 +113,11 @@ from robot.perception.visual_mass_runtime import (
     VisualMassRuntimeConfig,
     VisualMassRuntimeEstimator,
 )
+from robot.perception.visual_mass_live_diagnostic import (
+    LiveVisualMassDiagnostic,
+    accepted_detection_index,
+    evaluate_live_visual_mass_dataflow,
+)
 from robot.perception.yolo_detector import (
     YoloSegmentationConfig,
     YoloSegmentationDetector,
@@ -243,10 +248,11 @@ def attach_visual_mass_estimates(
     results = []
     for item in attributes:
         association = associations.get(item.track_id)
-        if association is None or association.detection_index is None:
+        detection_index = accepted_detection_index(association)
+        if detection_index is None:
             results.append(item)
             continue
-        detection = detections.detections[association.detection_index]
+        detection = detections.detections[detection_index]
         mass = estimator.estimate(
             image_rgb,
             detection,
@@ -419,6 +425,8 @@ def print_report(
     semantic_path: Path,
     fusion_path: Path,
     visual_mass_checkpoint: Path | None,
+    visual_mass_diagnostic: LiveVisualMassDiagnostic | None,
+    visual_mass_diagnostic_path: Path | None,
     initial_pose: np.ndarray,
     final_pose: np.ndarray,
 ) -> bool:
@@ -465,6 +473,10 @@ def print_report(
     )
     stationary_publication_valid = published_motion_count == 0
     sensor_age_valid = sensor_data_age <= MAXIMUM_SENSOR_DATA_AGE_SECONDS
+    visual_mass_valid = (
+        visual_mass_diagnostic is None
+        or visual_mass_diagnostic.live_dataflow_valid
+    )
     passed = (
         projection_inside_image
         and bool(detections.detections)
@@ -476,6 +488,7 @@ def print_report(
         and fixed_lambda_valid
         and stationary_threshold_valid
         and stationary_publication_valid
+        and visual_mass_valid
     )
 
     print("\n" + "=" * 78)
@@ -632,6 +645,17 @@ def print_report(
     print(f"  Yaw drift:                   {math.degrees(yaw_drift):.4f} degrees")
     print(f"  Robot remained stationary:   {robot_stationary}")
     print(f"  Fixed lambda=1.25:            {fixed_lambda_valid}")
+    if visual_mass_diagnostic is not None:
+        print(
+            "  Live visual-mass dataflow:   "
+            f"{visual_mass_diagnostic.live_dataflow_valid}"
+        )
+        print(
+            "  Sensor-domain accuracy claim:"
+            f" {visual_mass_diagnostic.ready_for_sensor_domain_accuracy_claim}"
+        )
+        for reason in visual_mass_diagnostic.accuracy_claim_blockers:
+            print(f"    accuracy blocker: {reason}")
     print("\nStationary motion calibration:")
     print(f"  Raw matched-track samples:    {motion_calibration.sample_count}")
     print(
@@ -667,6 +691,8 @@ def print_report(
     print(f"  Raw camera frame:            {raw_path}")
     print(f"  YOLO overlay:                {semantic_path}")
     print(f"  Fusion overlay:              {fusion_path}")
+    if visual_mass_diagnostic_path is not None:
+        print(f"  Visual-mass diagnostic:      {visual_mass_diagnostic_path}")
     print("\nControlled-data boundary:")
     print("  LiDAR clustering alone established geometry and track IDs.")
     print("  YOLO masks only attached labels to those existing tracks.")
@@ -940,6 +966,15 @@ def main() -> None:
         estimator=visual_mass_estimator,
         timestamp_seconds=lidar_info.sensor_timestamp_nanoseconds * 1e-9,
     )
+    visual_mass_diagnostic = None
+    visual_mass_diagnostic_path = None
+    if visual_mass_estimator is not None:
+        visual_mass_diagnostic = evaluate_live_visual_mass_dataflow(
+            physical_attributes,
+            checkpoint_sha256=visual_mass_estimator.checkpoint_sha256,
+        )
+        visual_mass_diagnostic_path = OUTPUT_DIRECTORY / "visual_mass_diagnostic.json"
+        visual_mass_diagnostic.write_json(visual_mass_diagnostic_path)
     physical_profile_provider = PhysicalAttributeCRARiskProfileProvider(
         {item.track_id: item for item in physical_attributes},
         timestamp_seconds=sensor_timestamp_seconds,
@@ -983,6 +1018,8 @@ def main() -> None:
             if visual_mass_estimator is not None
             else None
         ),
+        visual_mass_diagnostic=visual_mass_diagnostic,
+        visual_mass_diagnostic_path=visual_mass_diagnostic_path,
         initial_pose=initial_pose,
         final_pose=final_pose,
     )
