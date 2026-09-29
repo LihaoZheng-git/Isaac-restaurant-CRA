@@ -5,6 +5,10 @@ from robot.perception.fall_height import (
     FallSurfaceEvidence as FallSurfaceEvidence,
     estimate_fall_height as estimate_fall_height,
 )
+from robot.perception.fall_height_diagnostic import (
+    FallHeightDiagnosticReport as FallHeightDiagnosticReport,
+    evaluate_fall_height_diagnostic as evaluate_fall_height_diagnostic,
+)
 from robot.perception.contact_detection_adapter import (
     ContactPartAssociationConfig,
     ContactPartAssociationDiagnostics,
@@ -132,6 +136,7 @@ __all__ = [
     "ContactPartAssociationDiagnostics",
     "ContactPartAssociationResult",
     "EstimateStatus",
+    "FallHeightDiagnosticReport",
     "GeometryAttributes",
     "GEOMETRY_SOURCE",
     "HOT_SOUP_SOURCE",
@@ -185,6 +190,7 @@ __all__ = [
     "estimate_hot_soup_cues",
     "estimate_hot_soup_from_detections",
     "evaluate_hot_soup_predictions",
+    "evaluate_fall_height_diagnostic",
     "evaluate_visual_mass_isaac_domain",
     "estimate_mass_from_volume_density",
     "estimate_lidar_fall_surfaces",
