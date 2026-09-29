@@ -108,8 +108,10 @@ for the selected pretrained backbone and released derivative weights.
 
 `robot/perception/hot_soup_detector.py` accepts detector boxes only for
 `visible_hot_soup_plume` and `open_container`. It computes a configurable
-spatial association from horizontal overlap, vertical ordering, and vertical
-gap, then invokes the existing thermal cue contract. Missing detections remain
+continuous spatial association from horizontal overlap, relative vertical
+position, and vertical gap, then invokes the general thermal cue contract.
+Partial overlap or weak vertical evidence receives a correspondingly weak score
+instead of failing a geometry threshold. Missing detections remain
 unavailable because detector non-response is not proof that a hazard is absent.
 An observed plume/container pair with incompatible geometry can provide a zero
 association score. Detector confidence is recorded as an uncalibrated model

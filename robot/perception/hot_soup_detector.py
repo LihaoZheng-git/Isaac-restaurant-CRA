@@ -169,8 +169,16 @@ class HotSoupDetectionFrame:
 
 @dataclass(frozen=True)
 class HotSoupAssociationConfig:
+    """Continuous plume-to-container geometry score configuration.
+
+    ``minimum_horizontal_overlap_fraction`` is retained as a compatibility
+    name. It is the overlap that receives a full score, not a rejection
+    threshold; smaller observed overlaps retain proportionally weaker evidence.
+    """
+
     minimum_horizontal_overlap_fraction: float = 0.25
     maximum_vertical_gap_container_heights: float = 2.0
+    vertical_separation_full_score_container_heights: float = 0.75
     detector_score_half_width: float = 0.10
 
     def __post_init__(self) -> None:
@@ -182,15 +190,24 @@ class HotSoupAssociationConfig:
             self.maximum_vertical_gap_container_heights,
             "maximum_vertical_gap_container_heights",
         )
+        vertical = _finite(
+            self.vertical_separation_full_score_container_heights,
+            "vertical_separation_full_score_container_heights",
+        )
         half_width = _finite(self.detector_score_half_width, "detector_score_half_width")
         if not 0 < overlap <= 1:
             raise ValueError("minimum horizontal overlap must lie in (0, 1]")
-        if gap <= 0:
-            raise ValueError("maximum vertical gap must be positive")
+        if gap <= 0 or vertical <= 0:
+            raise ValueError("vertical association scales must be positive")
         if not 0 <= half_width <= 1:
             raise ValueError("detector_score_half_width must lie in [0, 1]")
         object.__setattr__(self, "minimum_horizontal_overlap_fraction", overlap)
         object.__setattr__(self, "maximum_vertical_gap_container_heights", gap)
+        object.__setattr__(
+            self,
+            "vertical_separation_full_score_container_heights",
+            vertical,
+        )
         object.__setattr__(self, "detector_score_half_width", half_width)
 
 
@@ -344,10 +361,6 @@ def _score_pair(
         0.0, min(plume.x_max, container.x_max) - max(plume.x_min, container.x_min)
     )
     horizontal_fraction = overlap_width / min(plume.width, container.width)
-    if horizontal_fraction < config.minimum_horizontal_overlap_fraction:
-        return 0.0
-    if plume.center_xy[1] >= container.center_xy[1]:
-        return 0.0
     gap = max(0.0, container.y_min - plume.y_max)
     maximum_gap = config.maximum_vertical_gap_container_heights * container.height
     gap_score = max(0.0, 1.0 - gap / maximum_gap)
@@ -355,7 +368,15 @@ def _score_pair(
         1.0,
         horizontal_fraction / config.minimum_horizontal_overlap_fraction,
     )
-    return min(overlap_score, gap_score)
+    vertical_separation = (
+        container.center_xy[1] - plume.center_xy[1]
+    ) / container.height
+    vertical_score = min(
+        1.0,
+        max(0.0, vertical_separation)
+        / config.vertical_separation_full_score_container_heights,
+    )
+    return min(overlap_score, vertical_score, gap_score)
 
 
 def _cue(
