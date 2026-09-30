@@ -35,9 +35,22 @@ summaries for each evidence mode.
 
 `robot.scene.restaurant_risk_scenarios` is the reusable source of truth for
 the five primary scene definitions. Actor positions use the robot's initial
-frame, and every authored semantic role, trajectory, support height, edge cue,
-and plume/container cue is oracle scoring metadata only. The crossing-person
-capsule and procedural edge/plume objects are visual and LiDAR test proxies;
-they do not establish real person detection, physical sharpness, temperature,
-or sensor-domain factor accuracy. The evaluation scenario list is generated
-from this catalog so scene IDs, factor families, and descriptions cannot drift.
+frame. Procedural positions identify geometric centers; the reused chair uses
+an explicit rendered-bounds floor anchor. This prevents a floor elevation from
+being interpreted as an object center. Every authored semantic role,
+trajectory, support height, edge cue, and plume/container cue is oracle scoring
+metadata only. The crossing-person capsule and procedural edge/plume objects
+are visual and LiDAR test proxies; they do not establish real person detection,
+physical sharpness, temperature, or sensor-domain factor accuracy. The
+evaluation scenario list is generated from this catalog so scene IDs, factor
+families, and descriptions cannot drift.
+
+`robot.scene.restaurant_scenario_authoring` places these definitions only in
+the anonymous USD session layer. It rotates robot-frame positions and configured
+velocities into the world frame, but never enables actor or robot motion. Z
+coordinates remain world heights; the robot chassis elevation is not added to
+support, landing, or fall heights. The stationary Isaac diagnostic
+`scripts/demos/restaurant_scenario_isaac_stationary_demo.py` checks composition,
+rendered bounds, root-layer preservation, and robot drift while issuing only
+zero wheel commands. Its coauthored fixtures validate placement only and are
+not valid perception samples.

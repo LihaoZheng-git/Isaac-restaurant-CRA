@@ -35,6 +35,13 @@ class ScenarioAppearanceBoundary(str, Enum):
     PROCEDURAL_ORACLE_PROXY = "procedural_oracle_proxy"
 
 
+class ScenarioPlacementAnchor(str, Enum):
+    """Which physical point an actor position identifies."""
+
+    GEOMETRIC_CENTER = "geometric_center"
+    BOUNDS_BASE_CENTER = "bounds_base_center"
+
+
 def _text(value: object, name: str) -> str:
     if not isinstance(value, str) or not value.strip():
         raise ValueError(f"{name} must be nonempty text")
@@ -63,12 +70,17 @@ def _finite_tuple(value: object, size: int, name: str) -> tuple[float, ...]:
 
 @dataclass(frozen=True)
 class RestaurantScenarioActor:
-    """One authored actor positioned in the robot's initial planar frame."""
+    """One authored actor positioned in the robot's initial planar frame.
+
+    ``position_robot_xyz_m`` is interpreted using ``placement_anchor``.  This
+    keeps a floor placement distinct from a geometric center for reused USD
+    assets whose dimensions come from their rendered bounds.
+    """
 
     actor_id: str
     role: str
     geometry: ScenarioGeometry
-    center_robot_xyz_m: tuple[float, float, float]
+    position_robot_xyz_m: tuple[float, float, float]
     oracle_semantic_class: str
     appearance_boundary: ScenarioAppearanceBoundary
     dimensions_m: tuple[float, float, float] | None = None
@@ -76,6 +88,9 @@ class RestaurantScenarioActor:
     linear_velocity_robot_xy_mps: tuple[float, float] = (0.0, 0.0)
     display_color_rgb: tuple[float, float, float] = (0.5, 0.5, 0.5)
     oracle_cues: tuple[str, ...] = ()
+    placement_anchor: ScenarioPlacementAnchor = (
+        ScenarioPlacementAnchor.GEOMETRIC_CENTER
+    )
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "actor_id", _text(self.actor_id, "actor_id"))
@@ -91,15 +106,24 @@ class RestaurantScenarioActor:
             "appearance_boundary",
             ScenarioAppearanceBoundary(self.appearance_boundary),
         )
-        center = _finite_tuple(self.center_robot_xyz_m, 3, "center_robot_xyz_m")
+        object.__setattr__(
+            self,
+            "placement_anchor",
+            ScenarioPlacementAnchor(self.placement_anchor),
+        )
+        position = _finite_tuple(
+            self.position_robot_xyz_m,
+            3,
+            "position_robot_xyz_m",
+        )
         velocity = _finite_tuple(
             self.linear_velocity_robot_xy_mps,
             2,
             "linear_velocity_robot_xy_mps",
         )
         color = _finite_tuple(self.display_color_rgb, 3, "display_color_rgb")
-        if center[2] < 0:
-            raise ValueError("actor center height cannot be negative")
+        if position[2] < 0:
+            raise ValueError("actor position height cannot be negative")
         if any(not 0 <= item <= 1 for item in color):
             raise ValueError("display_color_rgb must lie in [0, 1]")
         if self.geometry is ScenarioGeometry.EXISTING_PRIM:
@@ -117,7 +141,7 @@ class RestaurantScenarioActor:
                 raise ValueError("procedural actor dimensions must be positive")
             object.__setattr__(self, "dimensions_m", dimensions)
         cues = tuple(_text(item, "oracle cue") for item in self.oracle_cues)
-        object.__setattr__(self, "center_robot_xyz_m", center)
+        object.__setattr__(self, "position_robot_xyz_m", position)
         object.__setattr__(self, "linear_velocity_robot_xy_mps", velocity)
         object.__setattr__(self, "display_color_rgb", color)
         object.__setattr__(self, "oracle_cues", cues)
@@ -180,7 +204,8 @@ class RestaurantRiskScenarioDefinition:
                     "actor_id": actor.actor_id,
                     "role": actor.role,
                     "geometry": actor.geometry.value,
-                    "center_robot_xyz_m": actor.center_robot_xyz_m,
+                    "position_robot_xyz_m": actor.position_robot_xyz_m,
+                    "placement_anchor": actor.placement_anchor.value,
                     "dimensions_m": actor.dimensions_m,
                     "existing_prim_path": actor.existing_prim_path,
                     "linear_velocity_robot_xy_mps": (
@@ -227,6 +252,9 @@ def primary_restaurant_risk_scenarios() -> tuple[
                     "chair",
                     ScenarioAppearanceBoundary.RENDERED_ASSET,
                     existing_prim_path=_EXISTING_CHAIR_PATH,
+                    placement_anchor=(
+                        ScenarioPlacementAnchor.BOUNDS_BASE_CENTER
+                    ),
                 ),
             ),
             ("clearance_m",),
