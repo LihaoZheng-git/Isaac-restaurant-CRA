@@ -1,8 +1,11 @@
+from dataclasses import replace
+
 import pytest
 
 from robot.perception.physical_attributes import (
     EstimateStatus,
     MassAttributes,
+    PhysicalAttributes,
     ScalarEstimate,
 )
 from robot.perception.visual_mass_dataset import VisualMassSample
@@ -33,7 +36,14 @@ def sample(identifier, object_id, semantic_class, mass, split="test"):
     )
 
 
-def prediction(identifier, value, *, digest="a" * 64):
+def prediction(
+    identifier,
+    value,
+    *,
+    digest="a" * 64,
+    geometry_status=EstimateStatus.INFERRED,
+    geometry_source="calibrated_depth_geometry",
+):
     return VisualMassDomainPrediction(
         identifier,
         value,
@@ -43,6 +53,8 @@ def prediction(identifier, value, *, digest="a" * 64):
         EstimateStatus.INFERRED,
         VISUAL_MASS_RUNTIME_SOURCE,
         digest,
+        (geometry_status,) * 3,
+        (geometry_source,) * 3,
     )
 
 
@@ -60,7 +72,7 @@ def test_repeated_views_are_averaged_per_independent_object():
     report = evaluate_visual_mass_isaac_domain(
         samples,
         predictions,
-        config=VisualMassDomainEvaluationConfig(2, 1, sensor_derived_geometry=True),
+        config=VisualMassDomainEvaluationConfig(2, 1),
     )
     assert report.ready_for_sensor_domain_claim
     assert report.independent_object_count == 2
@@ -91,12 +103,15 @@ def test_authored_geometry_blocks_sensor_domain_claim_even_when_counts_pass():
     )
     report = evaluate_visual_mass_isaac_domain(
         samples,
-        (prediction("chair-a", 5), prediction("chair-b", 6)),
+        (
+            prediction("chair-a", 5, geometry_status=EstimateStatus.ORACLE),
+            prediction("chair-b", 6, geometry_status=EstimateStatus.ORACLE),
+        ),
         config=VisualMassDomainEvaluationConfig(2, 2),
     )
 
     assert not report.ready_for_sensor_domain_claim
-    assert "geometry inputs are not identified as sensor-derived" in report.blockers
+    assert any("lack measured/inferred geometry provenance" in item for item in report.blockers)
 
 
 def test_multiple_checkpoints_block_one_evaluation_claim():
@@ -140,9 +155,29 @@ def test_prediction_can_be_built_only_from_available_inferred_runtime_mass():
         2,
         EstimateStatus.INFERRED,
     )
+    unknown_geometry = PhysicalAttributes.unknown(
+        track_id=0, timestamp_seconds=2
+    ).geometry
+    dimension = ScalarEstimate(
+        0.5,
+        0.4,
+        0.6,
+        0.8,
+        "m",
+        "calibrated_depth_geometry",
+        2,
+        EstimateStatus.INFERRED,
+    )
+    geometry = replace(
+        unknown_geometry,
+        width_m=dimension,
+        depth_m=dimension,
+        height_m=dimension,
+    )
     result = VisualMassDomainPrediction.from_attributes(
         "sample",
         MassAttributes(estimate),
+        geometry,
         checkpoint_sha256="a" * 64,
     )
     assert result.predicted_mass_kg == 4
@@ -157,5 +192,25 @@ def test_prediction_can_be_built_only_from_available_inferred_runtime_mass():
                     timestamp_seconds=2,
                 )
             ),
+            geometry,
             checkpoint_sha256="a" * 64,
         )
+
+
+def test_prediction_without_geometry_provenance_cannot_grant_sensor_claim():
+    samples = (sample("chair-a", "chair-a", "chair", 5),)
+    estimate = prediction("chair-a", 5)
+    estimate = replace(
+        estimate,
+        geometry_statuses=(EstimateStatus.UNAVAILABLE,) * 3,
+        geometry_sources=("geometry_provenance_unavailable",) * 3,
+    )
+
+    report = evaluate_visual_mass_isaac_domain(
+        samples,
+        (estimate,),
+        config=VisualMassDomainEvaluationConfig(1, 1),
+    )
+
+    assert not report.ready_for_sensor_domain_claim
+    assert any("chair-a" in item for item in report.blockers)
