@@ -140,6 +140,16 @@ model confidence stay perception evidence and are not thermal severity. An
 invoked model with no accepted mask is represented as an empty observed frame,
 not automatically as evidence that the scene is thermally safe.
 
+`robot/perception/plume_features.py` derives continuous, model-independent
+descriptors from a temporal mask sequence: plume mask area relative to the
+candidate source box, vertical extent relative to source height, temporal
+persistence, source-context likelihood, and plume-to-source association.
+Segmentation confidence is retained as a separate epistemic field and is never
+used as plume strength. Empty invoked frames reduce persistence only when the
+backend's negative behavior has been explicitly validated; otherwise
+persistence remains unavailable. The mask descriptors do not measure opacity,
+temperature, or burn severity.
+
 `robot/perception/hot_soup_detector.py` accepts detector boxes only for
 `visible_hot_soup_plume` and `open_container`. It computes a configurable
 continuous spatial association from horizontal overlap, relative vertical
