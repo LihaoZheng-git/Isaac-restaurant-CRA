@@ -120,6 +120,26 @@ for the selected pretrained backbone and released derivative weights.
 
 ## Fixed-label runtime boundary
 
+### Public plume-segmentation baseline audit (2026-09-29)
+
+The public RISE Roboflow project reports a 1,872-image smoke/steam instance-
+segmentation dataset and hosted model with aggregate mAP50 0.778, precision
+0.823, and recall 0.726:
+`https://universe.roboflow.com/rise-wg1kn/rise-data-segmentation`. The page
+does not publish per-class steam metrics, restaurant-domain results, a source-
+data description, or a directly verified downloadable checkpoint. The current
+environment has no Roboflow API key, so no image was uploaded and no RISE
+inference result is claimed here. CC BY 4.0 is displayed for the project data;
+hosted-model access and derivative-weight terms still require verification.
+
+`robot/perception/plume_segmentation.py` provides the offline integration
+boundary for a future local or exported segmentation result. It requires an
+explicit mapping from source classes to `steam`, `smoke_like`, or
+`visible_plume`; a smoke label cannot silently become steam. The mask and
+model confidence stay perception evidence and are not thermal severity. An
+invoked model with no accepted mask is represented as an empty observed frame,
+not automatically as evidence that the scene is thermally safe.
+
 `robot/perception/hot_soup_detector.py` accepts detector boxes only for
 `visible_hot_soup_plume` and `open_container`. It computes a configurable
 continuous spatial association from horizontal overlap, relative vertical
