@@ -95,6 +95,14 @@ from robot.perception.physical_geometry import (
     LidarGeometryConfig,
     estimate_track_geometry,
 )
+from robot.perception.plume_segmentation import (
+    PLUME_SEGMENTATION_SOURCE,
+    PLUME_VISUAL_LABELS,
+    PlumeClassMap,
+    PlumeSegmentationFrame,
+    VisualPlumeInstance,
+    adapt_plume_segmentations,
+)
 from robot.perception.motion_attributes import (
     MOTION_SOURCE,
     ROUTE_SOURCE,
@@ -178,6 +186,10 @@ __all__ = [
     "MotionAttributes",
     "MotionDiagnosticReport",
     "PhysicalAttributes",
+    "PLUME_SEGMENTATION_SOURCE",
+    "PLUME_VISUAL_LABELS",
+    "PlumeClassMap",
+    "PlumeSegmentationFrame",
     "PixelBoundingBox",
     "ROUTE_SOURCE",
     "RouteMotionContext",
@@ -193,6 +205,7 @@ __all__ = [
     "VisualMassDomainEvaluation",
     "VisualMassDomainEvaluationConfig",
     "VisualMassDomainPrediction",
+    "VisualPlumeInstance",
     "YoloSegmentationConfig",
     "YoloSegmentationDetector",
     "YoloHotSoupDetector",
@@ -202,6 +215,7 @@ __all__ = [
     "assess_hot_soup_training_readiness",
     "combine_estimate_statuses",
     "associate_contact_parts_to_objects",
+    "adapt_plume_segmentations",
     "estimate_box_volume",
     "estimate_contextual_thermal_cues",
     "estimate_hot_soup_cues",
