@@ -6,6 +6,9 @@ import math
 from statistics import mean
 
 from robot.risk.cra import PhysicalRiskFactor
+from robot.scene.restaurant_risk_scenarios import (
+    primary_restaurant_risk_scenarios,
+)
 
 
 class CRABaseline(str, Enum):
@@ -226,20 +229,12 @@ def primary_restaurant_scenarios(
     *, evidence_mode: EvidenceMode = EvidenceMode.SENSOR, seed: int = 0
 ) -> tuple[RestaurantScenario, ...]:
     return tuple(
-        RestaurantScenario(identifier, family, description, evidence_mode, seed)
-        for identifier, family, description in (
-            ("chair", "potential", "ordinary chair on floor"),
-            ("crossing_person", "kinetic", "person crossing nominal route"),
-            (
-                "elevated_object",
-                "potential",
-                "object above a localized landing surface",
-            ),
-            ("exposed_edge", "contact", "fixed-label exposed blade edge"),
-            (
-                "carried_hot_soup",
-                "thermal",
-                "open carried soup container with a visible-plume cue",
-            ),
+        RestaurantScenario(
+            item.scenario_id,
+            item.factor.value,
+            item.description,
+            evidence_mode,
+            seed,
         )
+        for item in primary_restaurant_risk_scenarios()
     )
