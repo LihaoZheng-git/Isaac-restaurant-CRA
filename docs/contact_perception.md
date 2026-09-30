@@ -47,6 +47,16 @@ still only inferred visual evidence; a class name does not establish physical
 sharpness, material hardness, route orientation, contact probability, or injury
 severity.
 
+`robot/perception/contact_geometry_features.py` now extracts three continuous
+descriptors from any accepted mask in this taxonomy: dangerous-part exposure,
+principal-axis elongation, and isoperimetric boundary complexity. These make
+the future contact specialist less dependent on utensil names and can represent
+long edges, pointed or protruding parts, and irregular broken surfaces. They do
+not populate CRA sharpness, hardness, or route orientation. Those physical
+fields remain unavailable until separately calibrated 3D/material specialists
+exist. Current runtime enablement still defaults to `exposed_edge`; synthetic
+tests of the other geometry classes are oracle plumbing evidence only.
+
 `scripts/data/build_paco_hazard_manifest.py` streams the large annotation file
 with bounded memory and maps `knife:blade` and `scissors:blade` to
 `exposed_edge`, plus `screwdriver:tip` to `pointed_tip`. The generated manifest
