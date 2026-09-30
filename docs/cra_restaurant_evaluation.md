@@ -32,3 +32,12 @@ validated. Oracle and prior trials may test controller plumbing, but their
 results must be reported separately from sensor-derived experiments.
 The result aggregator enforces that separation by emitting distinct baseline
 summaries for each evidence mode.
+
+`robot.scene.restaurant_risk_scenarios` is the reusable source of truth for
+the five primary scene definitions. Actor positions use the robot's initial
+frame, and every authored semantic role, trajectory, support height, edge cue,
+and plume/container cue is oracle scoring metadata only. The crossing-person
+capsule and procedural edge/plume objects are visual and LiDAR test proxies;
+they do not establish real person detection, physical sharpness, temperature,
+or sensor-domain factor accuracy. The evaluation scenario list is generated
+from this catalog so scene IDs, factor families, and descriptions cannot drift.
