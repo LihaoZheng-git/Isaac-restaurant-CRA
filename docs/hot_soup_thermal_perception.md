@@ -150,6 +150,15 @@ backend's negative behavior has been explicitly validated; otherwise
 persistence remains unavailable. The mask descriptors do not measure opacity,
 temperature, or burn severity.
 
+`robot/perception/continuous_thermal_score.py` applies the first interpretable
+continuous mapping. Plume strength is a configurable weighted sum of normalized
+relative mask area, vertical extent, and persistence. Heat-source evidence is
+the conservative minimum of plume strength, source-context likelihood, and
+spatial association. Model confidence caps only evidence confidence and never
+changes score magnitude. The default weights and normalization scales are
+engineering hypotheses for evaluation, not learned calibration. A learned
+regression model remains a later ablation after graded supervision exists.
+
 `robot/perception/hot_soup_detector.py` accepts detector boxes only for
 `visible_hot_soup_plume` and `open_container`. It computes a configurable
 continuous spatial association from horizontal overlap, relative vertical
