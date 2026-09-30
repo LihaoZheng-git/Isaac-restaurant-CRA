@@ -15,6 +15,12 @@ from robot.perception.contact_detection_adapter import (
     ContactPartAssociationResult,
     associate_contact_parts_to_objects,
 )
+from robot.perception.continuous_thermal_score import (
+    CONTINUOUS_THERMAL_SOURCE,
+    ContinuousThermalScoreConfig,
+    ContinuousThermalScoreResult,
+    estimate_continuous_thermal_score,
+)
 from robot.perception.contextual_thermal_cues import (
     CONTEXTUAL_THERMAL_SOURCE,
     ContextualThermalCueConfig,
@@ -161,6 +167,9 @@ __all__ = [
     "ContactPartAssociationConfig",
     "ContactPartAssociationDiagnostics",
     "ContactPartAssociationResult",
+    "CONTINUOUS_THERMAL_SOURCE",
+    "ContinuousThermalScoreConfig",
+    "ContinuousThermalScoreResult",
     "CONTEXTUAL_THERMAL_SOURCE",
     "ContextualThermalCueConfig",
     "ContextualThermalCueResult",
@@ -229,6 +238,7 @@ __all__ = [
     "adapt_plume_segmentations",
     "estimate_box_volume",
     "estimate_contextual_thermal_cues",
+    "estimate_continuous_thermal_score",
     "estimate_hot_soup_cues",
     "estimate_hot_soup_from_detections",
     "evaluate_hot_soup_predictions",
