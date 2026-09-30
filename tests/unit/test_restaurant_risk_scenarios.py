@@ -6,6 +6,7 @@ from robot.scene.restaurant_risk_scenarios import (
     RestaurantScenarioActor,
     ScenarioAppearanceBoundary,
     ScenarioGeometry,
+    ScenarioPlacementAnchor,
     primary_restaurant_risk_scenarios,
     restaurant_risk_scenario,
     restaurant_risk_scenario_manifest,
@@ -64,6 +65,15 @@ def test_manifest_labels_all_authored_information_as_oracle_only():
     assert payload["schema_version"] == RESTAURANT_RISK_SCENARIO_SCHEMA_VERSION
     assert "offline scoring" in payload["oracle_boundary"]
     assert all(not item["runtime_sensor_claims"] for item in payload["scenarios"])
+    chair = payload["scenarios"][0]["actors"][0]
+    assert chair["placement_anchor"] == "bounds_base_center"
+
+
+def test_existing_chair_uses_a_floor_anchor_instead_of_a_false_center():
+    actor = restaurant_risk_scenario("chair").actors[0]
+
+    assert actor.position_robot_xyz_m == (1.7, 0.0, 0.0)
+    assert actor.placement_anchor is ScenarioPlacementAnchor.BOUNDS_BASE_CENTER
 
 
 def test_lookup_and_actor_validation_are_strict():
