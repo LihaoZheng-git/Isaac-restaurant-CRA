@@ -275,6 +275,37 @@ def test_volume_density_mass_uses_nonnegative_interval_arithmetic() -> None:
     assert mass.upper_bound == pytest.approx(15.0)
     assert mass.confidence == pytest.approx(0.6)
     assert mass.source == VOLUME_DENSITY_MASS_SOURCE
+    assert mass.status is EstimateStatus.PRIOR
+    assert mass.timestamp_seconds == 1.0
+
+
+@pytest.mark.parametrize(
+    "status",
+    [EstimateStatus.PRIOR, EstimateStatus.ORACLE, EstimateStatus.FALLBACK],
+)
+def test_box_volume_retains_non_sensor_geometry_dependency(status) -> None:
+    item = geometry()
+    item = GeometryAttributes(
+        *(
+            ScalarEstimate(
+                dimension.value,
+                dimension.lower_bound,
+                dimension.upper_bound,
+                dimension.confidence,
+                dimension.unit,
+                dimension.source,
+                dimension.timestamp_seconds,
+                status,
+            )
+            for dimension in (item.width_m, item.depth_m, item.height_m)
+        ),
+        item.center_height_m,
+        item.fall_height_m,
+    )
+
+    volume = estimate_box_volume(item, timestamp_seconds=2.0)
+
+    assert volume.status is status
 
 
 def test_unavailable_volume_does_not_become_zero_mass() -> None:
@@ -358,6 +389,17 @@ def test_mass_fusion_keeps_interval_hull_and_penalizes_disagreement() -> None:
     assert result.upper_bound == pytest.approx(12.0)
     assert result.confidence == pytest.approx(0.32)
     assert result.source == MASS_FUSION_SOURCE
+
+
+def test_derived_mass_keeps_oldest_contributing_timestamp() -> None:
+    first = scalar(4.0, unit="kg", source="newer", timestamp=1.5)
+    second = scalar(5.0, unit="kg", source="older", timestamp=1.0)
+
+    result = fuse_mass_estimates(
+        [first, second], timestamp_seconds=2.0
+    ).mass_kg
+
+    assert result.timestamp_seconds == 1.0
 
 
 @pytest.mark.parametrize(

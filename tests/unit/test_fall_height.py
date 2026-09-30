@@ -5,9 +5,15 @@ from robot.perception.physical_attributes import EstimateStatus, ScalarEstimate
 
 
 def scalar(
-    value, lower, upper, *, status=EstimateStatus.MEASURED, source="depth_plane"
+    value,
+    lower,
+    upper,
+    *,
+    status=EstimateStatus.MEASURED,
+    source="depth_plane",
+    timestamp=2,
 ):
-    return ScalarEstimate(value, lower, upper, 0.8, "m", source, 2, status)
+    return ScalarEstimate(value, lower, upper, 0.8, "m", source, timestamp, status)
 
 
 def test_surface_drop_propagates_interval_and_provenance():
@@ -75,3 +81,15 @@ def test_units_and_future_timestamp_rejected():
         estimate_fall_height(
             FallSurfaceEvidence(scalar(1, 1, 1), scalar(0, 0, 0)), timestamp_seconds=1
         )
+
+
+def test_fall_height_keeps_oldest_contributing_timestamp():
+    result = estimate_fall_height(
+        FallSurfaceEvidence(
+            scalar(1, 1, 1, timestamp=1.5),
+            scalar(0, 0, 0, timestamp=1.0),
+        ),
+        timestamp_seconds=2,
+    )
+
+    assert result.timestamp_seconds == 1.0

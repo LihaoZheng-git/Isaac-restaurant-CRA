@@ -92,14 +92,19 @@ class VisualMassDomainPrediction:
             raise ValueError("mass prediction bounds are inconsistent")
         if not 0 <= self.confidence <= 1:
             raise ValueError("confidence must lie in [0, 1]")
-        if self.status is not EstimateStatus.INFERRED:
-            raise ValueError("Isaac visual-mass evaluation requires inferred estimates")
+        try:
+            status = EstimateStatus(self.status)
+        except (TypeError, ValueError) as error:
+            raise ValueError("prediction status is unsupported") from error
+        if status is EstimateStatus.UNAVAILABLE:
+            raise ValueError("Isaac visual-mass evaluation requires an available estimate")
         if self.source != VISUAL_MASS_RUNTIME_SOURCE:
             raise ValueError("prediction source must be the visual-mass runtime adapter")
         digest = self.checkpoint_sha256.lower()
         if len(digest) != 64 or any(char not in "0123456789abcdef" for char in digest):
             raise ValueError("checkpoint_sha256 must be a hexadecimal SHA-256 digest")
         object.__setattr__(self, "checkpoint_sha256", digest)
+        object.__setattr__(self, "status", status)
         if len(self.geometry_statuses) != 3 or len(self.geometry_sources) != 3:
             raise ValueError("geometry provenance must describe width, depth, and height")
         try:
@@ -185,6 +190,16 @@ def evaluate_visual_mass_isaac_domain(
         blockers.append(
             "predictions lack measured/inferred geometry provenance: "
             f"{non_sensor_geometry}"
+        )
+    non_sensor_predictions = sorted(
+        item.sample_id
+        for item in prediction_items
+        if item.status is not EstimateStatus.INFERRED
+    )
+    if non_sensor_predictions:
+        blockers.append(
+            "mass predictions retain non-sensor dependency provenance: "
+            f"{non_sensor_predictions}"
         )
     if extra:
         blockers.append(f"predictions contain non-test samples: {sorted(extra)}")

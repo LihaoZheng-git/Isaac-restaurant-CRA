@@ -147,8 +147,10 @@ persistence, source-context likelihood, and plume-to-source association.
 Segmentation confidence is retained as a separate epistemic field and is never
 used as plume strength. Empty invoked frames reduce persistence only when the
 backend's negative behavior has been explicitly validated; otherwise
-persistence remains unavailable. The mask descriptors do not measure opacity,
-temperature, or burn severity.
+persistence remains unavailable. Mask frames, source context, and spatial
+association each pass the configured freshness check; a fresh mask cannot
+refresh a stale or future contextual cue. The mask descriptors do not measure
+opacity, temperature, or burn severity.
 
 `robot/perception/continuous_thermal_score.py` applies the first interpretable
 continuous mapping. Plume strength is a configurable weighted sum of normalized

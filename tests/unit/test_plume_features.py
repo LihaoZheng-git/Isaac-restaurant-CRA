@@ -53,12 +53,23 @@ def segmentation(frame_id, timestamp, mask=None, status=EstimateStatus.INFERRED)
     )
 
 
-def observation(frame_id, timestamp, mask, *, negative_validated=False):
+def observation(
+    frame_id,
+    timestamp,
+    mask,
+    *,
+    negative_validated=False,
+    context_timestamp=None,
+    association_timestamp=None,
+):
     return PlumeSourceObservation(
         segmentation(frame_id, timestamp, mask),
         PixelBoundingBox(5, 10, 15, 20),
-        cue(0.8, timestamp),
-        cue(0.7, timestamp),
+        cue(0.8, timestamp if context_timestamp is None else context_timestamp),
+        cue(
+            0.7,
+            timestamp if association_timestamp is None else association_timestamp,
+        ),
         0 if mask is not None else None,
         negative_validated,
     )
@@ -155,3 +166,38 @@ def test_stale_frames_are_rejected_together():
     )
     assert not actual.relative_mask_area.is_available
     assert actual.rejection_reasons == ("stale segmentation frame",)
+
+
+@pytest.mark.parametrize(
+    "timestamp_argument,feature,reason",
+    [
+        ({"context_timestamp": 0.0}, "source_context_likelihood", "stale cue"),
+        (
+            {"association_timestamp": 2.2},
+            "spatial_association_likelihood",
+            "future cue",
+        ),
+    ],
+)
+def test_fresh_masks_cannot_refresh_stale_or_future_context_cues(
+    timestamp_argument, feature, reason
+):
+    observations = tuple(
+        observation(
+            i,
+            1.8 + i * 0.1,
+            plume(4),
+            **timestamp_argument,
+        )
+        for i in range(3)
+    )
+
+    actual = extract_continuous_plume_features(
+        observations,
+        timestamp_seconds=2.0,
+        config=PlumeFeatureConfig(maximum_evidence_age_seconds=0.5),
+    )
+
+    assert actual.relative_mask_area.is_available
+    assert not getattr(actual, feature).is_available
+    assert f"{feature}: {reason}" in actual.rejection_reasons

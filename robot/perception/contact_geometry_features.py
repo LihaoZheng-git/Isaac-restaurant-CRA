@@ -104,6 +104,7 @@ def estimate_contact_geometry_features(
         raise ValueError("timestamp_seconds must be finite and nonnegative")
     if segmentation.timestamp_seconds > timestamp:
         raise ValueError("segmentation cannot be newer than result")
+    evidence_timestamp = float(segmentation.timestamp_seconds)
     status = EstimateStatus(evidence_status)
     if status is EstimateStatus.UNAVAILABLE:
         raise ValueError("an observed segmentation cannot have unavailable status")
@@ -150,13 +151,13 @@ def estimate_contact_geometry_features(
             value=label,
             confidence=confidence,
             source=CONTACT_GEOMETRY_FEATURE_SOURCE,
-            timestamp_seconds=timestamp,
+            timestamp_seconds=evidence_timestamp,
             status=status,
             evidence=common_evidence,
         ),
         exposure_fraction=_estimate(
             exposure,
-            timestamp=timestamp,
+            timestamp=evidence_timestamp,
             name="exposure_fraction",
             confidence=confidence,
             status=status,
@@ -164,7 +165,7 @@ def estimate_contact_geometry_features(
         ),
         elongation=_estimate(
             elongation,
-            timestamp=timestamp,
+            timestamp=evidence_timestamp,
             name="elongation",
             confidence=confidence,
             status=status,
@@ -173,7 +174,7 @@ def estimate_contact_geometry_features(
         ),
         boundary_complexity=_estimate(
             complexity,
-            timestamp=timestamp,
+            timestamp=evidence_timestamp,
             name="boundary_complexity",
             confidence=confidence,
             status=status,

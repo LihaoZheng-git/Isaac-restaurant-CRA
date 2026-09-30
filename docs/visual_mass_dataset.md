@@ -103,7 +103,10 @@ forward pass; no catalog metadata or language reasoning enters inference.
 The adapter uses a configurable absolute-error bound (default 4.542 kg, the
 held-out catalog validation MAE) and caps confidence at 0.25 for unvalidated
 ABO-to-Isaac domain transfer. These are conservative engineering settings, not
-calibrated uncertainty. The checkpoint hash, catalog error, sensor inputs, and
+calibrated uncertainty. Geometry must also be fresh at inference time. Any
+prior, fallback, or oracle geometry dependency remains attached to the mass
+estimate and cannot pass the sensor-domain gate. The checkpoint hash, catalog
+error, sensor inputs, and
 domain limitation are retained in evidence. Configure
 `VISUAL_MASS_CHECKPOINT` when running the stationary camera/LiDAR fusion demo;
 if it is absent, mass stays unavailable. A successful Isaac forward pass is

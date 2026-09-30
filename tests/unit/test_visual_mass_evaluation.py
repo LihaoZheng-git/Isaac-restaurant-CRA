@@ -214,3 +214,20 @@ def test_prediction_without_geometry_provenance_cannot_grant_sensor_claim():
 
     assert not report.ready_for_sensor_domain_claim
     assert any("chair-a" in item for item in report.blockers)
+
+
+def test_prediction_with_oracle_dependency_cannot_grant_sensor_claim():
+    samples = (sample("chair-a", "chair-a", "chair", 5),)
+    estimate = replace(
+        prediction("chair-a", 5),
+        status=EstimateStatus.ORACLE,
+    )
+
+    report = evaluate_visual_mass_isaac_domain(
+        samples,
+        (estimate,),
+        config=VisualMassDomainEvaluationConfig(1, 1),
+    )
+
+    assert not report.ready_for_sensor_domain_claim
+    assert any("non-sensor dependency" in item for item in report.blockers)
