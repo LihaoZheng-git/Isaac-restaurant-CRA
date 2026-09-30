@@ -103,6 +103,13 @@ from robot.perception.plume_segmentation import (
     VisualPlumeInstance,
     adapt_plume_segmentations,
 )
+from robot.perception.plume_features import (
+    PLUME_FEATURE_SOURCE,
+    ContinuousPlumeFeatures,
+    PlumeFeatureConfig,
+    PlumeSourceObservation,
+    extract_continuous_plume_features,
+)
 from robot.perception.motion_attributes import (
     MOTION_SOURCE,
     ROUTE_SOURCE,
@@ -186,10 +193,14 @@ __all__ = [
     "MotionAttributes",
     "MotionDiagnosticReport",
     "PhysicalAttributes",
+    "PLUME_FEATURE_SOURCE",
     "PLUME_SEGMENTATION_SOURCE",
     "PLUME_VISUAL_LABELS",
     "PlumeClassMap",
+    "ContinuousPlumeFeatures",
+    "PlumeFeatureConfig",
     "PlumeSegmentationFrame",
+    "PlumeSourceObservation",
     "PixelBoundingBox",
     "ROUTE_SOURCE",
     "RouteMotionContext",
@@ -225,6 +236,7 @@ __all__ = [
     "evaluate_motion_diagnostic",
     "evaluate_visual_mass_isaac_domain",
     "estimate_mass_from_volume_density",
+    "extract_continuous_plume_features",
     "estimate_lidar_fall_surfaces",
     "estimate_track_geometry",
     "estimate_track_mass",
