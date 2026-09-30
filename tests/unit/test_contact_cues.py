@@ -8,12 +8,12 @@ from robot.perception.contact_cues import (
 from robot.perception.physical_attributes import EstimateStatus, ScalarEstimate
 
 
-def segmentation(confidence=0.8):
+def segmentation(confidence=0.8, timestamp=2):
     object_mask = np.ones((4, 4), dtype=np.bool_)
     danger = np.zeros((4, 4), dtype=np.bool_)
     danger[:2] = True
     return DangerousPartSegmentation(
-        object_mask, danger, "knife_blade", confidence, 2, "fixture"
+        object_mask, danger, "knife_blade", confidence, timestamp, "fixture"
     )
 
 
@@ -89,3 +89,12 @@ def test_pixel_ratio_bounds_widen_when_confidence_is_low():
     low = estimate_contact_cues(segmentation(0.5), timestamp_seconds=2)
     assert high.dangerous_part_exposure.interval_width == 0
     assert low.dangerous_part_exposure.interval_width > 0
+
+
+def test_contact_mask_keeps_source_timestamp_instead_of_becoming_fresh():
+    result = estimate_contact_cues(
+        segmentation(timestamp=1), timestamp_seconds=2
+    )
+
+    assert result.dangerous_part_exposure.timestamp_seconds == 1
+    assert result.dangerous_part.timestamp_seconds == 1

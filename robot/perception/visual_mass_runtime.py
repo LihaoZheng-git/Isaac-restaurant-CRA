@@ -18,6 +18,7 @@ from robot.perception.physical_attributes import (
     GeometryAttributes,
     MassAttributes,
     ScalarEstimate,
+    combine_estimate_statuses,
 )
 from robot.perception.semantic_detection import SemanticDetection
 from robot.perception.visual_mass_model import (
@@ -51,6 +52,7 @@ class VisualMassRuntimeConfig:
     validation_mae_kg: float = 4.54224967956543
     domain_confidence_cap: float = 0.25
     supported_classes: tuple[str, ...] = ABO_SUPPORTED_CLASSES
+    maximum_geometry_age_seconds: float = 0.5
 
     def __post_init__(self) -> None:
         path = Path(self.checkpoint_path)
@@ -58,10 +60,13 @@ class VisualMassRuntimeConfig:
             raise FileNotFoundError(f"visual mass checkpoint not found: {path}")
         mae = float(self.validation_mae_kg)
         cap = float(self.domain_confidence_cap)
+        maximum_age = float(self.maximum_geometry_age_seconds)
         if not math.isfinite(mae) or mae <= 0:
             raise ValueError("validation_mae_kg must be positive and finite")
         if not math.isfinite(cap) or not 0 <= cap <= 1:
             raise ValueError("domain_confidence_cap must lie in [0, 1]")
+        if not math.isfinite(maximum_age) or maximum_age <= 0:
+            raise ValueError("maximum_geometry_age_seconds must be positive")
         classes = tuple(sorted(set(self.supported_classes)))
         if not classes or any(not isinstance(item, str) or not item for item in classes):
             raise ValueError("supported_classes must contain nonempty class names")
@@ -76,6 +81,7 @@ class VisualMassRuntimeConfig:
         object.__setattr__(self, "device", device)
         object.__setattr__(self, "validation_mae_kg", mae)
         object.__setattr__(self, "domain_confidence_cap", cap)
+        object.__setattr__(self, "maximum_geometry_age_seconds", maximum_age)
         object.__setattr__(self, "supported_classes", classes)
 
 
@@ -97,6 +103,8 @@ def mass_attributes_from_prediction(
     timestamp_seconds: float,
     config: VisualMassRuntimeConfig,
     checkpoint_sha256: str,
+    evidence_status: EstimateStatus = EstimateStatus.INFERRED,
+    dependency_evidence: tuple[str, ...] = (),
 ) -> MassAttributes:
     mass = float(predicted_mass_kg)
     confidence = min(float(input_confidence), config.domain_confidence_cap)
@@ -104,6 +112,9 @@ def mass_attributes_from_prediction(
         raise ValueError("predicted mass must be positive and finite")
     if not math.isfinite(confidence) or not 0 <= confidence <= 1:
         raise ValueError("input confidence must lie in [0, 1]")
+    status = EstimateStatus(evidence_status)
+    if status is EstimateStatus.UNAVAILABLE:
+        raise ValueError("an available mass prediction cannot be unavailable")
     error = config.validation_mae_kg
     return MassAttributes(
         ScalarEstimate(
@@ -114,12 +125,13 @@ def mass_attributes_from_prediction(
             "kg",
             VISUAL_MASS_RUNTIME_SOURCE,
             timestamp_seconds,
-            EstimateStatus.INFERRED,
+            status,
             (
                 f"checkpoint_sha256={checkpoint_sha256}",
                 f"catalog_validation_mae_kg={error}",
                 "RGB instance crop plus LiDAR-derived dimensions",
                 "ABO catalog domain; Isaac/restaurant mass is not calibrated",
+                *dependency_evidence,
             ),
         )
     )
@@ -158,6 +170,10 @@ class VisualMassRuntimeEstimator:
         timestamp_seconds: float,
     ) -> MassAttributes:
         timestamp = float(timestamp_seconds)
+        if not math.isfinite(timestamp) or timestamp < 0:
+            raise ValueError("timestamp_seconds must be finite and nonnegative")
+        if not isinstance(geometry, GeometryAttributes):
+            raise TypeError("geometry must be GeometryAttributes")
         if detection.semantic_class not in self.config.supported_classes:
             return unavailable_mass(
                 timestamp, f"unsupported semantic class={detection.semantic_class}"
@@ -165,6 +181,14 @@ class VisualMassRuntimeEstimator:
         dimensions = (geometry.width_m, geometry.depth_m, geometry.height_m)
         if any(not item.is_available for item in dimensions):
             return unavailable_mass(timestamp, "one or more dimensions unavailable")
+        if any(item.timestamp_seconds > timestamp for item in dimensions):
+            return unavailable_mass(timestamp, "one or more dimensions are future evidence")
+        if any(
+            timestamp - item.timestamp_seconds
+            > self.config.maximum_geometry_age_seconds
+            for item in dimensions
+        ):
+            return unavailable_mass(timestamp, "one or more dimensions are stale evidence")
         values = tuple(float(item.value) for item in dimensions)
         if any(value <= 0 for value in values):
             return unavailable_mass(timestamp, "one or more dimensions nonpositive")
@@ -193,10 +217,22 @@ class VisualMassRuntimeEstimator:
         confidence = min(
             detection.confidence, *(item.confidence for item in dimensions)
         )
+        evidence_status = combine_estimate_statuses(
+            (EstimateStatus.INFERRED, *(item.status for item in dimensions))
+        )
+        dependency_evidence = tuple(
+            f"geometry_{name}: status={item.status.value}, source={item.source}, "
+            f"timestamp={item.timestamp_seconds}, confidence={item.confidence}"
+            for name, item in zip(
+                ("width", "depth", "height"), dimensions, strict=True
+            )
+        )
         return mass_attributes_from_prediction(
             float(prediction.reshape(-1)[0]),
             input_confidence=confidence,
             timestamp_seconds=timestamp,
             config=self.config,
             checkpoint_sha256=self.checkpoint_sha256,
+            evidence_status=evidence_status,
+            dependency_evidence=dependency_evidence,
         )

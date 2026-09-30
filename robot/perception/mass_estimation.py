@@ -276,6 +276,9 @@ def estimate_box_volume(
     nominal_volume = math.prod(values)
     lower_volume = math.prod(lowers)
     upper_volume = math.prod(uppers)
+    evidence_timestamp = min(
+        estimate.timestamp_seconds for _, estimate in dimensions
+    )
     if upper_volume > settings.maximum_volume_m3:
         return ScalarEstimate.unavailable(
             unit="m^3",
@@ -292,8 +295,13 @@ def estimate_box_volume(
         confidence=min(estimate.confidence for _, estimate in dimensions),
         unit="m^3",
         source=VOLUME_SOURCE,
-        timestamp_seconds=timestamp,
-        status=EstimateStatus.INFERRED,
+        timestamp_seconds=evidence_timestamp,
+        status=combine_estimate_statuses(
+            (
+                EstimateStatus.INFERRED,
+                *(estimate.status for _, estimate in dimensions),
+            )
+        ),
         evidence=(
             "axis-aligned box volume = width * depth * height",
             "dimensions were accepted as complete metric geometry",
@@ -340,6 +348,9 @@ def estimate_mass_from_volume_density(
     upper = float(volume_m3.upper_bound) * float(
         density_kg_per_m3.upper_bound
     )
+    evidence_timestamp = min(
+        volume_m3.timestamp_seconds, density_kg_per_m3.timestamp_seconds
+    )
     return MassAttributes(
         mass_kg=ScalarEstimate(
             value=nominal,
@@ -351,8 +362,14 @@ def estimate_mass_from_volume_density(
             ),
             unit="kg",
             source=VOLUME_DENSITY_MASS_SOURCE,
-            timestamp_seconds=timestamp,
-            status=EstimateStatus.INFERRED,
+            timestamp_seconds=evidence_timestamp,
+            status=combine_estimate_statuses(
+                (
+                    EstimateStatus.INFERRED,
+                    volume_m3.status,
+                    density_kg_per_m3.status,
+                )
+            ),
             evidence=(
                 f"volume source={volume_m3.source}",
                 f"density source={density_kg_per_m3.source}",
@@ -416,6 +433,7 @@ def fuse_mass_estimates(
     ) / weight_sum
     confidence = weighted_confidence * agreement
     status = combine_estimate_statuses(candidate.status for candidate in available)
+    evidence_timestamp = min(candidate.timestamp_seconds for candidate in available)
     return MassAttributes(
         mass_kg=ScalarEstimate(
             value=nominal,
@@ -424,7 +442,7 @@ def fuse_mass_estimates(
             confidence=confidence,
             unit="kg",
             source=MASS_FUSION_SOURCE,
-            timestamp_seconds=timestamp,
+            timestamp_seconds=evidence_timestamp,
             status=status,
             evidence=(
                 f"fused {len(available)} available mass candidates",

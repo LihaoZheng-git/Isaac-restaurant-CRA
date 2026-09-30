@@ -8,14 +8,14 @@ from robot.perception.contact_geometry_features import (
 from robot.perception.physical_attributes import EstimateStatus
 
 
-def segmentation(label, part_mask, confidence=0.8):
+def segmentation(label, part_mask, confidence=0.8, timestamp=2.0):
     object_mask = np.ones((30, 30), dtype=bool)
     return DangerousPartSegmentation(
         object_mask,
         part_mask,
         label,
         confidence,
-        2.0,
+        timestamp,
         "geometry-fixture",
     )
 
@@ -88,3 +88,17 @@ def test_unknown_geometry_class_is_rejected():
             segmentation("knife", rectangle(10, 14, 5, 25)),
             timestamp_seconds=2.0,
         )
+
+
+def test_geometry_descriptors_keep_segmentation_timestamp():
+    actual = estimate_contact_geometry_features(
+        segmentation(
+            "pointed_tip",
+            rectangle(10, 20, 13, 17),
+            timestamp=1.0,
+        ),
+        timestamp_seconds=2.0,
+    )
+
+    assert actual.geometry_class.timestamp_seconds == 1.0
+    assert actual.exposure_fraction.timestamp_seconds == 1.0

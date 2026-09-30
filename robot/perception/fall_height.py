@@ -54,6 +54,9 @@ def estimate_fall_height(
     lower = max(0.0, support.lower_bound - landing.upper_bound)
     upper = max(0.0, support.upper_bound - landing.lower_bound)
     status = combine_estimate_statuses((support.status, landing.status))
+    evidence_timestamp = min(
+        support.timestamp_seconds, landing.timestamp_seconds
+    )
     return ScalarEstimate(
         value,
         lower,
@@ -61,7 +64,7 @@ def estimate_fall_height(
         min(support.confidence, landing.confidence),
         "m",
         FALL_HEIGHT_SOURCE,
-        timestamp,
+        evidence_timestamp,
         status,
         (
             f"support source={support.source}; status={support.status.value}",

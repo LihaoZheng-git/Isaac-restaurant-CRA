@@ -172,29 +172,41 @@ def _aggregate_input_cue(
     *,
     timestamp: float,
     uncertainty: float,
-) -> ScalarEstimate:
+    maximum_evidence_age_seconds: float,
+) -> tuple[ScalarEstimate, tuple[str, ...]]:
     items = tuple(getattr(item, name) for item in observations)
-    if any(not item.is_available for item in items):
-        return _unavailable(
-            timestamp,
-            name,
-            f"{name} unavailable in at least one invoked frame",
+    reasons = []
+    for item in items:
+        if not item.is_available:
+            reasons.append(f"{name}: unavailable cue")
+        elif item.timestamp_seconds > timestamp:
+            reasons.append(f"{name}: future cue")
+        elif timestamp - item.timestamp_seconds > maximum_evidence_age_seconds:
+            reasons.append(f"{name}: stale cue")
+    reasons = list(dict.fromkeys(reasons))
+    if reasons:
+        return (
+            _unavailable(timestamp, name, *reasons),
+            tuple(reasons),
         )
     values = [item.value for item in items]
     assert all(value is not None for value in values)
     value = float(median(values))
-    return _estimate(
-        value,
-        timestamp=timestamp,
-        feature=name,
-        confidence=min(item.confidence for item in items),
-        status=combine_estimate_statuses(item.status for item in items),
-        uncertainty=uncertainty,
-        bounded=True,
-        evidence=(
-            f"temporal median across {len(items)} invoked frames",
-            "context and spatial relation remain separate from plume appearance",
+    return (
+        _estimate(
+            value,
+            timestamp=timestamp,
+            feature=name,
+            confidence=min(item.confidence for item in items),
+            status=combine_estimate_statuses(item.status for item in items),
+            uncertainty=uncertainty,
+            bounded=True,
+            evidence=(
+                f"temporal median across {len(items)} invoked frames",
+                "context and spatial relation remain separate from plume appearance",
+            ),
         ),
+        (),
     )
 
 
@@ -360,18 +372,22 @@ def extract_continuous_plume_features(
             ),
         )
 
-    context = _aggregate_input_cue(
+    context, context_reasons = _aggregate_input_cue(
         ordered,
         "source_context_likelihood",
         timestamp=timestamp,
         uncertainty=settings.relative_measurement_uncertainty,
+        maximum_evidence_age_seconds=settings.maximum_evidence_age_seconds,
     )
-    association = _aggregate_input_cue(
+    association, association_reasons = _aggregate_input_cue(
         ordered,
         "spatial_association_likelihood",
         timestamp=timestamp,
         uncertainty=settings.relative_measurement_uncertainty,
+        maximum_evidence_age_seconds=settings.maximum_evidence_age_seconds,
     )
+    reasons.extend(context_reasons)
+    reasons.extend(association_reasons)
     return ContinuousPlumeFeatures(
         relative_mask_area=relative_area,
         vertical_extent=vertical_extent,

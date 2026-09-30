@@ -144,19 +144,20 @@ def test_missing_interaction_is_not_inferred_from_route_or_instability():
 
 
 @pytest.mark.parametrize(
-    "status,cap",
+    "status,cap,energy_status",
     [
-        (EstimateStatus.PRIOR, 0.5),
-        (EstimateStatus.FALLBACK, 0.0),
-        (EstimateStatus.INFERRED, 1.0),
+        (EstimateStatus.MEASURED, 1.0, EstimateStatus.INFERRED),
+        (EstimateStatus.PRIOR, 0.5, EstimateStatus.PRIOR),
+        (EstimateStatus.FALLBACK, 0.0, EstimateStatus.FALLBACK),
+        (EstimateStatus.INFERRED, 1.0, EstimateStatus.INFERRED),
     ],
 )
-def test_status_caps_and_provenance(status, cap):
+def test_status_caps_and_provenance(status, cap, energy_status):
     item = replace(attributes(), mass=MassAttributes(scalar(10, "kg", status=status)))
     result = adapt(item)
     assert result.profile.kinetic.confidence == cap
     assert result.kinetic.as_dict()["inputs"]["mass_kg"]["status"] == status.value
-    assert result.kinetic.energy_j.status is EstimateStatus.INFERRED
+    assert result.kinetic.energy_j.status is energy_status
 
 
 def test_priors_can_be_disabled():
@@ -276,6 +277,68 @@ def test_complete_contact_and_thermal_specialists_produce_all_four_factors():
     assert result.profile.thermal.severity == pytest.approx(0.8)
     assert result.profile.thermal.interaction_likelihood == pytest.approx(0.4)
     assert CRARiskAssessor().assess(result.profile).phi < 1
+
+
+@pytest.mark.parametrize(
+    "status,expected_confidence",
+    [
+        (EstimateStatus.INFERRED, 1.0),
+        (EstimateStatus.PRIOR, 0.5),
+        (EstimateStatus.FALLBACK, 0.0),
+    ],
+)
+def test_contact_and_thermal_apply_the_same_status_confidence_caps(
+    status, expected_confidence
+):
+    item = attributes()
+    item = replace(
+        item,
+        contact=replace(
+            item.contact,
+            sharpness=scalar(0.9, status=status),
+            hardness=scalar(0.8),
+            dangerous_part_exposure=scalar(0.7),
+            orientation_toward_route=scalar(0.5),
+        ),
+        thermal=replace(
+            item.thermal,
+            heat_source_likelihood=scalar(0.8, status=status),
+        ),
+    )
+
+    result = adapt_physical_factors(
+        item,
+        timestamp_seconds=2,
+        potential_interaction_likelihood=scalar(0.5),
+        thermal_interaction_likelihood=scalar(0.4),
+    )
+
+    assert result.profile.contact.confidence == expected_confidence
+    assert result.profile.thermal.confidence == expected_confidence
+
+
+def test_direct_factor_fallback_cap_is_configurable_but_remains_explicit():
+    item = attributes()
+    item = replace(
+        item,
+        thermal=replace(
+            item.thermal,
+            heat_source_likelihood=scalar(
+                0.8, status=EstimateStatus.FALLBACK, confidence=0.9
+            ),
+        ),
+    )
+
+    result = adapt_physical_factors(
+        item,
+        timestamp_seconds=2,
+        potential_interaction_likelihood=scalar(0.5),
+        thermal_interaction_likelihood=scalar(0.4),
+        config=PhysicalFactorAdapterConfig(fallback_confidence_cap=0.2),
+    )
+
+    assert result.profile.thermal.confidence == 0.2
+    assert result.thermal.inputs[0][1].status is EstimateStatus.FALLBACK
 
 
 def test_steam_without_heat_source_does_not_create_thermal_risk():

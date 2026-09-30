@@ -33,13 +33,19 @@ Contributing inputs must be available and no older than the configured age
 (default 1 s) at the supplied evaluation timestamp. Future, stale, missing, or
 disabled prior inputs make that factor unknown, with rejection reasons. The
 clock must share the evidence time base. Zero-valued measurements remain valid
-zero consequence evidence. Non-finite energy arithmetic fails to unknown.
+zero consequence evidence. Derived fall-height, contact, and mass estimates
+retain their oldest contributing evidence timestamp so feature extraction
+cannot make stale evidence appear fresh. Non-finite energy arithmetic fails to
+unknown.
 
 Confidence is the minimum contributing confidence, capped at 0.5 for priors
-and 0 for fallbacks by default. `allow_priors=False` rejects priors. Semantic
-detector confidence does not replace physical confidence. Derived energies
-are labeled inferred, and diagnostics retain every original input status,
-source, interval, confidence, timestamp, and evidence statement. Input status
+and 0 for fallbacks by default. The same caps apply to energy-based potential/
+kinetic inputs and normalized contact/thermal specialist inputs.
+`allow_priors=False` rejects priors. Semantic detector confidence does not
+replace physical confidence. Derived energies
+are labeled inferred when their inputs are sensor evidence, while any prior,
+fallback, or oracle dependency is retained. Diagnostics retain every original
+input status, source, interval, confidence, timestamp, and evidence statement. Input status
 labels are producer assertions, not independently verified observations.
 
 Contact requires sharpness, hardness, dangerous-part exposure, and orientation

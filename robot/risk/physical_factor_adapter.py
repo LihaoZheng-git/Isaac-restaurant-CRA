@@ -17,6 +17,7 @@ from robot.perception.physical_attributes import (
     EstimateStatus,
     PhysicalAttributes,
     ScalarEstimate,
+    combine_estimate_statuses,
 )
 from robot.risk.cra import PhysicalRiskProfile, RiskFactorEstimate
 
@@ -118,6 +119,18 @@ class PhysicalFactorAdapterResult:
     thermal: PhysicalFactorDiagnostic
 
 
+def _effective_confidence(
+    item: ScalarEstimate, config: PhysicalFactorAdapterConfig
+) -> float:
+    """Apply the same provenance confidence policy to every CRA factor."""
+
+    if item.status is EstimateStatus.PRIOR:
+        return min(item.confidence, config.prior_confidence_cap)
+    if item.status is EstimateStatus.FALLBACK:
+        return min(item.confidence, config.fallback_confidence_cap)
+    return item.confidence
+
+
 def _factor(
     factor: str,
     inputs: tuple[tuple[str, ScalarEstimate], ...],
@@ -164,14 +177,7 @@ def _factor(
         else:
 
             def confidence(items: tuple[ScalarEstimate, ...]) -> float:
-                return min(
-                    min(item.confidence, config.prior_confidence_cap)
-                    if item.status is EstimateStatus.PRIOR
-                    else min(item.confidence, config.fallback_confidence_cap)
-                    if item.status is EstimateStatus.FALLBACK
-                    else item.confidence
-                    for item in items
-                )
+                return min(_effective_confidence(item, config) for item in items)
 
             energy = ScalarEstimate(
                 value=energies[0],
@@ -181,7 +187,9 @@ def _factor(
                 unit="J",
                 source=ADAPTER_SOURCE,
                 timestamp_seconds=timestamp,
-                status=EstimateStatus.INFERRED,
+                status=combine_estimate_statuses(
+                    (EstimateStatus.INFERRED, mass.status, quantity.status)
+                ),
                 evidence=provenance,
             )
             bound = "upper_bound" if config.use_upper_bounds else "value"
@@ -198,6 +206,7 @@ def _factor(
                 evidence=provenance
                 + (
                     f"linear clipped energy severity; scale={scale} J; bound={bound}",
+                    "confidence applies prior/fallback caps before weakest-input fusion",
                     "uncalibrated consequence and interaction proxies",
                 ),
             )
@@ -247,18 +256,18 @@ def _direct_factor(
             source=ADAPTER_SOURCE, evidence=provenance + tuple(reasons)
         )
     else:
-        confidence = min(
-            min(item.confidence, config.prior_confidence_cap)
-            if item.status is EstimateStatus.PRIOR
-            else item.confidence
-            for _, item in inputs
-        )
+        confidence = min(_effective_confidence(item, config) for _, item in inputs)
         estimate = RiskFactorEstimate(
             severity=min(1.0, max(0.0, severity)),
             interaction_likelihood=min(1.0, max(0.0, interaction)),
             confidence=confidence,
             source=ADAPTER_SOURCE,
-            evidence=provenance + (assumption, "uncalibrated normalized cue mapping"),
+            evidence=provenance
+            + (
+                assumption,
+                "confidence applies prior/fallback caps before weakest-input fusion",
+                "uncalibrated normalized cue mapping",
+            ),
         )
     return PhysicalFactorDiagnostic(factor, inputs, energy, estimate, tuple(reasons))
 

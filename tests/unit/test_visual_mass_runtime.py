@@ -1,6 +1,7 @@
 from pathlib import Path
 
 import numpy as np
+import pytest
 import torch
 
 from robot.perception.physical_attributes import (
@@ -17,9 +18,22 @@ from robot.perception.visual_mass_runtime import (
 )
 
 
-def scalar(value, confidence=0.8):
+def scalar(
+    value,
+    confidence=0.8,
+    *,
+    timestamp=2,
+    status=EstimateStatus.INFERRED,
+):
     return ScalarEstimate(
-        value, value * 0.9, value * 1.1, confidence, "m", "lidar", 2
+        value,
+        value * 0.9,
+        value * 1.1,
+        confidence,
+        "m",
+        "lidar",
+        timestamp,
+        status,
     )
 
 
@@ -27,6 +41,19 @@ def geometry():
     unavailable = ScalarEstimate.unavailable(unit="m", source="none", timestamp_seconds=2)
     return GeometryAttributes(
         scalar(0.5), scalar(0.4), scalar(0.8), unavailable, unavailable
+    )
+
+
+def geometry_with(*, timestamp=2, status=EstimateStatus.INFERRED):
+    unavailable = ScalarEstimate.unavailable(
+        unit="m", source="none", timestamp_seconds=timestamp
+    )
+    return GeometryAttributes(
+        scalar(0.5, timestamp=timestamp, status=status),
+        scalar(0.4, timestamp=timestamp, status=status),
+        scalar(0.8, timestamp=timestamp, status=status),
+        unavailable,
+        unavailable,
     )
 
 
@@ -78,6 +105,14 @@ def test_ultralytics_numeric_device_is_normalized_for_pytorch(tmp_path):
     assert settings.device == "cuda:0"
 
 
+def test_geometry_age_must_be_positive(tmp_path):
+    with pytest.raises(ValueError, match="maximum_geometry_age_seconds"):
+        VisualMassRuntimeConfig(
+            config(tmp_path).checkpoint_path,
+            maximum_geometry_age_seconds=0,
+        )
+
+
 def test_estimator_uses_masked_crop_and_lidar_dimensions(tmp_path):
     estimator = VisualMassRuntimeEstimator(
         config(tmp_path), backend=Backend(), transform=transform
@@ -102,3 +137,39 @@ def test_unsupported_class_and_missing_dimensions_stay_unavailable(tmp_path):
     assert not estimator.estimate(
         image, detection(), missing, timestamp_seconds=2
     ).mass_kg.is_available
+
+
+def test_visual_mass_preserves_non_sensor_geometry_dependency(tmp_path):
+    estimator = VisualMassRuntimeEstimator(
+        config(tmp_path), backend=Backend(), transform=transform
+    )
+    image = np.zeros((10, 12, 3), dtype=np.uint8)
+
+    result = estimator.estimate(
+        image,
+        detection(),
+        geometry_with(status=EstimateStatus.ORACLE),
+        timestamp_seconds=2,
+    )
+
+    assert result.mass_kg.status is EstimateStatus.ORACLE
+    assert any("geometry_width: status=oracle" in item for item in result.mass_kg.evidence)
+
+
+def test_visual_mass_rejects_stale_and_future_geometry(tmp_path):
+    estimator = VisualMassRuntimeEstimator(
+        config(tmp_path), backend=Backend(), transform=transform
+    )
+    image = np.zeros((10, 12, 3), dtype=np.uint8)
+
+    stale = estimator.estimate(
+        image, detection(), geometry_with(timestamp=1), timestamp_seconds=2
+    )
+    future = estimator.estimate(
+        image, detection(), geometry_with(timestamp=3), timestamp_seconds=2
+    )
+
+    assert not stale.mass_kg.is_available
+    assert "stale" in stale.mass_kg.evidence[0]
+    assert not future.mass_kg.is_available
+    assert "future" in future.mass_kg.evidence[0]

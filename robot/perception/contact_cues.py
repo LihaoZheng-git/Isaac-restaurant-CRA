@@ -68,6 +68,7 @@ def estimate_contact_cues(
             raise ValueError("segmentation confidence must lie in [0, 1]")
         if segmentation.timestamp_seconds > timestamp:
             raise ValueError("segmentation cannot be newer than result")
+        evidence_timestamp = float(segmentation.timestamp_seconds)
         ratio = danger_count / object_count
         uncertainty = min(0.25, (1 - confidence) * 0.5)
         exposure = ScalarEstimate(
@@ -77,7 +78,7 @@ def estimate_contact_cues(
             confidence,
             "1",
             CONTACT_MASK_SOURCE,
-            timestamp,
+            evidence_timestamp,
             EstimateStatus.INFERRED,
             (
                 f"model_id={segmentation.model_id}",
@@ -89,7 +90,7 @@ def estimate_contact_cues(
             segmentation.dangerous_part_label,
             confidence,
             CONTACT_MASK_SOURCE,
-            timestamp,
+            evidence_timestamp,
             EstimateStatus.INFERRED,
             (f"model_id={segmentation.model_id}",),
         )
