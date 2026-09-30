@@ -5,6 +5,7 @@ from pathlib import Path
 
 import numpy as np
 
+from robot.perception.physical_attributes import EstimateStatus
 from robot.perception.visual_mass_dataset import VisualMassSample
 
 
@@ -22,6 +23,8 @@ class VisualMassCapture:
     simulation_seed: int
     rgb: np.ndarray
     object_mask: np.ndarray
+    geometry_status: EstimateStatus = EstimateStatus.UNAVAILABLE
+    geometry_source: str = "geometry_provenance_unavailable"
 
 
 def persist_visual_mass_capture(
@@ -64,4 +67,6 @@ def persist_visual_mass_capture(
         height_m=height,
         camera_id=capture.camera_id,
         simulation_seed=capture.simulation_seed,
+        geometry_status=capture.geometry_status,
+        geometry_source=capture.geometry_source,
     )

@@ -44,6 +44,7 @@ from robot.perception.visual_mass_collection import (
     VisualMassCapture,
     persist_visual_mass_capture,
 )
+from robot.perception.physical_attributes import EstimateStatus
 from robot.perception.visual_mass_dataset import (
     validate_visual_mass_dataset,
     write_visual_mass_manifest,
@@ -180,6 +181,8 @@ def _capture_view(item: IsaacMassObject, camera_id: str, position, sample_id: st
                 simulation_seed=0,
                 rgb=rgb[:, :, :3].astype(np.uint8),
                 object_mask=mask,
+                geometry_status=EstimateStatus.ORACLE,
+                geometry_source="isaac_authored_geometry_offline",
             ),
             OUTPUT_DIRECTORY,
         )

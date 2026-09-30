@@ -3,6 +3,7 @@ import json
 import numpy as np
 import pytest
 
+from robot.perception.physical_attributes import EstimateStatus
 from robot.perception.visual_mass_collection import (
     VisualMassCapture,
     persist_visual_mass_capture,
@@ -48,7 +49,27 @@ def test_manifest_round_trip_is_deterministic(tmp_path):
     path = tmp_path / "manifest.jsonl"
     write_visual_mass_manifest([sample()], path)
     assert read_visual_mass_manifest(path) == (sample(),)
-    assert json.loads(path.read_text().splitlines()[0])["schema_version"] == 1
+    payload = json.loads(path.read_text().splitlines()[0])
+    assert payload["schema_version"] == 2
+    assert payload["geometry_status"] == "unavailable"
+
+
+def test_version_one_manifest_loads_missing_geometry_as_unavailable(tmp_path):
+    path = tmp_path / "legacy.jsonl"
+    payload = {
+        "schema_version": 1,
+        **{
+            key: value
+            for key, value in sample().__dict__.items()
+            if key not in {"geometry_status", "geometry_source"}
+        },
+    }
+    path.write_text(json.dumps(payload) + "\n", encoding="utf-8")
+
+    item = read_visual_mass_manifest(path)[0]
+
+    assert item.geometry_status is EstimateStatus.UNAVAILABLE
+    assert item.geometry_source == "geometry_provenance_unavailable"
 
 
 def test_validation_detects_missing_files_and_object_leak(tmp_path):
@@ -77,8 +98,33 @@ def test_capture_persists_rgb_mask_and_auditable_label(tmp_path):
     item = persist_visual_mass_capture(capture, tmp_path)
     assert np.load(tmp_path / item.rgb_path, allow_pickle=False).shape == (4, 5, 3)
     assert validate_visual_mass_dataset([item], tmp_path).valid
+    assert item.geometry_status is EstimateStatus.UNAVAILABLE
     with pytest.raises(FileExistsError):
         persist_visual_mass_capture(capture, tmp_path)
+
+
+def test_capture_preserves_sensor_geometry_provenance(tmp_path):
+    capture = VisualMassCapture(
+        "bowl-2-view-1",
+        "bowl-2",
+        "bowl",
+        "restaurant",
+        "test",
+        1.0,
+        "measured_scale_mass",
+        (0.2, 0.2, 0.1),
+        "front_hawk_left",
+        4,
+        np.zeros((4, 5, 3), dtype=np.uint8),
+        np.ones((4, 5), dtype=np.bool_),
+        EstimateStatus.INFERRED,
+        "calibrated_depth_geometry",
+    )
+
+    item = persist_visual_mass_capture(capture, tmp_path)
+
+    assert item.geometry_status is EstimateStatus.INFERRED
+    assert item.geometry_source == "calibrated_depth_geometry"
 
 
 def test_bad_capture_is_rejected(tmp_path):

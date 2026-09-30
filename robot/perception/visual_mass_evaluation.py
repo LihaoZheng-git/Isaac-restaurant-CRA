@@ -6,7 +6,11 @@ from dataclasses import dataclass
 import math
 from typing import Iterable
 
-from robot.perception.physical_attributes import EstimateStatus, MassAttributes
+from robot.perception.physical_attributes import (
+    EstimateStatus,
+    GeometryAttributes,
+    MassAttributes,
+)
 from robot.perception.visual_mass_dataset import (
     VisualMassMetrics,
     VisualMassSample,
@@ -27,17 +31,30 @@ class VisualMassDomainPrediction:
     status: EstimateStatus
     source: str
     checkpoint_sha256: str
+    geometry_statuses: tuple[EstimateStatus, EstimateStatus, EstimateStatus] = (
+        EstimateStatus.UNAVAILABLE,
+        EstimateStatus.UNAVAILABLE,
+        EstimateStatus.UNAVAILABLE,
+    )
+    geometry_sources: tuple[str, str, str] = (
+        "geometry_provenance_unavailable",
+        "geometry_provenance_unavailable",
+        "geometry_provenance_unavailable",
+    )
 
     @classmethod
     def from_attributes(
         cls,
         sample_id: str,
         attributes: MassAttributes,
+        geometry: GeometryAttributes,
         *,
         checkpoint_sha256: str,
     ) -> "VisualMassDomainPrediction":
         if not isinstance(attributes, MassAttributes):
             raise TypeError("attributes must be MassAttributes")
+        if not isinstance(geometry, GeometryAttributes):
+            raise TypeError("geometry must be GeometryAttributes")
         estimate = attributes.mass_kg
         if not estimate.is_available:
             raise ValueError("mass estimate must be available for evaluation")
@@ -50,6 +67,14 @@ class VisualMassDomainPrediction:
             estimate.status,
             estimate.source,
             checkpoint_sha256,
+            tuple(
+                item.status
+                for item in (geometry.width_m, geometry.depth_m, geometry.height_m)
+            ),
+            tuple(
+                item.source
+                for item in (geometry.width_m, geometry.depth_m, geometry.height_m)
+            ),
         )
 
     def __post_init__(self) -> None:
@@ -75,6 +100,26 @@ class VisualMassDomainPrediction:
         if len(digest) != 64 or any(char not in "0123456789abcdef" for char in digest):
             raise ValueError("checkpoint_sha256 must be a hexadecimal SHA-256 digest")
         object.__setattr__(self, "checkpoint_sha256", digest)
+        if len(self.geometry_statuses) != 3 or len(self.geometry_sources) != 3:
+            raise ValueError("geometry provenance must describe width, depth, and height")
+        try:
+            statuses = tuple(EstimateStatus(item) for item in self.geometry_statuses)
+        except (TypeError, ValueError) as error:
+            raise ValueError("geometry_statuses contains an unsupported status") from error
+        sources = tuple(str(item).strip() for item in self.geometry_sources)
+        if any(not item for item in sources):
+            raise ValueError("geometry_sources must contain nonempty text")
+        object.__setattr__(self, "geometry_statuses", statuses)
+        object.__setattr__(self, "geometry_sources", sources)
+
+    @property
+    def uses_sensor_geometry(self) -> bool:
+        """Return whether all mass dimensions came from measured/inferred evidence."""
+
+        return all(
+            status in (EstimateStatus.MEASURED, EstimateStatus.INFERRED)
+            for status in self.geometry_statuses
+        )
 
 
 @dataclass(frozen=True)
@@ -89,7 +134,6 @@ class VisualMassClassEvaluation:
 class VisualMassDomainEvaluationConfig:
     minimum_independent_test_objects: int = 10
     minimum_objects_per_reported_class: int = 2
-    sensor_derived_geometry: bool = False
 
     def __post_init__(self) -> None:
         for name in (
@@ -99,8 +143,6 @@ class VisualMassDomainEvaluationConfig:
             value = getattr(self, name)
             if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
                 raise ValueError(f"{name} must be a positive integer")
-        if not isinstance(self.sensor_derived_geometry, bool):
-            raise TypeError("sensor_derived_geometry must be boolean")
 
 
 @dataclass(frozen=True)
@@ -136,8 +178,14 @@ def evaluate_visual_mass_isaac_domain(
     extra = set(by_sample) - expected_ids
     missing = expected_ids - set(by_sample)
     blockers = []
-    if not settings.sensor_derived_geometry:
-        blockers.append("geometry inputs are not identified as sensor-derived")
+    non_sensor_geometry = sorted(
+        item.sample_id for item in prediction_items if not item.uses_sensor_geometry
+    )
+    if non_sensor_geometry:
+        blockers.append(
+            "predictions lack measured/inferred geometry provenance: "
+            f"{non_sensor_geometry}"
+        )
     if extra:
         blockers.append(f"predictions contain non-test samples: {sorted(extra)}")
     if missing:

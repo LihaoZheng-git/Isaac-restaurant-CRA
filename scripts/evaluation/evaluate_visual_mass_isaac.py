@@ -41,21 +41,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--device", default="cpu")
     parser.add_argument("--minimum-test-objects", type=int, default=10)
     parser.add_argument("--minimum-per-class", type=int, default=2)
-    parser.add_argument(
-        "--sensor-derived-geometry",
-        action="store_true",
-        help="identify manifest dimensions as sensor-derived rather than authored oracle",
-    )
     return parser.parse_args()
 
 
-def _scalar(value: float, *, sensor_derived: bool) -> ScalarEstimate:
-    status = EstimateStatus.MEASURED if sensor_derived else EstimateStatus.ORACLE
-    source = (
-        "isaac_capture_sensor_geometry"
-        if sensor_derived
-        else "isaac_authored_geometry_offline"
-    )
+def _scalar(
+    value: float, *, status: EstimateStatus, source: str
+) -> ScalarEstimate:
     return ScalarEstimate(
         value,
         value,
@@ -101,13 +92,19 @@ def main() -> None:
         geometry = replace(
             base.geometry,
             width_m=_scalar(
-                item.width_m, sensor_derived=args.sensor_derived_geometry
+                item.width_m,
+                status=item.geometry_status,
+                source=item.geometry_source,
             ),
             depth_m=_scalar(
-                item.depth_m, sensor_derived=args.sensor_derived_geometry
+                item.depth_m,
+                status=item.geometry_status,
+                source=item.geometry_source,
             ),
             height_m=_scalar(
-                item.height_m, sensor_derived=args.sensor_derived_geometry
+                item.height_m,
+                status=item.geometry_status,
+                source=item.geometry_source,
             ),
         )
         attributes = estimator.estimate(
@@ -120,6 +117,7 @@ def main() -> None:
             VisualMassDomainPrediction.from_attributes(
                 item.sample_id,
                 attributes,
+                geometry,
                 checkpoint_sha256=estimator.checkpoint_sha256,
             )
         )
@@ -129,7 +127,6 @@ def main() -> None:
         config=VisualMassDomainEvaluationConfig(
             args.minimum_test_objects,
             args.minimum_per_class,
-            args.sensor_derived_geometry,
         ),
     )
     payload = asdict(report)
@@ -138,8 +135,12 @@ def main() -> None:
     payload["oracle_boundary"] = (
         "authored mass read only after runtime prediction for offline scoring"
     )
-    payload["geometry_evidence"] = (
-        "sensor_derived" if args.sensor_derived_geometry else "isaac_authored_oracle"
+    payload["geometry_evidence"] = sorted(
+        {
+            f"{item.geometry_status.value}:{item.geometry_source}"
+            for item in samples
+            if item.split == "test"
+        }
     )
     payload["ready_for_sensor_domain_claim"] = (
         report.ready_for_sensor_domain_claim

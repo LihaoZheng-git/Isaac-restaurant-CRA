@@ -12,8 +12,11 @@ from numbers import Real
 from pathlib import Path, PurePosixPath
 from typing import Iterable
 
+from robot.perception.physical_attributes import EstimateStatus
 
-VISUAL_MASS_DATASET_SCHEMA_VERSION = 1
+
+VISUAL_MASS_DATASET_SCHEMA_VERSION = 2
+SUPPORTED_VISUAL_MASS_DATASET_SCHEMA_VERSIONS = frozenset({1, 2})
 ALLOWED_SPLITS = frozenset({"train", "validation", "test"})
 ALLOWED_MASS_SOURCES = frozenset(
     {"isaac_authored_mass", "isaac_density_volume_mass", "measured_scale_mass"}
@@ -62,6 +65,8 @@ class VisualMassSample:
     simulation_seed: int
     domain: str = "isaac_sim"
     mask_path: str | None = None
+    geometry_status: EstimateStatus = EstimateStatus.UNAVAILABLE
+    geometry_source: str = "geometry_provenance_unavailable"
 
     def __post_init__(self) -> None:
         for name in (
@@ -77,6 +82,11 @@ class VisualMassSample:
             raise ValueError(f"split must be one of {sorted(ALLOWED_SPLITS)}")
         if self.mass_source not in ALLOWED_MASS_SOURCES:
             raise ValueError("mass_source must identify auditable ground truth")
+        try:
+            geometry_status = EstimateStatus(self.geometry_status)
+        except (TypeError, ValueError) as error:
+            raise ValueError("geometry_status must be a supported EstimateStatus") from error
+        geometry_source = _text(self.geometry_source, "geometry_source")
         object.__setattr__(self, "rgb_path", _relative_path(self.rgb_path, "rgb_path"))
         if self.mask_path is not None:
             object.__setattr__(
@@ -90,6 +100,8 @@ class VisualMassSample:
             raise TypeError("simulation_seed must be an integer")
         if self.simulation_seed < 0:
             raise ValueError("simulation_seed cannot be negative")
+        object.__setattr__(self, "geometry_status", geometry_status)
+        object.__setattr__(self, "geometry_source", geometry_source)
 
 
 @dataclass(frozen=True)
@@ -154,7 +166,7 @@ def read_visual_mass_manifest(manifest_path: Path) -> tuple[VisualMassSample, ..
                 continue
             payload = json.loads(line)
             version = payload.pop("schema_version", None)
-            if version != VISUAL_MASS_DATASET_SCHEMA_VERSION:
+            if version not in SUPPORTED_VISUAL_MASS_DATASET_SCHEMA_VERSIONS:
                 raise ValueError(f"line {line_number}: unsupported schema version")
             items.append(VisualMassSample(**payload))
     if len({item.sample_id for item in items}) != len(items):

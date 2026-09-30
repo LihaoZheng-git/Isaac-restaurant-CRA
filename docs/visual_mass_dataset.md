@@ -7,8 +7,9 @@ they must never enter runtime CRA inference.
 
 Splits use physical `object_id`, preventing multiple views of one asset from
 leaking across train, validation, and test. The manifest records scene, camera,
-seed, class, dimensions, mass, and mass source. Collection stores RGB and masks
-losslessly. Before training, inventory multiple independent instances per
+seed, class, dimensions, mass source, and the dimensions' provenance status
+and source. Collection stores RGB and masks losslessly. Before training,
+inventory multiple independent instances per
 class—not merely views of one mesh—and randomize viewpoint, lighting, texture,
 background, and container fill state.
 
@@ -141,8 +142,10 @@ offline scoring. Oracle mass therefore cannot enter the runtime estimate.
 The controlled manifest dimensions are also identified as offline authored
 geometry with `oracle` provenance. They do not count as live LiDAR measurements.
 The evaluator therefore blocks its sensor-domain readiness flag by default.
-Only captures whose dimensions came from the sensor pipeline may pass
-`--sensor-derived-geometry`; this switch does not convert authored dimensions.
+Only captures persisted with measured or inferred geometry provenance can pass
+that gate. There is no command-line override that can convert authored
+dimensions into sensor evidence. Version-one manifests remain readable, but
+their missing geometry provenance is loaded as explicitly unavailable.
 
 Repeated views are averaged per physical `object_id` before MAE, median error,
 MAPE, and interval coverage are computed. This prevents many camera views of
