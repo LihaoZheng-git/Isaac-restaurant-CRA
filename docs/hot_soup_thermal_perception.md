@@ -159,6 +159,14 @@ changes score magnitude. The default weights and normalization scales are
 engineering hypotheses for evaluation, not learned calibration. A learned
 regression model remains a later ablation after graded supervision exists.
 
+The continuous result can be supplied to
+`build_track_specialist_evidence` by parent-object detection index. Exactly one
+accepted camera--LiDAR association must refer to that detection. Zero matches
+remain unattached, and multiple tracks are reported as ambiguous. The legacy
+box-only hot-soup path and continuous mask path cannot be active for the same
+update. Once attached, the existing same-track waypoint-corridor score supplies
+thermal interaction; it does not imply carriage, spill, or temperature.
+
 `robot/perception/hot_soup_detector.py` accepts detector boxes only for
 `visible_hot_soup_plume` and `open_container`. It computes a configurable
 continuous spatial association from horizontal overlap, relative vertical

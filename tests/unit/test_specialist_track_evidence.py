@@ -1,3 +1,5 @@
+from dataclasses import replace
+
 import numpy as np
 import pytest
 
@@ -7,6 +9,12 @@ from robot.perception.hot_soup_detector import (
     HotSoupDetection,
     HotSoupDetectionFrame,
     estimate_hot_soup_from_detections,
+)
+from robot.perception.physical_attributes import (
+    CategoricalEstimate,
+    EstimateStatus,
+    PhysicalAttributes,
+    ScalarEstimate,
 )
 from robot.perception.semantic_detection import PixelBoundingBox
 from robot.perception.specialist_track_evidence import (
@@ -73,6 +81,28 @@ def hot_soup_frame(timestamp=2.0, frame_id=7):
     )
 
 
+def continuous_thermal(timestamp=2.0):
+    base = PhysicalAttributes.unknown(track_id=4, timestamp_seconds=timestamp).thermal
+    heat = ScalarEstimate(
+        0.6,
+        0.5,
+        0.7,
+        0.75,
+        "1",
+        "continuous_plume_fixture",
+        timestamp,
+        EstimateStatus.INFERRED,
+    )
+    source = CategoricalEstimate(
+        "continuous_visual_plume_proxy",
+        0.75,
+        "continuous_plume_fixture",
+        timestamp,
+        EstimateStatus.INFERRED,
+    )
+    return replace(base, heat_source_likelihood=heat, source_type=source)
+
+
 def test_aligned_specialists_become_fresh_per_track_providers():
     soup = hot_soup_frame()
     soup_result = estimate_hot_soup_from_detections(soup, timestamp_seconds=2.0)
@@ -136,4 +166,44 @@ def test_specialist_frame_identity_and_timestamp_must_match():
         build_track_specialist_evidence(
             association_frame(association(4, 0)),
             contact_segmentations={0: segmentation(timestamp=1.9)},
+        )
+
+
+def test_continuous_thermal_attributes_follow_parent_detection_to_track():
+    evidence = build_track_specialist_evidence(
+        association_frame(association(4, 2)),
+        thermal_attributes_by_detection_index={2: continuous_thermal()},
+    )
+    thermal = evidence.thermal_for(4, 2.1)
+    assert thermal.heat_source_likelihood.value == pytest.approx(0.6)
+    assert thermal.source_type.value == "continuous_visual_plume_proxy"
+    assert evidence.diagnostics.thermal_track_ids == (4,)
+
+
+def test_continuous_thermal_parent_with_multiple_tracks_is_ambiguous():
+    evidence = build_track_specialist_evidence(
+        association_frame(association(4, 2), association(5, 2)),
+        thermal_attributes_by_detection_index={2: continuous_thermal()},
+    )
+    assert evidence.diagnostics.ambiguous_thermal_track_ids == (4, 5)
+    assert not evidence.thermal_for(4, 2.1).heat_source_likelihood.is_available
+
+
+def test_continuous_thermal_timestamp_must_match_camera_association():
+    with pytest.raises(ValueError, match="timestamp"):
+        build_track_specialist_evidence(
+            association_frame(association(4, 2)),
+            thermal_attributes_by_detection_index={2: continuous_thermal(1.9)},
+        )
+
+
+def test_legacy_and_continuous_thermal_paths_cannot_be_mixed():
+    soup = hot_soup_frame()
+    result = estimate_hot_soup_from_detections(soup, timestamp_seconds=2.0)
+    with pytest.raises(ValueError, match="mutually exclusive"):
+        build_track_specialist_evidence(
+            association_frame(association(4, 2)),
+            thermal_attributes_by_detection_index={2: continuous_thermal()},
+            hot_soup_frame=soup,
+            hot_soup_result=result,
         )

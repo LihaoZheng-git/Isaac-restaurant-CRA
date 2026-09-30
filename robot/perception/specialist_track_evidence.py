@@ -7,7 +7,7 @@ IDs.  Missing, stale, or ambiguous evidence stays unavailable.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, fields
 import math
 from types import MappingProxyType
 from typing import Mapping
@@ -181,14 +181,16 @@ def build_track_specialist_evidence(
     association_frame: SpecialistAssociationFrame,
     *,
     contact_segmentations: Mapping[int, DangerousPartSegmentation] | None = None,
+    thermal_attributes_by_detection_index: Mapping[int, ThermalAttributes]
+    | None = None,
     hot_soup_frame: HotSoupDetectionFrame | None = None,
     hot_soup_result: HotSoupDetectionCueResult | None = None,
     maximum_age_seconds: float = 0.5,
 ) -> TrackSpecialistEvidence:
     """Build provider-ready evidence from aligned fixed-label results.
 
-    Contact segmentation keys are detection indices from the association frame.
-    Hot-soup evidence is assigned through the selected container box and the
+    Contact segmentation and continuous thermal keys are detection indices
+    from the association frame. Hot-soup evidence is assigned through the selected container box and the
     projected median of each visible LiDAR track.  A box containing multiple
     track medians is ambiguous and is not assigned.
     """
@@ -224,6 +226,50 @@ def build_track_specialist_evidence(
     thermal: dict[int, ThermalAttributes] = {}
     ambiguous_thermal: tuple[int, ...] = ()
     thermal_timestamp: float | None = None
+    continuous_thermal = dict(thermal_attributes_by_detection_index or {})
+    if continuous_thermal and (
+        hot_soup_frame is not None or hot_soup_result is not None
+    ):
+        raise ValueError(
+            "continuous thermal attributes and legacy hot-soup evidence are "
+            "mutually exclusive"
+        )
+    for index, attributes in continuous_thermal.items():
+        if isinstance(index, bool) or not isinstance(index, int) or index < 0:
+            raise ValueError("thermal detection indices must be nonnegative integers")
+        if not isinstance(attributes, ThermalAttributes):
+            raise TypeError(
+                "thermal_attributes_by_detection_index must contain ThermalAttributes"
+            )
+        _validate_thermal_timestamp(
+            attributes,
+            association_frame.source_timestamp_seconds,
+        )
+        if not attributes.heat_source_likelihood.is_available:
+            reasons.append(
+                f"thermal detection index {index} has unavailable heat-source evidence"
+            )
+            continue
+        candidates = sorted(
+            association.track_id
+            for association in association_frame.associations
+            if association.is_matched and association.detection_index == index
+        )
+        if len(candidates) == 1:
+            thermal[candidates[0]] = attributes
+        elif len(candidates) > 1:
+            ambiguous_thermal = tuple(
+                sorted(set(ambiguous_thermal).union(candidates))
+            )
+            reasons.append(
+                f"thermal detection index {index} maps to multiple LiDAR tracks"
+            )
+        else:
+            reasons.append(
+                f"thermal detection index {index} has no accepted LiDAR track"
+            )
+    if continuous_thermal:
+        thermal_timestamp = association_frame.source_timestamp_seconds
     if (hot_soup_frame is None) != (hot_soup_result is None):
         raise ValueError("hot_soup_frame and hot_soup_result must be supplied together")
     if hot_soup_frame is not None and hot_soup_result is not None:
@@ -286,6 +332,22 @@ def _validate_aligned_hot_soup_frame(
         or hot_soup_frame.image_width != association_frame.image_width
     ):
         raise ValueError("hot-soup and association image dimensions must match")
+
+
+def _validate_thermal_timestamp(
+    thermal: ThermalAttributes,
+    expected_timestamp: float,
+) -> None:
+    for item in fields(thermal):
+        estimate = getattr(thermal, item.name)
+        if not math.isclose(
+            estimate.timestamp_seconds,
+            expected_timestamp,
+            abs_tol=1e-9,
+        ):
+            raise ValueError(
+                "continuous thermal timestamp must match association frame"
+            )
 
 
 def _tracks_inside_box(
