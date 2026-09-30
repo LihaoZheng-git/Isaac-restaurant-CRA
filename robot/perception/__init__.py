@@ -15,6 +15,11 @@ from robot.perception.contact_detection_adapter import (
     ContactPartAssociationResult,
     associate_contact_parts_to_objects,
 )
+from robot.perception.contact_geometry_features import (
+    CONTACT_GEOMETRY_FEATURE_SOURCE,
+    ContactGeometryFeatures,
+    estimate_contact_geometry_features,
+)
 from robot.perception.continuous_thermal_score import (
     CONTINUOUS_THERMAL_SOURCE,
     ContinuousThermalScoreConfig,
@@ -164,6 +169,8 @@ __all__ = [
     "ClassMassPrior",
     "ClassMassPriorTable",
     "ContactAttributes",
+    "CONTACT_GEOMETRY_FEATURE_SOURCE",
+    "ContactGeometryFeatures",
     "ContactPartAssociationConfig",
     "ContactPartAssociationDiagnostics",
     "ContactPartAssociationResult",
@@ -238,6 +245,7 @@ __all__ = [
     "adapt_plume_segmentations",
     "estimate_box_volume",
     "estimate_contextual_thermal_cues",
+    "estimate_contact_geometry_features",
     "estimate_continuous_thermal_score",
     "estimate_hot_soup_cues",
     "estimate_hot_soup_from_detections",
