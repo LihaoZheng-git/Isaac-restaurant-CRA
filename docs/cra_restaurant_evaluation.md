@@ -54,3 +54,17 @@ support, landing, or fall heights. The stationary Isaac diagnostic
 rendered bounds, root-layer preservation, and robot drift while issuing only
 zero wheel commands. Its coauthored fixtures validate placement only and are
 not valid perception samples.
+
+`robot.evaluation.restaurant_evidence_records` is the durable boundary for the
+stationary benchmark. Each record identifies the scenario, seed, capture, code
+revision, and optional SHA-256 fingerprints for configuration, weights,
+datasets, scenes, or code artifacts. Runtime physical inputs retain measured,
+inferred, prior, oracle, fallback, or unavailable provenance.
+
+Factor-specific records contain only the scenario's named factor and omit the
+aggregate. Four-factor records store aggregate `phi` separately and mark it
+reportable only when all required evidence passes the matching evidence-mode
+readiness check. Unknown fallback factors and saturation remain visible even
+when the aggregate is unreportable. Authored scoring truth is stored in a
+separate `oracle_scoring` section with `available_to_runtime=false`; undeclared
+fields are rejected, so object height cannot be inserted as fall height.
