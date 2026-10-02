@@ -34,9 +34,24 @@ fixture declares an experimental 0.20 m support gap and 0.30 m local search
 margin. The stricter runtime defaults remain unchanged. This configuration
 requires additional negative-scene calibration before runtime adoption.
 
-The validated stationary run associated 15 live LiDAR returns with the target,
-inferred a 0.726 m support-to-landing drop against the separately authored
-0.800 m oracle, and covered the oracle within its uncertainty interval. Absolute
-error was 0.074 m. Robot drift was 0.0012 m and 0.0127 degrees under zero wheel
-commands. This is one controlled positive sensor diagnostic, not a general
-fall-height accuracy result.
+The earlier run reported a 0.726 m drop against a declared 0.800 m oracle.
+The 2026-10-02 stationary benchmark found that the fixture scaled a unit USD
+cube by half its declared dimensions. Its rendered support and target therefore
+did not match the experiment's geometry contract. That result is superseded
+and must not be cited as valid positive fall-height accuracy.
+
+The diagnostic now uses full metric dimensions, checks rendered support top,
+target bottom and target height, and authors only in the session layer. With
+the corrected 0.80 m support, the live scan's object-adjacent band was too far
+below the target. Fall height remained unavailable. A separately labeled
+0.55 m visibility diagnostic also remained unavailable because the selected
+band lacked planar support beyond the object's footprint. Both robots stayed
+within 0.005 m / 0.1 degree stationary tolerances. No runtime thresholds were
+loosened to pass these cases.
+
+`CRA_FALL_SUPPORT_DROP_M` configures the diagnostic support height; the default
+remains 0.80 m. Target association and the height filter use authored fixture
+setup. The surface estimator receives live points, and authored heights are
+used separately for scoring. Positive fall-height sensor validation remains
+pending; support-plane visibility and band selection need investigation before
+using this path in a motion experiment.

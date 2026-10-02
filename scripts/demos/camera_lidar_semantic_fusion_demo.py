@@ -39,10 +39,12 @@ import math
 import os
 import sys
 import traceback
-from dataclasses import replace
+from dataclasses import asdict, replace
 from datetime import datetime
 import hashlib
+import json
 from pathlib import Path
+import subprocess
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -91,6 +93,15 @@ from PIL import Image
 from pxr import Gf, Usd
 
 from robot.control.differential_drive import NovaCarterController
+from robot.evaluation.restaurant_evidence_records import (
+    EvaluationArtifactFingerprint,
+    EvaluationArtifactKind,
+    EvaluationRunIdentity,
+)
+from robot.evaluation.stationary_perception_benchmark import (
+    StationaryCaptureChecks,
+    write_stationary_sensor_capture,
+)
 from robot.perception.camera_lidar_fusion import (
     CameraLidarFusionConfig,
     CameraLidarFusionResult,
@@ -180,6 +191,8 @@ from robot.scene.camera_calibration import (
     read_fisheye_polynomial_calibration,
 )
 from robot.scene.loader import load_robot_scene
+from robot.scene.restaurant_risk_scenarios import restaurant_risk_scenario
+from robot.scene.restaurant_scenario_authoring import author_restaurant_risk_scenario
 from robot.scene.transforms import (
     compute_relative_prim_transform,
     get_prim_planar_pose,
@@ -235,6 +248,9 @@ RUN_TIMESTAMP = datetime.now().strftime("%Y%m%d_%H%M%S")
 OUTPUT_DIRECTORY = (
     PROJECT_ROOT / "outputs" / "camera_lidar_semantic_fusion" / RUN_TIMESTAMP
 )
+BENCHMARK_DIRECTORY = os.environ.get("CRA_STATIONARY_BENCHMARK_DIR", "").strip()
+if BENCHMARK_DIRECTORY:
+    OUTPUT_DIRECTORY = Path(BENCHMARK_DIRECTORY).expanduser().resolve()
 
 TRANSIENT_SENSOR_ERRORS = (
     "No LiDAR data is available yet",
@@ -488,6 +504,120 @@ def wrapped_angle_difference(first: float, second: float) -> float:
     """Return the absolute wrapped difference between two yaw angles."""
 
     return abs(math.atan2(math.sin(first - second), math.cos(first - second)))
+
+
+def save_benchmark_capture(
+    *, model_path, visual_mass_estimator, contact_checkpoint,
+    contact_diagnostic, contact_frame, detections, camera_info, lidar_info,
+    physical_attributes, physical_profile_provider, fusion, initial_pose,
+    final_pose, pipeline_passed, published_motion_count,
+    published_motion_sample_count, image_rgb, points_robot,
+    obstacle_points_3d, tracking, raw_path, semantic_path, fusion_path,
+    authored_scenario, calibration, robot_from_lidar, camera_from_robot,
+) -> None:
+    """Persist the exact sensor inputs and diagnostics used by this run."""
+
+    artifacts = [
+        EvaluationArtifactFingerprint.from_file(
+            model_path, name="object_segmentation", kind=EvaluationArtifactKind.MODEL_WEIGHTS,
+        ),
+        EvaluationArtifactFingerprint.from_file(
+            ROBOT_SCENE_PATH, name="restaurant_robot", kind=EvaluationArtifactKind.SCENE,
+        ),
+    ]
+    for name in (
+        "scripts/demos/camera_lidar_semantic_fusion_demo.py",
+        "robot/evaluation/stationary_perception_benchmark.py",
+        "robot/scene/restaurant_scenario_authoring.py",
+    ):
+        artifacts.append(EvaluationArtifactFingerprint.from_file(
+            PROJECT_ROOT / name, name=name, kind=EvaluationArtifactKind.CODE,
+        ))
+    if visual_mass_estimator is not None:
+        artifacts.append(EvaluationArtifactFingerprint.from_file(
+            visual_mass_estimator.config.checkpoint_path,
+            name="visual_mass", kind=EvaluationArtifactKind.MODEL_WEIGHTS,
+        ))
+    if contact_checkpoint is not None:
+        artifacts.append(EvaluationArtifactFingerprint.from_file(
+            contact_checkpoint, name="contact", kind=EvaluationArtifactKind.MODEL_WEIGHTS,
+        ))
+    revision = subprocess.run(
+        ["git", "rev-parse", "HEAD"], cwd=PROJECT_ROOT,
+        check=True, capture_output=True, text=True,
+    ).stdout.strip()
+    identity = EvaluationRunIdentity(
+        run_id=os.environ.get("CRA_BENCHMARK_RUN_ID", RUN_TIMESTAMP),
+        capture_id=os.environ.get("CRA_BENCHMARK_CAPTURE_ID", f"hawk-{camera_info.read_index}"),
+        code_revision=revision, artifacts=tuple(artifacts),
+    )
+    points_path = OUTPUT_DIRECTORY / "sensor_inputs.npz"
+    detection_masks = np.stack([d.mask for d in detections.detections]) if detections.detections else np.empty((0, camera_info.height, camera_info.width), dtype=bool)
+    np.savez_compressed(
+        points_path, image_rgb=image_rgb,
+        scene_points_robot_xyz=points_robot,
+        obstacle_points_robot_xyz=obstacle_points_3d,
+        point_track_ids=tracking.point_track_ids,
+        object_masks=detection_masks,
+        robot_from_lidar=np.asarray(robot_from_lidar),
+        camera_from_robot=np.asarray(camera_from_robot),
+    )
+    position_drift = float(np.linalg.norm(final_pose[:2] - initial_pose[:2]))
+    yaw_drift = math.degrees(wrapped_angle_difference(final_pose[2], initial_pose[2]))
+    sensor_age = abs(camera_info.simulation_time_seconds - lidar_info.sensor_timestamp_nanoseconds * 1e-9)
+    checks = StationaryCaptureChecks(
+        sensor_pipeline_passed=pipeline_passed,
+        robot_position_drift_m=position_drift, robot_yaw_drift_degrees=yaw_drift,
+        maximum_position_drift_m=MAXIMUM_ALLOWED_POSITION_DRIFT,
+        maximum_yaw_drift_degrees=math.degrees(MAXIMUM_ALLOWED_YAW_DRIFT),
+        camera_lidar_age_seconds=sensor_age,
+        maximum_sensor_age_seconds=MAXIMUM_SENSOR_DATA_AGE_SECONDS,
+        published_motion_count=published_motion_count,
+        motion_sample_count=published_motion_sample_count,
+        matched_camera_lidar_track_count=sum(a.is_matched for a in fusion.associations),
+        nonzero_wheel_command_count=0,
+    )
+    oracle = {}
+    if authored_scenario is not None:
+        actor = authored_scenario.actor("chair")
+        oracle = {
+            "scenario_id": "chair", "role": "offline_scoring_only",
+            "rendered_bounds_world_minimum_m": actor.bounds_world.minimum,
+            "rendered_bounds_world_maximum_m": actor.bounds_world.maximum,
+            "full_object_dimensions_m": actor.bounds_world.size,
+            "mass_reference": None,
+        }
+    capture = write_stationary_sensor_capture(
+        OUTPUT_DIRECTORY, identity=identity, attributes=physical_attributes,
+        adapted=tuple(physical_profile_provider.diagnostics_by_track_id.values()),
+        checks=checks,
+        configuration={
+            "stationary_speed_threshold_mps": STATIONARY_TRACK_SPEED_THRESHOLD_MPS,
+            "minimum_consecutive_motion_updates": STATIONARY_TRACK_MINIMUM_MOTION_UPDATES,
+            "motion_calibration_frames": MOTION_CALIBRATION_FRAME_COUNT,
+            "semantic_cluster_radius_m": SEMANTIC_CLUSTER_RADIUS,
+            "object_confidence_threshold": YOLO_CONFIDENCE_THRESHOLD,
+            "contact_confidence_threshold": CONTACT_CONFIDENCE_THRESHOLD,
+            "fixed_lambda": 1.25,
+            "camera_calibration": asdict(calibration),
+            "camera_simulation_time_seconds": camera_info.simulation_time_seconds,
+            "lidar_sensor_timestamp_nanoseconds": lidar_info.sensor_timestamp_nanoseconds,
+            "geometry_boundary": "visible LiDAR envelope; full object size is not assumed",
+            "robot_velocity_context": "stationary zero assumption validated by drift",
+            "visual_mass_confidence_cap": None if visual_mass_estimator is None else visual_mass_estimator.config.domain_confidence_cap,
+            "visual_mass_error_bound_kg": None if visual_mass_estimator is None else visual_mass_estimator.config.validation_mae_kg,
+        },
+        model_invocations={
+            "objects": {"invoked": True, "detection_count": len(detections.detections), "wall_seconds": detections.inference_wall_seconds},
+            "visual_mass": {"invoked": visual_mass_estimator is not None, "accuracy_validated": False},
+            "contact": {"invoked": contact_frame is not None, "pipeline_valid": contact_diagnostic is not None and contact_diagnostic.pipeline_valid, "detection_count": 0 if contact_frame is None else len(contact_frame.detections), "complete_factor_validated": False},
+            "thermal": {"invoked": False, "reason": "no verified local continuous-plume checkpoint", "complete_factor_validated": False},
+        },
+        artifact_paths={"raw_rgb": str(raw_path), "semantic_overlay": str(semantic_path), "fusion_overlay": str(fusion_path), "sensor_inputs": str(points_path)},
+        oracle_scoring=oracle,
+    )
+    print("STATIONARY_BENCHMARK_CAPTURE=" + str(OUTPUT_DIRECTORY / "capture.json"))
+    print(json.dumps({"capture_passed": capture["capture_passed"], "capture_blockers": capture["capture_blockers"]}))
 
 
 def print_report(
@@ -879,6 +1009,9 @@ def print_report(
 def main() -> None:
     """Run the complete stationary camera--LiDAR fusion validation."""
 
+    if BENCHMARK_DIRECTORY and os.environ.get("HOT_SOUP_DETECTION_CHECKPOINT", "").strip():
+        raise ValueError("stationary benchmark requires continuous plume evidence; legacy hot-soup detector must be unset")
+
     print("\n" + "=" * 78)
     print("CAMERA--LIDAR SEMANTIC FUSION - STATIONARY ISAAC SIM VALIDATION")
     print("=" * 78)
@@ -926,6 +1059,12 @@ def main() -> None:
     ):
         return
     initial_pose = read_chassis_pose(loaded_scene.stage)
+    authored_scenario = None
+    if BENCHMARK_DIRECTORY:
+        authored_scenario = author_restaurant_risk_scenario(
+            loaded_scene.stage, restaurant_risk_scenario("chair"),
+            robot_pose_world_xy_yaw=tuple(initial_pose),
+        )
     print("\nWaiting for a paired camera and LiDAR observation...")
     (
         _,
@@ -1258,7 +1397,7 @@ def main() -> None:
     app_utils.update_app(steps=5)
     final_pose = read_chassis_pose(loaded_scene.stage)
     app_utils.stop()
-    print_report(
+    pipeline_passed = print_report(
         model_path=model_path,
         camera_info=camera_info,
         lidar_info=lidar_info,
@@ -1298,6 +1437,25 @@ def main() -> None:
         initial_pose=initial_pose,
         final_pose=final_pose,
     )
+    if BENCHMARK_DIRECTORY:
+        save_benchmark_capture(
+            model_path=model_path, visual_mass_estimator=visual_mass_estimator,
+            contact_checkpoint=contact_checkpoint, contact_diagnostic=contact_diagnostic,
+            contact_frame=contact_frame, detections=detections,
+            camera_info=camera_info, lidar_info=lidar_info,
+            physical_attributes=physical_attributes,
+            physical_profile_provider=physical_profile_provider, fusion=fusion,
+            initial_pose=initial_pose, final_pose=final_pose,
+            pipeline_passed=pipeline_passed,
+            published_motion_count=published_motion_count,
+            published_motion_sample_count=published_motion_sample_count,
+            image_rgb=image_rgb, points_robot=points_robot,
+            obstacle_points_3d=obstacle_points_3d, tracking=tracking,
+            raw_path=raw_path, semantic_path=semantic_path, fusion_path=fusion_path,
+            authored_scenario=authored_scenario,
+            calibration=calibration, robot_from_lidar=robot_from_lidar,
+            camera_from_robot=camera_from_robot,
+        )
     print("\nExpected image behavior:")
     print("  - The raw image matches Nova Carter's front Hawk left camera.")
     print("  - The semantic overlay contains YOLO masks and boxes.")
