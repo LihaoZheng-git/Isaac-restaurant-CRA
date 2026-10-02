@@ -14,10 +14,14 @@ and sensor results cannot be pooled into one completion, collision, or
 clearance statistic. Repeated seeds and uncertainty/domain-shift evaluations
 remain required before research conclusions.
 
-This branch implements the protocol and validators, not completed restaurant
-experiments. Actual sensor trials remain blocked on collected mass data and
-verified contact/thermal model weights. Wheel motion should only begin after
-stationary scenario-specific perception acceptance checks pass.
+The protocol and validators are implemented; closed-loop restaurant
+experiments remain pending. A local exposed-edge contact checkpoint and visual
+mass baseline can be invoked, but their complete factor accuracy is unvalidated.
+Actual sensor trials remain blocked on independent restaurant mass references,
+positive fall-surface validation, general contact consequence evidence and
+verified continuous-plume weights. Wheel motion should only begin after
+stationary scenario-specific perception acceptance checks pass. See
+[stationary benchmark results](stationary_sensor_gate.md).
 
 The stationary readiness gate enforces that requirement. Sensor trials accept
 only measured or inferred inputs; prior demonstrations may additionally use

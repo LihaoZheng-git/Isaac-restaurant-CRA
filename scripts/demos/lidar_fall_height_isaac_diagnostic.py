@@ -44,7 +44,7 @@ simulation_app = SimulationApp({"headless": HEADLESS})
 import isaacsim.core.experimental.utils.app as app_utils
 from isaacsim.core.simulation_manager import SimulationManager
 import numpy as np
-from pxr import Gf, Sdf, UsdGeom, UsdShade
+from pxr import Gf, Sdf, Usd, UsdGeom, UsdShade
 
 from robot.control.differential_drive import NovaCarterController
 from robot.perception.fall_height import estimate_fall_height
@@ -60,6 +60,7 @@ from robot.safety.obstacle_detection import (
 )
 from robot.safety.obstacle_tracking import ObstacleTracker, ObstacleTrackerConfig
 from robot.scene.loader import load_robot_scene
+from robot.scene.controlled_semantic_obstacle import read_world_bounds
 from robot.scene.transforms import (
     compute_relative_prim_transform,
     get_prim_planar_pose,
@@ -69,10 +70,14 @@ from robot.sensor.lidar import NovaCarterLidar
 from robot.sensor.lidar_geometry import transform_points
 
 
-OUTPUT_DIRECTORY = ROOT / "outputs" / "lidar_fall_height_isaac"
+OUTPUT_DIRECTORY = Path(os.environ.get(
+    "CRA_LIDAR_DIAGNOSTIC_DIR", str(ROOT / "outputs" / "lidar_fall_height_isaac")
+))
 FIXTURE_ROOT = "/World/CRA_FallHeightValidation"
 FIXTURE_CENTER_ROBOT_XY = np.asarray((2.0, 0.50), dtype=np.float64)
-SUPPORT_DROP_M = 0.80
+SUPPORT_DROP_M = float(os.environ.get("CRA_FALL_SUPPORT_DROP_M", "0.80"))
+if not math.isfinite(SUPPORT_DROP_M) or SUPPORT_DROP_M <= 0:
+    raise ValueError("CRA_FALL_SUPPORT_DROP_M must be positive and finite")
 SUPPORT_SIZE_M = (1.40, 1.40, 0.10)
 OBJECT_SIZE_M = (0.14, 0.14, 0.34)
 CAPTURE_FRAME_COUNT = 12
@@ -98,13 +103,19 @@ def _cube(stage, path: str, center, size, material) -> None:
     cube = UsdGeom.Cube.Define(stage, path)
     cube.CreateSizeAttr(1.0)
     cube.AddTranslateOp().Set(Gf.Vec3d(*center))
-    cube.AddScaleOp().Set(Gf.Vec3f(*(value / 2 for value in size)))
+    # A USD cube with size=1 has unit full extent, not half extent.
+    cube.AddScaleOp().Set(Gf.Vec3f(*size))
     UsdShade.MaterialBindingAPI.Apply(cube.GetPrim()).Bind(material)
 
 
 def author_fixture(stage, floor_height_robot_m: float) -> None:
     """Author a fixed world fixture using robot-frame coordinates at setup."""
 
+    with Usd.EditContext(stage, stage.GetSessionLayer()):
+        _author_fixture(stage, floor_height_robot_m)
+
+
+def _author_fixture(stage, floor_height_robot_m: float) -> None:
     root = UsdGeom.Xform.Define(stage, FIXTURE_ROOT)
     root.AddTransformOp().Set(get_prim_world_transform(stage, ROBOT_BASE_PRIM_PATH))
     support = _material(stage, f"{FIXTURE_ROOT}/SupportMaterial", (0.18, 0.42, 0.72))
@@ -163,6 +174,17 @@ def main() -> None:
     )
     floor_z = floor_height_robot(loaded.stage)
     author_fixture(loaded.stage, floor_z)
+    support_bounds = read_world_bounds(loaded.stage, f"{FIXTURE_ROOT}/Support")
+    object_bounds = read_world_bounds(loaded.stage, f"{FIXTURE_ROOT}/Target")
+    # Independent authored geometry is checked offline, never given to the
+    # surface estimator. Setup/cluster selection remain controlled fixtures.
+    fixture_geometry_valid = (
+        abs(support_bounds.maximum[2] - SUPPORT_DROP_M) < 0.005
+        and abs(object_bounds.minimum[2] - SUPPORT_DROP_M) < 0.005
+        and abs(object_bounds.size[2] - OBJECT_SIZE_M[2]) < 0.005
+    )
+    if not fixture_geometry_valid:
+        raise RuntimeError("rendered fixture does not match declared metric geometry")
     controller = NovaCarterController(robot_prim_path=ROBOT_PRIM_PATH)
     SimulationManager.setup_simulation(dt=PHYSICS_DT, device=PHYSICS_DEVICE)
     app_utils.play()
@@ -265,6 +287,12 @@ def main() -> None:
         "robot_yaw_drift_degrees": math.degrees(yaw_drift),
         "robot_motion_command": "zero",
         "oracle_role": "offline_scoring_only",
+        "fixture_geometry_valid": fixture_geometry_valid,
+        "rendered_support_top_world_m": support_bounds.maximum[2],
+        "rendered_object_bottom_world_m": object_bounds.minimum[2],
+        "declared_object_height_m": OBJECT_SIZE_M[2],
+        "rendered_object_height_m": object_bounds.size[2],
+        "selection_boundary": "authored target location and height filter; inference uses live LiDAR surfaces",
     }
     OUTPUT_DIRECTORY.mkdir(parents=True, exist_ok=True)
     (OUTPUT_DIRECTORY / "report.json").write_text(
