@@ -86,3 +86,19 @@ fixture remains unavailable because its support top is occluded. These results
 do not establish tabletop coverage or harmful-fall interaction likelihood.
 Artifacts: `outputs/visible_support_estimation/isolated-030-final/`.
 Validation: 1,286 unit tests passed; repository Ruff and whitespace checks passed.
+
+## Relative heaviness component result (2026-10-02)
+
+The existing frozen ABO model was evaluated on all 152 held-out objects without
+retraining or selecting successful examples. For catalog masses separated by
+at least 3x (chosen before inference), 6,758 / 6,943 pairs had the correct
+lighter/heavier order (97.34%); within the same class, 587 / 646 pairs did
+(90.87%). Pairs share objects, so these are descriptive ordering metrics,
+not independent statistical samples. All 185 reversals are retained in the
+report. Catalog dimensions remain external metadata, not live sensor evidence.
+This supports bounded catalog relative heaviness, but does not validate mass
+from the robot's incomplete visible envelope. The live 0.25 confidence cap and
+uncertainty bounds are unchanged. Exact kilograms remain a secondary claim.
+Artifact: `outputs/relative_heaviness/report.json`; checkpoint SHA-256
+`92d437580efb283071e0ac0cd7c16de77f76ef3017a243329e4bf826e0e5a31e`.
+Validation: 18 relevant tests passed; repository Ruff passed.
