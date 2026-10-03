@@ -34,3 +34,11 @@
   restaurant and run matched navigation comparisons. Acceptance is bounded to
   those scenarios, not every possible object or condition. A working plume
   estimation method is still required for a sensor-derived thermal claim.
+- The implemented visual contact proxy requires explicit adapter opt-in and
+  separate interaction evidence. Preserve its `visual_exposed_edge_proxy`
+  basis in diagnostics; physical sharpness, hardness and 3D orientation stay
+  unavailable. An unmatched part mask is not negative contact evidence.
+- The current RGB plume baseline is a bounded fixed-camera reference method.
+  Preserve configured container regions/context as priors, reject invalid
+  references, and do not claim moving-camera support. Validated low visible
+  plume cues do not establish that an object is cold.

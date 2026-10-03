@@ -23,10 +23,14 @@ class PhysicalAttributeCRARiskProfileProvider:
         timestamp_seconds: float,
         potential_interactions: Mapping[int, ScalarEstimate] | None = None,
         thermal_interactions: Mapping[int, ScalarEstimate] | None = None,
+        visual_contact_proxies: Mapping[int, ScalarEstimate] | None = None,
+        contact_interactions: Mapping[int, ScalarEstimate] | None = None,
         config: PhysicalFactorAdapterConfig | None = None,
     ):
         potential = potential_interactions or {}
         thermal = thermal_interactions or {}
+        contact = visual_contact_proxies or {}
+        contact_routes = contact_interactions or {}
         results = {}
         for track_id, attributes in attributes_by_track_id.items():
             if track_id != attributes.track_id:
@@ -36,6 +40,8 @@ class PhysicalAttributeCRARiskProfileProvider:
                 timestamp_seconds=timestamp_seconds,
                 potential_interaction_likelihood=potential.get(track_id),
                 thermal_interaction_likelihood=thermal.get(track_id),
+                visual_contact_proxy=contact.get(track_id),
+                contact_interaction_likelihood=contact_routes.get(track_id),
                 config=config,
             )
         self._results = MappingProxyType(results)

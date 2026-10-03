@@ -20,6 +20,7 @@ from robot.perception.semantic_detection import PixelBoundingBox
 from robot.perception.specialist_track_evidence import (
     SpecialistAssociationFrame,
     build_track_specialist_evidence,
+    build_track_visual_contact_proxies,
 )
 
 
@@ -54,6 +55,21 @@ def segmentation(timestamp=2.0):
         timestamp,
         "contact-fixture",
     )
+
+
+def test_visual_edge_proxy_transfers_only_to_single_aligned_parent_track():
+    proxies = build_track_visual_contact_proxies(association_frame(association(4, 2)), {2: segmentation()})
+    assert proxies[4].value > 0
+    assert proxies[4].timestamp_seconds == 2
+    assert proxies[4].status is EstimateStatus.INFERRED
+    ambiguous = build_track_visual_contact_proxies(
+        association_frame(association(4, 2), association(5, 2)), {2: segmentation()})
+    assert not ambiguous
+    rejected = build_track_visual_contact_proxies(
+        association_frame(association(4, 2, status="ambiguous")), {2: segmentation()})
+    assert not rejected
+    with pytest.raises(ValueError, match="align"):
+        build_track_visual_contact_proxies(association_frame(association(4, 2)), {2: segmentation(timestamp=1)})
 
 
 def hot_soup_frame(timestamp=2.0, frame_id=7):
