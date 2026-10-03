@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import json
 from pathlib import Path
 import sys
 
@@ -20,6 +21,9 @@ from robot.perception.contact_detection_adapter import (
     associate_contact_parts_to_objects,
 )
 from robot.perception.contact_replay import evaluate_contact_replay
+from robot.perception.contact_geometry_features import (
+    estimate_contact_geometry_features, estimate_exposed_edge_proxy,
+)
 from robot.perception.visualization import render_semantic_detection_overlay
 from robot.perception.yolo_detector import (
     YoloSegmentationConfig,
@@ -84,6 +88,17 @@ def main() -> None:
         args.output / "exposed_edges.png"
     )
     report.write_json(args.output / "diagnostic.json")
+    proxy_rows = []
+    for index, segmentation in association.segmentations_by_object_detection_index.items():
+        features = estimate_contact_geometry_features(segmentation, timestamp_seconds=0.0)
+        score = estimate_exposed_edge_proxy(features)
+        proxy_rows.append({"object_detection_index": index, "value": score.value,
+                           "lower_bound": score.lower_bound, "upper_bound": score.upper_bound,
+                           "confidence": score.confidence, "status": score.status.value,
+                           "source": score.source, "evidence": score.evidence,
+                           "physical_sharpness": features.sharpness.status.value,
+                           "hardness": features.hardness.status.value})
+    (args.output / "visual_proxy.json").write_text(json.dumps(proxy_rows, indent=2) + "\n", encoding="utf-8")
     print(report.to_dict())
     if not report.positive_association_valid:
         raise RuntimeError("no positive contact part-to-parent association was accepted")

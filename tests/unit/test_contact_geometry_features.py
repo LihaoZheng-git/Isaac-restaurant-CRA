@@ -4,6 +4,7 @@ import pytest
 from robot.perception.contact_cues import DangerousPartSegmentation
 from robot.perception.contact_geometry_features import (
     estimate_contact_geometry_features,
+    estimate_exposed_edge_proxy,
 )
 from robot.perception.physical_attributes import EstimateStatus
 
@@ -24,6 +25,32 @@ def rectangle(y0, y1, x0, x1):
     mask = np.zeros((30, 30), dtype=bool)
     mask[y0:y1, x0:x1] = True
     return mask
+
+
+def test_visual_proxy_is_continuous_and_preserves_unavailable_physics():
+    small = estimate_contact_geometry_features(
+        segmentation("exposed_edge", rectangle(12, 14, 3, 15)), timestamp_seconds=2,
+    )
+    large = estimate_contact_geometry_features(
+        segmentation("exposed_edge", rectangle(12, 14, 3, 27)), timestamp_seconds=2,
+    )
+    assert 0 < estimate_exposed_edge_proxy(small).value < estimate_exposed_edge_proxy(large).value < 1
+    assert not large.sharpness.is_available
+    assert not large.hardness.is_available
+    tip = estimate_contact_geometry_features(
+        segmentation("pointed_tip", rectangle(12, 14, 3, 27)), timestamp_seconds=2,
+    )
+    assert not estimate_exposed_edge_proxy(tip).is_available
+
+
+def test_visual_proxy_keeps_original_frame_age_and_oracle_provenance():
+    features = estimate_contact_geometry_features(
+        segmentation("exposed_edge", rectangle(12, 14, 3, 27), timestamp=1),
+        timestamp_seconds=2, evidence_status=EstimateStatus.ORACLE,
+    )
+    proxy = estimate_exposed_edge_proxy(features)
+    assert proxy.timestamp_seconds == 1
+    assert proxy.status is EstimateStatus.ORACLE
 
 
 @pytest.mark.parametrize(

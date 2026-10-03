@@ -28,6 +28,7 @@ class FactorReadiness:
     factor: str
     accepted: bool
     reasons: tuple[str, ...]
+    basis: str = "physical"
 
 
 @dataclass(frozen=True)
@@ -64,6 +65,10 @@ def _factor_readiness(
     evidence_mode: EvidenceMode,
 ) -> FactorReadiness:
     reasons = list(diagnostic.rejection_reasons)
+    if diagnostic.basis not in {"physical", "visual_exposed_edge_proxy"}:
+        reasons.append("unsupported factor basis")
+    if diagnostic.basis == "visual_exposed_edge_proxy" and diagnostic.factor != "contact":
+        reasons.append("visual exposed-edge proxy is only valid for contact")
     if diagnostic.estimate.confidence <= 0:
         reasons.append("factor estimate has zero confidence")
     allowed = _allowed_statuses(evidence_mode)
@@ -77,6 +82,7 @@ def _factor_readiness(
         diagnostic.factor,
         not reasons,
         tuple(dict.fromkeys(reasons)),
+        diagnostic.basis,
     )
 
 
@@ -108,6 +114,9 @@ def evaluate_perception_readiness(
         )
 
     diagnostics = {name: getattr(result, name) for name in FACTOR_NAMES}
+    if (result.contact.basis == "visual_exposed_edge_proxy"
+            and not result.config.allow_visual_contact_proxy):
+        raise ValueError("contact proxy readiness requires adapter configuration opt-in")
     checked = (
         FACTOR_NAMES
         if evaluation_scope is EvaluationScope.FOUR_FACTOR

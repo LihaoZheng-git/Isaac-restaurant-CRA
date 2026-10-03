@@ -76,6 +76,24 @@ def scenario(mode=EvidenceMode.SENSOR, family="thermal"):
     return RestaurantScenario("fixture", family, "fixture", mode, 0)
 
 
+def test_contact_proxy_readiness_is_explicit_and_provenance_is_still_required():
+    result = adapter_result()
+    result = replace(
+        result, contact=replace(result.contact, basis="visual_exposed_edge_proxy"),
+        config=PhysicalFactorAdapterConfig(allow_visual_contact_proxy=True),
+    )
+    readiness = evaluate_perception_readiness(scenario(family="contact"), result,
+                                             scope=EvaluationScope.FACTOR_SPECIFIC)
+    assert readiness.ready
+    assert readiness.factors[0].basis == "visual_exposed_edge_proxy"
+    prior = replace(result, contact=replace(diagnostic("contact", EstimateStatus.PRIOR),
+                                          basis="visual_exposed_edge_proxy"))
+    assert not evaluate_perception_readiness(scenario(family="contact"), prior,
+                                             scope=EvaluationScope.FACTOR_SPECIFIC).ready
+    with pytest.raises(ValueError, match="opt-in"):
+        evaluate_perception_readiness(scenario(), replace(result, config=PhysicalFactorAdapterConfig()))
+
+
 def test_sensor_four_factor_readiness_requires_all_inferred_or_measured():
     result = evaluate_perception_readiness(scenario(), adapter_result())
     assert result.ready

@@ -18,6 +18,7 @@ from robot.perception.physical_attributes import (
     CategoricalEstimate,
     EstimateStatus,
     ScalarEstimate,
+    combine_estimate_statuses,
 )
 
 
@@ -196,4 +197,37 @@ def estimate_contact_geometry_features(
             "orientation_toward_route",
             "route orientation requires calibrated 3D geometry",
         ),
+    )
+
+
+def estimate_exposed_edge_proxy(
+    features: ContactGeometryFeatures, *, elongation_weight: float = 0.6,
+) -> ScalarEstimate:
+    """Continuous visible-edge proxy, never physical sharpness or hardness.
+
+    Exposure scales a weighted mask-shape descriptor (0.6 elongation, 0.4
+    boundary complexity). The fixed weights are engineering assumptions,
+    not a calibrated injury model. Unsupported geometry remains unavailable.
+    """
+    source = "visual_exposed_edge_geometry_proxy"
+    if not math.isfinite(elongation_weight) or not 0 <= elongation_weight <= 1:
+        raise ValueError("elongation_weight must lie in [0, 1]")
+    items = (features.exposure_fraction, features.elongation, features.boundary_complexity)
+    timestamp = min(item.timestamp_seconds for item in items)
+    if features.geometry_class.value != "exposed_edge" or any(not item.is_available for item in items):
+        return ScalarEstimate.unavailable(
+            unit="1", source=source, timestamp_seconds=timestamp,
+            evidence=("only accepted exposed-edge masks support this bounded proxy",),
+        )
+    values = [
+        getattr(items[0], bound) * (elongation_weight * getattr(items[1], bound)
+                                  + (1 - elongation_weight) * getattr(items[2], bound))
+        for bound in ("value", "lower_bound", "upper_bound")
+    ]
+    return ScalarEstimate(
+        *values, min(item.confidence for item in items), "1", source, timestamp,
+        combine_estimate_statuses(item.status for item in items),
+        tuple(f"{item.source}: value={item.value}; bounds=({item.lower_bound},{item.upper_bound}); status={item.status.value}" for item in items)
+        + (f"exposure * ({elongation_weight} elongation + {1-elongation_weight} boundary complexity)",
+           "2D visual proxy; sharpness, hardness, edge radius and 3D route orientation remain unknown"),
     )
