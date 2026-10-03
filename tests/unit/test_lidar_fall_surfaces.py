@@ -92,6 +92,17 @@ def test_partial_support_coverage_without_landing_does_not_imply_zero_drop():
     assert "landing" in result.rejection_reasons[0]
 
 
+def test_small_surrounding_support_patch_without_farther_visibility_is_unknown():
+    # The patch spans every direction, but its nearby edges have no visible
+    # landing. Direction count alone cannot justify a zero drop.
+    support = plane(0.8, (-0.45, 0.45), (-0.45, 0.45), count=51)
+    item = object_points()
+    result = estimate_lidar_fall_surfaces(np.vstack((support, item)), item,
+                                         timestamp_seconds=2, config=CONFIG)
+    assert not result.is_available
+    assert "landing" in result.rejection_reasons[0]
+
+
 def test_dense_object_remnants_do_not_hide_a_visible_support_plane():
     item = object_points()
     table = plane(0.8, (-0.8, 0.18), (-0.7, 0.7), count=15)
