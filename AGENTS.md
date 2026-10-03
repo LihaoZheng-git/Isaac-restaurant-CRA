@@ -17,3 +17,20 @@
   proof that the aerosol is steam.
 - Validate perception stationary before enabling new wheel-motion experiments. Report oracle/prior demonstrations separately from sensor-derived results.
 - Preserve user changes. Do not force-push, rewrite history, bypass checks, upgrade dependencies silently, or merge unvalidated work.
+- The accepted thesis scope is sufficient support for the selected final
+  restaurant scenarios. Treat broad generalization, complete 3D reconstruction,
+  crowded/occluded multi-object motion, general outdoor contact perception, and
+  comprehensive physical calibration as future work rather than prerequisites.
+- Mass acceptance prioritizes continuous relative heaviness and sensible
+  potential/kinetic risk ordering in a small independent test set. Exact
+  kilograms and a large general-object mass study are secondary.
+- The primary contact demonstration may use an explicitly named continuous
+  visual exposed-edge geometry proxy. Preserve the general hazard taxonomy for
+  future work, and never relabel that proxy as physical sharpness or hardness.
+  Implement and validate its explicit adapter/readiness path before using it
+  in an aggregate runtime experiment; do not fill unsupported fields with zero.
+- Validate components first in controlled scenes or held-out inputs outside
+  the restaurant, then a stationary combined benchmark, then enrich the
+  restaurant and run matched navigation comparisons. Acceptance is bounded to
+  those scenarios, not every possible object or condition. A working plume
+  estimation method is still required for a sensor-derived thermal claim.
