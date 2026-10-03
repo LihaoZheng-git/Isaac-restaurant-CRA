@@ -8,13 +8,17 @@ a separate ablation.
 Sensor-derived wheel-motion trials require factor-specific readiness records
 for potential, kinetic, contact, and thermal evidence. Each factor must have a
 validated stationary pipeline, audited runtime provenance, and sensor-domain
-accuracy evidence. Missing readiness or an unsupported factor blocks motion;
+validation appropriate to the [accepted bounded thesis scope](restaurant_evaluation.md#accepted-thesis-scope).
+Generalization outside the selected restaurant cases is future work. Missing
+readiness or an unsupported factor in the active experiment blocks motion;
 it is never converted to zero risk.
 
 The current primary contact scenario is an exposed blade edge because the
 local PACO baseline has nonzero held-out performance only for exposed edges.
-Pointed tips, protrusions, jagged surfaces, physical sharpness, and hardness
-remain pending. The thermal scenario is carried hot soup with a visible-plume
+The accepted primary contact direction is a visual exposed-edge geometry proxy;
+its explicit adapter and readiness path still need implementation. Pointed tips,
+protrusions, jagged surfaces, physical sharpness and hardness are future work.
+The thermal scenario is carried hot soup with a visible-plume
 cue above an open container. It does not claim that a visual plume is measured
 steam or temperature.
 
@@ -26,9 +30,10 @@ conservative fallbacks saturate aggregate `phi`, the saturation report names
 them and preserves their rejection reasons.
 
 The present repository is not ready for sensor-derived wheel-motion trials.
-Visual mass lacks Isaac-domain accuracy calibration, the contact model has
-limited geometry coverage, and no trained hot-soup checkpoint has been
-validated. Oracle and prior trials may test controller plumbing, but their
+The remaining bounded tasks are a relative-heaviness check, positive fall-height
+evidence, a visual contact-proxy scoring path and a working plume-estimation
+method. A validated image-based plume baseline may be used without requiring
+a new neural network. Oracle and prior trials may test controller plumbing, but their
 results must be reported separately from sensor-derived experiments.
 The result aggregator enforces that separation by emitting distinct baseline
 summaries for each evidence mode.
