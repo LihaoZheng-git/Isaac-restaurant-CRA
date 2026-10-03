@@ -82,6 +82,41 @@ def test_missing_support_stays_unavailable():
     assert "support" in result.rejection_reasons[0]
 
 
+def test_partial_support_coverage_without_landing_does_not_imply_zero_drop():
+    table = plane(0.8, (-0.8, 0.18), (-0.7, 0.7))
+    item = object_points()
+    result = estimate_lidar_fall_surfaces(
+        np.vstack((table, item)), item, timestamp_seconds=2, config=CONFIG,
+    )
+    assert not result.is_available
+    assert "landing" in result.rejection_reasons[0]
+
+
+def test_dense_object_remnants_do_not_hide_a_visible_support_plane():
+    item = object_points()
+    table = plane(0.8, (-0.8, 0.18), (-0.7, 0.7), count=15)
+    # Untracked returns from a narrow object face outnumber the support band.
+    remnants = plane(0.85, (-0.04, 0.04), (-0.04, 0.04), count=41)
+    floor = plane(0.0, (0.3, 1.2), (-0.4, 0.4))
+    result = estimate_lidar_fall_surfaces(
+        np.vstack((table, remnants, floor, item)), item,
+        timestamp_seconds=2, config=CONFIG,
+    )
+    assert result.is_available
+    assert result.evidence.support_height_m.value == pytest.approx(0.8)
+
+
+def test_rotated_vertical_surface_band_does_not_establish_planar_support():
+    item = object_points()
+    values = np.linspace(-0.5, 0.5, 100)
+    line = np.column_stack((values, values, np.full_like(values, 0.8)))
+    result = estimate_lidar_fall_surfaces(
+        np.vstack((line, item)), item, timestamp_seconds=2, config=CONFIG,
+    )
+    assert not result.is_available
+    assert "planar support" in result.rejection_reasons[0]
+
+
 def test_ambiguous_opposing_drops_stay_unavailable():
     table = plane(0.8, (-0.18, 0.18), (-0.8, 0.8))
     left_floor = plane(0.0, (-1.2, -0.3), (-0.3, 0.3))
