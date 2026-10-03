@@ -44,6 +44,7 @@ class PlumeSourceObservation:
     spatial_association_likelihood: ScalarEstimate
     selected_instance_index: int | None
     negative_observation_validated: bool = False
+    negative_observation_confidence: float = 0.0
 
     def __post_init__(self) -> None:
         if not isinstance(self.frame, PlumeSegmentationFrame):
@@ -74,6 +75,11 @@ class PlumeSourceObservation:
             object.__setattr__(self, "selected_instance_index", index)
         if not isinstance(self.negative_observation_validated, bool):
             raise TypeError("negative_observation_validated must be boolean")
+        confidence = _finite(self.negative_observation_confidence, "negative_observation_confidence")
+        if not 0 <= confidence <= 1:
+            raise ValueError("negative observation confidence must lie in [0, 1]")
+        if confidence > 0 and not self.negative_observation_validated:
+            raise ValueError("negative confidence requires explicit domain validation")
 
     @property
     def selected_instance(self):
@@ -338,6 +344,22 @@ def extract_continuous_plume_features(
         model_confidence = _unavailable(
             timestamp, "segmentation_confidence", "no associated plume mask"
         )
+        if (len(ordered) >= settings.minimum_frame_count
+                and all(item.negative_observation_validated and item.negative_observation_confidence > 0
+                        for item in ordered)):
+            # Explicitly validated low visible-cue evidence, not missing masks
+            # and not proof that the source is cold or thermally harmless.
+            confidence = min(item.negative_observation_confidence for item in ordered)
+            status = combine_estimate_statuses(item.frame.evidence_status for item in ordered)
+            relative_area = _estimate(0., timestamp=timestamp, feature="relative_mask_area",
+                confidence=confidence, status=status, uncertainty=settings.relative_measurement_uncertainty,
+                bounded=False, evidence=("bounded validated empty-mask behavior; no cold-object claim",))
+            vertical_extent = _estimate(0., timestamp=timestamp, feature="vertical_extent",
+                confidence=confidence, status=status, uncertainty=settings.relative_measurement_uncertainty,
+                bounded=False, evidence=relative_area.evidence)
+            model_confidence = _estimate(confidence, timestamp=timestamp, feature="segmentation_confidence",
+                confidence=confidence, status=status, uncertainty=0., bounded=True,
+                evidence=relative_area.evidence)
 
     persistence = _unavailable(
         timestamp,
@@ -362,7 +384,7 @@ def extract_continuous_plume_features(
             value,
             timestamp=timestamp,
             feature="persistence",
-            confidence=min(confidences) if confidences else 0.0,
+            confidence=min(confidences) if confidences else min(item.negative_observation_confidence for item in ordered),
             status=status,
             uncertainty=settings.relative_measurement_uncertainty,
             bounded=True,
