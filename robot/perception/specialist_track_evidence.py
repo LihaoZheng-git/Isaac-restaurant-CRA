@@ -17,13 +17,18 @@ from robot.perception.contact_cues import (
     DangerousPartSegmentation,
     estimate_contact_cues,
 )
+from robot.perception.contact_geometry_features import (
+    estimate_contact_geometry_features, estimate_exposed_edge_proxy,
+)
 from robot.perception.hot_soup_detector import (
     HotSoupDetectionCueResult,
     HotSoupDetectionFrame,
 )
 from robot.perception.physical_attributes import (
     ContactAttributes,
+    EstimateStatus,
     PhysicalAttributes,
+    ScalarEstimate,
     ThermalAttributes,
 )
 from robot.perception.semantic_detection import PixelBoundingBox
@@ -363,3 +368,32 @@ def _tracks_inside_box(
         if box.x_min <= x <= box.x_max and box.y_min <= y <= box.y_max:
             candidates.append(association.track_id)
     return sorted(candidates)
+
+
+def build_track_visual_contact_proxies(
+    association_frame: SpecialistAssociationFrame,
+    contact_segmentations: Mapping[int, DangerousPartSegmentation],
+    *, evidence_status: EstimateStatus = EstimateStatus.INFERRED,
+    elongation_weight: float = 0.6,
+) -> Mapping[int, ScalarEstimate]:
+    """Attach accepted same-frame edge proxies only to unambiguous tracks.
+
+    No match, multiple tracks per parent, or unsupported geometry supplies no
+    proxy. Downstream missing evidence stays unknown. No physical fields are
+    populated, and scores retain the original image timestamp.
+    """
+    result = {}
+    for detection_index, segmentation in contact_segmentations.items():
+        if (segmentation.object_mask.shape != (association_frame.image_height, association_frame.image_width)
+                or segmentation.timestamp_seconds != association_frame.source_timestamp_seconds):
+            raise ValueError("contact proxy segmentation must align with association frame")
+        candidates = [item.track_id for item in association_frame.associations
+                      if item.is_matched and item.detection_index == detection_index]
+        if len(candidates) != 1:
+            continue
+        proxy = estimate_exposed_edge_proxy(estimate_contact_geometry_features(
+            segmentation, timestamp_seconds=association_frame.source_timestamp_seconds,
+            evidence_status=evidence_status), elongation_weight=elongation_weight)
+        if proxy.is_available:
+            result[candidates[0]] = proxy
+    return MappingProxyType(result)

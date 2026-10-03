@@ -140,6 +140,7 @@ from robot.perception.specialist_track_evidence import (
     SpecialistAssociationFrame,
     TrackSpecialistEvidence,
     build_track_specialist_evidence,
+    build_track_visual_contact_proxies,
 )
 from robot.perception.thermal_interaction import (
     estimate_thermal_route_interaction,
@@ -169,6 +170,7 @@ from robot.perception.yolo_detector import (
 from robot.risk.physical_profile_provider import (
     PhysicalAttributeCRARiskProfileProvider,
 )
+from robot.risk.physical_factor_adapter import PhysicalFactorAdapterConfig
 from robot.runtime.simulation_loop import (
     advance_playing_steps,
     wait_until_playing,
@@ -1378,10 +1380,21 @@ def main() -> None:
         for item in physical_attributes
         if item.thermal.heat_source_likelihood.is_available
     }
+    use_contact_proxy = environment_flag("CRA_USE_VISUAL_CONTACT_PROXY")
+    contact_proxies = build_track_visual_contact_proxies(
+        specialist_frame, contact_segmentations,
+    ) if use_contact_proxy else {}
+    contact_interactions = {
+        item.track_id: item.motion.route_crossing_likelihood
+        for item in physical_attributes if item.track_id in contact_proxies
+    }
     physical_profile_provider = PhysicalAttributeCRARiskProfileProvider(
         {item.track_id: item for item in physical_attributes},
         timestamp_seconds=sensor_timestamp_seconds,
         thermal_interactions=thermal_interactions,
+        visual_contact_proxies=contact_proxies,
+        contact_interactions=contact_interactions,
+        config=PhysicalFactorAdapterConfig(allow_visual_contact_proxy=use_contact_proxy),
     )
     cra_policy_result = resolve_cra_track_policy(
         fusion.semantic_labels.semantic_obstacles,

@@ -32,6 +32,7 @@ class FactorSpecificCRAReport:
     rejection_reasons: tuple[str, ...]
     inputs: tuple[FactorInputProvenance, ...]
     aggregate_phi_reportable: bool = False
+    basis: str = "physical"
 
     def __post_init__(self) -> None:
         if not isinstance(self.factor, PhysicalRiskFactor):
@@ -158,6 +159,7 @@ def diagnose_factor_specific_cra(
                 confidence=assessed.estimate.confidence,
                 fallback_risk=assessed.fallback_risk,
                 rejection_reasons=diagnostic.rejection_reasons,
+                basis=diagnostic.basis,
                 inputs=tuple(
                     FactorInputProvenance(
                         name=name,

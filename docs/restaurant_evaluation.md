@@ -18,9 +18,11 @@ future work.
 The protocol and validators are implemented; closed-loop restaurant
 experiments remain pending. A local exposed-edge contact checkpoint and visual
 mass baseline can be invoked, but their complete factor accuracy is unvalidated.
-Actual sensor trials still need bounded relative-heaviness validation,
-positive fall-surface evidence, an explicit visual contact-proxy adapter and
-a validated continuous-plume estimation method. Wheel motion should only begin after
+Component results now include catalog relative-heaviness validation, a visible
+positive fall-surface fixture, an explicit visual contact-proxy adapter, and a
+prior-assisted fixed-camera RGB plume method (see results below). Their input
+domains and limitations remain separate. Full sensor-derived restaurant
+acceptance is still pending. Wheel motion should only begin after
 stationary scenario-specific perception acceptance checks pass. See
 [stationary benchmark results](stationary_sensor_gate.md).
 
@@ -50,9 +52,9 @@ perception are not completion criteria for this thesis.
   landing evidence justifies the drop. General toppling/stability is deferred.
 - Demonstrate contact with an explicitly named continuous visual exposed-edge
   geometry proxy. Broader nails/tips/protrusions/jagged surfaces and physical
-  sharpness/hardness remain future work. The current physical contact adapter
-  still requires those physical inputs; an explicit proxy path must be added
-  and tested rather than populating missing inputs with invented values.
+  sharpness/hardness remain future work. The opt-in proxy path is implemented
+  and tested; the default physical contact path still requires those physical
+  inputs. Missing inputs are never populated with invented values.
 - Demonstrate thermal evidence with a continuous visible plume associated with
   an open container. Temperature, burn severity, aerosol identity and a general
   thermal model are outside the primary claim. A learned model is not mandatory,
@@ -146,3 +148,35 @@ It is a controlled demonstration, not a general steam/smoke detector, moving
 camera solution, temperature measurement or steam-identity classifier.
 Artifacts and overlays: `outputs/rgb_plume_isaac/`; 27 relevant tests and Ruff
 passed. Restaurant source detection and moving-camera validation remain pending.
+
+## Object evidence to CRA and Safe-SAGE (2026-10-02)
+
+The per-track profile provider accepts explicit visual contact proxies and
+separate contact interactions. The stationary fusion demo enables this with
+`CRA_USE_VISUAL_CONTACT_PROXY=1`, associates accepted masks only to one matching
+LiDAR track, and explicitly uses geometric route crossing as a bounded contact
+interaction proxy. This is not 3D edge orientation or collision probability.
+Ambiguous parent/track matches and absent masks remain unknown. Factor-specific
+records retain the proxy basis as well as their input provenance.
+
+A fresh stopped-robot restaurant capture matched three chair tracks, drifted
+0.00144 m / 0.00275 degrees, and sent zero nonzero wheel commands. All three
+had inferred mass and kinetic inputs; thermal, contact and potential remained
+unknown. Conservative aggregate phi stayed 1.0 and was **not accepted as a
+validated four-factor sensor result**. No factors from independent fixtures
+were spliced into the chairs. Replay through the actual occupancy, configuration
+space, guidance and h_full solvers yielded a finite 3 x 24 x 28 field with
+lambda 1.25. This validates the evidence-to-policy/field connection, not robot
+navigation or universal safety. Artifacts: `outputs/stationary_capture_safe_sage/`.
+
+Final validation: 1,305 unit tests passed; repository Ruff and whitespace checks
+passed. One earlier full-suite invocation had temporary-directory setup errors;
+the corrected run completed without errors. All simulations remained stationary.
+
+Next: enrich the restaurant with the agreed factor-specific actors and validate
+their visibility/source association stationary. The bounded plume demo can
+initially use clearly labeled fixed-camera/source priors; moving robot-camera
+plume perception remains unsupported. Check relative heaviness on the selected
+rendered objects rather than demanding precise kilograms. Wheel trials still
+require the scenario's stationary readiness records. Fixed-class and continuous
+CRA baselines retain matched settings and primary lambda 1.25.
