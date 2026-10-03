@@ -16,7 +16,7 @@ it is never converted to zero risk.
 The current primary contact scenario is an exposed blade edge because the
 local PACO baseline has nonzero held-out performance only for exposed edges.
 The accepted primary contact direction is a visual exposed-edge geometry proxy;
-its explicit adapter and readiness path still need implementation. Pointed tips,
+its opt-in adapter and labeled readiness path are implemented. Pointed tips,
 protrusions, jagged surfaces, physical sharpness and hardness are future work.
 The thermal scenario is carried hot soup with a visible-plume
 cue above an open container. It does not claim that a visual plume is measured

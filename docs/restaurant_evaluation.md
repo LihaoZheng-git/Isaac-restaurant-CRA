@@ -120,3 +120,29 @@ Six ambiguous and three unmatched masks were rejected. This validates the
 image-to-proxy path on that replay, not general restaurant contact accuracy,
 negative absence, tips, nails or jagged surfaces. Local checkpoint and image
 hashes are recorded in `outputs/contact_visual_proxy/diagnostic.json`.
+
+## Fixed-camera RGB plume component (2026-10-02)
+
+The classical RGB baseline subtracts an observed clean reference, retains
+bright low-chroma components above a supplied source region, and measures their
+spatial alignment. It supplies image-derived masks to the existing area,
+vertical-extent and persistence estimator. Thresholds, source-relative search
+size, background-change rejection and confidence cap are configurable. Empty
+masks become low **visible-cue** evidence only with explicit bounded-domain
+negative validation and confidence; defaults still leave them unknown. Low
+visible cue never asserts that an object is cold.
+
+Eighteen actual Isaac RGB captures (six per condition) gave continuous thermal
+proxy values 0.000, 0.294 and 0.968 for no cue, intermittent small plume and
+persistent large plume. The existing cartoon fixture appearance is unchanged.
+Plume masks are inferred from pixels; the configured container region and
+open-container context are **priors**, so the final thermal score also retains
+prior provenance. The generic object detector returned no container detection
+on this fixture. No oracle segmentation is used by the estimator.
+
+This method requires a fixed camera and a clean reference. Global background
+changes reject the reference; grey foreground objects can still confound it.
+It is a controlled demonstration, not a general steam/smoke detector, moving
+camera solution, temperature measurement or steam-identity classifier.
+Artifacts and overlays: `outputs/rgb_plume_isaac/`; 27 relevant tests and Ruff
+passed. Restaurant source detection and moving-camera validation remain pending.

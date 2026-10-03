@@ -1,5 +1,6 @@
 import numpy as np
 import pytest
+from dataclasses import replace
 
 from robot.perception.physical_attributes import EstimateStatus, ScalarEstimate
 from robot.perception.plume_features import (
@@ -79,6 +80,23 @@ def plume(height, width=6):
     mask = np.zeros((20, 20), dtype=bool)
     mask[10 - height : 10, 10 - width // 2 : 10 + width // 2] = True
     return mask
+
+
+def test_validated_empty_quality_enables_low_visible_cue_without_claiming_cold():
+    items = tuple(replace(observation(i, 1+i*.1, None, negative_validated=True),
+                          negative_observation_confidence=.55) for i in range(3))
+    features = extract_continuous_plume_features(items, timestamp_seconds=1.2)
+    assert features.relative_mask_area.value == 0
+    assert features.vertical_extent.value == 0
+    assert features.persistence.value == 0
+    assert features.segmentation_confidence.value == .55
+    assert features.persistence.confidence == .55
+    assert "no cold-object claim" in features.relative_mask_area.evidence[0]
+
+
+def test_negative_confidence_cannot_appear_without_domain_validation():
+    with pytest.raises(ValueError, match="domain validation"):
+        replace(observation(0, 1, None), negative_observation_confidence=.55)
 
 
 def test_larger_and_taller_masks_produce_larger_descriptive_features():
