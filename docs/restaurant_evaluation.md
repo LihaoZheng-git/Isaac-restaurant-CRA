@@ -169,7 +169,7 @@ space, guidance and h_full solvers yielded a finite 3 x 24 x 28 field with
 lambda 1.25. This validates the evidence-to-policy/field connection, not robot
 navigation or universal safety. Artifacts: `outputs/stationary_capture_safe_sage/`.
 
-Final validation: 1,305 unit tests passed; repository Ruff and whitespace checks
+Integration validation: 1,305 unit tests passed; repository Ruff and whitespace checks
 passed. One earlier full-suite invocation had temporary-directory setup errors;
 the corrected run completed without errors. All simulations remained stationary.
 
@@ -180,3 +180,12 @@ plume perception remains unsupported. Check relative heaviness on the selected
 rendered objects rather than demanding precise kilograms. Wheel trials still
 require the scenario's stationary readiness records. Fixed-class and continuous
 CRA baselines retain matched settings and primary lambda 1.25.
+
+Final support-coverage review: a surrounding small support patch must not
+establish zero local drop when farther surfaces are unseen. Zero-drop evidence
+now requires support-height returns reaching the outer 80% of the configured
+search neighborhood in every sampled direction. The fraction is configurable;
+this remains a bounded local observation, not a general toppling claim. The
+0.30117 m positive sensor replay is unchanged. The new small-platform regression
+passes alongside the existing ground-support and positive-drop cases.
+Final full regression: 1,306 tests passed; Ruff and whitespace checks passed.

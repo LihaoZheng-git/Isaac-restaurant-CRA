@@ -26,6 +26,7 @@ class LidarFallSurfaceConfig:
     support_maximum_gap_m: float = 0.06
     minimum_support_overhang_m: float = 0.10
     minimum_support_planarity_ratio: float = 0.05
+    minimum_zero_drop_coverage_fraction: float = 0.80
     surface_band_tolerance_m: float = 0.04
     minimum_surface_points: int = 6
     landing_minimum_offset_m: float = 0.12
@@ -60,7 +61,7 @@ class LidarFallSurfaceConfig:
             value = getattr(self, name)
             if isinstance(value, bool) or not isinstance(value, int) or value < 3:
                 raise ValueError(f"{name} must be an integer of at least 3")
-        for name in ("maximum_support_continuation_fraction", "minimum_support_planarity_ratio", "confidence"):
+        for name in ("maximum_support_continuation_fraction", "minimum_support_planarity_ratio", "confidence", "minimum_zero_drop_coverage_fraction"):
             value = float(getattr(self, name))
             if not math.isfinite(value) or not 0 <= value <= 1:
                 raise ValueError(f"{name} must lie in [0, 1]")
@@ -142,7 +143,13 @@ def estimate_lidar_fall_surfaces(
                 <= settings.surface_band_tolerance_m
             )
         )
-        if same_count >= settings.minimum_surface_points:
+        outer_support_count = int(np.count_nonzero(
+            corridor
+            & (np.abs(scene[:, 2] - support_level) <= settings.surface_band_tolerance_m)
+            & (along >= half_extent + settings.minimum_zero_drop_coverage_fraction
+               * settings.landing_maximum_offset_m)
+        ))
+        if outer_support_count >= settings.minimum_surface_points:
             contiguous_directions += 1
         lower_heights = heights[
             heights <= support_level - settings.minimum_positive_drop_m
@@ -174,7 +181,7 @@ def estimate_lidar_fall_surfaces(
                 settings=settings,
                 support_count=support_count,
                 landing_count=contiguous_directions,
-                detail="support-height surface continues around the object",
+                detail="support-height returns reach the outer sampled neighborhood in every direction; local drop only",
             )
             return LidarFallSurfaceResult(
                 evidence, None, (), support_count, contiguous_directions
