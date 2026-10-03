@@ -67,3 +67,22 @@ The study evaluates continuous visual/physical risk proxies in these scenarios.
 Unknown handling, provenance separation, online intervention and fixed primary
 lambda 1.25 remain unchanged. This scope decision does not itself change
 runtime code, relax existing readiness gates, or turn a failed test into a pass.
+
+## Visible support component result (2026-10-02)
+
+The stopped-robot Pandar diagnostic now selects geometrically valid support
+bands before ranking their density, rejecting narrow vertical-face bands.
+Partial directional coverage cannot imply zero local drop. The fixture filter
+also uses the settled chassis frame instead of the authored pre-settling pose.
+An isolated 0.300 m support-to-floor case estimated 0.30117 m, covered the
+oracle in its evidence interval, and drifted 0.00120 m / 0.0100 degrees with
+zero wheel commands. This uses live LiDAR; authored target location and height
+select the controlled cluster, and authored heights score it offline.
+
+The explicitly recorded diagnostic configuration uses a 1.50 m landing search
+because the mounted scanner first sees the floor beyond the platform at that
+distance. Runtime defaults remain unchanged. Replay of the corrected 0.800 m
+fixture remains unavailable because its support top is occluded. These results
+do not establish tabletop coverage or harmful-fall interaction likelihood.
+Artifacts: `outputs/visible_support_estimation/isolated-030-final/`.
+Validation: 1,286 unit tests passed; repository Ruff and whitespace checks passed.

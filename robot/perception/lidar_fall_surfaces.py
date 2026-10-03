@@ -25,6 +25,7 @@ class LidarFallSurfaceConfig:
     support_xy_margin_m: float = 0.12
     support_maximum_gap_m: float = 0.06
     minimum_support_overhang_m: float = 0.10
+    minimum_support_planarity_ratio: float = 0.05
     surface_band_tolerance_m: float = 0.04
     minimum_surface_points: int = 6
     landing_minimum_offset_m: float = 0.12
@@ -59,7 +60,7 @@ class LidarFallSurfaceConfig:
             value = getattr(self, name)
             if isinstance(value, bool) or not isinstance(value, int) or value < 3:
                 raise ValueError(f"{name} must be an integer of at least 3")
-        for name in ("maximum_support_continuation_fraction", "confidence"):
+        for name in ("maximum_support_continuation_fraction", "minimum_support_planarity_ratio", "confidence"):
             value = float(getattr(self, name))
             if not math.isfinite(value) or not 0 <= value <= 1:
                 raise ValueError(f"{name} must lie in [0, 1]")
@@ -110,31 +111,12 @@ def estimate_lidar_fall_surfaces(
         & (scene[:, 1] <= upper_xyz[1] + margin)
         & (scene[:, 2] <= lower_xyz[2] + settings.support_maximum_gap_m)
     )
-    support_values = scene[support_mask, 2]
-    support_level, support_count = _surface_level(
-        support_values,
-        tolerance=settings.surface_band_tolerance_m,
-        minimum_points=settings.minimum_surface_points,
-        target=float(lower_xyz[2]),
+    support_level, support_count = _support_surface_level(
+        scene[support_mask], lower_xyz, upper_xyz, settings,
     )
     if support_level is None:
-        return _unavailable("object-adjacent support surface was not localized")
-    if lower_xyz[2] - support_level > settings.support_maximum_gap_m:
-        return _unavailable("localized surface is too far below the object")
-    support_band_points = scene[
-        support_mask
-        & (
-            np.abs(scene[:, 2] - support_level)
-            <= settings.surface_band_tolerance_m
-        )
-    ]
-    support_span = np.ptp(support_band_points[:, :2], axis=0)
-    object_span = upper_xyz[:2] - lower_xyz[:2]
-    if np.any(
-        support_span < object_span + settings.minimum_support_overhang_m
-    ):
         return _unavailable(
-            "localized height band lacks planar support beyond the object footprint",
+            "object-adjacent planar support was not localized within the allowed gap",
             support_point_count=support_count,
         )
 
@@ -181,7 +163,10 @@ def estimate_lidar_fall_surfaces(
         )
 
     if not direction_results:
-        if contiguous_directions >= max(3, settings.direction_count // 4):
+        # A few visible directions cannot rule out an unseen nearby edge.
+        # Zero is a bounded local-drop observation only with full sampled
+        # support coverage; otherwise a missing landing remains unknown.
+        if contiguous_directions == settings.direction_count:
             evidence = _surface_evidence(
                 support_level,
                 support_level,
@@ -283,6 +268,41 @@ def _surface_level(
         if selected.size >= minimum_points:
             level = float(np.median(selected))
             candidates.append((int(selected.size), -abs(level - target), level))
+    if not candidates:
+        return None, 0
+    count, _, level = max(candidates)
+    return level, count
+
+
+def _support_surface_level(points, lower_xyz, upper_xyz, settings):
+    """Select only geometrically supported bands before ranking point counts.
+
+    Dense vertical object remnants must not outrank a sparser supporting plane.
+    A rotated line can span both coordinate axes, so require two-dimensional
+    coverage as well as the existing footprint-overhang test.
+    """
+    if len(points) < settings.minimum_surface_points:
+        return None, 0
+    candidates = []
+    seen_levels = set()
+    for height in np.unique(points[:, 2]):
+        selected = points[np.abs(points[:, 2] - height) <= settings.surface_band_tolerance_m]
+        if len(selected) < settings.minimum_surface_points:
+            continue
+        level = float(np.median(selected[:, 2]))
+        key = round(level, 6)
+        if key in seen_levels:
+            continue
+        seen_levels.add(key)
+        if abs(float(lower_xyz[2]) - level) > settings.support_maximum_gap_m:
+            continue
+        span = np.ptp(selected[:, :2], axis=0)
+        if np.any(span < upper_xyz[:2] - lower_xyz[:2] + settings.minimum_support_overhang_m):
+            continue
+        eigenvalues = np.linalg.eigvalsh(np.cov(selected[:, :2], rowvar=False, bias=True))
+        if eigenvalues[-1] <= 1e-12 or eigenvalues[0] / eigenvalues[-1] < settings.minimum_support_planarity_ratio:
+            continue
+        candidates.append((len(selected), -abs(level - float(lower_xyz[2])), level))
     if not candidates:
         return None, 0
     count, _, level = max(candidates)

@@ -74,6 +74,7 @@ OUTPUT_DIRECTORY = Path(os.environ.get(
     "CRA_LIDAR_DIAGNOSTIC_DIR", str(ROOT / "outputs" / "lidar_fall_height_isaac")
 ))
 FIXTURE_ROOT = "/World/CRA_FallHeightValidation"
+ISOLATED_SCENE = os.environ.get("CRA_FALL_ISOLATED_SCENE", "0") == "1"
 FIXTURE_CENTER_ROBOT_XY = np.asarray((2.0, 0.50), dtype=np.float64)
 SUPPORT_DROP_M = float(os.environ.get("CRA_FALL_SUPPORT_DROP_M", "0.80"))
 if not math.isfinite(SUPPORT_DROP_M) or SUPPORT_DROP_M <= 0:
@@ -86,6 +87,9 @@ FIXTURE_SURFACE_CONFIG = LidarFallSurfaceConfig(
     support_xy_margin_m=0.30,
     support_maximum_gap_m=0.20,
     minimum_support_overhang_m=0.05,
+    # At the mounted scanner's elevation, the first visible floor returns
+    # beyond the platform can lie outside the default 0.90 m neighborhood.
+    landing_maximum_offset_m=1.50,
 )
 
 
@@ -116,10 +120,15 @@ def author_fixture(stage, floor_height_robot_m: float) -> None:
 
 
 def _author_fixture(stage, floor_height_robot_m: float) -> None:
+    if ISOLATED_SCENE:
+        UsdGeom.Imageable(stage.GetPrimAtPath("/World/Environment")).MakeInvisible()
     root = UsdGeom.Xform.Define(stage, FIXTURE_ROOT)
     root.AddTransformOp().Set(get_prim_world_transform(stage, ROBOT_BASE_PRIM_PATH))
     support = _material(stage, f"{FIXTURE_ROOT}/SupportMaterial", (0.18, 0.42, 0.72))
     target = _material(stage, f"{FIXTURE_ROOT}/TargetMaterial", (0.90, 0.28, 0.10))
+    if ISOLATED_SCENE:
+        _cube(stage, f"{FIXTURE_ROOT}/Landing", (2.0, 0.0, floor_height_robot_m - 0.05),
+              (20.0, 20.0, 0.10), support)
     support_center_z = floor_height_robot_m + SUPPORT_DROP_M - SUPPORT_SIZE_M[2] / 2
     _cube(
         stage,
@@ -206,6 +215,14 @@ def main() -> None:
     # can be removed exactly from the same scene cloud. Stacking asynchronous
     # scans would leave near-duplicate target returns that resemble support.
     scene_points = transform_points(frames[-1][0], robot_from_lidar)
+    # The chassis settles from its authored pose. Re-express the independently
+    # known floor in the current sensor frame for fixture selection/scoring.
+    floor_z = floor_height_robot(loaded.stage)
+    OUTPUT_DIRECTORY.mkdir(parents=True, exist_ok=True)
+    np.savez_compressed(OUTPUT_DIRECTORY / "scene_points.npz",
+                        scene_points_robot_xyz=scene_points,
+                        robot_from_lidar=robot_from_lidar,
+                        floor_height_robot_m=floor_z)
     support_height = floor_z + SUPPORT_DROP_M
     obstacle_points = detect_obstacle_points_3d(
         scene_points,
@@ -293,6 +310,7 @@ def main() -> None:
         "declared_object_height_m": OBJECT_SIZE_M[2],
         "rendered_object_height_m": object_bounds.size[2],
         "selection_boundary": "authored target location and height filter; inference uses live LiDAR surfaces",
+        "scene_scope": "isolated_visible_fixture" if ISOLATED_SCENE else "restaurant_fixture",
     }
     OUTPUT_DIRECTORY.mkdir(parents=True, exist_ok=True)
     (OUTPUT_DIRECTORY / "report.json").write_text(
