@@ -102,3 +102,21 @@ uncertainty bounds are unchanged. Exact kilograms remain a secondary claim.
 Artifact: `outputs/relative_heaviness/report.json`; checkpoint SHA-256
 `92d437580efb283071e0ac0cd7c16de77f76ef3017a243329e4bf826e0e5a31e`.
 Validation: 18 relevant tests passed; repository Ruff passed.
+
+## Explicit visual contact proxy (2026-10-02)
+
+Accepted exposed-edge masks now produce a continuous score from exposure,
+elongation and boundary complexity. The default shape weight is configurable
+(0.6 elongation / 0.4 complexity); it is an engineering proxy, not injury
+calibration. Adapter use requires `allow_visual_contact_proxy=True` and a
+separate interaction estimate. Diagnostic and readiness records label the
+basis `visual_exposed_edge_proxy`. Physical sharpness, hardness and 3D edge
+orientation remain unavailable; absent or unmatched part detections remain
+unknown. Existing physical-contact behavior is unchanged by default.
+
+Held-out PACO replay accepted four edge masks on three parent objects, producing
+nominal proxy values 0.258, 0.273 and 0.354 with distinct confidence/bounds.
+Six ambiguous and three unmatched masks were rejected. This validates the
+image-to-proxy path on that replay, not general restaurant contact accuracy,
+negative absence, tips, nails or jagged surfaces. Local checkpoint and image
+hashes are recorded in `outputs/contact_visual_proxy/diagnostic.json`.

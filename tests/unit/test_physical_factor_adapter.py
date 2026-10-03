@@ -75,6 +75,33 @@ def test_energy_equations_and_unknown_specialists():
     assert CRARiskAssessor().assess(result.profile).phi == 1.0
 
 
+def test_explicit_visual_contact_path_does_not_invent_physical_inputs():
+    item = attributes()
+    with pytest.raises(ValueError, match="opt-in"):
+        adapt(item, visual_contact_proxy=scalar(0.4))
+    result = adapt(
+        item, visual_contact_proxy=scalar(0.4, confidence=0.8),
+        contact_interaction_likelihood=scalar(0.5),
+        config=PhysicalFactorAdapterConfig(allow_visual_contact_proxy=True),
+    )
+    assert result.contact.basis == "visual_exposed_edge_proxy"
+    assert result.contact.as_dict()["basis"] == "visual_exposed_edge_proxy"
+    assert result.contact.estimate.nominal_risk == pytest.approx(0.2)
+    assert not item.contact.sharpness.is_available
+    assert not item.contact.hardness.is_available
+
+
+@pytest.mark.parametrize("timestamp,reason", [(0, "stale"), (3, "future")])
+def test_visual_contact_proxy_age_and_missing_interaction_remain_unknown(timestamp, reason):
+    result = adapt(
+        visual_contact_proxy=scalar(0.4, timestamp=timestamp),
+        config=PhysicalFactorAdapterConfig(allow_visual_contact_proxy=True),
+    )
+    assert result.contact.estimate.confidence == 0
+    assert f"visual_exposed_edge_proxy: {reason} evidence" in result.contact.rejection_reasons
+    assert "contact_interaction_likelihood: unavailable" in result.contact.rejection_reasons
+
+
 def test_upper_bounds_and_nominal_option():
     item = attributes()
     item = replace(

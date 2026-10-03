@@ -52,6 +52,7 @@ class PhysicalFactorAdapterConfig:
     use_upper_bounds: bool = True
     allow_priors: bool = True
     contact_sharpness_weight: float = 0.7
+    allow_visual_contact_proxy: bool = False
 
     def __post_init__(self) -> None:
         for name in (
@@ -70,7 +71,7 @@ class PhysicalFactorAdapterConfig:
             elif value <= 0.0:
                 raise ValueError(f"{name} must be positive")
             object.__setattr__(self, name, value)
-        for name in ("use_upper_bounds", "allow_priors"):
+        for name in ("use_upper_bounds", "allow_priors", "allow_visual_contact_proxy"):
             if not isinstance(getattr(self, name), bool):
                 raise TypeError(f"{name} must be bool")
 
@@ -84,6 +85,7 @@ class PhysicalFactorDiagnostic:
     energy_j: ScalarEstimate
     estimate: RiskFactorEstimate
     rejection_reasons: tuple[str, ...]
+    basis: str = "physical"
 
     def as_dict(self) -> dict[str, object]:
         def scalar(item: ScalarEstimate) -> dict[str, object]:
@@ -98,6 +100,7 @@ class PhysicalFactorDiagnostic:
 
         return {
             "factor": self.factor,
+            "basis": self.basis,
             "inputs": {name: scalar(item) for name, item in self.inputs},
             "energy_j": scalar(self.energy_j),
             "severity": self.estimate.severity,
@@ -227,6 +230,7 @@ def _direct_factor(
     severity: float,
     interaction: float,
     assumption: str,
+    basis: str = "physical",
 ) -> PhysicalFactorDiagnostic:
     reasons = []
     for name, item in inputs:
@@ -269,7 +273,7 @@ def _direct_factor(
                 "uncalibrated normalized cue mapping",
             ),
         )
-    return PhysicalFactorDiagnostic(factor, inputs, energy, estimate, tuple(reasons))
+    return PhysicalFactorDiagnostic(factor, inputs, energy, estimate, tuple(reasons), basis)
 
 
 def adapt_physical_factors(
@@ -278,6 +282,8 @@ def adapt_physical_factors(
     timestamp_seconds: float,
     potential_interaction_likelihood: ScalarEstimate | None = None,
     thermal_interaction_likelihood: ScalarEstimate | None = None,
+    visual_contact_proxy: ScalarEstimate | None = None,
+    contact_interaction_likelihood: ScalarEstimate | None = None,
     config: PhysicalFactorAdapterConfig | None = None,
 ) -> PhysicalFactorAdapterResult:
     """Adapt one track without semantic-class or object-height substitutions.
@@ -350,6 +356,25 @@ def adapt_physical_factors(
         * (getattr(orientation, bound) or 0),
         assumption="weighted sharpness/hardness severity; exposure times orientation interaction",
     )
+    if visual_contact_proxy is not None:
+        if not settings.allow_visual_contact_proxy:
+            raise ValueError("visual contact proxy requires explicit configuration opt-in")
+        if not isinstance(visual_contact_proxy, ScalarEstimate) or visual_contact_proxy.unit != "1":
+            raise ValueError("visual contact proxy must be a dimensionless ScalarEstimate")
+        route = contact_interaction_likelihood or ScalarEstimate.unavailable(
+            unit="1", source="visual_contact_interaction_unavailable", timestamp_seconds=timestamp,
+        )
+        if not isinstance(route, ScalarEstimate) or route.unit != "1":
+            raise ValueError("contact interaction must be a dimensionless ScalarEstimate")
+        contact = _direct_factor(
+            "contact", (("visual_exposed_edge_proxy", visual_contact_proxy),
+                        ("contact_interaction_likelihood", route)),
+            timestamp=timestamp, config=settings,
+            severity=getattr(visual_contact_proxy, bound) or 0,
+            interaction=getattr(route, bound) or 0,
+            assumption="bounded visual exposed-edge proxy with separately supplied interaction; no physical sharpness/hardness claim",
+            basis="visual_exposed_edge_proxy",
+        )
     thermal_interaction = thermal_interaction_likelihood or ScalarEstimate.unavailable(
         unit="1", source="thermal_interaction_unavailable", timestamp_seconds=timestamp
     )
