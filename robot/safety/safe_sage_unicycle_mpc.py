@@ -26,6 +26,11 @@ horizon.  A recovery is returned only when the exact DTCBF check passes.
 Final acceptance also rejects every predicted configuration-space cell marked
 unsafe; interpolated positive ``h_full`` values cannot override that mask.
 
+Optional integration substeps match the curved constant-command rollout to a
+finer execution time step, including analytical translation/turn Jacobians.
+With more than one integration substep, inter-sample geometry checks use that
+same curved rollout. The default remains one Euler step per MPC interval.
+
 The module has no Isaac Sim dependency.
 """
 
@@ -120,6 +125,7 @@ class SafeSAGEUnicycleMPCConfig:
 
     horizon_steps: int = 12
     safety_substeps_per_interval: int = 1
+    integration_substeps_per_interval: int = 1
     time_step: float = 0.20
     gamma: float = 1.0
     lookahead_distance: float = 0.10
@@ -156,6 +162,10 @@ class SafeSAGEUnicycleMPCConfig:
                 self.safety_substeps_per_interval,
                 name="safety_substeps_per_interval",
             ),
+            "integration_substeps_per_interval": _positive_integer(
+                self.integration_substeps_per_interval,
+                name="integration_substeps_per_interval",
+            ),
             "maximum_sqp_iterations": _positive_integer(
                 self.maximum_sqp_iterations,
                 name="maximum_sqp_iterations",
@@ -177,6 +187,12 @@ class SafeSAGEUnicycleMPCConfig:
                 name="maximum_line_search_iterations",
             ),
         }
+        integration_count = integer_values["integration_substeps_per_interval"]
+        safety_count = integer_values["safety_substeps_per_interval"]
+        if integration_count > 1 and integration_count % safety_count:
+            raise ValueError(
+                "integration substeps must be a multiple of safety substeps"
+            )
         real_values = {
             name: _finite_real(value, name=name)
             for name, value in (
@@ -1543,27 +1559,10 @@ class SafeSAGEUnicycleMPC:
             (horizon + 1, 3, variable_count),
             dtype=np.float64,
         )
-        dt = self.config.time_step
         for index in range(horizon):
-            yaw = float(chassis_states[index, 2])
-            linear_velocity = float(commands[index, 0])
-            cosine = math.cos(yaw)
-            sine = math.sin(yaw)
-            state_matrix = np.array(
-                [
-                    [1.0, 0.0, -dt * linear_velocity * sine],
-                    [0.0, 1.0, dt * linear_velocity * cosine],
-                    [0.0, 0.0, 1.0],
-                ],
-                dtype=np.float64,
-            )
-            control_matrix = np.array(
-                [
-                    [dt * cosine, 0.0],
-                    [dt * sine, 0.0],
-                    [0.0, dt],
-                ],
-                dtype=np.float64,
+            _, state_matrix, control_matrix = self._interval_dynamics(
+                chassis_states[index],
+                commands[index],
             )
             sensitivities[index + 1] = state_matrix @ sensitivities[index]
             column = 2 * index
@@ -1668,6 +1667,7 @@ class SafeSAGEUnicycleMPC:
             unsafe_mask = self._inter_sample_unsafe_mask(
                 chassis_states,
                 samples.unsafe_configuration_mask,
+                commands=clipped_commands,
                 configuration_space=configuration_space,
                 h_full=h_full,
             )
@@ -1691,10 +1691,11 @@ class SafeSAGEUnicycleMPC:
         chassis_states: np.ndarray,
         endpoint_mask: np.ndarray,
         *,
+        commands: np.ndarray,
         configuration_space: SafeSAGEConfigurationSpaceResult,
         h_full: SafeSAGEHFullResult,
     ) -> np.ndarray:
-        """Mark intervals whose interpolated motion enters an unsafe cell.
+        """Mark intervals whose predicted motion enters an unsafe cell.
 
         DTCBF constraints remain defined at MPC sample times.  This denser
         geometry check prevents a command from leaving and then re-entering
@@ -1711,14 +1712,27 @@ class SafeSAGEUnicycleMPC:
             yaw_delta = wrap_to_pi(float(end[2] - start[2]))
             for substep in range(1, substeps):
                 fraction = substep / substeps
-                chassis_state = np.array(
-                    [
-                        start[0] + fraction * (end[0] - start[0]),
-                        start[1] + fraction * (end[1] - start[1]),
-                        wrap_to_pi(float(start[2]) + fraction * yaw_delta),
-                    ],
-                    dtype=np.float64,
-                )
+                if self.config.integration_substeps_per_interval > 1:
+                    chassis_state, _, _ = self._interval_dynamics(
+                        start,
+                        commands[interval],
+                        duration=self.config.time_step * fraction,
+                        substeps=max(
+                            1,
+                            round(
+                                self.config.integration_substeps_per_interval * fraction
+                            ),
+                        ),
+                    )
+                else:
+                    chassis_state = np.array(
+                        [
+                            start[0] + fraction * (end[0] - start[0]),
+                            start[1] + fraction * (end[1] - start[1]),
+                            wrap_to_pi(float(start[2]) + fraction * yaw_delta),
+                        ],
+                        dtype=np.float64,
+                    )
                 safety_state = lookahead_state(
                     chassis_state,
                     lookahead_distance=self.config.lookahead_distance,
@@ -1854,6 +1868,52 @@ class SafeSAGEUnicycleMPC:
         )
         return lower, upper
 
+    def _interval_dynamics(self, state, command, *, duration=None, substeps=None):
+        """Constant-command Euler substeps and their analytical Jacobians.
+
+        A vectorized sum is equivalent to repeated smaller Euler steps, whose
+        headings change while executing a turn. Derivatives include angular
+        velocity's influence on translation. One substep preserves the old
+        endpoint model. This remains a kinematic model, not wheel/slip physics.
+        """
+        duration = self.config.time_step if duration is None else duration
+        count = (
+            self.config.integration_substeps_per_interval
+            if substeps is None
+            else substeps
+        )
+        dt = duration / count
+        velocity, angular = command
+        indices = np.arange(count, dtype=np.float64)
+        angles = state[2] + indices * angular * dt
+        cosines, sines = np.cos(angles), np.sin(angles)
+        cosine_sum, sine_sum = float(cosines.sum()), float(sines.sum())
+        if count == 1:
+            next_state = integrate_unicycle_euler(state, command, time_step=duration)
+        else:
+            next_state = np.array(
+                [
+                    state[0] + velocity * dt * cosine_sum,
+                    state[1] + velocity * dt * sine_sum,
+                    wrap_to_pi(float(state[2] + angular * duration)),
+                ]
+            )
+        state_matrix = np.array(
+            [
+                [1.0, 0.0, -velocity * dt * sine_sum],
+                [0.0, 1.0, velocity * dt * cosine_sum],
+                [0.0, 0.0, 1.0],
+            ]
+        )
+        control_matrix = np.array(
+            [
+                [dt * cosine_sum, -velocity * dt * dt * float(indices @ sines)],
+                [dt * sine_sum, velocity * dt * dt * float(indices @ cosines)],
+                [0.0, duration],
+            ]
+        )
+        return next_state, state_matrix, control_matrix
+
     def _rollout(
         self,
         initial_state: np.ndarray,
@@ -1867,11 +1927,7 @@ class SafeSAGEUnicycleMPC:
         )
         states[0] = initial_state
         for index, command in enumerate(commands):
-            states[index + 1] = integrate_unicycle_euler(
-                states[index],
-                command,
-                time_step=self.config.time_step,
-            )
+            states[index + 1], _, _ = self._interval_dynamics(states[index], command)
         return states
 
     def _safety_states(self, chassis_states: np.ndarray) -> np.ndarray:

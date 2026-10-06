@@ -42,3 +42,7 @@
   Preserve configured container regions/context as priors, reject invalid
   references, and do not claim moving-camera support. Validated low visible
   plume cues do not establish that an object is cold.
+- The simple-object demo separates oracle factor profiles from its measured
+  LiDAR occupancy and unchanged unknown sensor assessment. Require actual
+  waypoint completion for motion acceptance; positive clearance alone is not
+  a successful pass-by. See `docs/simple_object_test.md` for its bounded scope.

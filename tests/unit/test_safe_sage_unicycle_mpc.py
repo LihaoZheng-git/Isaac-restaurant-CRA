@@ -264,8 +264,13 @@ def test_elastic_cbf_subproblem_remains_solvable_inside_tight_trust_region() -> 
     assert solution.maximum_cbf_slack > 0.0
 
 
-def test_analytical_rollout_sensitivities_match_finite_difference() -> None:
-    mpc = make_mpc(horizon_steps=4)
+@pytest.mark.parametrize("integration_substeps", [1, 12])
+def test_analytical_rollout_sensitivities_match_finite_difference(
+    integration_substeps,
+) -> None:
+    mpc = make_mpc(
+        horizon_steps=4, integration_substeps_per_interval=integration_substeps
+    )
     initial_state = np.array([0.1, -0.2, 0.35], dtype=np.float64)
     commands = np.array(
         [
@@ -300,6 +305,67 @@ def test_analytical_rollout_sensitivities_match_finite_difference() -> None:
             rtol=1e-5,
             atol=1e-7,
         )
+
+
+def test_substep_prediction_matches_executed_curved_unicycle_motion():
+    from robot.control.unicycle_model import integrate_unicycle_euler
+
+    mpc = make_mpc(horizon_steps=1, time_step=0.2, integration_substeps_per_interval=12)
+    initial = np.array([0.1, -0.2, 0.35])
+    command = np.array([0.2, 0.8])
+    actual = initial.copy()
+    for _ in range(12):
+        actual = integrate_unicycle_euler(actual, command, time_step=0.2 / 12)
+    predicted = mpc._rollout(initial, command[None, :])[-1]
+    np.testing.assert_allclose(predicted, actual, atol=1e-12)
+    coarse = integrate_unicycle_euler(initial, command, time_step=0.2)
+    assert np.linalg.norm(predicted[:2] - coarse[:2]) > 0.002
+
+
+def test_inter_sample_check_follows_the_integrated_turn_instead_of_its_chord(
+    monkeypatch,
+):
+    from robot.control.unicycle_model import integrate_unicycle_euler, lookahead_state
+
+    mpc = make_mpc(
+        horizon_steps=1,
+        time_step=0.2,
+        safety_substeps_per_interval=12,
+        integration_substeps_per_interval=12,
+    )
+    initial = np.zeros(3)
+    commands = np.array([[0.2, 0.8]])
+    actual = initial.copy()
+    for _ in range(6):
+        actual = integrate_unicycle_euler(actual, commands[0], time_step=0.2 / 12)
+    query = lookahead_state(actual, lookahead_distance=mpc.config.lookahead_distance)
+    monkeypatch.setattr(
+        mpc.paper_filter,
+        "is_unsafe_configuration",
+        lambda **kwargs: (
+            np.linalg.norm(kwargs["query_position_grid_xy"] - query[:2]) < 1e-8
+        ),
+    )
+    mask = mpc._inter_sample_unsafe_mask(
+        mpc._rollout(initial, commands),
+        np.zeros(2, dtype=bool),
+        commands=commands,
+        configuration_space=None,
+        h_full=None,
+    )
+    assert mask.tolist() == [False, True]
+
+
+@pytest.mark.parametrize(
+    "options",
+    [
+        {"integration_substeps_per_interval": 0},
+        {"integration_substeps_per_interval": 2, "safety_substeps_per_interval": 3},
+    ],
+)
+def test_invalid_integration_and_safety_substep_settings_are_rejected(options):
+    with pytest.raises(ValueError):
+        make_mpc(**options)
 
 
 def test_thirty_step_sparse_mpc_solves_within_one_second() -> None:

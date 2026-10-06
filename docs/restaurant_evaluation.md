@@ -173,8 +173,9 @@ Integration validation: 1,305 unit tests passed; repository Ruff and whitespace 
 passed. One earlier full-suite invocation had temporary-directory setup errors;
 the corrected run completed without errors. All simulations remained stationary.
 
-Next: enrich the restaurant with the agreed factor-specific actors and validate
-their visibility/source association stationary. The bounded plume demo can
+Next: complete the simple-object pass-by gate in `docs/simple_object_test.md`
+before enriching the restaurant with the agreed factor-specific actors and
+validating their visibility/source association stationary. The bounded plume demo can
 initially use clearly labeled fixed-camera/source priors; moving robot-camera
 plume perception remains unsupported. Check relative heaviness on the selected
 rendered objects rather than demanding precise kilograms. Wheel trials still
@@ -189,3 +190,23 @@ this remains a bounded local observation, not a general toppling claim. The
 0.30117 m positive sensor replay is unchanged. The new small-platform regression
 passes alongside the existing ground-support and positive-drop cases.
 Final full regression: 1,306 tests passed; Ruff and whitespace checks passed.
+
+## Simple-object navigation gate (2026-10-05)
+
+The session-only floor sphere has measured Pandar occupancy, simulation-oracle
+pose/extrinsic references, and explicitly controlled oracle factor profiles.
+The separate sensor assessment preserves missing mass/contact/thermal/fall
+inputs and phi 1.0. Low/medium/high controlled phi maps monotonically to field
+flux at fixed lambda 1.25, and stationary prediction/readiness checks pass.
+
+Matched low-CRA, constant-baseline and high-CRA Isaac wheel trials all maintained
+positive checked margins and 0.130–0.139 m minimum monitored target clearance,
+but none completed the 2.50 m waypoint in 30 simulated seconds. All three stalled;
+the gate fails. Mean MPC solve times also exceed the 0.20 s prediction interval.
+Do not treat unit/stationary success as completed navigation or use these runs
+to claim a better CRA baseline. The saved restaurant asset is unchanged.
+Diagnose MPC progress and computation cost, then repeat the object gate before
+scenario enrichment. Details and artifact hashes: `docs/simple_object_test.md`.
+Validation: 1,322 unit tests passed, 53 final targeted tests passed, Ruff and
+whitespace checks passed. This work remains a review branch while motion
+acceptance is unresolved.
