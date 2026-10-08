@@ -317,6 +317,13 @@ def main():
             integration_substeps_per_interval=round(
                 mpc.config.time_step / stationary.PHYSICS_DT
             ),
+            enable_progress_seeds=True,
+            progress_seed_linear_fraction=0.5,
+            # Prefix envelopes across 1,056 preceding wheel intervals cover
+            # lookahead-position/yaw errors, including command reversals.
+            configuration_position_padding_m=0.025,
+            configuration_yaw_padding_radians=0.21,
+            configuration_padding_initial_fraction=0.1,
         ),
     )
     # Stationary initial predictions never command the wheels.
@@ -584,6 +591,27 @@ def main():
             )
             result["motion_mode"] = "Isaac Nova Carter physical wheel commands"
             result["initial_state"] = state_before.tolist()
+            stopping_states = []
+            stopping_clearances = []
+            for _ in range(30):
+                advance(0.0, 0.0)
+                state = local_state(stage, anchor)
+                stopping_states.append(state.tolist())
+                stopping_clearances.append(disk_footprint_clearance(
+                    state, center_xy=sphere_center, radius_m=RADIUS_M,
+                    footprint=footprint,
+                ))
+            stopping_passed = bool(
+                np.isfinite(stopping_states).all()
+                and min(stopping_clearances) > 0.02
+            )
+            result["stopping"] = {
+                "simulated_seconds": 30 * stationary.PHYSICS_DT,
+                "minimum_clearance_m": min(stopping_clearances),
+                "trajectory": stopping_states,
+                "passed": bool(stopping_passed),
+            }
+            result["passed"] = result["passed"] and stopping_passed
             report["motion"][name] = result
             save_json("report.json", report)
             print(

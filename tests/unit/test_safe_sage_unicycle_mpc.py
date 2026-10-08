@@ -341,17 +341,18 @@ def test_inter_sample_check_follows_the_integrated_turn_instead_of_its_chord(
     query = lookahead_state(actual, lookahead_distance=mpc.config.lookahead_distance)
     monkeypatch.setattr(
         mpc.paper_filter,
-        "is_unsafe_configuration",
-        lambda **kwargs: (
-            np.linalg.norm(kwargs["query_position_grid_xy"] - query[:2]) < 1e-8
+        "unsafe_configuration_mask",
+        lambda states, **kwargs: (
+            np.linalg.norm(states[:, :2] - query[:2], axis=1) < 1e-8
         ),
     )
+    configuration_space, h_full, _ = make_fields()
     mask = mpc._inter_sample_unsafe_mask(
         mpc._rollout(initial, commands),
         np.zeros(2, dtype=bool),
         commands=commands,
-        configuration_space=None,
-        h_full=None,
+        configuration_space=configuration_space,
+        h_full=h_full,
     )
     assert mask.tolist() == [False, True]
 
@@ -771,6 +772,13 @@ def test_unsafe_current_configuration_fails_closed() -> None:
         {"linear_velocity_trust_region": 0.0},
         {"cbf_slack_weight": 0.0},
         {"line_search_contraction": 1.0},
+        {"enable_progress_seeds": 1},
+        {"progress_seed_linear_fraction": 0.0},
+        {"progress_seed_linear_fraction": 1.0},
+        {"configuration_position_padding_m": -0.01},
+        {"configuration_yaw_padding_radians": -0.01},
+        {"configuration_padding_initial_fraction": -0.1},
+        {"configuration_padding_initial_fraction": 1.1},
     ),
 )
 def test_invalid_configuration_is_rejected(
@@ -785,3 +793,83 @@ def test_mpc_requires_paper_space_filter() -> None:
         SafeSAGEUnicycleMPC(
             SafeSAGECBFConfig(),  # type: ignore[arg-type]
         )
+
+
+def test_progress_seeds_preserve_open_space_nominal_and_unsafe_stop():
+    mpc = make_mpc(enable_progress_seeds=True)
+    kwargs = dict(
+        zip(
+            ("configuration_space", "h_full", "guidance_fields"),
+            make_fields(safety_value=2.0),
+        )
+    )
+    result = mpc.plan(np.zeros(3), np.array([0.25, 0.0]), **kwargs)
+    assert result.success
+    assert result.first_command == pytest.approx((0.25, 0.0))
+    kwargs = dict(
+        zip(
+            ("configuration_space", "h_full", "guidance_fields"),
+            make_fields(safety_value=2.0, unsafe_yaw_indices=(2,)),
+        )
+    )
+    result = mpc.plan(np.zeros(3), np.array([0.25, 0.0]), **kwargs)
+    assert not result.success
+    assert result.first_command == (0.0, 0.0)
+
+
+def test_progress_pool_can_restore_an_infeasible_nominal_horizon():
+    configuration_space, h_full, guidance_fields = make_fields(
+        guidance=(-1.0, -1.0), gradient=(-1.0, -1.0, 0.0), safety_value=.75,
+    )
+    result = make_mpc(horizon_steps=30, enable_progress_seeds=True).plan(
+        np.zeros(3), np.array([.25, 0]), configuration_space=configuration_space,
+        h_full=h_full, guidance_fields=guidance_fields,
+    )
+    assert result.success and result.restoration_used
+    assert result.status == "exact_safe_seed_feasibility_recovered"
+    assert result.minimum_dtcbf_margin >= -1e-6
+    assert result.predicted_chassis_states[-1, 1] < 0
+
+
+def test_geometry_padding_grows_within_first_execution_interval(monkeypatch):
+    configuration_space, h_full, _ = make_fields()
+    mpc = make_mpc(
+        horizon_steps=2, safety_substeps_per_interval=2,
+        configuration_position_padding_m=.1,
+        configuration_yaw_padding_radians=.2,
+        configuration_padding_initial_fraction=.1,
+    )
+    captured = []
+
+    def inspect(states, **kwargs):
+        captured.append(states.copy())
+        return np.zeros(len(states), dtype=bool)
+
+    monkeypatch.setattr(mpc.paper_filter, "unsafe_configuration_mask", inspect)
+    commands = np.zeros((2, 2))
+    mpc._inter_sample_unsafe_mask(
+        mpc._rollout(np.zeros(3), commands), np.zeros(3, dtype=bool),
+        commands=commands, configuration_space=configuration_space, h_full=h_full,
+    )
+    queries = captured[0].reshape(2, 2, -1, 3)
+    np.testing.assert_allclose(np.max(np.abs(queries[..., 0] - .1), axis=2), [[.055, .1], [.1, .1]])
+    np.testing.assert_allclose(np.max(np.abs(queries[..., 2]), axis=2), [[.11, .2], [.2, .2]])
+
+
+@pytest.mark.parametrize("padding", [
+    {"configuration_position_padding_m": 0.02},
+    {"configuration_yaw_padding_radians": 0.08},
+])
+def test_future_geometry_padding_rejects_nearby_unsafe_configuration(padding):
+    configuration_space, h_full, _ = make_fields(unsafe_yaw_indices=(2,))
+    if "configuration_position_padding_m" in padding:
+        state = np.array([.41, 0, 0.0])  # lookahead x=.51 is outside unsafe center cell
+    else:
+        state = np.array([0, 0, np.pi / 4 + .02])  # nearest yaw is safe slice 3
+    commands = np.zeros((1, 2))
+    plain = make_mpc(horizon_steps=1)
+    padded = make_mpc(horizon_steps=1, **padding)
+    kwargs = dict(commands=commands, configuration_space=configuration_space, h_full=h_full)
+    endpoints = np.zeros(2, dtype=bool)
+    assert not plain._inter_sample_unsafe_mask(plain._rollout(state, commands), endpoints, **kwargs).any()
+    assert padded._inter_sample_unsafe_mask(padded._rollout(state, commands), endpoints, **kwargs).tolist() == [False, True]

@@ -632,3 +632,93 @@ def test_nonfinite_filter_inputs_are_rejected(
             h_full=h_full,
             guidance_fields=guidance_fields,
         )
+
+
+def test_batch_matches_scalar_sampling_at_yaw_and_cell_boundaries(monkeypatch):
+    from robot.safety import safe_sage_cbf_filter as module
+
+    configuration_space, h_full, guidance = make_fields(
+        gradient=(0.3, -0.2, 0.1),
+        per_yaw_safety_values=(0.5, 1.0, 1.5, 2.0),
+        per_yaw_guidance=((1, 0), (0, 1), (-1, 0), (0, -1)),
+        unsafe_yaw_indices=(2,),
+    )
+    states = np.array(
+        [
+            [x, y, yaw]
+            for x, y in ((0, 0), (0.5, -0.5), (-2.0, 2.0))
+            for yaw in (-np.pi, -np.pi / 4, 0, np.pi / 4, np.pi, 7 * np.pi)
+        ]
+    )
+    filter_ = make_filter()
+    kwargs = dict(
+        configuration_space=configuration_space,
+        h_full=h_full,
+        guidance_fields=guidance,
+        temporal_safety_derivative=-0.03,
+    )
+    scalar = tuple(
+        filter_.evaluate_constraint(
+            query_position_grid_xy=state[:2],
+            query_yaw_radians=float(state[2]),
+            **kwargs,
+        )
+        for state in states
+    )
+    validations = []
+    original = module._validate_field_alignment
+
+    def validate(*args):
+        validations.append(1)
+        original(*args)
+
+    monkeypatch.setattr(module, "_validate_field_alignment", validate)
+    assert filter_.evaluate_constraints(states, **kwargs) == scalar
+    assert len(validations) == 1
+    assert filter_.evaluate_constraints(states, **kwargs) == scalar
+    assert len(validations) == 2  # no stale validation cache
+
+
+@pytest.mark.parametrize("states", [[], [[0, 0]], [[0, 0, np.nan]], [[3, 0, 0]]])
+def test_batch_rejects_invalid_or_out_of_grid_queries(states):
+    configuration_space, h_full, guidance = make_fields()
+    with pytest.raises(ValueError):
+        make_filter().evaluate_constraints(
+            np.asarray(states),
+            configuration_space=configuration_space,
+            h_full=h_full,
+            guidance_fields=guidance,
+        )
+
+
+def test_batch_rejects_malformed_replacement_field():
+    configuration_space, h_full, guidance = make_fields()
+    malformed = replace(guidance[0], vectors_robot_xy=np.zeros((4, 4, 2)))
+    with pytest.raises(ValueError, match="Guidance-field shape"):
+        make_filter().evaluate_constraints(
+            np.zeros((2, 3)),
+            configuration_space=configuration_space,
+            h_full=h_full,
+            guidance_fields=(malformed,) + guidance[1:],
+        )
+
+
+def test_vector_geometry_mask_matches_scalar_including_yaw_ties():
+    configuration_space, h_full, _ = make_fields(unsafe_yaw_indices=(0, 2))
+    generator = np.random.default_rng(42)
+    states = np.column_stack((
+        generator.uniform(-2.49, 2.49, (200, 2)),
+        generator.uniform(-8 * np.pi, 8 * np.pi, 200),
+    ))
+    ties = np.array([[0, 0, yaw] for yaw in (
+        -np.pi, -3 * np.pi / 4, -np.pi / 4, np.pi / 4, 3 * np.pi / 4,
+    )])
+    states = np.vstack((states, ties))
+    filter_ = make_filter()
+    kwargs = dict(configuration_space=configuration_space, h_full=h_full)
+    expected = [filter_.is_unsafe_configuration(
+        query_position_grid_xy=state[:2], query_yaw_radians=float(state[2]), **kwargs,
+    ) for state in states]
+    np.testing.assert_array_equal(filter_.unsafe_configuration_mask(states, **kwargs), expected)
+    with pytest.raises(ValueError, match="outside"):
+        filter_.unsafe_configuration_mask(np.array([[2.5, 0, 0]]), **kwargs)

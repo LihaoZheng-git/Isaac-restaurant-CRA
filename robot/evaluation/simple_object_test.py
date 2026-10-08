@@ -277,6 +277,20 @@ def run_bounded_pass_by(
                 or np.min(planned.dtcbf_margins) < -mpc.config.constraint_tolerance
             ):
                 reason = "mpc_fail_closed"
+                failure_diagnostic = {
+                    "state": state.tolist(),
+                    "status": getattr(planned, "status", "unreported"),
+                    "success": bool(planned.success),
+                    "fallback_active": bool(planned.fallback_active),
+                    "finite_prediction": bool(finite),
+                    "nominal_sequence": sequence.tolist(),
+                    "warm_start": None if warm_start is None else warm_start.tolist(),
+                    "predicted_states": planned.predicted_chassis_states.tolist()
+                    if finite else None,
+                    "predicted_safety_values": planned.predicted_safety_values.tolist()
+                    if finite else None,
+                    "dtcbf_margins": planned.dtcbf_margins.tolist() if finite else None,
+                }
                 break
             minimum_mpc_margin = min(
                 minimum_mpc_margin, float(np.min(planned.dtcbf_margins))

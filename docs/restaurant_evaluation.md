@@ -210,3 +210,35 @@ scenario enrichment. Details and artifact hashes: `docs/simple_object_test.md`.
 Validation: 1,322 unit tests passed, 53 final targeted tests passed, Ruff and
 whitespace checks passed. This work remains a review branch while motion
 acceptance is unresolved.
+
+## Simple-object controller gate resolved (2026-10-08)
+
+The corrected bounded unicycle MPC now completes all three matched Isaac wheel
+trials within the unchanged 30 s deadline: low CRA 26.8 s, constant baseline
+28.2 s, high CRA 29.0 s. Minimum monitored target policy-footprint clearances
+are 0.19845 / 0.18306 / 0.18804 m. Each passes the additional 0.50 s zero-command
+stopping check, retains positive checked MPC/CBF margins, and uses lambda 1.25.
+Stationary prerequisites passed first and the saved restaurant asset is unchanged.
+
+The correction uses opt-in bounded online turn seeds under the same nominal
+objective and exact trajectory acceptance checks, plus empirical future-geometry
+padding. It preserves the obstacle-unaware waypoint controller. A fresh audit
+covers all 420 execution intervals within the configured tracking envelope;
+this is empirical evidence, not a certified robust bound. Other MPC callers
+retain the legacy default. Final regression: 1,344 unit tests, Ruff and
+whitespace checks passed. Details, provenance, artifact hashes and the earlier
+failed gate are retained in `docs/simple_object_test.md`.
+
+This accepts the static single-object controller bridge with LiDAR occupancy
+and oracle factor profiles. The separate sensor assessment remains phi 1.0
+with unavailable evidence. Clearance is not monotonic in phi; the runs do not
+establish a CRA performance advantage. All passed left despite configured
+right-side soft guidance, so passing-side enforcement remains a limitation.
+Solve times are around 0.20–0.23 s on average and below 0.78 s at maximum;
+simulation pauses while planning, so real-time/dynamic-actor acceptance is pending.
+
+Next is the agreed restaurant-setup and experiment-design discussion. Select
+actors supported by the bounded factor estimators, validate visibility and
+source/track association stationary, and label priors/oracle controls separately
+from sensor results. Moving-camera plume estimation remains unsupported. Dynamic
+motion experiments need an explicit latency/control-rate assessment first.
