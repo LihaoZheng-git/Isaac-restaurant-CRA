@@ -30,7 +30,18 @@ parser.add_argument("--motion", action="store_true")
 parser.add_argument("--oracle-comparison", action="store_true")
 parser.add_argument("--grid-resolution", type=float, default=0.10)
 parser.add_argument("--yaw-slices", type=int, default=16)
+parser.add_argument("--object-radius", type=float, default=0.25,
+                    help="authored fixture radius, never supplied to estimators")
+parser.add_argument("--sphere-density-prior-kg-m3", type=float, nargs=3,
+                    metavar=("NOMINAL", "LOWER", "UPPER"),
+                    help="explicit effective bulk-density prior for accepted sphere fits")
 args = parser.parse_args()
+if not math.isfinite(args.object_radius) or not 0.08 <= args.object_radius <= 0.5:
+    parser.error("--object-radius must be within [0.08, 0.5] m")
+if args.sphere_density_prior_kg_m3 is not None:
+    nominal, lower, upper = args.sphere_density_prior_kg_m3
+    if not all(math.isfinite(value) for value in (nominal, lower, upper)) or not 0 < lower <= nominal <= upper:
+        parser.error("density prior must satisfy 0 < LOWER <= NOMINAL <= UPPER")
 args.output.mkdir(parents=True, exist_ok=True)
 os.environ.setdefault("WARP_CACHE_PATH", str(args.output / "warp"))
 
@@ -74,11 +85,13 @@ from robot.perception.camera_lidar_fusion import (
 from robot.perception.contact_detection_adapter import associate_contact_parts_to_objects
 from robot.perception.lidar_fall_surfaces import estimate_lidar_fall_surfaces
 from robot.perception.motion_attributes import RouteMotionContext, estimate_track_motion
-from robot.perception.physical_attributes import PhysicalAttributes, ScalarEstimate
+from robot.perception.physical_attributes import EstimateStatus, PhysicalAttributes, ScalarEstimate
 from robot.perception.physical_geometry import estimate_track_geometry
 from robot.perception.specialist_track_evidence import (
-    SpecialistAssociationFrame, build_track_visual_contact_proxies,
+    SpecialistAssociationFrame, build_track_shape_contact_proxies, build_track_visual_contact_proxies,
 )
+from robot.perception.spherical_mass import estimate_spherical_geometry, estimate_spherical_mass
+from robot.perception.visual_shape_contact import SHAPE_CONTACT_SOURCE, SHAPE_CONTACT_BASIS
 from robot.perception.visualization import render_camera_lidar_fusion_overlay
 from robot.perception.yolo_detector import YoloSegmentationConfig, YoloSegmentationDetector
 from robot.risk.physical_factor_adapter import PhysicalFactorAdapterConfig, adapt_physical_factors
@@ -107,7 +120,7 @@ from robot.sensor.lidar_geometry import transform_points
 
 stationary = existing.stationary
 simulation_app = existing.simulation_app
-RADIUS_M = 0.25
+RADIUS_M = args.object_radius
 CENTER_WORLD_XY = np.array(
     [
         stationary.ROBOT_START_POSITION_WORLD[0] + 1.30,
@@ -324,6 +337,12 @@ def main():
                 camera_info.height, camera_info.width, fusion.associations,
             ), contact_association.segmentations_by_object_detection_index,
         )
+        contact_proxies = build_track_shape_contact_proxies(
+            detections, SpecialistAssociationFrame(
+                camera_info.read_index, camera_info.simulation_time_seconds,
+                camera_info.height, camera_info.width, fusion.associations,
+            ), part_proxies=contact_proxies,
+        )
         model_invocations = {
             "objects": {"invoked": True, "detection_count": len(detections.detections)},
             "contact": {
@@ -331,6 +350,7 @@ def main():
                 "accepted_part_count": contact_association.diagnostics.accepted_part_count,
                 "target_proxy_available": target.track_id in contact_proxies,
                 "absence_is_negative_evidence": False,
+                "whole_silhouette_proxy_enabled": True,
             },
             "thermal": {
                 "invoked": False, "evidence_status": "unavailable",
@@ -407,6 +427,28 @@ def main():
             image_rgb, detections.detections[target_association.detection_index],
             geometry, timestamp_seconds=evidence_timestamp,
         )
+        learned_mass_available = mass.mass_kg.is_available
+        if args.sphere_density_prior_kg_m3 is not None:
+            spherical = estimate_spherical_geometry(object_xyz, timestamp_seconds=timestamp)
+            nominal, lower, upper = args.sphere_density_prior_kg_m3
+            density = ScalarEstimate(nominal, lower, upper, .35, "kg/m^3",
+                "configured_effective_sphere_density_prior", evidence_timestamp,
+                EstimateStatus.PRIOR, (
+                    "explicit demonstration assumption; material, hollow fraction and contents are not measured",
+                    "same effective density interval for size comparison; not a universal ball prior",
+                ))
+            spherical_mass = estimate_spherical_mass(spherical,
+                effective_density_kg_m3=density, timestamp_seconds=evidence_timestamp)
+            # Explicit bounded fallback only when the learned class model cannot
+            # supply mass. Do not silently replace an existing learned estimate.
+            if not mass.mass_kg.is_available:
+                mass = spherical_mass
+            save_json("sphere-size-evidence.json", {
+                "geometry": asdict(spherical), "density": asdict(density),
+                "mass": asdict(spherical_mass),
+                "selected_as_runtime_mass": mass is spherical_mass,
+                "authored_radius_used_as_estimator_input": False,
+            })
         sensor_attributes = replace(
             sensor_attributes, mass=mass,
             thermal=replace(base.thermal, heat_source_likelihood=ScalarEstimate.unavailable(
@@ -417,7 +459,9 @@ def main():
         )
         model_invocations["mass"] = {
             "adapter_invoked": True,
-            "prediction_available": mass.mass_kg.is_available,
+            "prediction_available": learned_mass_available,
+            "runtime_mass_available": mass.mass_kg.is_available,
+            "runtime_mass_status": mass.mass_kg.status.value,
             "evidence": mass.mass_kg.evidence,
         }
         save_json("vision-model-invocations.json", model_invocations)
@@ -425,6 +469,9 @@ def main():
     sensor_adapter = adapt_physical_factors(
         sensor_attributes, timestamp_seconds=evidence_timestamp,
         visual_contact_proxy=visual_contact_proxy,
+        visual_contact_basis=SHAPE_CONTACT_BASIS
+        if visual_contact_proxy is not None and visual_contact_proxy.source == SHAPE_CONTACT_SOURCE
+        else "visual_exposed_edge_proxy",
         contact_interaction_likelihood=motion.route_crossing_likelihood
         if visual_contact_proxy is not None else None,
         config=PhysicalFactorAdapterConfig(allow_visual_contact_proxy=True),
@@ -659,6 +706,9 @@ def main():
         "sensor_phi": sensor_policy.assessment.phi,
         "sensor_factors": diagnose_factor_specific_cra(sensor_adapter).to_dict(),
         "sensor_attributes": asdict(sensor_attributes),
+        "visual_contact_proxy": asdict(visual_contact_proxy) if visual_contact_proxy is not None else None,
+        "authored_fixture_radius_m": RADIUS_M,
+        "sphere_density_prior_kg_m3": args.sphere_density_prior_kg_m3,
         "root_layer_unchanged_by_fixture": root_unchanged_by_fixture,
         "position_drift_m": drift,
         "yaw_drift_degrees": math.degrees(yaw_drift),
@@ -685,7 +735,10 @@ def main():
             "robot ego pose and LiDAR extrinsics are simulation-oracle USD references; world-Z-zero floor is a configured prior",
             "oracle comparison only: controlled factor values are supplied and separately labeled",
             "observed mode uses the computed conservative sensor policy unchanged, including phi saturation",
-            "unmatched contact detections remain unknown; no plume is not proof of a cold object",
+            "unmatched part masks are not negative evidence; a separately accepted visible silhouette may support a continuous contact proxy",
+            "silhouette shape is a 2D visible-outline proxy; hidden features and physical sharpness/hardness remain unknown",
+            "optional fitted-sphere mass depends on an explicitly configured effective-density prior; size alone is not measured mass",
+            "no plume is not proof of a cold object; absent thermal prerequisites stay unknown",
             "kinetic uses nonzero 0.20 m/s relative approach speed even though the object is stationary",
             "authored location selects the target track; authored radius only scores independent clearance",
             "unsupported estimator outputs remain unavailable with per-factor rejection reasons",

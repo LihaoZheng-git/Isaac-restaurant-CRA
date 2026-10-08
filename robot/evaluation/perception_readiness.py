@@ -65,10 +65,11 @@ def _factor_readiness(
     evidence_mode: EvidenceMode,
 ) -> FactorReadiness:
     reasons = list(diagnostic.rejection_reasons)
-    if diagnostic.basis not in {"physical", "visual_exposed_edge_proxy"}:
+    visual_bases = {"visual_exposed_edge_proxy", "visual_silhouette_geometry_proxy"}
+    if diagnostic.basis not in {"physical", *visual_bases}:
         reasons.append("unsupported factor basis")
-    if diagnostic.basis == "visual_exposed_edge_proxy" and diagnostic.factor != "contact":
-        reasons.append("visual exposed-edge proxy is only valid for contact")
+    if diagnostic.basis in visual_bases and diagnostic.factor != "contact":
+        reasons.append("visual geometry proxy is only valid for contact")
     if diagnostic.estimate.confidence <= 0:
         reasons.append("factor estimate has zero confidence")
     allowed = _allowed_statuses(evidence_mode)
@@ -114,7 +115,7 @@ def evaluate_perception_readiness(
         )
 
     diagnostics = {name: getattr(result, name) for name in FACTOR_NAMES}
-    if (result.contact.basis == "visual_exposed_edge_proxy"
+    if (result.contact.basis in {"visual_exposed_edge_proxy", "visual_silhouette_geometry_proxy"}
             and not result.config.allow_visual_contact_proxy):
         raise ValueError("contact proxy readiness requires adapter configuration opt-in")
     checked = (

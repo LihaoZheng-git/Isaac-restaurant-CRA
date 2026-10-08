@@ -283,6 +283,7 @@ def adapt_physical_factors(
     potential_interaction_likelihood: ScalarEstimate | None = None,
     thermal_interaction_likelihood: ScalarEstimate | None = None,
     visual_contact_proxy: ScalarEstimate | None = None,
+    visual_contact_basis: str = "visual_exposed_edge_proxy",
     contact_interaction_likelihood: ScalarEstimate | None = None,
     config: PhysicalFactorAdapterConfig | None = None,
 ) -> PhysicalFactorAdapterResult:
@@ -361,19 +362,24 @@ def adapt_physical_factors(
             raise ValueError("visual contact proxy requires explicit configuration opt-in")
         if not isinstance(visual_contact_proxy, ScalarEstimate) or visual_contact_proxy.unit != "1":
             raise ValueError("visual contact proxy must be a dimensionless ScalarEstimate")
+        if visual_contact_basis not in {"visual_exposed_edge_proxy", "visual_silhouette_geometry_proxy"}:
+            raise ValueError("unsupported visual contact basis")
+        if (visual_contact_basis == "visual_silhouette_geometry_proxy"
+                and visual_contact_proxy.source != "visual_silhouette_contact_proxy"):
+            raise ValueError("silhouette basis requires observed silhouette proxy source")
         route = contact_interaction_likelihood or ScalarEstimate.unavailable(
             unit="1", source="visual_contact_interaction_unavailable", timestamp_seconds=timestamp,
         )
         if not isinstance(route, ScalarEstimate) or route.unit != "1":
             raise ValueError("contact interaction must be a dimensionless ScalarEstimate")
         contact = _direct_factor(
-            "contact", (("visual_exposed_edge_proxy", visual_contact_proxy),
+            "contact", ((visual_contact_basis, visual_contact_proxy),
                         ("contact_interaction_likelihood", route)),
             timestamp=timestamp, config=settings,
             severity=getattr(visual_contact_proxy, bound) or 0,
             interaction=getattr(route, bound) or 0,
-            assumption="bounded visual exposed-edge proxy with separately supplied interaction; no physical sharpness/hardness claim",
-            basis="visual_exposed_edge_proxy",
+            assumption=f"bounded {visual_contact_basis} with separately supplied interaction; no physical sharpness/hardness claim",
+            basis=visual_contact_basis,
         )
     thermal_interaction = thermal_interaction_likelihood or ScalarEstimate.unavailable(
         unit="1", source="thermal_interaction_unavailable", timestamp_seconds=timestamp
