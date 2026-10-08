@@ -269,3 +269,16 @@ stronger perception claims. Static frozen fields, soft passing-side guidance and
 solve times exceeding the control interval remain limitations.
 Final validation: 1,351 unit tests passed, including 21 simple-object tests;
 repository Ruff and whitespace checks passed.
+
+## Later object-level cue improvements (2026-10-08)
+
+`docs/observed_shape_heaviness.md` records inferred sphere size, prior-dependent
+rough heaviness and visible-silhouette contact cues. `docs/object_plume_policy.md`
+adds the user's clarified object-associated plume mode: validated no-plume views
+can give low continuous thermal cues without proving coldness or classifying
+hot soup. The live stationary sphere now has thermal, contact and kinetic inputs
+under those explicit proxy/prior assumptions. Justified fall evidence remains
+unknown, aggregate phi remains 1.0, and complete sensor-only readiness is false.
+The latest revision passed 1,406 unit tests, Ruff and stationary component/dataflow
+diagnostics. No additional wheel-motion experiment or restaurant enrichment is
+included in these improvements.

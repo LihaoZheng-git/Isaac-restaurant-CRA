@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from robot.perception.rgb_plume import StationaryRgbPlumeEstimator
+from robot.perception.rgb_plume import RgbPlumeConfig, StationaryRgbPlumeEstimator
 from robot.perception.semantic_detection import PixelBoundingBox
 
 
@@ -42,3 +42,11 @@ def test_global_camera_or_lighting_change_rejects_reference():
 def test_bad_image_contract_is_rejected():
     with pytest.raises(ValueError, match="uint8"):
         estimator().estimate(np.zeros((120, 160, 3)), source_frame_id=0, timestamp_seconds=0)
+
+
+def test_independent_background_coverage_cannot_be_disabled():
+    with pytest.raises(ValueError, match="independent background"):
+        StationaryRgbPlumeEstimator(np.zeros((120,160,3),np.uint8),
+            source_box=PixelBoundingBox(60,80,100,110), background_exclusion_mask=np.ones((120,160),bool))
+    with pytest.raises(ValueError, match="positive"):
+        RgbPlumeConfig(minimum_background_fraction=0)

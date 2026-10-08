@@ -376,3 +376,10 @@ provide inferred size/visible-outline contact and prior-dependent rough mass.
 Thermal and justified fall evidence still leave aggregate phi saturated. The
 user's different-observed-objects -> different aggregate phi -> matched control
 acceptance gate remains pending; the earlier sphere pass does not complete it.
+
+The subsequent `--object-plume-policy` stationary improvement is documented in
+`docs/object_plume_policy.md`. It accepts validated low visible-plume cues for
+the sphere without requiring open-container classification. Thermal is now
+available in that named proxy mode; justified fall evidence remains unknown and
+mass remains prior-dependent. Aggregate phi is still saturated. Earlier reports
+above describe their original inputs and are not revised into later results.
