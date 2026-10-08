@@ -415,15 +415,12 @@ class SafeSAGECBFSafetyFilter:
             SafeSAGEConfigurationSpaceResult,
         ):
             raise TypeError(
-                "configuration_space must be a "
-                "SafeSAGEConfigurationSpaceResult."
+                "configuration_space must be a SafeSAGEConfigurationSpaceResult."
             )
         if not isinstance(h_full, SafeSAGEHFullResult):
             raise TypeError("h_full must be a SafeSAGEHFullResult.")
         if configuration_space.yaw_slice_count != h_full.yaw_slice_count:
-            raise ValueError(
-                "configuration_space and h_full yaw counts must match."
-            )
+            raise ValueError("configuration_space and h_full yaw counts must match.")
         reference_grid = configuration_space.occupancy_grids[0]
         if h_full.dirichlet_boundary_masks.shape[1:] != reference_grid.shape:
             raise ValueError(
@@ -454,6 +451,52 @@ class SafeSAGECBFSafetyFilter:
             for yaw_index in active_yaw_slices
         )
 
+    def unsafe_configuration_mask(
+        self,
+        query_states_grid: np.ndarray,
+        *,
+        configuration_space: SafeSAGEConfigurationSpaceResult,
+        h_full: SafeSAGEHFullResult,
+    ) -> np.ndarray:
+        """Vectorized equivalent of ``is_unsafe_configuration``.
+
+        Includes both yaw slices at a nearest-slice tie, and rejects queries
+        outside the same half-open spatial grid. This is geometry only.
+        """
+
+        states = np.asarray(query_states_grid, dtype=np.float64)
+        if states.ndim != 2 or states.shape[1] != 3 or len(states) == 0:
+            raise ValueError("query_states_grid must have nonempty shape (N, 3).")
+        if not np.isfinite(states).all():
+            raise ValueError("query_states_grid must contain only finite values.")
+        if not isinstance(configuration_space, SafeSAGEConfigurationSpaceResult):
+            raise TypeError("configuration_space must be a SafeSAGEConfigurationSpaceResult.")
+        if not isinstance(h_full, SafeSAGEHFullResult):
+            raise TypeError("h_full must be a SafeSAGEHFullResult.")
+        if configuration_space.yaw_slice_count != h_full.yaw_slice_count:
+            raise ValueError("configuration_space and h_full yaw counts must match.")
+        grid = configuration_space.occupancy_grids[0]
+        masks = h_full.dirichlet_boundary_masks
+        if masks.shape != (h_full.yaw_slice_count,) + grid.shape:
+            raise ValueError("h_full boundary masks must match the occupancy-grid shape.")
+        config = grid.config
+        if np.any(
+            (states[:, 0] < config.minimum_x) | (states[:, 0] >= config.maximum_x)
+            | (states[:, 1] < config.minimum_y) | (states[:, 1] >= config.maximum_y)
+        ):
+            raise ValueError("query_position_grid_xy lies outside the local grid.")
+        columns = np.floor((states[:, 0] - config.minimum_x) / config.resolution).astype(int)
+        rows = np.floor((states[:, 1] - config.minimum_y) / config.resolution).astype(int)
+        yaw_position = ((states[:, 2] + math.pi) % math.tau) / (math.tau / h_full.yaw_slice_count)
+        lower = np.floor(yaw_position).astype(int) % h_full.yaw_slice_count
+        upper = (lower + 1) % h_full.yaw_slice_count
+        weight = yaw_position - np.floor(yaw_position)
+        tolerance = self.config.numerical_tolerance
+        return (
+            ((weight <= 0.5 + tolerance) & masks[lower, rows, columns])
+            | ((weight >= 0.5 - tolerance) & masks[upper, rows, columns])
+        )
+
     def evaluate_constraint(
         self,
         *,
@@ -480,6 +523,62 @@ class SafeSAGECBFSafetyFilter:
             h_full,
             guidance_sequence,
         )
+
+        return self._evaluate_aligned_constraint(
+            query_position,
+            query_yaw,
+            configuration_space=configuration_space,
+            h_full=h_full,
+            guidance_fields=guidance_sequence,
+            temporal_safety_derivative=temporal_safety_derivative,
+        )
+
+    def evaluate_constraints(
+        self,
+        query_states_grid: np.ndarray,
+        *,
+        configuration_space: SafeSAGEConfigurationSpaceResult,
+        h_full: SafeSAGEHFullResult,
+        guidance_fields: Sequence[LaplaceGuidanceFieldResult],
+        temporal_safety_derivative: TemporalSafetyDerivativeInput = 0.0,
+    ) -> tuple[SafeSAGEConstraintEvaluation, ...]:
+        """Sample a trajectory with one field validation per call.
+
+        This uses the same scalar interpolation, yaw-mask convention and
+        temporal checks as ``evaluate_constraint``. Nothing is cached across
+        calls: a replacement or invalid field is validated again.
+        """
+
+        states = np.asarray(query_states_grid, dtype=np.float64)
+        if states.ndim != 2 or states.shape[1] != 3 or len(states) == 0:
+            raise ValueError("query_states_grid must have nonempty shape (N, 3).")
+        if not np.isfinite(states).all():
+            raise ValueError("query_states_grid must contain only finite values.")
+        guidance_sequence = tuple(guidance_fields)
+        _validate_field_alignment(configuration_space, h_full, guidance_sequence)
+        return tuple(
+            self._evaluate_aligned_constraint(
+                state[:2],
+                float(state[2]),
+                configuration_space=configuration_space,
+                h_full=h_full,
+                guidance_fields=guidance_sequence,
+                temporal_safety_derivative=temporal_safety_derivative,
+            )
+            for state in states
+        )
+
+    def _evaluate_aligned_constraint(
+        self,
+        query_position: np.ndarray,
+        query_yaw: float,
+        *,
+        configuration_space: SafeSAGEConfigurationSpaceResult,
+        h_full: SafeSAGEHFullResult,
+        guidance_fields: tuple[LaplaceGuidanceFieldResult, ...],
+        temporal_safety_derivative: TemporalSafetyDerivativeInput,
+    ) -> SafeSAGEConstraintEvaluation:
+        """Interpolate one query after the caller validates inputs/fields."""
 
         reference_grid = configuration_space.occupancy_grids[0]
         temporal_derivative = sample_temporal_safety_derivative(
@@ -524,7 +623,7 @@ class SafeSAGECBFSafetyFilter:
             # matching a symmetric finite-difference/SQP linearization.
             interpolant_yaw_derivative = sampled_yaw_derivative
         sampled_guidance = _sample_periodic_guidance(
-            guidance_sequence,
+            guidance_fields,
             query_position=query_position,
             grid=reference_grid,
             lower_yaw=lower_yaw,

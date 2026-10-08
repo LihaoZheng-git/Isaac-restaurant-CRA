@@ -26,6 +26,17 @@ horizon.  A recovery is returned only when the exact DTCBF check passes.
 Final acceptance also rejects every predicted configuration-space cell marked
 unsafe; interpolated positive ``h_full`` values cannot override that mask.
 
+Optional integration substeps match the curved constant-command rollout to a
+finer execution time step, including analytical translation/turn Jacobians.
+With more than one integration substep, inter-sample geometry checks use that
+same curved rollout. The default remains one Euler step per MPC interval.
+
+An opt-in bounded turn-seed search addresses nearly stopped local solutions.
+It retains the nominal tracking objective and accepts only a cheaper horizon
+that passes the same exact DTCBF and dense geometry checks. It is an online
+nonholonomic adaptation, not an obstacle-aware nominal planner or a claim of
+global convergence. Legacy callers leave this search disabled by default.
+
 The module has no Isaac Sim dependency.
 """
 
@@ -120,6 +131,7 @@ class SafeSAGEUnicycleMPCConfig:
 
     horizon_steps: int = 12
     safety_substeps_per_interval: int = 1
+    integration_substeps_per_interval: int = 1
     time_step: float = 0.20
     gamma: float = 1.0
     lookahead_distance: float = 0.10
@@ -145,8 +157,15 @@ class SafeSAGEUnicycleMPCConfig:
     intervention_tolerance: float = 1e-5
     line_search_contraction: float = 0.5
     maximum_line_search_iterations: int = 8
+    enable_progress_seeds: bool = False
+    progress_seed_linear_fraction: float = 0.25
+    configuration_position_padding_m: float = 0.0
+    configuration_yaw_padding_radians: float = 0.0
+    configuration_padding_initial_fraction: float = 1.0
 
     def __post_init__(self) -> None:
+        if not isinstance(self.enable_progress_seeds, bool):
+            raise TypeError("enable_progress_seeds must be a boolean.")
         integer_values = {
             "horizon_steps": _positive_integer(
                 self.horizon_steps,
@@ -155,6 +174,10 @@ class SafeSAGEUnicycleMPCConfig:
             "safety_substeps_per_interval": _positive_integer(
                 self.safety_substeps_per_interval,
                 name="safety_substeps_per_interval",
+            ),
+            "integration_substeps_per_interval": _positive_integer(
+                self.integration_substeps_per_interval,
+                name="integration_substeps_per_interval",
             ),
             "maximum_sqp_iterations": _positive_integer(
                 self.maximum_sqp_iterations,
@@ -177,6 +200,12 @@ class SafeSAGEUnicycleMPCConfig:
                 name="maximum_line_search_iterations",
             ),
         }
+        integration_count = integer_values["integration_substeps_per_interval"]
+        safety_count = integer_values["safety_substeps_per_interval"]
+        if integration_count > 1 and integration_count % safety_count:
+            raise ValueError(
+                "integration substeps must be a multiple of safety substeps"
+            )
         real_values = {
             name: _finite_real(value, name=name)
             for name, value in (
@@ -224,6 +253,10 @@ class SafeSAGEUnicycleMPCConfig:
                 ("constraint_tolerance", self.constraint_tolerance),
                 ("intervention_tolerance", self.intervention_tolerance),
                 ("line_search_contraction", self.line_search_contraction),
+                ("progress_seed_linear_fraction", self.progress_seed_linear_fraction),
+                ("configuration_position_padding_m", self.configuration_position_padding_m),
+                ("configuration_yaw_padding_radians", self.configuration_yaw_padding_radians),
+                ("configuration_padding_initial_fraction", self.configuration_padding_initial_fraction),
             )
         }
 
@@ -284,6 +317,13 @@ class SafeSAGEUnicycleMPCConfig:
             raise ValueError(
                 "line_search_contraction must lie strictly between zero and one."
             )
+        if not 0.0 < real_values["progress_seed_linear_fraction"] < 1.0:
+            raise ValueError("progress_seed_linear_fraction must lie in (0, 1).")
+        if min(real_values["configuration_position_padding_m"],
+               real_values["configuration_yaw_padding_radians"]) < 0.0:
+            raise ValueError("configuration padding must be nonnegative.")
+        if not 0.0 <= real_values["configuration_padding_initial_fraction"] <= 1.0:
+            raise ValueError("configuration_padding_initial_fraction must lie in [0, 1].")
 
         for name, value in integer_values.items():
             object.__setattr__(self, name, value)
@@ -484,6 +524,19 @@ class SafeSAGEUnicycleMPC:
                 status=current_constraint.unsafe_reason,
             )
 
+        seed_restoration_used = False
+        if self.config.enable_progress_seeds and not self._trajectory_is_safe(reference):
+            seed = self._select_progress_seed(
+                reference, initial_state=initial_state,
+                nominal_sequence=nominal_sequence, target_chassis_states=target_states,
+                configuration_space=configuration_space, h_full=h_full,
+                guidance_fields=guidance_fields,
+                temporal_safety_derivative=temporal_derivative,
+            )
+            if seed is not reference:
+                reference = seed
+                seed_restoration_used = True
+
         total_qp_iterations = 0
         completed_sqp_iterations = 0
         guidance_failure: str | None = None
@@ -575,7 +628,9 @@ class SafeSAGEUnicycleMPC:
 
         restoration_used = not self._trajectory_is_safe(reference)
         nonlinear_rescue_used = False
-        feasibility_recovery_status: str | None = None
+        feasibility_recovery_status: str | None = (
+            "exact_safe_seed_feasibility_recovered" if seed_restoration_used else None
+        )
         if restoration_used:
             restoration_success = False
             restoration_failure: str | None = None
@@ -643,19 +698,17 @@ class SafeSAGEUnicycleMPC:
                 )
                 total_qp_iterations += rescue_iterations
                 if rescue is None:
-                    recovery, recovery_status = (
-                        self._recover_feasible_command_horizon(
-                            reference,
-                            initial_state=initial_state,
-                            nominal_sequence=nominal_sequence,
-                            configuration_space=configuration_space,
-                            h_full=h_full,
-                            guidance_fields=guidance_fields,
-                            temporal_safety_derivative=temporal_derivative,
-                            preferred_lateral_direction_grid_y=(
-                                preferred_lateral_direction
-                            ),
-                        )
+                    recovery, recovery_status = self._recover_feasible_command_horizon(
+                        reference,
+                        initial_state=initial_state,
+                        nominal_sequence=nominal_sequence,
+                        configuration_space=configuration_space,
+                        h_full=h_full,
+                        guidance_fields=guidance_fields,
+                        temporal_safety_derivative=temporal_derivative,
+                        preferred_lateral_direction_grid_y=(
+                            preferred_lateral_direction
+                        ),
                     )
                     if recovery is None:
                         return self._fallback_result(
@@ -690,6 +743,26 @@ class SafeSAGEUnicycleMPC:
                     reference = rescue
                     nonlinear_rescue_used = True
 
+        if (
+            self.config.enable_progress_seeds
+            and nominal_sequence[0, 0] > self.config.intervention_tolerance
+            and reference.commands[0, 0]
+            < self.config.progress_seed_linear_fraction * nominal_sequence[0, 0]
+        ):
+            improved = self._select_progress_seed(
+                reference,
+                initial_state=initial_state,
+                nominal_sequence=nominal_sequence,
+                target_chassis_states=target_states,
+                configuration_space=configuration_space,
+                h_full=h_full,
+                guidance_fields=guidance_fields,
+                temporal_safety_derivative=temporal_derivative,
+            )
+            if improved is not reference:
+                reference = improved
+                feasibility_recovery_status = "exact_safe_progress_seed_selected"
+
         intervention = bool(
             np.any(
                 np.abs(reference.commands[0] - nominal_sequence[0])
@@ -717,7 +790,7 @@ class SafeSAGEUnicycleMPC:
             success=True,
             intervention_active=intervention,
             fallback_active=False,
-            restoration_used=restoration_used,
+            restoration_used=restoration_used or seed_restoration_used,
             status=(
                 feasibility_recovery_status
                 or (
@@ -731,6 +804,101 @@ class SafeSAGEUnicycleMPC:
                 )
             ),
         )
+
+    def _select_progress_seed(
+        self,
+        reference: _TrajectoryEvaluation,
+        *,
+        initial_state: np.ndarray,
+        nominal_sequence: np.ndarray,
+        target_chassis_states: np.ndarray | None,
+        configuration_space: SafeSAGEConfigurationSpaceResult,
+        h_full: SafeSAGEHFullResult,
+        guidance_fields: Sequence[LaplaceGuidanceFieldResult],
+        temporal_safety_derivative: TemporalSafetyDerivativeInput,
+    ) -> _TrajectoryEvaluation:
+        """Escape a stopped local solution with bounded online turn seeds.
+
+        A nonholonomic robot may need to turn before translating. Local SQP
+        about a stopped horizon cannot discover that coordinated maneuver.
+        Try both turn directions, several durations and reduced translation,
+        then retain only a strictly cheaper, exact-safe horizon. The nominal
+        objective, actuator limits, DTCBF and dense mask checks are unchanged.
+        No obstacle pose or authored bypass waypoint enters this search.
+        """
+
+        best = reference
+        best_cost = self._objective_value(
+            best.commands,
+            nominal_sequence,
+            chassis_states=best.chassis_states,
+            target_chassis_states=target_chassis_states,
+        )
+        if not self._trajectory_is_safe(reference):
+            # An infeasible nominal/warm start has no admissible objective
+            # value. First find a feasible horizon, then optimize its cost.
+            best_cost = math.inf
+        durations = sorted(
+            {
+                min(self.config.horizon_steps, max(1, round(t / self.config.time_step)))
+                for t in (0.4, 0.8, 1.2, 1.6, 2.4, 3.2)
+            }
+        )
+        direction = math.copysign(
+            1.0, self._initial_guidance_angular_coefficient(reference)
+        )
+        seeds = []
+        for linear_fraction in (0.5, 0.75, 1.0):
+            straight = nominal_sequence.copy()
+            straight[:, 0] *= linear_fraction
+            straight[:, 1] = 0.0
+            seeds.append(straight)
+        for sign in (direction, -direction):
+            angular_limit = (
+                self.config.maximum_angular_velocity
+                if sign > 0 else abs(self.config.minimum_angular_velocity)
+            )
+            if angular_limit == 0:
+                continue
+            for angular_fraction in (0.125, 0.5, 1.0):
+                for count in durations:
+                    for linear_fraction in (0.5, 0.75, 1.0):
+                        for turning_fraction in (0.0, 0.25):
+                            for hold_heading in (False, True):
+                                commands = nominal_sequence.copy()
+                                commands[:, 0] *= linear_fraction
+                                if hold_heading:
+                                    commands[:, 1] = 0.0
+                                commands[:count, 0] *= turning_fraction
+                                commands[:count, 1] = sign * angular_fraction * angular_limit
+                                seeds.append(commands)
+        # Command cost is a lower bound on the optional nonnegative path cost.
+        # Check cheapest seeds first and stop once none can improve the result.
+        ranked = []
+        for commands in seeds:
+            commands = self._clip_commands(commands)
+            lower_cost = self._objective_value(commands, nominal_sequence)
+            ranked.append((lower_cost, commands))
+        for lower_cost, commands in sorted(ranked, key=lambda item: item[0]):
+            if lower_cost >= best_cost - self.config.trajectory_tolerance:
+                break
+            candidate = self._evaluate_trajectory(
+                initial_state, commands,
+                configuration_space=configuration_space,
+                h_full=h_full,
+                guidance_fields=guidance_fields,
+                temporal_safety_derivative=temporal_safety_derivative,
+            )
+            if candidate is None or not self._trajectory_is_safe(candidate):
+                continue
+            cost = self._objective_value(
+                candidate.commands, nominal_sequence,
+                chassis_states=candidate.chassis_states,
+                target_chassis_states=target_chassis_states,
+            )
+            if cost < best_cost - self.config.trajectory_tolerance:
+                best, best_cost = candidate, cost
+        return best
 
     def _improve_safe_warm_start(
         self,
@@ -1543,27 +1711,10 @@ class SafeSAGEUnicycleMPC:
             (horizon + 1, 3, variable_count),
             dtype=np.float64,
         )
-        dt = self.config.time_step
         for index in range(horizon):
-            yaw = float(chassis_states[index, 2])
-            linear_velocity = float(commands[index, 0])
-            cosine = math.cos(yaw)
-            sine = math.sin(yaw)
-            state_matrix = np.array(
-                [
-                    [1.0, 0.0, -dt * linear_velocity * sine],
-                    [0.0, 1.0, dt * linear_velocity * cosine],
-                    [0.0, 0.0, 1.0],
-                ],
-                dtype=np.float64,
-            )
-            control_matrix = np.array(
-                [
-                    [dt * cosine, 0.0],
-                    [dt * sine, 0.0],
-                    [0.0, dt],
-                ],
-                dtype=np.float64,
+            _, state_matrix, control_matrix = self._interval_dynamics(
+                chassis_states[index],
+                commands[index],
             )
             sensitivities[index + 1] = state_matrix @ sensitivities[index]
             column = 2 * index
@@ -1664,10 +1815,15 @@ class SafeSAGEUnicycleMPC:
             )
         except (TypeError, ValueError):
             return None
-        if self.config.safety_substeps_per_interval > 1:
+        if not np.any(samples.unsafe_configuration_mask) and (
+            self.config.safety_substeps_per_interval > 1
+            or self.config.configuration_position_padding_m > 0
+            or self.config.configuration_yaw_padding_radians > 0
+        ):
             unsafe_mask = self._inter_sample_unsafe_mask(
                 chassis_states,
                 samples.unsafe_configuration_mask,
+                commands=clipped_commands,
                 configuration_space=configuration_space,
                 h_full=h_full,
             )
@@ -1691,10 +1847,11 @@ class SafeSAGEUnicycleMPC:
         chassis_states: np.ndarray,
         endpoint_mask: np.ndarray,
         *,
+        commands: np.ndarray,
         configuration_space: SafeSAGEConfigurationSpaceResult,
         h_full: SafeSAGEHFullResult,
     ) -> np.ndarray:
-        """Mark intervals whose interpolated motion enters an unsafe cell.
+        """Mark intervals whose predicted motion enters an unsafe cell.
 
         DTCBF constraints remain defined at MPC sample times.  This denser
         geometry check prevents a command from leaving and then re-entering
@@ -1705,33 +1862,65 @@ class SafeSAGEUnicycleMPC:
 
         unsafe = np.array(endpoint_mask, dtype=bool, copy=True)
         substeps = self.config.safety_substeps_per_interval
-        for interval in range(self.config.horizon_steps):
-            start = chassis_states[interval]
-            end = chassis_states[interval + 1]
-            yaw_delta = wrap_to_pi(float(end[2] - start[2]))
-            for substep in range(1, substeps):
-                fraction = substep / substeps
-                chassis_state = np.array(
-                    [
-                        start[0] + fraction * (end[0] - start[0]),
-                        start[1] + fraction * (end[1] - start[1]),
-                        wrap_to_pi(float(start[2]) + fraction * yaw_delta),
-                    ],
-                    dtype=np.float64,
-                )
-                safety_state = lookahead_state(
-                    chassis_state,
-                    lookahead_distance=self.config.lookahead_distance,
-                )
-                is_unsafe = self.paper_filter.is_unsafe_configuration(
-                    query_position_grid_xy=safety_state[:2],
-                    query_yaw_radians=float(safety_state[2]),
-                    configuration_space=configuration_space,
-                    h_full=h_full,
-                )
-                if is_unsafe:
-                    unsafe[interval + 1] = True
-                    break
+        fractions = np.arange(1, substeps + 1) / substeps
+        starts = chassis_states[:-1]
+        integration_count = self.config.integration_substeps_per_interval
+        if integration_count > 1:
+            dt = self.config.time_step / integration_count
+            headings = starts[:, 2, None] + commands[:, 1, None] * dt * np.arange(integration_count)
+            increments = commands[:, 0, None, None] * dt * np.stack(
+                (np.cos(headings), np.sin(headings)), axis=-1,
+            )
+            indices = np.rint(fractions * integration_count).astype(int) - 1
+            positions = starts[:, None, :2] + np.cumsum(increments, axis=1)[:, indices]
+            yaws = starts[:, 2, None] + commands[:, 1, None] * self.config.time_step * fractions
+        else:
+            positions = starts[:, None, :2] + fractions[None, :, None] * (
+                chassis_states[1:, None, :2] - starts[:, None, :2]
+            )
+            yaw_changes = (chassis_states[1:, 2] - starts[:, 2] + math.pi) % math.tau - math.pi
+            yaws = starts[:, 2, None] + yaw_changes[:, None] * fractions
+        yaws = (yaws + math.pi) % math.tau - math.pi
+        safety_queries = np.concatenate((
+            positions + self.config.lookahead_distance * np.stack(
+                (np.cos(yaws), np.sin(yaws)), axis=-1,
+            ),
+            yaws[..., None],
+        ), axis=-1).reshape(-1, 3)
+        grid = configuration_space.occupancy_grids[0]
+        position_padding = self.config.configuration_position_padding_m
+        yaw_padding = self.config.configuration_yaw_padding_radians
+
+        def offsets(padding, spacing):
+            if padding == 0:
+                return (0.0,)
+            # Sample densely enough to cover every crossed discrete cell/slice.
+            count = 2 * max(1, math.ceil(2 * padding / spacing)) + 1
+            return np.linspace(-padding, padding, count)
+
+        spatial_offsets = offsets(position_padding, grid.config.resolution)
+        yaw_offsets = offsets(yaw_padding, math.tau / h_full.yaw_slice_count)
+        perturbations = np.array([
+            [x, y, yaw] for x in spatial_offsets for y in spatial_offsets
+            for yaw in yaw_offsets
+        ])
+        scales = np.ones((self.config.horizon_steps, substeps))
+        initial_fraction = self.config.configuration_padding_initial_fraction
+        scales[0] = initial_fraction + (1.0 - initial_fraction) * fractions
+        queries = (
+            np.asarray(safety_queries)[:, None, :]
+            + scales.reshape(-1, 1, 1) * perturbations[None, :, :]
+        )
+        try:
+            query_mask = self.paper_filter.unsafe_configuration_mask(
+                queries.reshape(-1, 3), configuration_space=configuration_space,
+                h_full=h_full,
+            ).reshape(self.config.horizon_steps, substeps, len(perturbations))
+        except ValueError:
+            # A padded future query outside the field is not safe evidence.
+            unsafe[1:] = True
+        else:
+            unsafe[1:] |= query_mask.any(axis=(1, 2))
         return np.ascontiguousarray(unsafe, dtype=bool)
 
     def _trajectory_is_safe(
@@ -1854,6 +2043,52 @@ class SafeSAGEUnicycleMPC:
         )
         return lower, upper
 
+    def _interval_dynamics(self, state, command, *, duration=None, substeps=None):
+        """Constant-command Euler substeps and their analytical Jacobians.
+
+        A vectorized sum is equivalent to repeated smaller Euler steps, whose
+        headings change while executing a turn. Derivatives include angular
+        velocity's influence on translation. One substep preserves the old
+        endpoint model. This remains a kinematic model, not wheel/slip physics.
+        """
+        duration = self.config.time_step if duration is None else duration
+        count = (
+            self.config.integration_substeps_per_interval
+            if substeps is None
+            else substeps
+        )
+        dt = duration / count
+        velocity, angular = command
+        indices = np.arange(count, dtype=np.float64)
+        angles = state[2] + indices * angular * dt
+        cosines, sines = np.cos(angles), np.sin(angles)
+        cosine_sum, sine_sum = float(cosines.sum()), float(sines.sum())
+        if count == 1:
+            next_state = integrate_unicycle_euler(state, command, time_step=duration)
+        else:
+            next_state = np.array(
+                [
+                    state[0] + velocity * dt * cosine_sum,
+                    state[1] + velocity * dt * sine_sum,
+                    wrap_to_pi(float(state[2] + angular * duration)),
+                ]
+            )
+        state_matrix = np.array(
+            [
+                [1.0, 0.0, -velocity * dt * sine_sum],
+                [0.0, 1.0, velocity * dt * cosine_sum],
+                [0.0, 0.0, 1.0],
+            ]
+        )
+        control_matrix = np.array(
+            [
+                [dt * cosine_sum, -velocity * dt * dt * float(indices @ sines)],
+                [dt * sine_sum, velocity * dt * dt * float(indices @ cosines)],
+                [0.0, duration],
+            ]
+        )
+        return next_state, state_matrix, control_matrix
+
     def _rollout(
         self,
         initial_state: np.ndarray,
@@ -1867,11 +2102,7 @@ class SafeSAGEUnicycleMPC:
         )
         states[0] = initial_state
         for index, command in enumerate(commands):
-            states[index + 1] = integrate_unicycle_euler(
-                states[index],
-                command,
-                time_step=self.config.time_step,
-            )
+            states[index + 1], _, _ = self._interval_dynamics(states[index], command)
         return states
 
     def _safety_states(self, chassis_states: np.ndarray) -> np.ndarray:
@@ -1903,15 +2134,14 @@ class SafeSAGEUnicycleMPC:
         exact_gradients: list[tuple[float, float, float]] = []
         temporal_terms: list[float] = []
         unsafe_configurations: list[bool] = []
-        for state in safety_states:
-            evaluation = self.paper_filter.evaluate_constraint(
-                query_position_grid_xy=state[:2],
-                query_yaw_radians=float(state[2]),
-                configuration_space=configuration_space,
-                h_full=h_full,
-                guidance_fields=guidance_fields,
-                temporal_safety_derivative=temporal_safety_derivative,
-            )
+        evaluations = self.paper_filter.evaluate_constraints(
+            safety_states,
+            configuration_space=configuration_space,
+            h_full=h_full,
+            guidance_fields=guidance_fields,
+            temporal_safety_derivative=temporal_safety_derivative,
+        )
+        for evaluation in evaluations:
             values.append(evaluation.sampled_safety_value)
             guidance_normals.append(evaluation.constraint_normal)
             exact_gradients.append(evaluation.interpolant_gradient)

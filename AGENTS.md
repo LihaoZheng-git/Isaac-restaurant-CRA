@@ -42,3 +42,16 @@
   Preserve configured container regions/context as priors, reject invalid
   references, and do not claim moving-camera support. Validated low visible
   plume cues do not establish that an object is cold.
+- The simple-object demo separates oracle factor profiles from its measured
+  LiDAR occupancy and unchanged unknown sensor assessment. Require actual
+  waypoint completion for motion acceptance; positive clearance alone is not
+  a successful pass-by. See `docs/simple_object_test.md` for its bounded scope.
+- The simple-object controller may enable bounded online turn seeds to escape
+  nearly stopped MPC horizons. Keep the nominal obstacle-unaware, retain the
+  same objective and exact DTCBF/dense geometry acceptance checks, and report
+  this as a unicycle implementation adaptation rather than global convergence
+  or exact paper equivalence. Other MPC callers retain the legacy default.
+- The accepted static simple-object gate does not establish real-time control,
+  monotonic risk-to-clearance ordering, or enforced passing side. Its configured
+  side is soft guidance; retain the observed side and planning latency in later
+  evaluations. Validate selected restaurant actors stationary before new motion.
