@@ -1,14 +1,15 @@
-"""Stationary sphere evidence, matched CRA fields, then optional wheel pass-by.
+"""Observe a sphere, compute its CRA policy, then optionally drive past it.
 
-Runtime geometry comes from real Pandar returns. Low/medium/high factor values
-are separately labeled ORACLE experimental inputs, not outputs of the vision
-estimators. All fields use identical geometry and lambda=1.25. Sensor evidence
-keeps unavailable mass/contact/thermal inputs and the normal conservative CRA
-policy. No restaurant asset is saved or enriched by this session-layer fixture.
+The default uses actual camera/LiDAR evidence and the existing estimators,
+including conservative CRA uncertainty handling. Unknown factors remain unknown;
+the resulting phi is used unchanged by the controller, even if it saturates.
+This validates uncertainty-aware navigation, not complete perception accuracy.
+The older supplied-profile comparison requires --oracle-comparison explicitly.
+No restaurant asset is saved or enriched by this session-layer fixture.
 
-Run stationary first, then explicitly request the controlled motion comparison:
-    python -u scripts/demos/cra_simple_object_isaac_demo.py --output outputs/simple_object/stationary
-    python -u scripts/demos/cra_simple_object_isaac_demo.py --motion --output outputs/simple_object/motion
+Configure YOLO_MODEL_PATH, VISUAL_MASS_CHECKPOINT and
+CONTACT_SEGMENTATION_CHECKPOINT with the existing local weights. Run stationary
+first, then add --motion to execute the assessed policy on the simulated wheels.
 """
 
 import argparse
@@ -26,11 +27,20 @@ sys.path.insert(0, str(ROOT))
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument("--output", type=Path, required=True)
 parser.add_argument("--motion", action="store_true")
+parser.add_argument("--oracle-comparison", action="store_true")
 parser.add_argument("--grid-resolution", type=float, default=0.10)
 parser.add_argument("--yaw-slices", type=int, default=16)
 args = parser.parse_args()
 args.output.mkdir(parents=True, exist_ok=True)
 os.environ.setdefault("WARP_CACHE_PATH", str(args.output / "warp"))
+
+if not args.oracle_comparison:
+    # Resolve the existing vision environment's torch/torchvision pair before
+    # SimulationApp adds its bundled packages to sys.path. No install or
+    # dependency replacement occurs; mixing those two environments is invalid.
+    from robot.perception.visual_mass_runtime import (
+        VisualMassRuntimeConfig, VisualMassRuntimeEstimator,
+    )
 
 # Reuse the validated scene, footprint, PDE and controller configurations.
 # This creates SimulationApp once; imported main functions do not execute.
@@ -52,16 +62,26 @@ from robot.evaluation.cra_experiments import EvidenceMode, RestaurantScenario
 from robot.evaluation.perception_readiness import evaluate_perception_readiness
 from robot.evaluation.simple_object_test import (
     ControlledObjectInputs,
+    build_assessed_object_field,
     controlled_object_adapter,
     disk_footprint_clearance,
     run_bounded_pass_by,
 )
 from robot.perception.fall_height import estimate_fall_height
+from robot.perception.camera_lidar_fusion import (
+    CameraLidarFusionConfig, CameraLidarSemanticFusion,
+)
+from robot.perception.contact_detection_adapter import associate_contact_parts_to_objects
 from robot.perception.lidar_fall_surfaces import estimate_lidar_fall_surfaces
 from robot.perception.motion_attributes import RouteMotionContext, estimate_track_motion
-from robot.perception.physical_attributes import PhysicalAttributes
+from robot.perception.physical_attributes import PhysicalAttributes, ScalarEstimate
 from robot.perception.physical_geometry import estimate_track_geometry
-from robot.risk.physical_factor_adapter import adapt_physical_factors
+from robot.perception.specialist_track_evidence import (
+    SpecialistAssociationFrame, build_track_visual_contact_proxies,
+)
+from robot.perception.visualization import render_camera_lidar_fusion_overlay
+from robot.perception.yolo_detector import YoloSegmentationConfig, YoloSegmentationDetector
+from robot.risk.physical_factor_adapter import PhysicalFactorAdapterConfig, adapt_physical_factors
 from robot.safety.cra_safe_sage_policy import CRASafeSAGEPolicy
 from robot.safety.class_safety_policy import ClassSafetyParameters
 from robot.safety.local_occupancy_grid import build_local_occupancy_grid
@@ -79,6 +99,7 @@ from robot.safety.safe_sage_guidance_policy import (
 )
 from robot.safety.semantic_obstacle import SemanticObstacle
 from robot.scene.loader import load_robot_scene
+from robot.scene.camera_calibration import read_fisheye_polynomial_calibration
 from robot.scene.transforms import compute_relative_prim_transform
 from robot.sensor.camera import NovaCarterCamera
 from robot.sensor.lidar import NovaCarterLidar
@@ -115,6 +136,38 @@ def local_state(stage, anchor):
 
 
 def main():
+    detector = contact_detector = mass_estimator = None
+    model_artifacts = {}
+    if not args.oracle_comparison:
+        # Explicit existing paths prevent automatic weight downloads. Keep the
+        # same bounded model/domain contracts as the stationary fusion demo.
+        paths = {}
+        for name, variable in (
+            ("objects", "YOLO_MODEL_PATH"),
+            ("mass", "VISUAL_MASS_CHECKPOINT"),
+            ("contact", "CONTACT_SEGMENTATION_CHECKPOINT"),
+        ):
+            configured = os.environ.get(variable, "").strip()
+            if not configured or not Path(configured).is_file():
+                raise FileNotFoundError(f"{variable} must identify existing local weights")
+            paths[name] = Path(configured)
+            model_artifacts[name] = {
+                "path": str(paths[name].resolve()),
+                "sha256": hashlib.sha256(paths[name].read_bytes()).hexdigest(),
+            }
+        device = os.environ.get("YOLO_DEVICE", "0")
+        detector = YoloSegmentationDetector(YoloSegmentationConfig(
+            model_path=paths["objects"], device=device,
+        ))
+        contact_detector = YoloSegmentationDetector(YoloSegmentationConfig(
+            model_path=paths["contact"], device=device, confidence_threshold=0.25,
+            allowed_classes=("exposed_edge",),
+        ))
+        detector.initialize()
+        contact_detector.initialize()
+        mass_estimator = VisualMassRuntimeEstimator(VisualMassRuntimeConfig(
+            checkpoint_path=paths["mass"], device=device,
+        ))
     class_policy, guidance_policy, grid_config, field_config = (
         existing.create_fixed_field_configuration()
     )
@@ -223,6 +276,90 @@ def main():
         samples[-1]
     )
     timestamp = info.sensor_timestamp_nanoseconds * 1e-9
+    image_rgb = camera.get_rgb()
+    camera_info = camera.get_frame_info()
+    camera_lidar_age = abs(camera_info.simulation_time_seconds - timestamp)
+    evidence_timestamp = max(timestamp, camera_info.simulation_time_seconds)
+    fusion = detections = contact_association = target_association = None
+    contact_proxies = {}
+    observed_semantic = None
+    model_invocations = {}
+    sensor_dataflow_passed = True
+    if detector is not None:
+        detections = detector.detect(
+            image_rgb, source_frame_id=camera_info.read_index,
+            source_timestamp_seconds=camera_info.simulation_time_seconds,
+        )
+        calibration = read_fisheye_polynomial_calibration(
+            stage, camera_prim_path=camera.camera_prim_path,
+            output_resolution=camera.resolution,
+        )
+        camera_from_robot = compute_relative_prim_transform(
+            stage, source_prim_path=stationary.ROBOT_BASE_PRIM_PATH,
+            target_prim_path=camera.camera_prim_path,
+        )
+        fusion = CameraLidarSemanticFusion(CameraLidarFusionConfig(
+            minimum_mask_hits=4, minimum_overlap_fraction=0.10,
+            mask_dilation_radius_pixels=6, projected_median_box_margin_pixels=12,
+        )).fuse(
+            detection_frame=detections, obstacle_points_source_xyz=obstacle_xyz,
+            tracking_result=tracking, camera_from_source=camera_from_robot,
+            calibration=calibration,
+        )
+        target_association = next(
+            item for item in fusion.associations if item.track_id == target.track_id
+        )
+        observed_semantic = next(
+            item for item in fusion.semantic_labels.semantic_obstacles
+            if item.track_id == target.track_id
+        )
+        part_frame = contact_detector.detect(
+            image_rgb, source_frame_id=camera_info.read_index,
+            source_timestamp_seconds=camera_info.simulation_time_seconds,
+        )
+        contact_association = associate_contact_parts_to_objects(detections, part_frame)
+        contact_proxies = build_track_visual_contact_proxies(
+            SpecialistAssociationFrame(
+                camera_info.read_index, camera_info.simulation_time_seconds,
+                camera_info.height, camera_info.width, fusion.associations,
+            ), contact_association.segmentations_by_object_detection_index,
+        )
+        model_invocations = {
+            "objects": {"invoked": True, "detection_count": len(detections.detections)},
+            "contact": {
+                "invoked": True, "part_detection_count": len(part_frame.detections),
+                "accepted_part_count": contact_association.diagnostics.accepted_part_count,
+                "target_proxy_available": target.track_id in contact_proxies,
+                "absence_is_negative_evidence": False,
+            },
+            "thermal": {
+                "invoked": False, "evidence_status": "unavailable",
+                "reason": "bounded RGB plume estimator requires a clean reference and supported open-container source evidence",
+            },
+        }
+        sensor_dataflow_passed = target_association.is_matched and camera_lidar_age <= 0.25
+        plt.imsave(args.output / "fusion-overlay.png", render_camera_lidar_fusion_overlay(
+            image_rgb, detections, fusion,
+        ))
+        save_json("vision.json", {
+            "camera_info": asdict(camera_info),
+            "camera_lidar_age_seconds": camera_lidar_age,
+            "target_association": asdict(target_association),
+            "associations": [asdict(item) for item in fusion.associations],
+            "calibration": asdict(calibration),
+            "camera_from_robot": np.asarray(camera_from_robot).tolist(),
+            "models": model_artifacts, "invocations": model_invocations,
+            "detections": [{
+                "semantic_class": item.semantic_class, "confidence": item.confidence,
+                "bounding_box": asdict(item.bounding_box),
+            } for item in detections.detections],
+            "contact_association": asdict(contact_association.diagnostics),
+        })
+        np.savez_compressed(
+            args.output / "vision-masks.npz",
+            object_masks=np.array([item.mask for item in detections.detections]),
+            contact_masks=np.array([item.mask for item in part_frame.detections]),
+        )
     selected = tracking.point_track_ids == target.track_id
     object_xyz = obstacle_xyz[selected]
     points_anchor = existing.motion.robot_points_in_anchor_frame(
@@ -233,6 +370,7 @@ def main():
         tracking_result=tracking,
         track_id=target.track_id,
         floor_height_robot_m=floor,
+        association=target_association,
     )
     surfaces = estimate_lidar_fall_surfaces(
         scene_xyz, object_xyz, timestamp_seconds=timestamp
@@ -248,19 +386,48 @@ def main():
         target,
         timestamp_seconds=timestamp,
         route_context=RouteMotionContext(
-            (final_pose.x, final_pose.y), tuple(CENTER_WORLD_XY + [1.2, 0]), 0.20
+            (final_pose.x, final_pose.y),
+            (
+                anchor.x + math.cos(anchor.yaw) * GOAL_XY[0] - math.sin(anchor.yaw) * GOAL_XY[1],
+                anchor.y + math.sin(anchor.yaw) * GOAL_XY[0] + math.cos(anchor.yaw) * GOAL_XY[1],
+            ),
+            0.20,
         ),
     )
     base = PhysicalAttributes.unknown(
         track_id=target.track_id,
-        timestamp_seconds=timestamp,
-        semantic_class="object",
-        semantic_source="controlled_track_selection_prior",
-        semantic_confidence=1.0,
+        timestamp_seconds=evidence_timestamp,
+        semantic_class=observed_semantic.semantic_class if observed_semantic else "object",
+        semantic_source=observed_semantic.label_source if observed_semantic else "controlled_track_selection_prior",
+        semantic_confidence=observed_semantic.semantic_confidence if observed_semantic else 1.0,
     )
     sensor_attributes = replace(base, geometry=geometry, motion=motion)
+    if mass_estimator is not None and target_association.is_matched:
+        mass = mass_estimator.estimate(
+            image_rgb, detections.detections[target_association.detection_index],
+            geometry, timestamp_seconds=evidence_timestamp,
+        )
+        sensor_attributes = replace(
+            sensor_attributes, mass=mass,
+            thermal=replace(base.thermal, heat_source_likelihood=ScalarEstimate.unavailable(
+                unit="1", source="bounded_plume_prerequisites_unavailable",
+                timestamp_seconds=evidence_timestamp,
+                evidence=(model_invocations["thermal"]["reason"],),
+            )),
+        )
+        model_invocations["mass"] = {
+            "adapter_invoked": True,
+            "prediction_available": mass.mass_kg.is_available,
+            "evidence": mass.mass_kg.evidence,
+        }
+        save_json("vision-model-invocations.json", model_invocations)
+    visual_contact_proxy = contact_proxies.get(target.track_id)
     sensor_adapter = adapt_physical_factors(
-        sensor_attributes, timestamp_seconds=timestamp
+        sensor_attributes, timestamp_seconds=evidence_timestamp,
+        visual_contact_proxy=visual_contact_proxy,
+        contact_interaction_likelihood=motion.route_crossing_likelihood
+        if visual_contact_proxy is not None else None,
+        config=PhysicalFactorAdapterConfig(allow_visual_contact_proxy=True),
     )
     sensor_policy = CRASafeSAGEPolicy().evaluate(sensor_adapter.profile)
     np.savez_compressed(
@@ -273,10 +440,7 @@ def main():
         ],
         object_velocities=[sample[3].velocity_world_xy for sample in samples],
     )
-    try:
-        plt.imsave(args.output / "camera.png", camera.get_rgb())
-    except RuntimeError as error:
-        print(f"Camera visualization unavailable: {error}")
+    plt.imsave(args.output / "camera.png", image_rgb)
     drift = math.hypot(final_pose.x - anchor.x, final_pose.y - anchor.y)
     yaw_drift = abs(final_pose.yaw - anchor.yaw)
     stationary_passed = (
@@ -285,6 +449,7 @@ def main():
         and len(object_xyz) >= 4
         and association_error <= 0.40
         and root_unchanged_by_fixture
+        and sensor_dataflow_passed
     )
     # Known position is only a controlled track-selection and independent
     # collision-scoring input; no authored radius/center enters the field.
@@ -300,7 +465,7 @@ def main():
         stationary.ROBOT_RIGHT_EXTENT,
         stationary.ROBOT_SAFETY_MARGIN,
     )
-    semantic = SemanticObstacle(
+    semantic = observed_semantic or SemanticObstacle(
         target, "object", 1.0, "controlled_track_selection_prior"
     )
     fields, policies, factors, predictions, readiness = {}, {}, {}, {}, {}
@@ -343,39 +508,30 @@ def main():
             minimum_alignment_scale=0.25,
         ),
     )
-    for name, inputs in PROFILE_INPUTS.items():
-        adapted = controlled_object_adapter(
-            inputs, track_id=target.track_id, timestamp_seconds=timestamp
+    adapters = {"observed": sensor_adapter}
+    if args.oracle_comparison:
+        adapters = {
+            name: controlled_object_adapter(
+                inputs, track_id=target.track_id, timestamp_seconds=timestamp,
+            ) for name, inputs in PROFILE_INPUTS.items()
+        }
+    for name, adapted in adapters.items():
+        policy, field = build_assessed_object_field(
+            points_anchor, adapted=adapted, semantic=semantic,
+            class_policy=class_policy, guidance_policy=guidance_policy,
+            grid_config=grid_config, field_config=field_config,
         )
-        policy = CRASafeSAGEPolicy().evaluate(adapted.profile)
         readiness[name] = asdict(
             evaluate_perception_readiness(
                 RestaurantScenario(
                     "simple_object",
                     "contact",
-                    "controlled sphere test",
-                    EvidenceMode.ORACLE,
+                    "oracle comparison" if args.oracle_comparison else "observed sphere, conservative unknown handling",
+                    EvidenceMode.ORACLE if args.oracle_comparison else EvidenceMode.SENSOR,
                     0,
                 ),
                 adapted,
             )
-        )
-        grid = build_local_occupancy_grid(
-            points_anchor,
-            point_track_ids=np.full(len(points_anchor), target.track_id),
-            semantic_obstacles=(semantic,),
-            class_safety_policy=class_policy,
-            config=grid_config,
-            track_safety_parameters={
-                target.track_id: policy.guidance_parameters.safety_parameters
-            },
-        )
-        field = build_safe_sage_field_pipeline(
-            grid,
-            guidance_policy=guidance_policy,
-            config=field_config,
-            semantic_obstacles=(semantic,),
-            track_guidance_parameters={target.track_id: policy.guidance_parameters},
         )
         fields[name] = field
         policies[name] = policy.as_dict()
@@ -407,68 +563,76 @@ def main():
             "minimum_margin": float(np.min(planned.dtcbf_margins)),
             "predicted_chassis_states": planned.predicted_chassis_states.tolist(),
         }
-    # A constant policy baseline shares CRA's flux range and lambda, so a
-    # different legacy flux range or class-specific lambda cannot confound it.
-    fixed_risk = 0.40
-    fixed_guidance = SafeSAGEGuidanceParameters(
-        ClassSafetyParameters(
-            fixed_risk,
-            CRASafeSAGEPolicy().config.normal_flux_magnitude_for_risk(fixed_risk),
-        ),
-        1.25,
-        PassingSide.RIGHT,
-    )
-    fixed_grid = build_local_occupancy_grid(
-        points_anchor,
-        point_track_ids=np.full(len(points_anchor), target.track_id),
-        semantic_obstacles=(semantic,),
-        class_safety_policy=class_policy,
-        config=grid_config,
-        track_safety_parameters={target.track_id: fixed_guidance.safety_parameters},
-    )
-    fields["fixed_parameter_baseline"] = build_safe_sage_field_pipeline(
-        fixed_grid,
-        guidance_policy=guidance_policy,
-        config=field_config,
-        semantic_obstacles=(semantic,),
-        track_guidance_parameters={target.track_id: fixed_guidance},
-    )
-    policies["fixed_parameter_baseline"] = {
-        "cra": {
-            "phi": fixed_risk,
-            "source": "constant experimental baseline, not physical assessment",
-        },
-        "safe_sage": {
-            "boundary_flux_magnitude": fixed_guidance.boundary_flux_magnitude,
-            "tangential_strength": 1.25,
-        },
-    }
-    fixed_field = fields["fixed_parameter_baseline"]
-    fixed_prediction = mpc.plan(
-        np.zeros(3),
-        np.array([[item.linear_velocity, item.angular_velocity] for item in nominal]),
-        configuration_space=fixed_field.configuration_space,
-        h_full=fixed_field.h_full,
-        guidance_fields=fixed_field.guidance_fields,
-        temporal_safety_derivative=0.0,
-        preferred_lateral_direction_grid_y=-1.0,
-    )
-    predictions["fixed_parameter_baseline"] = {
-        "success": existing.predictive_result_is_valid(
-            fixed_prediction, constraint_tolerance=mpc.config.constraint_tolerance
-        ),
-        "status": fixed_prediction.status,
-        "minimum_margin": float(np.min(fixed_prediction.dtcbf_margins)),
-        "predicted_chassis_states": fixed_prediction.predicted_chassis_states.tolist(),
-    }
-    phi = [policies[name]["cra"]["phi"] for name in PROFILE_INPUTS]
+    if args.oracle_comparison:
+        # A constant policy baseline shares CRA's flux range and lambda, so a
+        # different legacy flux range or class-specific lambda cannot confound it.
+        fixed_risk = 0.40
+        fixed_guidance = SafeSAGEGuidanceParameters(
+            ClassSafetyParameters(
+                fixed_risk,
+                CRASafeSAGEPolicy().config.normal_flux_magnitude_for_risk(fixed_risk),
+            ),
+            1.25,
+            PassingSide.RIGHT,
+        )
+        fixed_grid = build_local_occupancy_grid(
+            points_anchor,
+            point_track_ids=np.full(len(points_anchor), target.track_id),
+            semantic_obstacles=(semantic,),
+            class_safety_policy=class_policy,
+            config=grid_config,
+            track_safety_parameters={target.track_id: fixed_guidance.safety_parameters},
+        )
+        fields["fixed_parameter_baseline"] = build_safe_sage_field_pipeline(
+            fixed_grid,
+            guidance_policy=guidance_policy,
+            config=field_config,
+            semantic_obstacles=(semantic,),
+            track_guidance_parameters={target.track_id: fixed_guidance},
+        )
+        policies["fixed_parameter_baseline"] = {
+            "cra": {
+                "phi": fixed_risk,
+                "source": "constant experimental baseline, not physical assessment",
+            },
+            "safe_sage": {
+                "boundary_flux_magnitude": fixed_guidance.boundary_flux_magnitude,
+                "tangential_strength": 1.25,
+            },
+        }
+        fixed_field = fields["fixed_parameter_baseline"]
+        fixed_prediction = mpc.plan(
+            np.zeros(3),
+            np.array([[item.linear_velocity, item.angular_velocity] for item in nominal]),
+            configuration_space=fixed_field.configuration_space,
+            h_full=fixed_field.h_full,
+            guidance_fields=fixed_field.guidance_fields,
+            temporal_safety_derivative=0.0,
+            preferred_lateral_direction_grid_y=-1.0,
+        )
+        predictions["fixed_parameter_baseline"] = {
+            "success": existing.predictive_result_is_valid(
+                fixed_prediction, constraint_tolerance=mpc.config.constraint_tolerance
+            ),
+            "status": fixed_prediction.status,
+            "minimum_margin": float(np.min(fixed_prediction.dtcbf_margins)),
+            "predicted_chassis_states": fixed_prediction.predicted_chassis_states.tolist(),
+        }
+    phi = [policies[name]["cra"]["phi"] for name in adapters]
     flux = [
         policies[name]["safe_sage"]["boundary_flux_magnitude"]
-        for name in PROFILE_INPUTS
+        for name in adapters
     ]
-    mapping_passed = (
+    source_mapping_passed = (
         all(a < b for a, b in zip(phi, phi[1:]))
         and all(a < b for a, b in zip(flux, flux[1:]))
+        if args.oracle_comparison else (
+            policies["observed"] == sensor_policy.as_dict()
+            and policies["observed"]["cra"]["phi"] == sensor_policy.assessment.phi
+        )
+    )
+    mapping_passed = (
+        source_mapping_passed
         and all(np.isfinite(field.h_full.values).all() for field in fields.values())
         and all(
             item["safe_sage"]["tangential_strength"] == 1.25
@@ -479,14 +643,19 @@ def main():
         stationary_passed
         and mapping_passed
         and all(item["success"] for item in predictions.values())
-        and all(item["ready"] for item in readiness.values())
+        and (not args.oracle_comparison or all(item["ready"] for item in readiness.values()))
     )
     report = {
         "stationary_passed": stationary_passed,
         "mapping_passed": mapping_passed,
         "motion_gate_passed": gate,
-        "evidence_mode": "oracle profiles with measured LiDAR geometry",
-        "aggregate_sensor_acceptance": False,
+        "evidence_mode": "oracle profiles with measured LiDAR geometry" if args.oracle_comparison else "observed camera/LiDAR with conservative uncertainty",
+        "acceptance_scope": "oracle controller comparison" if args.oracle_comparison else "uncertainty-aware observed-object navigation; complete four-factor perception is assessed separately",
+        "aggregate_sensor_acceptance": False if args.oracle_comparison else readiness["observed"]["aggregate_phi_reportable"],
+        "sensor_dataflow_passed": sensor_dataflow_passed,
+        "camera_lidar_age_seconds": camera_lidar_age,
+        "model_artifacts": model_artifacts,
+        "model_invocations": model_invocations,
         "sensor_phi": sensor_policy.assessment.phi,
         "sensor_factors": diagnose_factor_specific_cra(sensor_adapter).to_dict(),
         "sensor_attributes": asdict(sensor_attributes),
@@ -498,11 +667,11 @@ def main():
         "association_error_m": association_error,
         "distinct_matched_frames": len(samples),
         "fall_surface_rejections": surfaces.rejection_reasons,
-        "profiles": {name: asdict(value) for name, value in PROFILE_INPUTS.items()},
+        "profiles": {name: asdict(value) for name, value in PROFILE_INPUTS.items()} if args.oracle_comparison else {},
         "policies": policies,
         "factor_diagnostics": factors,
         "stationary_predictions": predictions,
-        "controlled_readiness": readiness,
+        "perception_readiness": readiness,
         "fixed_lambda": 1.25,
         "grid_configuration": asdict(grid_config),
         "field_configuration": asdict(field_config),
@@ -510,15 +679,17 @@ def main():
         "capture_sha256": hashlib.sha256(
             (args.output / "capture.npz").read_bytes()
         ).hexdigest(),
+        "camera_sha256": hashlib.sha256((args.output / "camera.png").read_bytes()).hexdigest(),
         "assumptions": [
             "frozen field and CRA assessment during each pass-by; static sphere; h_t=0",
             "robot ego pose and LiDAR extrinsics are simulation-oracle USD references; world-Z-zero floor is a configured prior",
-            "controlled factor values are illustrative oracle inputs, not calibrated model predictions",
-            "contact proxy low value is supplied; absent edge detection is not negative evidence",
-            "thermal low value is supplied; no plume is not proof of a cold object",
+            "oracle comparison only: controlled factor values are supplied and separately labeled",
+            "observed mode uses the computed conservative sensor policy unchanged, including phi saturation",
+            "unmatched contact detections remain unknown; no plume is not proof of a cold object",
             "kinetic uses nonzero 0.20 m/s relative approach speed even though the object is stationary",
             "authored location selects the target track; authored radius only scores independent clearance",
-            "mass/contact/thermal for the sphere remain unavailable in the sensor record",
+            "unsupported estimator outputs remain unavailable with per-factor rejection reasons",
+            "complete four-factor readiness is reported separately from uncertainty-aware controller acceptance",
             "fixed geometry, waypoint, controller limits and lambda across comparisons",
         ],
         "motion": {},
@@ -541,10 +712,11 @@ def main():
         flush=True,
     )
     if args.motion and not gate:
-        raise RuntimeError("stationary gate rejected controlled wheel motion")
+        raise RuntimeError("stationary dataflow/field gate rejected wheel motion")
     if args.motion:
         initial_dof_positions = controller.robot.get_dof_positions().numpy().copy()
-        for name in ("controlled_low", "fixed_parameter_baseline", "controlled_high"):
+        motion_names = ("controlled_low", "fixed_parameter_baseline", "controlled_high") if args.oracle_comparison else ("observed",)
+        for name in motion_names:
             controller.stop()
             controller.robot.set_velocities(
                 linear_velocities=[[0.0, 0.0, 0.0]],
@@ -669,7 +841,7 @@ def main():
     axis.set(
         xlabel="Trial-frame x (m)",
         ylabel="Trial-frame y (m)",
-        title="Simple object: controlled CRA, measured geometry, lambda=1.25",
+        title="Simple object: " + ("oracle comparison" if args.oracle_comparison else "observed CRA with uncertainty") + ", lambda=1.25",
         xlim=(-0.3, 2.8),
         ylim=(-1.3, 1.0),
     )

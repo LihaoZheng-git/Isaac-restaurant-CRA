@@ -8,6 +8,7 @@ import pytest
 
 from robot.evaluation.simple_object_test import (
     ControlledObjectInputs,
+    build_assessed_object_field,
     controlled_object_adapter,
     disk_footprint_clearance,
     run_bounded_pass_by,
@@ -79,6 +80,82 @@ def test_unknown_sphere_inputs_are_not_replaced_by_the_controlled_profile():
     )
     assert sphere.contact.sharpness.status is EstimateStatus.UNAVAILABLE
     assert sphere.thermal.heat_source_likelihood.status is EstimateStatus.UNAVAILABLE
+
+
+@pytest.mark.parametrize("unknown", [True, False])
+def test_assessed_policy_drives_field_and_mpc_even_when_perception_is_incomplete(unknown):
+    from robot.evaluation.cra_experiments import EvidenceMode, RestaurantScenario
+    from robot.evaluation.perception_readiness import evaluate_perception_readiness
+    from robot.safety.class_safety_policy import ClassSafetyParameters, ClassSafetyPolicy
+    from robot.safety.local_occupancy_grid import LocalOccupancyGridConfig
+    from robot.safety.obstacle_tracking import TrackedObstacle
+    from robot.safety.safe_sage_cbf_filter import SafeSAGECBFSafetyFilter
+    from robot.safety.safe_sage_configuration_space import SafeSAGEConfigurationSpaceConfig
+    from robot.safety.safe_sage_field_pipeline import SafeSAGEFieldPipelineConfig
+    from robot.safety.safe_sage_guidance_policy import SafeSAGEGuidancePolicy
+    from robot.safety.safe_sage_h_full import SafeSAGEHFullConfig
+    from robot.safety.safe_sage_unicycle_mpc import SafeSAGEUnicycleMPC, SafeSAGEUnicycleMPCConfig
+    from robot.safety.semantic_obstacle import SemanticObstacle
+
+    adapted = adapt_physical_factors(
+        PhysicalAttributes.unknown(track_id=7, timestamp_seconds=1., semantic_class="sports_ball"),
+        timestamp_seconds=1.,
+    ) if unknown else controlled_object_adapter(
+        ControlledObjectInputs(), track_id=7, timestamp_seconds=1.,
+    )
+    track = TrackedObstacle(7, (1., 0.), (1., 0.), (0., 0.), (0., 0.), 4, 12, True)
+    semantic = SemanticObstacle(track, "sports_ball", .8, "synthetic_camera_association")
+    expected = CRASafeSAGEPolicy().evaluate(adapted.profile)
+    result, field = build_assessed_object_field(
+        np.array([[1., -.1], [1., .1], [1.1, -.1], [1.1, .1]]),
+        adapted=adapted, semantic=semantic,
+        class_policy=ClassSafetyPolicy({
+            "sports_ball": ClassSafetyParameters(.01, .5),
+            "unknown": ClassSafetyParameters(1., 1.7),
+        }),
+        guidance_policy=SafeSAGEGuidancePolicy({"unknown": expected.guidance_parameters}),
+        grid_config=LocalOccupancyGridConfig(
+            resolution=.2, minimum_x=-2, maximum_x=3, minimum_y=-2, maximum_y=2,
+        ),
+        field_config=SafeSAGEFieldPipelineConfig(
+            SafeSAGEConfigurationSpaceConfig(RectangularRobotFootprint(.1, .1, .1, .1), 4),
+            h_full_config=SafeSAGEHFullConfig(yaw_slice_count=4),
+        ),
+    )
+    assert result.as_dict() == expected.as_dict()
+    assert result.assessment.phi == pytest.approx(1. if unknown else .02984851)
+    assert result.tangential_strength == 1.25
+    for grid in field.configuration_space.occupancy_grids:
+        np.testing.assert_allclose(grid.cell_risks[grid.occupied_mask], expected.assessment.phi)
+        np.testing.assert_allclose(
+            grid.cell_boundary_fluxes[grid.occupied_mask],
+            expected.guidance_parameters.boundary_flux,
+        )
+    ready = evaluate_perception_readiness(
+        RestaurantScenario("sphere", "contact", "synthetic evidence test",
+                           EvidenceMode.SENSOR if unknown else EvidenceMode.ORACLE, 0),
+        adapted,
+    )
+    assert ready.aggregate_phi_reportable is not unknown
+    planned = SafeSAGEUnicycleMPC(
+        SafeSAGECBFSafetyFilter(), SafeSAGEUnicycleMPCConfig(horizon_steps=2),
+    ).plan(
+        np.zeros(3), np.array([.2, 0.]), configuration_space=field.configuration_space,
+        h_full=field.h_full, guidance_fields=field.guidance_fields,
+    )
+    assert planned.success and not planned.fallback_active
+    assert planned.minimum_dtcbf_margin >= -1e-6
+
+
+def test_assessed_field_rejects_evidence_from_a_different_track():
+    adapted = adapt_physical_factors(
+        PhysicalAttributes.unknown(track_id=7, timestamp_seconds=1.), timestamp_seconds=1.,
+    )
+    with pytest.raises(ValueError, match="track IDs"):
+        build_assessed_object_field(
+            np.empty((0, 2)), adapted=adapted, semantic=SimpleNamespace(track_id=8),
+            class_policy=None, guidance_policy=None, grid_config=None, field_config=None,
+        )
 
 
 @pytest.mark.parametrize("initial_state,padding,warm_turn,flux", [
@@ -267,7 +344,8 @@ def test_clearance_monitor_handles_rotation_and_collision_independently():
     )
 
 
-def runner(*, plan_success=True, backup_valid=True, initial_clearance=1.0):
+def runner(*, plan_success=True, backup_valid=True, initial_clearance=1.0,
+           terminal_position=None, terminal_clearance=None):
     counters = {"commands": 0, "stops": 0, "backup_calls": 0}
     config = SimpleNamespace(time_step=0.2, horizon_steps=2, constraint_tolerance=1e-6)
     planned = SimpleNamespace(
@@ -310,16 +388,26 @@ def runner(*, plan_success=True, backup_valid=True, initial_clearance=1.0):
     def stop():
         counters["stops"] += 1
 
+    def read_state():
+        if terminal_position is not None and counters["commands"] >= 4:
+            return np.array([*terminal_position, 0.])
+        return np.zeros(3)
+
+    def clearance(state):
+        if terminal_clearance is not None and counters["commands"] >= 4:
+            return terminal_clearance
+        return initial_clearance
+
     result = run_bounded_pass_by(
         field=SimpleNamespace(
             configuration_space=None, h_full=None, guidance_fields=()
         ),
         mpc=mpc,
         backup=backup,
-        read_state=lambda: np.zeros(3),
+        read_state=read_state,
         advance=advance,
         stop=stop,
-        clearance=lambda state: initial_clearance,
+        clearance=clearance,
         physics_dt=0.05,
         maximum_seconds=0.2,
     )
@@ -348,3 +436,20 @@ def test_analytical_filter_is_rechecked_before_every_physics_command():
     assert counters["stops"] == 1
     assert not result["passed"]  # Command validity alone is not goal completion.
     assert result["termination"] == "duration_limit"
+
+
+@pytest.mark.parametrize("position,clearance,passed,termination", [
+    ((2.45, 0.), 1., True, "goal_reached"),
+    ((2.35, 0.), 1., False, "duration_limit"),
+    ((2.45, 0.), .01, False, "clearance_guard"),
+    ((np.nan, 0.), 1., False, "invalid_state"),
+])
+def test_final_interval_arrival_counts_only_after_state_and_clearance_checks(
+    position, clearance, passed, termination,
+):
+    result, counters = runner(terminal_position=position, terminal_clearance=clearance)
+    assert result["passed"] is passed
+    assert result["route_complete"] is passed
+    assert result["termination"] == termination
+    assert result["simulated_seconds"] == pytest.approx(.2)
+    assert counters["commands"] == 4 and counters["stops"] == 1
