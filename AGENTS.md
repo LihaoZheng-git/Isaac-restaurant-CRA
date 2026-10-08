@@ -11,10 +11,12 @@
   knife/fork specialist is a bounded demonstration, not the full contact model.
   Keep unsupported sharpness, material consequence, exposure, and route
   orientation evidence unavailable rather than inferring safety from class names.
-- Keep the bounded thermal demonstration to a visible steam/smoke-like plume
-  spatially associated with an open soup container. Generic smoke alone is not
-  hot-soup evidence, and a visible plume is not a temperature measurement or
-  proof that the aerosol is steam.
+- The current primary thermal factor is an explicitly named object-associated
+  visible-plume proxy. The user's later decision permits validated low/no-plume
+  observations to produce low cue scores for any clearly observed object.
+  Hot soup is one example; open-container classification is not required in this
+  mode. Preserve the older contextual container mode separately. Generic smoke
+  is not hot-soup evidence, and a plume is not temperature or aerosol identity.
 - Validate perception stationary before enabling new wheel-motion experiments. Report oracle/prior demonstrations separately from sensor-derived results.
 - Preserve user changes. Do not force-push, rewrite history, bypass checks, upgrade dependencies silently, or merge unvalidated work.
 - The accepted thesis scope is sufficient support for the selected final
@@ -67,3 +69,8 @@
 - Fitted spherical size may support rough heaviness only with explicit effective
   density evidence. A configured density keeps mass PRIOR; there is no universal
   ball density. Keep the sphere-shape extrapolation and uncertainty explicit.
+- Object-plume negative evidence requires a validated clean reference/domain,
+  distinct stationary frames, usable air/source regions and unambiguous fresh
+  association. Invalid/missing observations stay unknown. Other sources' air
+  regions may be excluded from reference-background checks only while enough
+  independent background remains; shared positive plumes remain ambiguous.

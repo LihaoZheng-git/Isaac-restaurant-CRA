@@ -23,6 +23,7 @@ class PhysicalAttributeCRARiskProfileProvider:
         timestamp_seconds: float,
         potential_interactions: Mapping[int, ScalarEstimate] | None = None,
         thermal_interactions: Mapping[int, ScalarEstimate] | None = None,
+        thermal_bases: Mapping[int, str] | None = None,
         visual_contact_proxies: Mapping[int, ScalarEstimate] | None = None,
         visual_contact_bases: Mapping[int, str] | None = None,
         contact_interactions: Mapping[int, ScalarEstimate] | None = None,
@@ -30,6 +31,7 @@ class PhysicalAttributeCRARiskProfileProvider:
     ):
         potential = potential_interactions or {}
         thermal = thermal_interactions or {}
+        heat_bases = thermal_bases or {}
         contact = visual_contact_proxies or {}
         contact_bases = visual_contact_bases or {}
         contact_routes = contact_interactions or {}
@@ -42,6 +44,7 @@ class PhysicalAttributeCRARiskProfileProvider:
                 timestamp_seconds=timestamp_seconds,
                 potential_interaction_likelihood=potential.get(track_id),
                 thermal_interaction_likelihood=thermal.get(track_id),
+                thermal_basis=heat_bases.get(track_id, "physical"),
                 visual_contact_proxy=contact.get(track_id),
                 visual_contact_basis=contact_bases.get(track_id, "visual_exposed_edge_proxy"),
                 contact_interaction_likelihood=contact_routes.get(track_id),

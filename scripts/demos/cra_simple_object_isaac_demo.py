@@ -28,6 +28,8 @@ parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument("--output", type=Path, required=True)
 parser.add_argument("--motion", action="store_true")
 parser.add_argument("--oracle-comparison", action="store_true")
+parser.add_argument("--object-plume-policy", action="store_true",
+                    help="validate a stationary object-level plume window using this controlled clean fixture")
 parser.add_argument("--grid-resolution", type=float, default=0.10)
 parser.add_argument("--yaw-slices", type=int, default=16)
 parser.add_argument("--object-radius", type=float, default=0.25,
@@ -91,6 +93,10 @@ from robot.perception.specialist_track_evidence import (
     SpecialistAssociationFrame, build_track_shape_contact_proxies, build_track_visual_contact_proxies,
 )
 from robot.perception.spherical_mass import estimate_spherical_geometry, estimate_spherical_mass
+from robot.perception.object_plume_evidence import (
+    OBJECT_PLUME_BASIS, ObjectPlumeObservation, estimate_object_plume_evidence,
+)
+from robot.perception.thermal_interaction import estimate_thermal_route_interaction
 from robot.perception.visual_shape_contact import SHAPE_CONTACT_SOURCE, SHAPE_CONTACT_BASIS
 from robot.perception.visualization import render_camera_lidar_fusion_overlay
 from robot.perception.yolo_detector import YoloSegmentationConfig, YoloSegmentationDetector
@@ -465,6 +471,59 @@ def main():
             "evidence": mass.mass_kg.evidence,
         }
         save_json("vision-model-invocations.json", model_invocations)
+    thermal_interaction = None
+    if args.object_plume_policy and detector is not None:
+        reference_time = camera_info.simulation_time_seconds
+        plume_observations = []
+        for _ in range(3):
+            for _ in range(6):
+                controller.stop()
+                simulation_app.update()
+            frame_rgb = camera.get_rgb()
+            frame_info = camera.get_frame_info()
+            frame_detections = detector.detect(frame_rgb, source_frame_id=frame_info.read_index,
+                source_timestamp_seconds=frame_info.simulation_time_seconds)
+            frame_fusion = CameraLidarSemanticFusion(CameraLidarFusionConfig(
+                minimum_mask_hits=4, minimum_overlap_fraction=.10,
+                mask_dilation_radius_pixels=6, projected_median_box_margin_pixels=12,
+            )).fuse(detection_frame=frame_detections, obstacle_points_source_xyz=obstacle_xyz,
+                tracking_result=tracking, camera_from_source=camera_from_robot, calibration=calibration)
+            current_pose = stationary.read_robot_pose(stage)
+            camera_stationary = (math.hypot(current_pose.x-final_pose.x, current_pose.y-final_pose.y) < .005
+                                 and abs(current_pose.yaw-final_pose.yaw) < .005)
+            plume_observations.append(ObjectPlumeObservation(frame_rgb, frame_detections,
+                SpecialistAssociationFrame(frame_info.read_index, frame_info.simulation_time_seconds,
+                    frame_info.height, frame_info.width, frame_fusion.associations),
+                timestamp, camera_stationary))
+        evidence_timestamp = plume_observations[-1].detections.source_timestamp_seconds
+        object_plumes = estimate_object_plume_evidence(image_rgb,
+            reference_timestamp_seconds=reference_time, observations=tuple(plume_observations),
+            timestamp_seconds=evidence_timestamp, clean_reference_validated=True,
+            negative_validation_scope="controlled fixed-camera sphere fixture with no authored plumes; positive/negative backend controls tested separately")
+        save_json("object-plume-evidence.json", {
+            "records": {str(track): asdict(value) for track, value in object_plumes.items()},
+            "reference_timestamp": reference_time,
+            "camera_stationary": all(item.camera_stationary for item in plume_observations),
+            "tracking_geometry_frozen": True,
+            "maximum_camera_track_age_seconds": max(item.detections.source_timestamp_seconds-timestamp
+                                                      for item in plume_observations),
+        })
+        np.savez_compressed(args.output / "plume-window.npz",
+            rgb=np.stack([item.rgb for item in plume_observations]),
+            timestamps=[item.detections.source_timestamp_seconds for item in plume_observations])
+        record = object_plumes.get(target.track_id)
+        if record is not None:
+            sensor_attributes = replace(sensor_attributes, timestamp_seconds=evidence_timestamp,
+                                         thermal=record.thermal)
+            thermal_interaction = estimate_thermal_route_interaction(record.thermal,
+                motion.route_crossing_likelihood, timestamp_seconds=evidence_timestamp)
+        model_invocations["thermal"] = {
+            "invoked": True, "backend": "fixed-camera reference RGB object plume proxy",
+            "object_records": len(object_plumes),
+            "target_evidence_available": record is not None and record.thermal.heat_source_likelihood.is_available,
+            "temperature_available": False, "moving_camera_supported": False,
+        }
+        save_json("vision-model-invocations.json", model_invocations)
     visual_contact_proxy = contact_proxies.get(target.track_id)
     sensor_adapter = adapt_physical_factors(
         sensor_attributes, timestamp_seconds=evidence_timestamp,
@@ -474,7 +533,10 @@ def main():
         else "visual_exposed_edge_proxy",
         contact_interaction_likelihood=motion.route_crossing_likelihood
         if visual_contact_proxy is not None else None,
-        config=PhysicalFactorAdapterConfig(allow_visual_contact_proxy=True),
+        thermal_interaction_likelihood=thermal_interaction,
+        thermal_basis=OBJECT_PLUME_BASIS if thermal_interaction is not None else "physical",
+        config=PhysicalFactorAdapterConfig(allow_visual_contact_proxy=True,
+                                           allow_visual_thermal_proxy=args.object_plume_policy),
     )
     sensor_policy = CRASafeSAGEPolicy().evaluate(sensor_adapter.profile)
     np.savez_compressed(
@@ -739,6 +801,7 @@ def main():
             "silhouette shape is a 2D visible-outline proxy; hidden features and physical sharpness/hardness remain unknown",
             "optional fitted-sphere mass depends on an explicitly configured effective-density prior; size alone is not measured mass",
             "no plume is not proof of a cold object; absent thermal prerequisites stay unknown",
+            "optional object plume policy accepts low visible cue only with validated stationary clean-reference observations; all track records include rejection reasons",
             "kinetic uses nonzero 0.20 m/s relative approach speed even though the object is stationary",
             "authored location selects the target track; authored radius only scores independent clearance",
             "unsupported estimator outputs remain unavailable with per-factor rejection reasons",

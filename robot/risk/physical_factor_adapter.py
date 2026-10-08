@@ -53,6 +53,7 @@ class PhysicalFactorAdapterConfig:
     allow_priors: bool = True
     contact_sharpness_weight: float = 0.7
     allow_visual_contact_proxy: bool = False
+    allow_visual_thermal_proxy: bool = False
 
     def __post_init__(self) -> None:
         for name in (
@@ -71,7 +72,7 @@ class PhysicalFactorAdapterConfig:
             elif value <= 0.0:
                 raise ValueError(f"{name} must be positive")
             object.__setattr__(self, name, value)
-        for name in ("use_upper_bounds", "allow_priors", "allow_visual_contact_proxy"):
+        for name in ("use_upper_bounds", "allow_priors", "allow_visual_contact_proxy", "allow_visual_thermal_proxy"):
             if not isinstance(getattr(self, name), bool):
                 raise TypeError(f"{name} must be bool")
 
@@ -282,6 +283,7 @@ def adapt_physical_factors(
     timestamp_seconds: float,
     potential_interaction_likelihood: ScalarEstimate | None = None,
     thermal_interaction_likelihood: ScalarEstimate | None = None,
+    thermal_basis: str = "physical",
     visual_contact_proxy: ScalarEstimate | None = None,
     visual_contact_basis: str = "visual_exposed_edge_proxy",
     contact_interaction_likelihood: ScalarEstimate | None = None,
@@ -393,6 +395,13 @@ def adapt_physical_factors(
         ("heat_source_likelihood", attributes.thermal.heat_source_likelihood),
         ("thermal_interaction_likelihood", thermal_interaction),
     )
+    if thermal_basis not in {"physical", "visual_object_plume_proxy"}:
+        raise ValueError("unsupported thermal basis")
+    if thermal_basis == "visual_object_plume_proxy":
+        if not settings.allow_visual_thermal_proxy:
+            raise ValueError("object plume proxy requires explicit configuration opt-in")
+        if attributes.thermal.heat_source_likelihood.source != "object_visible_plume_proxy":
+            raise ValueError("object plume basis requires object plume evidence source")
     thermal = _direct_factor(
         "thermal",
         thermal_inputs,
@@ -400,7 +409,8 @@ def adapt_physical_factors(
         config=settings,
         severity=getattr(attributes.thermal.heat_source_likelihood, bound) or 0,
         interaction=getattr(thermal_interaction, bound) or 0,
-        assumption="heat-source cue severity with separately supplied contextual interaction",
+        assumption=f"{thermal_basis} cue severity with separately supplied contextual interaction; no temperature claim",
+        basis=thermal_basis,
     )
     return PhysicalFactorAdapterResult(
         attributes.track_id,

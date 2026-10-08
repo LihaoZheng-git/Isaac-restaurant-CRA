@@ -66,10 +66,12 @@ def _factor_readiness(
 ) -> FactorReadiness:
     reasons = list(diagnostic.rejection_reasons)
     visual_bases = {"visual_exposed_edge_proxy", "visual_silhouette_geometry_proxy"}
-    if diagnostic.basis not in {"physical", *visual_bases}:
+    if diagnostic.basis not in {"physical", "visual_object_plume_proxy", *visual_bases}:
         reasons.append("unsupported factor basis")
     if diagnostic.basis in visual_bases and diagnostic.factor != "contact":
         reasons.append("visual geometry proxy is only valid for contact")
+    if diagnostic.basis == "visual_object_plume_proxy" and diagnostic.factor != "thermal":
+        reasons.append("object plume proxy is only valid for thermal")
     if diagnostic.estimate.confidence <= 0:
         reasons.append("factor estimate has zero confidence")
     allowed = _allowed_statuses(evidence_mode)
@@ -118,6 +120,8 @@ def evaluate_perception_readiness(
     if (result.contact.basis in {"visual_exposed_edge_proxy", "visual_silhouette_geometry_proxy"}
             and not result.config.allow_visual_contact_proxy):
         raise ValueError("contact proxy readiness requires adapter configuration opt-in")
+    if result.thermal.basis == "visual_object_plume_proxy" and not result.config.allow_visual_thermal_proxy:
+        raise ValueError("thermal proxy readiness requires adapter configuration opt-in")
     checked = (
         FACTOR_NAMES
         if evaluation_scope is EvaluationScope.FOUR_FACTOR

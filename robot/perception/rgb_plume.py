@@ -29,14 +29,17 @@ class RgbPlumeConfig:
     source_height_multiplier: float = 4.0
     maximum_background_change: float = 8.0
     confidence_cap: float = 0.55
+    minimum_background_fraction: float = 0.10
 
     def __post_init__(self) -> None:
+        if self.minimum_background_fraction == 0:
+            raise ValueError("minimum_background_fraction must be positive")
         for name in ("minimum_brightness_change", "source_width_multiplier",
                      "source_height_multiplier", "maximum_background_change"):
             value = getattr(self, name)
             if not math.isfinite(value) or value <= 0:
                 raise ValueError(f"{name} must be positive and finite")
-        for name in ("maximum_chroma_fraction", "confidence_cap"):
+        for name in ("maximum_chroma_fraction", "confidence_cap", "minimum_background_fraction"):
             if not math.isfinite(getattr(self, name)) or not 0 <= getattr(self, name) <= 1:
                 raise ValueError(f"{name} must lie in [0, 1]")
         if isinstance(self.minimum_component_pixels, bool) or not isinstance(self.minimum_component_pixels, int) or self.minimum_component_pixels < 1:
@@ -59,7 +62,8 @@ def _rgb(image: np.ndarray) -> np.ndarray:
 
 class StationaryRgbPlumeEstimator:
     def __init__(self, reference_rgb: np.ndarray, *, source_box: PixelBoundingBox,
-                 config: RgbPlumeConfig | None = None) -> None:
+                 config: RgbPlumeConfig | None = None,
+                 background_exclusion_mask: np.ndarray | None = None) -> None:
         self.reference = np.array(_rgb(reference_rgb), copy=True)
         self.source_box = source_box
         self.config = config or RgbPlumeConfig()
@@ -74,6 +78,14 @@ class StationaryRgbPlumeEstimator:
                  max(0, int(cx-half_width)):min(width, int(math.ceil(cx+half_width)))] = True
         if not np.any(self.roi) or not np.any(~self.roi):
             raise ValueError("source box must allow plume and background regions")
+        self.background = ~self.roi
+        if background_exclusion_mask is not None:
+            excluded = np.asarray(background_exclusion_mask)
+            if excluded.dtype != np.bool_ or excluded.shape != (height, width):
+                raise ValueError("background exclusion must be an aligned boolean mask")
+            self.background = self.background & ~excluded
+        if self.background.mean() < self.config.minimum_background_fraction:
+            raise ValueError("insufficient independent background for reference validation")
 
     def estimate(self, image_rgb: np.ndarray, *, source_frame_id: int,
                  timestamp_seconds: float) -> RgbPlumeResult:
@@ -85,7 +97,7 @@ class StationaryRgbPlumeEstimator:
                 or source_frame_id < 0 or not math.isfinite(timestamp_seconds) or timestamp_seconds < 0):
             raise ValueError("frame id and timestamp must be valid nonnegative values")
         difference = image.astype(float) - self.reference.astype(float)
-        background_change = float(np.abs(difference[~self.roi]).mean())
+        background_change = float(np.abs(difference[self.background]).mean())
         if background_change > self.config.maximum_background_change:
             reason = "background changed; fixed-camera reference is invalid"
             return RgbPlumeResult(None, ScalarEstimate.unavailable(
