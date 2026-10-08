@@ -60,3 +60,10 @@
   monotonic risk-to-clearance ordering, or enforced passing side. Its configured
   side is soft guidance; retain the observed side and planning latency in later
   evaluations. Validate selected restaurant actors stationary before new motion.
+- A resolved silhouette may support the explicitly named
+  `visual_silhouette_geometry_proxy`; it establishes only visible-outline cues,
+  not hidden-surface safety or physical sharpness/hardness. Preserve stronger
+  accepted part cues and reject ambiguous/frame-mismatched associations.
+- Fitted spherical size may support rough heaviness only with explicit effective
+  density evidence. A configured density keeps mass PRIOR; there is no universal
+  ball density. Keep the sphere-shape extrapolation and uncertainty explicit.

@@ -397,3 +397,50 @@ def build_track_visual_contact_proxies(
         if proxy.is_available:
             result[candidates[0]] = proxy
     return MappingProxyType(result)
+
+
+def build_track_shape_contact_proxies(
+    detection_frame,
+    association_frame: SpecialistAssociationFrame,
+    *, part_proxies: Mapping[int, ScalarEstimate] | None = None,
+    config=None,
+) -> Mapping[int, ScalarEstimate]:
+    """Same-frame, one-parent/one-track silhouette cues plus detected parts.
+
+    Ambiguous parents supply no shape proxy. Part-only evidence is retained
+    when the whole silhouette is unusable. No physical contact field is filled.
+    """
+    from robot.perception.semantic_detection import SemanticDetectionFrame
+    from robot.perception.visual_shape_contact import (
+        combine_shape_and_part_contact, estimate_silhouette_contact_proxy,
+    )
+
+    if not isinstance(detection_frame, SemanticDetectionFrame):
+        raise TypeError("detection_frame must be SemanticDetectionFrame")
+    if not isinstance(association_frame, SpecialistAssociationFrame):
+        raise TypeError("association_frame must be SpecialistAssociationFrame")
+    if (detection_frame.source_frame_id != association_frame.source_frame_id
+            or detection_frame.source_timestamp_seconds != association_frame.source_timestamp_seconds
+            or detection_frame.image_height != association_frame.image_height
+            or detection_frame.image_width != association_frame.image_width):
+        raise ValueError("shape contact frames must align in ID, timestamp and dimensions")
+    parts = part_proxies or {}
+    result = {}
+    matches = [item for item in association_frame.associations if item.is_matched]
+    for match in matches:
+        if (sum(item.detection_index == match.detection_index for item in matches) != 1
+                or sum(item.track_id == match.track_id for item in matches) != 1):
+            continue
+        if match.detection_index is None or not 0 <= match.detection_index < len(detection_frame.detections):
+            raise ValueError("matched shape contact detection index is invalid")
+        part = parts.get(match.track_id)
+        if part is not None and part.timestamp_seconds != detection_frame.source_timestamp_seconds:
+            raise ValueError("part proxy must come from the same image timestamp")
+        shape = estimate_silhouette_contact_proxy(
+            detection_frame.detections[match.detection_index],
+            timestamp_seconds=detection_frame.source_timestamp_seconds, config=config,
+        )
+        combined = combine_shape_and_part_contact(shape, part)
+        if combined.is_available:
+            result[match.track_id] = combined
+    return MappingProxyType(result)

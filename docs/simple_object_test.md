@@ -368,4 +368,11 @@ stops, feasibility recovery and three synthetic stalled-horizon reproductions.
 Repository Ruff and whitespace checks passed. No packages, checkpoints or saved
 scene assets were changed. The next stage is the agreed restaurant-setup and
 experiment-design discussion, followed by stationary validation of selected
-actors; this gate does not authorize claiming completed sensor-only perception.
+  actors; this gate does not authorize claiming completed sensor-only perception.
+
+The subsequent size/contact component improvement is documented in
+`docs/observed_shape_heaviness.md`. Its two supported stationary sphere captures
+provide inferred size/visible-outline contact and prior-dependent rough mass.
+Thermal and justified fall evidence still leave aggregate phi saturated. The
+user's different-observed-objects -> different aggregate phi -> matched control
+acceptance gate remains pending; the earlier sphere pass does not complete it.
