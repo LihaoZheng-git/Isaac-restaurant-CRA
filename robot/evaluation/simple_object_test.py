@@ -1,6 +1,6 @@
-"""Bounded simple-object CRA/controller checks, with explicit oracle inputs.
+"""Bounded observed-object CRA/controller checks and optional oracle controls.
 
-The controlled profile is an experimental input, not a perception result.
+The optional controlled profile is an experimental input, not a perception result.
 In particular, a round shape and absent detections do not certify low contact
 or thermal risk. The unchanged adapter/assessor retains unknown sensor inputs.
 """
@@ -111,6 +111,38 @@ def controlled_object_adapter(
         contact_interaction_likelihood=scalar(inputs.interaction),
         config=PhysicalFactorAdapterConfig(allow_visual_contact_proxy=True),
     )
+
+
+def build_assessed_object_field(
+    points_xy, *, adapted, semantic, class_policy, guidance_policy,
+    grid_config, field_config,
+):
+    """Send the assessment's unchanged policy into per-track field parameters.
+
+    Unknown evidence is consumable by the conservative controller policy; it
+    does not make four-factor perception complete. This function never chooses
+    a replacement phi, class prior, or controlled experimental factor value.
+    """
+    from robot.safety.cra_safe_sage_policy import CRASafeSAGEPolicy
+    from robot.safety.local_occupancy_grid import build_local_occupancy_grid
+    from robot.safety.safe_sage_field_pipeline import build_safe_sage_field_pipeline
+
+    if adapted.track_id != semantic.track_id:
+        raise ValueError("assessment and semantic track IDs must match")
+    policy = CRASafeSAGEPolicy().evaluate(adapted.profile)
+    grid = build_local_occupancy_grid(
+        points_xy,
+        point_track_ids=np.full(len(points_xy), semantic.track_id),
+        semantic_obstacles=(semantic,), class_safety_policy=class_policy,
+        config=grid_config,
+        track_safety_parameters={semantic.track_id: policy.guidance_parameters.safety_parameters},
+    )
+    field = build_safe_sage_field_pipeline(
+        grid, guidance_policy=guidance_policy, config=field_config,
+        semantic_obstacles=(semantic,),
+        track_guidance_parameters={semantic.track_id: policy.guidance_parameters},
+    )
+    return policy, field
 
 
 def disk_footprint_clearance(state, *, center_xy, radius_m, footprint):
@@ -360,6 +392,12 @@ def run_bounded_pass_by(
                     reason, interrupted = "clearance_guard", True
                     break
             if interrupted:
+                break
+            # Include arrival during the last permitted execution interval.
+            # State validity and clearance have already been checked above;
+            # an aborted interval must never become a successful arrival.
+            if waypoint.compute_command(RobotPose2D(*state)).route_complete:
+                completed, reason = True, "goal_reached"
                 break
     finally:
         stop()

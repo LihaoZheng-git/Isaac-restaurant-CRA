@@ -1,11 +1,10 @@
 # Simple-object CRA and Safe-SAGE test
 
-**Latest gate (2026-10-08): PASS for all three matched Isaac wheel trials.**
-The controller correction below resolves the earlier navigation stall. This
-accepts a static single-object controller bridge with measured LiDAR geometry
-and explicitly controlled oracle factor profiles. The separate sensor-only
-assessment remains unknown/saturated (`phi=1.0`), not a complete four-factor
-sensor result. The historical failed gate is retained below.
+The default test now uses the object's **observed camera/LiDAR evidence and
+the algorithm's computed CRA policy unchanged**, including conservative unknown
+handling. The former low/high supplied-profile comparison is available only
+with `--oracle-comparison`. Historical oracle results remain below and must not
+be presented as sensor-estimated factor results.
 
 This bounded test adds one blue, static, 0.25 m radius sphere to the anonymous
 USD session layer. The saved restaurant scene is not edited. The waypoint goal
@@ -30,7 +29,7 @@ unknown; object height is never substituted. A stationary target has nonzero
 relative speed when the nominal robot approaches. The robot camera also saves
 an actual RGB view for inspection.
 
-Three separately labeled **oracle experimental profiles** exercise the real
+The optional comparison's three **oracle experimental profiles** exercise the real
 physical-factor adapter. These are illustrative controlled inputs, not vision
 model outputs or validated physical safety estimates:
 
@@ -60,9 +59,11 @@ those values are not mixed into this comparison.
 ## Validation and execution
 
 The script first captures twelve matched stationary scans, checks robot drift,
-preserves the saved scene, checks oracle four-factor readiness with the existing
+preserves the saved scene, records four-factor completeness with the existing
 readiness validator, and builds finite fields and valid initial MPC predictions.
-Wheel motion is rejected if any stationary prerequisite fails.
+The oracle comparison requires complete oracle readiness. The default observed
+test uses the assessed conservative uncertainty policy. Wheel motion is rejected
+if its stationary dataflow, field or prediction prerequisites fail.
 
 The initial coarse 0.20 m / 10-yaw setup stopped safely at an intermediate
 discrete configuration boundary, despite independent sphere clearance remaining
@@ -94,15 +95,113 @@ poses, margins, solve times, path length and simulated duration are saved.
 
 ```powershell
 $env:ISAAC_SIM_HEADLESS = '1'
+# Existing local checkpoints; no automatic downloads or model upgrades.
+$env:YOLO_MODEL_PATH = 'C:\path\to\yolo11n-seg.pt'
+$env:VISUAL_MASS_CHECKPOINT = 'C:\path\to\visual-mass-best.pt'
+$env:CONTACT_SEGMENTATION_CHECKPOINT = 'C:\path\to\contact-best.pt'
 python -u scripts/demos/cra_simple_object_isaac_demo.py --output outputs/simple_object/stationary
 python -u scripts/demos/cra_simple_object_isaac_demo.py --motion --output outputs/simple_object/motion
+# Optional historical experiment; supplied factors are explicitly oracle.
+python -u scripts/demos/cra_simple_object_isaac_demo.py --oracle-comparison --motion --output outputs/simple_object/oracle-comparison
 ```
 
 Use the existing Isaac/YOLO environment. No package, checkpoint or scene
 upgrade is needed. Inspect report JSON and failure JSON, not just the process
 exit status: Isaac shutdown can mask an exception's exit code.
+Observed mode imports the existing matching torch/torchvision pair before
+SimulationApp adds its bundled packages, avoiding mixed CUDA builds. This
+changes import order, not installed libraries. Combined record timestamps use
+the latest camera/LiDAR evidence time, preserving each input's own timestamp.
 
-## Camera model audit
+## Observed-object data flow
+
+The camera segmentation is projected onto the existing LiDAR track using the
+authored camera calibration/extrinsics. A fresh unambiguous target association
+(camera/LiDAR age at most 0.25 s), stationary drift, finite fields and a valid
+initial MPC prediction are required before wheel motion. Actual RGB, object
+and edge masks, associations, weight hashes and per-factor diagnostics are saved.
+
+LiDAR supplies visible geometry and tracked velocity. The existing ABO mass
+adapter receives the associated image crop and geometry; unsupported classes
+remain unavailable. The exposed-edge specialist runs on the same image, and
+only accepted masks associated with the target can supply its continuous
+contact proxy. The bounded plume method cannot run without a clean reference
+and supported open-container source context, so missing prerequisites remain
+explicitly unavailable. No binary hot-soup decision or synthetic low factor is
+introduced. The approach velocity is a configured nominal-route prior; its
+world waypoint comes from the fixed robot goal, not the authored obstacle pose.
+
+The resulting physical-factor adapter output is assessed by CRASafeSAGEPolicy
+and supplied directly as per-track occupancy/guidance parameters. The test
+checks that this policy equals the observed assessment; no substitute phi is
+selected. Complete four-factor readiness is reported independently. A failed
+perception-completeness check does not prohibit this explicitly scoped
+uncertainty-aware navigation test: unknowns drive the normal conservative
+policy. It does prohibit claiming four calibrated or fully observed factors.
+Lambda, safety checks, geometry, speed limits, deadline and goal tolerance stay
+unchanged. Fields/factors are frozen after the stationary assessment during the
+static pass-by; this is not continuously refreshed moving-camera perception.
+
+## Observed-CRA wheel result (2026-10-08)
+
+**PASS: the computed observed phi, 1.0, drove the actual Isaac wheel trial.**
+There were no supplied factor scores in this run (`profiles={}`). The sphere
+was associated with the camera's `sports_ball` detection: 738 of 754 projected
+target returns hit its dilated mask (97.88% overlap), with fused confidence
+0.80336. Camera/LiDAR age was 0.10 s. Twelve distinct stationary scans passed
+with 0.001440 m position drift and 0.000654 degrees yaw drift.
+
+| Factor | Observed evidence / estimator result | Factor assessment |
+|---|---|---|
+| Potential | Visible LiDAR geometry; local support not localized; mass adapter rejects unsupported `sports_ball` | Unknown |
+| Kinetic | LiDAR centroid velocity and relative nominal approach estimated; mass unavailable | Unknown |
+| Contact | Existing exposed-edge checkpoint invoked; no accepted target part mask | Unknown, not zero |
+| Thermal | Clean reference and supported open-container source evidence unavailable | Unknown, not cold |
+
+The normal conservative aggregation therefore gives phi 1.0, flux magnitude
+1.7 and fixed lambda 1.25. This is uncertainty-driven control, not a finding that
+the sphere is physically maximally hazardous. Complete four-factor readiness
+correctly remains false; no supported fields are filled with experimental values.
+
+The robot completed the waypoint in **30.0 simulated seconds**, with 0.08740 m
+final goal distance (tolerance 0.10 m). Minimum monitored policy-footprint
+clearance was **0.21348 m**; the additional 0.50 s stop retained **0.24219 m**.
+Minimum checked MPC/CBF margins were 0.02418 / 0.27453. There were 134 MPC
+interventions, zero CBF interventions and no fallback. Path length was 2.99855 m.
+The saved restaurant scene remained unchanged. The empirical tracking audit
+covered all 150 execution intervals: maximum lookahead axis error 0.00925 m,
+yaw error 0.08734 rad, inside every configured prefix allowance.
+
+The first observed wheel run reported a duration-limit failure even though its
+final executed pose was already inside the goal tolerance. The harness checked
+arrival only before each interval. It now also checks after a fully executed
+interval, after state and clearance checks, so arrival in the last permitted
+interval counts. Regression tests retain rejection of an outside-tolerance pose,
+invalid state and clearance failure. No deadline or goal tolerance was relaxed.
+The original diagnostic remains in `outputs/simple_object/observed-motion/`.
+
+Mean / maximum MPC time was 0.254 / 0.840 s. Real-time control remains unvalidated.
+This test accepts observed-data flow and conservative controller execution,
+not accurate four-factor perception, low-risk sphere recognition, dynamic field
+updates or a CRA performance advantage. The route again passed left under
+right-side soft guidance. Oracle ego pose/calibration references and nominal
+approach/floor priors remain explicitly labeled.
+
+Artifacts: `outputs/simple_object/observed-motion-final/` contains `report.json`,
+`stationary.json`, `vision.json`, `vision-model-invocations.json`, input masks,
+raw camera image, `fusion-overlay.png`, `paths.png` and `tracking-audit.json`.
+Report SHA-256:
+`04f8dd015c7a399845d646323b78e4d4a51588df75ea3cad23774bbdbfd0cfaf`.
+LiDAR capture SHA-256:
+`020a44d91e96a101e300daa19d52793b799d73a6b1a7aad67c3a732b5c99d9c2`.
+Camera PNG SHA-256:
+`67f7d57f5ee5aecc49aad287058ab7cbe504c4080e9cd0380e243f709b0f7bd8`.
+Existing object/mass/contact checkpoint hashes match the earlier stationary
+benchmark. No weights, packages or saved scene assets were changed.
+Final regression: **1,351 unit tests passed**, including 21 simple-object tests;
+repository Ruff and whitespace checks passed.
+
+## Earlier camera model audit (2026-10-05)
 
 An offline replay of the actual saved stationary RGB image detected the sphere
 as `sports_ball` with confidence 0.806. That class is outside the current ABO

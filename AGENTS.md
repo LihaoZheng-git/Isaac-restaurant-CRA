@@ -46,6 +46,11 @@
   LiDAR occupancy and unchanged unknown sensor assessment. Require actual
   waypoint completion for motion acceptance; positive clearance alone is not
   a successful pass-by. See `docs/simple_object_test.md` for its bounded scope.
+- The default simple-object test must use the algorithm's observed evidence
+  assessment unchanged, including conservative phi saturation. Supplied low/high
+  profiles require explicit `--oracle-comparison`. Record complete perception
+  readiness separately from uncertainty-aware controller acceptance: unknown
+  evidence may drive conservative control, but is never a validated low factor.
 - The simple-object controller may enable bounded online turn seeds to escape
   nearly stopped MPC horizons. Keep the nominal obstacle-unaware, retain the
   same objective and exact DTCBF/dense geometry acceptance checks, and report

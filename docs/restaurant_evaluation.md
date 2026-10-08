@@ -242,3 +242,30 @@ actors supported by the bounded factor estimators, validate visibility and
 source/track association stationary, and label priors/oracle controls separately
 from sensor results. Moving-camera plume estimation remains unsupported. Dynamic
 motion experiments need an explicit latency/control-rate assessment first.
+
+## Observed assessment drives the object trial (2026-10-08)
+
+The default sphere test now runs the actual camera segmentation, camera-LiDAR
+association, visual-mass adapter, exposed-edge specialist, LiDAR geometry/motion
+and local fall-surface estimation. Unsupported outputs remain unavailable;
+thermal estimation explicitly reports its missing clean-reference/open-container
+prerequisites. Supplied low/high factor profiles require `--oracle-comparison`.
+
+The algorithm assessed phi=1.0 from conservative unknown handling and passed that
+policy unchanged to the field and MPC/CBF. The fresh Isaac wheel run reached the
+goal at 30.0 s with 0.21348 m minimum monitored target clearance and passed the
+0.50 s stopping check. Stationary camera-LiDAR association, unchanged scene,
+finite prediction and empirical tracking allowance checks passed. An arrival
+check after the final permitted interval fixes a harness boundary error without
+extending the deadline or relaxing goal tolerance. Details and hashes are in
+`docs/simple_object_test.md`.
+
+This fulfills the observed-assessment-to-controller test. It does not establish
+four available or accurate factor estimators for the sphere: mass is unsupported,
+contact non-response remains unknown, fall support is unavailable, and thermal
+prerequisites are absent. Complete four-factor readiness remains false. Select
+supported restaurant actors and validate their evidence stationary before making
+stronger perception claims. Static frozen fields, soft passing-side guidance and
+solve times exceeding the control interval remain limitations.
+Final validation: 1,351 unit tests passed, including 21 simple-object tests;
+repository Ruff and whitespace checks passed.
