@@ -33,6 +33,7 @@ from robot.safety.safe_sage_configuration_space import RectangularRobotFootprint
 from robot.safety.safe_sage_field_pipeline import SafeSAGEFieldPipelineResult
 from robot.safety.safe_sage_unicycle_cbf_filter import SafeSAGEUnicycleCBFFilter
 from robot.safety.safe_sage_unicycle_mpc import SafeSAGEUnicycleMPC
+from robot.safety.semantic_obstacle import SemanticObstacle
 
 
 @dataclass(frozen=True)
@@ -115,7 +116,7 @@ def controlled_object_adapter(
 
 def build_assessed_object_field(
     points_xy, *, adapted, semantic, class_policy, guidance_policy,
-    grid_config, field_config,
+    grid_config, field_config, unassessed_points_xy=None,
 ):
     """Send the assessment's unchanged policy into per-track field parameters.
 
@@ -130,17 +131,41 @@ def build_assessed_object_field(
     if adapted.track_id != semantic.track_id:
         raise ValueError("assessment and semantic track IDs must match")
     policy = CRASafeSAGEPolicy().evaluate(adapted.profile)
+    points_xy = np.asarray(points_xy)
+    point_ids = np.full(len(points_xy), semantic.track_id)
+    semantics = (semantic,)
+    safety = {semantic.track_id: policy.guidance_parameters.safety_parameters}
+    guidance = {semantic.track_id: policy.guidance_parameters}
+    if unassessed_points_xy is not None and len(unassessed_points_xy):
+        # A separate occupancy group, not an inferred object identity. Its
+        # factors remain unavailable and use the unchanged CRA fallback.
+        unknown_id = semantic.track_id + 1_000_000
+        unknown = SemanticObstacle(
+            replace(semantic.tracked_obstacle, track_id=unknown_id,
+                    point_count=len(unassessed_points_xy)),
+            "unknown", 0.0, "unassessed_lidar_occupancy_group",
+        )
+        unknown_policy = CRASafeSAGEPolicy().evaluate(adapt_physical_factors(
+            PhysicalAttributes.unknown(track_id=unknown_id,
+                timestamp_seconds=adapted.timestamp_seconds),
+            timestamp_seconds=adapted.timestamp_seconds,
+        ).profile)
+        points_xy = np.concatenate((points_xy, np.asarray(unassessed_points_xy)))
+        point_ids = np.concatenate((point_ids, np.full(len(unassessed_points_xy), unknown_id)))
+        semantics += (unknown,)
+        safety[unknown_id] = unknown_policy.guidance_parameters.safety_parameters
+        guidance[unknown_id] = unknown_policy.guidance_parameters
     grid = build_local_occupancy_grid(
         points_xy,
-        point_track_ids=np.full(len(points_xy), semantic.track_id),
-        semantic_obstacles=(semantic,), class_safety_policy=class_policy,
+        point_track_ids=point_ids,
+        semantic_obstacles=semantics, class_safety_policy=class_policy,
         config=grid_config,
-        track_safety_parameters={semantic.track_id: policy.guidance_parameters.safety_parameters},
+        track_safety_parameters=safety,
     )
     field = build_safe_sage_field_pipeline(
         grid, guidance_policy=guidance_policy, config=field_config,
-        semantic_obstacles=(semantic,),
-        track_guidance_parameters={semantic.track_id: policy.guidance_parameters},
+        semantic_obstacles=semantics,
+        track_guidance_parameters=guidance,
     )
     return policy, field
 
