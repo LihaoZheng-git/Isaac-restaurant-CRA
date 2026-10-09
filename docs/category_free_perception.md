@@ -96,10 +96,13 @@ Mass-path validation: 30 focused tests, **1,526 full unit tests**, and
 repository-wide Ruff passed. No new training, density input, package install or
 dependency upgrade was needed. This does not establish general-object accuracy.
 
-## Remaining bounded step
+## Next scenario step
 
-Only after readiness: unchanged computed CRA phi in physical pass-by trials,
-with fixed lambda 1.25, obstacle-unaware nominal and online MPC/CBF safety.
+The bounded category-free track is complete through physical pass-by validation.
+Next, select and enrich restaurant props/actors, validate each stationary, then
+run matched restaurant baseline experiments. Moving-camera plume estimation and
+continuous field updates remain separate work; these endpoint trials freeze
+stationary perception during motion.
 
 This track does not claim universal segmentation, general mass accuracy,
 physical sharpness, temperature measurement or universal navigation safety.
@@ -153,3 +156,81 @@ under `outputs/sam2_integration/`;
 comparison `four-factor-summary.json` and `.png`; rejected/accepted diagnostic
 set `all-stationary-diagnostics.json`. No wheel motion in these captures.
 Validation: **80 focused tests**, **1,545 full unit tests**, repository-wide Ruff.
+
+## Physical wheel acceptance
+
+Each wheel trial recaptured RGB/LiDAR and passed four-factor readiness before
+motion. It used the computed phi unchanged, fixed lambda **1.25**, the straight
+obstacle-unaware waypoint nominal, online unicycle MPC and analytical CBF
+rechecks, and physical Nova Carter wheel commands. No controller objective,
+uncertainty policy, mask gate, fall-height gate or tolerance was weakened.
+
+| Fresh trial | Computed phi | Waypoint time | Minimum independent footprint clearance | Stop |
+| --- | ---: | ---: | ---: | --- |
+| Ground matte sphere | 0.98070 | 26.2 s | 0.15301 m | passed |
+| Raised matte sphere, actual YOLO miss | 0.98389 | 34.0 s | 0.12399 m, includes platform | passed |
+| Ground plus visible plume | 0.98965 | 25.2 s | 0.15422 m | passed |
+
+All three reached the waypoint, retained positive MPC/CBF margins and preserved
+the saved restaurant scene. MPC intervened 116/161/111 times respectively;
+CBF remained active for rechecks but needed zero additional interventions.
+Mean/max MPC wall times were 0.196/0.577, 0.228/1.007 and 0.207/0.608 s against
+a 0.20 s planning interval. These are **not real-time deadline results**.
+
+The ground mass estimates were 0.354 and 0.343 kg; raised mass was 0.527 kg and
+inferred support-to-landing drop 0.30125 m. Frame/view variation and broad
+engineering mass bounds remain explicit. Ground continuity and harmful-fall
+opportunity are priors. No true mass, physical sharpness or temperature labels
+were available. The high phi values mainly reflect conservative uncertainty;
+the raw evidence and factor-specific scores still vary continuously.
+
+Support/environment occupancy remains conservative phi 1 and can dominate the
+raised planar field. Different fixture geometry, fresh evidence and solver
+trajectories confound causal risk-to-clearance claims. These runs establish the
+bounded perception-to-policy-to-controller connection, not a CRA advantage,
+monotonic clearance ordering, universal safety or exact paper equivalence.
+The control uses the existing planar/unicycle adaptation, with no moving-camera
+perception or dynamic field updates during execution.
+
+Artifacts: `outputs/sam2_integration/unknown_matte_{ground,raised,plume}_motion/`
+contain complete `report.json`, masks, camera/fusion overlays and `paths.png`.
+`physical-summary.json` fingerprints actual reports and requires physical route
+completion, nonzero command/finite trajectory records, safety margins and safe
+stopping. `--require-motion` rejects a stationary-only report with exit status 1;
+the three actual wheel reports passed with exit status 0. Final validation:
+**47 focused tests**, **1,556 full unit tests**, repository-wide Ruff.
+
+### Reproduction
+
+Use the existing Isaac/vision import bridge and existing local weights. Example
+from the repository root (process-only environment; no installation):
+
+```powershell
+$env:ISAAC_SIM_HEADLESS = '1'
+$env:CRA_VISION_SITE_PACKAGES = 'C:\Users\tayli\anaconda3\envs\env_60_isaacsim_yolo\Lib\site-packages'
+$env:YOLO_MODEL_PATH = 'C:\myworkplace\models\ultralytics\yolo11n-seg.pt'
+$env:VISUAL_MASS_CHECKPOINT = 'outputs/visual_mass_data/abo/baseline_frozen_final_v2/best.pt'
+$env:CONTACT_SEGMENTATION_CHECKPOINT = 'runs/segment/outputs/contact_perception/training/yolo11n_seg_paco_geometry/weights/best.pt'
+$env:SAM2_CHECKPOINT = 'outputs/sam2_integration/sam2.1_t.pt'
+& C:/isaacsim/python.bat -u -c "import sys,os,runpy; sys.path.insert(0, os.environ['CRA_VISION_SITE_PACKAGES']); target='scripts/demos/cra_simple_object_isaac_demo.py'; sys.argv=[target,*sys.argv[1:]]; runpy.run_path(target,run_name='__main__')" `
+  --output outputs/sam2_integration/reproduction-ground-stationary `
+  --object-radius 0.18 --object-appearance matte --instance-mask-geometry `
+  --sam-instance-proposal --category-free-visual-mass --object-plume-policy `
+  --ground-continuity-prior --worst-case-fall-interaction-prior `
+  --require-four-factor-readiness
+```
+
+For raised, remove `--ground-continuity-prior` and add `--support-drop-m 0.30
+--fall-landing-maximum-offset-m 2.5`. For plume, add `--plume-control persistent`.
+Use fresh output directories. Validate stationary first; then add `--motion
+--motion-maximum-seconds 40` in another directory, which repeats the gate before
+commands. Check report acceptance, because Isaac shutdown can mask exceptions.
+
+```powershell
+& C:/Users/tayli/anaconda3/envs/env_60_isaacsim_yolo/python.exe `
+  scripts/evaluation/cra_category_free_report.py --require-motion `
+  --case ground=outputs/sam2_integration/unknown_matte_ground_motion `
+  --case raised=outputs/sam2_integration/unknown_matte_raised_motion `
+  --case plume=outputs/sam2_integration/unknown_matte_plume_motion `
+  --output outputs/sam2_integration/physical-summary.json
+```

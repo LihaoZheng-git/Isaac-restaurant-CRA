@@ -120,18 +120,97 @@ def summarize_capture(report, mass_dataflow, sam_record):
     }
 
 
+def summarize_motion(report):
+    """Require actual wheel motion, goal arrival and safe stopping, not clearance alone."""
+    trial = report.get("motion", {}).get("observed", {})
+    reasons = []
+    for key in ("passed", "route_complete"):
+        if trial.get(key) is not True:
+            reasons.append(f"motion {key} did not pass")
+    if trial.get("motion_mode") != "Isaac Nova Carter physical wheel commands":
+        reasons.append("physical wheel-command trial is unavailable")
+    if not report.get("scene_file_unchanged") or not report.get("passed"):
+        reasons.append("final report or scene-preservation check failed")
+    clearance = trial.get("minimum_clearance_m")
+    if clearance is None or not math.isfinite(clearance) or clearance <= 0.02:
+        reasons.append("independent clearance guard did not pass")
+    stopping = trial.get("stopping", {})
+    stopping_clearance = stopping.get("minimum_clearance_m")
+    if (
+        not stopping.get("passed")
+        or stopping_clearance is None
+        or not math.isfinite(stopping_clearance)
+        or stopping_clearance <= 0.02
+    ):
+        reasons.append("safe stopping did not pass")
+    for name in ("minimum_mpc_margin", "minimum_cbf_margin"):
+        value = trial.get(name)
+        if value is None or not math.isfinite(value) or value < -1e-6:
+            reasons.append(f"{name} did not pass")
+    if trial.get("mpc_intervention_count", 0) <= 0:
+        reasons.append("online MPC intervention was not observed")
+    commands = trial.get("commands", [])
+    nominal = trial.get("nominal_commands", [])
+    trajectory = trial.get("trajectory", [])
+    if (
+        not commands
+        or len(commands) != len(nominal)
+        or not trajectory
+        or not all(
+            len(row) == 2 and all(math.isfinite(v) for v in row)
+            for row in commands + nominal
+        )
+        or not all(
+            len(row) == 3 and all(math.isfinite(v) for v in row) for row in trajectory
+        )
+        or not any(abs(v) > 1e-6 for row in commands for v in row)
+    ):
+        reasons.append(
+            "finite physical trajectory and nonzero command records are required"
+        )
+    return {
+        "accepted": not reasons,
+        "reasons": reasons,
+        **{
+            key: trial.get(key)
+            for key in (
+                "route_complete",
+                "termination",
+                "minimum_clearance_m",
+                "minimum_mpc_margin",
+                "minimum_cbf_margin",
+                "mpc_intervention_count",
+                "cbf_intervention_count",
+                "simulated_seconds",
+                "path_length_m",
+                "mean_mpc_wall_seconds",
+                "maximum_mpc_wall_seconds",
+            )
+        },
+        "stopping_passed": stopping.get("passed", False),
+        "scope": "frozen stationary perception/field; bounded physical wheel pass, not real-time perception or universal safety",
+    }
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--case", action="append", required=True, help="label=actual capture directory"
     )
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument(
+        "--require-motion",
+        action="store_true",
+        help="inspect final physical report and require arrival/stopping",
+    )
     args = parser.parse_args()
     rows = {}
     for specification in args.case:
         label, directory = specification.split("=", 1)
         path = Path(directory)
-        report_path = path / "stationary.json"
+        report_path = path / (
+            "report.json" if args.require_motion else "stationary.json"
+        )
         report = json.loads(report_path.read_text(encoding="utf-8"))
         frame_id = json.loads((path / "vision.json").read_text(encoding="utf-8"))[
             "camera_info"
@@ -143,6 +222,9 @@ def main():
             json.loads(mass_path.read_text(encoding="utf-8")),
             json.loads(sam_path.read_text(encoding="utf-8")),
         )
+        if args.require_motion:
+            row["motion"] = summarize_motion(report)
+            row["accepted"] = row["accepted"] and row["motion"]["accepted"]
         row["artifacts"] = {
             p.name: {
                 "path": str(p.resolve()),
@@ -159,6 +241,7 @@ def main():
             row["yolo_mask_miss_on_sam_instance"] is True for row in rows.values()
         ),
         "scope": "configured category-free fixtures; ground/fall interaction priors remain explicit",
+        "physical_motion_required": args.require_motion,
     }
     args.output.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
     import matplotlib
@@ -204,6 +287,8 @@ def main():
             }
         )
     )
+    if args.require_motion and not payload["all_cases_accepted"]:
+        raise SystemExit(1)
 
 
 if __name__ == "__main__":
