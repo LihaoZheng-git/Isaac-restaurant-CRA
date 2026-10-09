@@ -59,6 +59,8 @@ parser.add_argument("--chromatic-instance-proposal", action="store_true",
                     help="explicit separated uniformly chromatic object/contrasting-background RGB domain; class stays unknown")
 parser.add_argument("--sam-instance-proposal", action="store_true",
                     help="LiDAR-prompted SAM 2.1 RGB mask; unknown class; SAM2_CHECKPOINT must be an audited local Tiny checkpoint")
+parser.add_argument("--category-free-visual-mass", action="store_true",
+                    help="explicit SAM-associated RGB/LiDAR network extrapolation without class or density input")
 parser.add_argument("--worst-case-fall-interaction-prior", action="store_true",
                     help="explicit harmful-fall interaction prior, upper bound one, independent of route overlap")
 parser.add_argument("--fall-landing-maximum-offset-m", type=float, default=2.0)
@@ -86,6 +88,8 @@ if args.chromatic_instance_proposal and not args.instance_mask_geometry:
     parser.error("chromatic proposal requires instance-mask geometry")
 if args.sam_instance_proposal and (not args.instance_mask_geometry or args.chromatic_instance_proposal or args.seed_color_outline):
     parser.error("SAM proposal requires instance-mask geometry and excludes chromatic/seed-color outline modes")
+if args.category_free_visual_mass and (not args.sam_instance_proposal or args.sphere_density_prior_kg_m3 is not None):
+    parser.error("category-free visual mass requires SAM and excludes density-prior mass fallback")
 if not 0 <= args.instance_mask_margin_pixels <= 6:
     parser.error("instance mask margin must lie within [0, 6] pixels")
 if (not math.isfinite(args.ground_prior_maximum_extrapolation_m)
@@ -300,6 +304,7 @@ def main():
         contact_detector.initialize()
         mass_estimator = VisualMassRuntimeEstimator(VisualMassRuntimeConfig(
             checkpoint_path=paths["mass"], device=device,
+            allow_category_free_instances=args.category_free_visual_mass,
         ))
         if args.sam_instance_proposal:
             sam_path = Path(os.environ.get("SAM2_CHECKPOINT", ""))
@@ -708,10 +713,15 @@ def main():
     )
     sensor_attributes = replace(base, geometry=geometry, motion=motion)
     if mass_estimator is not None and target_association.is_matched:
-        mass = mass_estimator.estimate(
-            image_rgb, detections.detections[target_association.detection_index],
-            geometry, timestamp_seconds=evidence_timestamp,
-        )
+        if args.category_free_visual_mass:
+            mass = mass_estimator.estimate_instance(image_rgb, detections,
+                target_association, geometry, track_id=target.track_id,
+                timestamp_seconds=evidence_timestamp)
+        else:
+            mass = mass_estimator.estimate(
+                image_rgb, detections.detections[target_association.detection_index],
+                geometry, timestamp_seconds=evidence_timestamp,
+            )
         learned_mass_available = mass.mass_kg.is_available
         if args.sphere_density_prior_kg_m3 is not None:
             nominal, lower, upper = args.sphere_density_prior_kg_m3
@@ -751,6 +761,11 @@ def main():
             "runtime_mass_status": mass.mass_kg.status.value,
             "evidence": mass.mass_kg.evidence,
         }
+        if args.category_free_visual_mass:
+            from robot.perception.visual_mass_live_diagnostic import evaluate_live_visual_mass_dataflow
+            evaluate_live_visual_mass_dataflow((sensor_attributes,),
+                checkpoint_sha256=mass_estimator.checkpoint_sha256,
+                instance_associations=(target_association,)).write_json(args.output / "live-mass-dataflow.json")
         save_json("vision-model-invocations.json", model_invocations)
     potential_interaction = None
     if args.worst_case_fall_interaction_prior:
@@ -1152,6 +1167,7 @@ def main():
         "instance_mask_margin_pixels": args.instance_mask_margin_pixels,
         "chromatic_instance_proposal_enabled": args.chromatic_instance_proposal,
         "sam_instance_proposal_enabled": args.sam_instance_proposal,
+        "category_free_visual_mass_enabled": args.category_free_visual_mass,
         "full_target_track_return_count": len(full_track_xyz),
         "unassessed_occupancy_return_count": len(unassessed_points_anchor) if unassessed_points_anchor is not None else 0,
         "unassessed_occupancy_phi": 1.0 if args.instance_mask_geometry else None,

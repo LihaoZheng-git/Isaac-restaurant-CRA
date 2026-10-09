@@ -125,3 +125,9 @@
   ambiguous/boundary/contaminated proposals, and retain all unmatched occupancy.
   See `docs/category_free_perception.md`; the first stationary glossy sphere was
   recognized by YOLO and must not be described as a detector-miss demonstration.
+- Category-free mass uses the separate opt-in `estimate_instance` API with
+  a fresh accepted SAM association and live LiDAR geometry. The legacy class
+  guard stays intact. No density or category is a network input; retain the
+  domain-extrapolation marker, original confidence cap and engineering bounds.
+  Unknown class does not mean missing instance association. These live results
+  establish rough-heaviness dataflow, not calibrated general-object mass.

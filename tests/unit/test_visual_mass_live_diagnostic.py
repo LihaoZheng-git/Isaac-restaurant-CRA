@@ -1,4 +1,5 @@
 import json
+from dataclasses import replace
 
 import pytest
 
@@ -16,6 +17,8 @@ from robot.perception.visual_mass_live_diagnostic import (
     evaluate_live_visual_mass_dataflow,
 )
 from robot.perception.visual_mass_runtime import VISUAL_MASS_RUNTIME_SOURCE
+from robot.perception.visual_mass_runtime import CATEGORY_FREE_MASS_EVIDENCE
+from robot.perception.sam_instance_segmentation import SAM_INSTANCE_SOURCE
 
 
 def estimate(value, unit, source, status=EstimateStatus.INFERRED):
@@ -41,9 +44,7 @@ def attributes(
         item.geometry.center_height_m,
         item.geometry.fall_height_m,
     )
-    mass = MassAttributes(
-        estimate(6.0, "kg", VISUAL_MASS_RUNTIME_SOURCE, mass_status)
-    )
+    mass = MassAttributes(estimate(6.0, "kg", VISUAL_MASS_RUNTIME_SOURCE, mass_status))
     return PhysicalAttributes(
         item.track_id,
         item.semantic_class,
@@ -125,3 +126,34 @@ def test_rejected_fusion_candidate_cannot_drive_mass_estimation():
 
     assert accepted_detection_index(attempted) is None
     assert accepted_detection_index(matched) == 7
+
+
+def test_unknown_class_with_accepted_instance_is_not_missing_association():
+    item = attributes()
+    item = replace(
+        item,
+        semantic_class="unknown",
+        semantic_source=SAM_INSTANCE_SOURCE,
+        mass=MassAttributes(
+            replace(
+                item.mass.mass_kg,
+                evidence=(CATEGORY_FREE_MASS_EVIDENCE, "accepted_instance_track_id=4"),
+            )
+        ),
+    )
+    matched = TrackSemanticAssociation(
+        4, "matched", 10, 0, 8, 0.8, 0.75, True, (20.0, 30.0)
+    )
+    report = evaluate_live_visual_mass_dataflow(
+        (item,), checkpoint_sha256="a" * 64, instance_associations=(matched,)
+    )
+    assert report.live_dataflow_valid
+    assert not report.ready_for_sensor_domain_accuracy_claim
+    assert not evaluate_live_visual_mass_dataflow(
+        (item,), checkpoint_sha256="a" * 64
+    ).live_dataflow_valid
+    assert not evaluate_live_visual_mass_dataflow(
+        (replace(item, semantic_source="authored_mask"),),
+        checkpoint_sha256="a" * 64,
+        instance_associations=(matched,),
+    ).live_dataflow_valid
