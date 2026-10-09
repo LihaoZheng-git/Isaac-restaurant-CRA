@@ -383,3 +383,15 @@ the sphere without requiring open-container classification. Thermal is now
 available in that named proxy mode; justified fall evidence remains unknown and
 mass remains prior-dependent. Aggregate phi is still saturated. Earlier reports
 above describe their original inputs and are not revised into later results.
+
+The next ground-support improvement is documented in
+`docs/four_factor_simple_object_readiness.md`. It admits an explicit bounded
+floor-continuity PRIOR checked against a LiDAR plane and fitted sphere bottom.
+Two fresh stationary cases pass all-four-factor readiness in prior-assisted
+mode, with computed phi 0.957558 and 0.970768. Sensor-only readiness remains false;
+no object height is substituted for drop and no unknown hazard is set to zero.
+Their subsequent physical wheel trials also passed, with fresh computed phi
+0.957502/0.969787, goal times 25.4/28.4 s, minimum monitored footprint clearances
+0.1538/0.2047 m and successful stopping checks. These complete the selected
+prior-assisted evidence-to-controller gate, not sensor-only or universal safety
+validation. See that document for report hashes and timing/visibility limits.

@@ -282,3 +282,14 @@ unknown, aggregate phi remains 1.0, and complete sensor-only readiness is false.
 The latest revision passed 1,406 unit tests, Ruff and stationary component/dataflow
 diagnostics. No additional wheel-motion experiment or restaurant enrichment is
 included in these improvements.
+
+The subsequent prior-assisted ground-support branch is documented in
+`docs/four_factor_simple_object_readiness.md`. Small/large sphere captures now
+have all four admitted factor inputs and distinct computed phi/Safe-SAGE flux.
+Floor continuity and effective density remain explicit priors; sensor-only
+readiness is still false. These selected simple-object gates do not validate
+humans, elevated objects, restaurant clutter or moving-camera plume perception.
+Both selected prior-assisted wheel trials subsequently reached the waypoint and
+passed stopping checks using their freshly computed phi unchanged. The test now
+supports moving to selected restaurant actor/setup design, with stationary
+validation still required for each new actor and evidence domain.
