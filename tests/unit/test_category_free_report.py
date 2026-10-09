@@ -2,7 +2,10 @@ from copy import deepcopy
 
 import pytest
 
-from scripts.evaluation.cra_category_free_report import summarize_capture
+from scripts.evaluation.cra_category_free_report import (
+    summarize_capture,
+    summarize_motion,
+)
 from robot.perception.sam_instance_segmentation import SAM_INSTANCE_SOURCE
 from robot.perception.visual_mass_runtime import (
     CATEGORY_FREE_MASS_EVIDENCE,
@@ -149,3 +152,70 @@ def test_recognized_instance_is_not_a_detector_miss():
         summarize_capture(report, dataflow, sam)["yolo_mask_miss_on_sam_instance"]
         is False
     )
+
+
+def motion_report():
+    return {
+        "passed": True,
+        "scene_file_unchanged": True,
+        "motion": {
+            "observed": {
+                "passed": True,
+                "route_complete": True,
+                "motion_mode": "Isaac Nova Carter physical wheel commands",
+                "minimum_clearance_m": 0.2,
+                "minimum_mpc_margin": 0.0,
+                "minimum_cbf_margin": 0.0,
+                "mpc_intervention_count": 5,
+                "commands": [[0.1, 0.2]],
+                "nominal_commands": [[0.2, 0.0]],
+                "trajectory": [[0.0, 0.0, 0.0], [2.4, -0.1, 0.2]],
+                "stopping": {"passed": True, "minimum_clearance_m": 0.3},
+            }
+        },
+    }
+
+
+def test_actual_wheel_motion_arrival_and_stopping_are_required():
+    assert summarize_motion(motion_report())["accepted"]
+
+
+@pytest.mark.parametrize(
+    "case",
+    [
+        "not_complete",
+        "predicted_only",
+        "stopping",
+        "nan_stopping",
+        "clearance",
+        "cbf",
+        "no_intervention",
+        "invalid_state",
+        "zero_commands",
+        "scene_changed",
+    ],
+)
+def test_motion_failure_cannot_be_hidden_by_positive_clearance(case):
+    report = motion_report()
+    trial = report["motion"]["observed"]
+    if case == "not_complete":
+        trial["route_complete"] = False
+    elif case == "predicted_only":
+        trial["motion_mode"] = "offline predicted chassis states"
+    elif case == "stopping":
+        trial["stopping"]["passed"] = False
+    elif case == "nan_stopping":
+        trial["stopping"]["minimum_clearance_m"] = float("nan")
+    elif case == "clearance":
+        trial["minimum_clearance_m"] = 0.01
+    elif case == "cbf":
+        trial["minimum_cbf_margin"] = -0.01
+    elif case == "no_intervention":
+        trial["mpc_intervention_count"] = 0
+    elif case == "invalid_state":
+        trial["trajectory"][0][0] = float("nan")
+    elif case == "zero_commands":
+        trial["commands"] = [[0.0, 0.0]]
+    elif case == "scene_changed":
+        report["scene_file_unchanged"] = False
+    assert not summarize_motion(report)["accepted"]

@@ -1,5 +1,10 @@
 # Simple-object CRA and Safe-SAGE test
 
+The later [category-free SAM/mass integration](category_free_perception.md)
+adds three accepted four-factor prior-assisted wheel trials, including an
+actual YOLO miss. Its category-free neural mass path requires no density input;
+the earlier incomplete/oracle runs below remain historical results.
+
 The default test now uses the object's **observed camera/LiDAR evidence and
 the algorithm's computed CRA policy unchanged**, including conservative unknown
 handling. The former low/high supplied-profile comparison is available only

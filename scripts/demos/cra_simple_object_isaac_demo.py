@@ -590,7 +590,7 @@ def main():
             },
             "thermal": {
                 "invoked": False, "evidence_status": "unavailable",
-                "reason": "bounded RGB plume estimator requires a clean reference and supported open-container source evidence",
+                "reason": "RGB object-plume proxy requires an explicitly validated stationary clean-reference window",
             },
         }
         sensor_dataflow_passed = target_association.is_matched and camera_lidar_age <= 0.25

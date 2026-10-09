@@ -138,3 +138,11 @@
   drop uses the explicitly recorded 2.5 m search scope, not authored height.
   Larger ground fixtures can fail the unchanged bottom-uncertainty gate even
   when mass inference succeeds; keep potential unknown and block full motion.
+- Category-free ground, raised (actual YOLO miss), and positive-plume wheel
+  trials completed under unchanged computed phi and fixed lambda. This is a
+  stationary-estimation/frozen-field endpoint gate, not continuous moving-camera
+  estimation, calibrated mass, physical sharpness, temperature or a causal CRA
+  advantage. Require actual arrival and safe stopping in later tests; the
+  category-free report's `--require-motion` rejects stationary-only records.
+  Preserve failed larger-ground/shorter-landing diagnostics and the documented
+  conservative uncertainty/support dominance. See `docs/category_free_perception.md`.
