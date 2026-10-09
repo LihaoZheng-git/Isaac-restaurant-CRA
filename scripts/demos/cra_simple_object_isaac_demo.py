@@ -57,6 +57,8 @@ parser.add_argument("--instance-mask-margin-pixels", type=int, default=0,
                     help="geometry selection margin; association retains its separate six-pixel tolerance")
 parser.add_argument("--chromatic-instance-proposal", action="store_true",
                     help="explicit separated uniformly chromatic object/contrasting-background RGB domain; class stays unknown")
+parser.add_argument("--sam-instance-proposal", action="store_true",
+                    help="LiDAR-prompted SAM 2.1 RGB mask; unknown class; SAM2_CHECKPOINT must be an audited local Tiny checkpoint")
 parser.add_argument("--worst-case-fall-interaction-prior", action="store_true",
                     help="explicit harmful-fall interaction prior, upper bound one, independent of route overlap")
 parser.add_argument("--fall-landing-maximum-offset-m", type=float, default=2.0)
@@ -82,6 +84,8 @@ if args.instance_mask_geometry and args.oracle_comparison:
     parser.error("instance geometry requires observed mode")
 if args.chromatic_instance_proposal and not args.instance_mask_geometry:
     parser.error("chromatic proposal requires instance-mask geometry")
+if args.sam_instance_proposal and (not args.instance_mask_geometry or args.chromatic_instance_proposal or args.seed_color_outline):
+    parser.error("SAM proposal requires instance-mask geometry and excludes chromatic/seed-color outline modes")
 if not 0 <= args.instance_mask_margin_pixels <= 6:
     parser.error("instance mask margin must lie within [0, 6] pixels")
 if (not math.isfinite(args.ground_prior_maximum_extrapolation_m)
@@ -146,6 +150,7 @@ from robot.perception.camera_lidar_fusion import (
 from robot.perception.contact_detection_adapter import associate_contact_parts_to_objects
 from robot.perception.lidar_fall_surfaces import LidarFallSurfaceConfig, estimate_lidar_fall_surfaces
 from robot.perception.instance_lidar_geometry import masked_track_return_selection, propose_chromatic_instance
+from robot.perception.sam_instance_segmentation import SamInstanceConfig, SamInstanceSegmenter, SAM_INSTANCE_SOURCE
 from robot.perception.ground_support import GroundSupportConfig, estimate_spherical_ground_support
 from robot.perception.motion_attributes import RouteMotionContext, estimate_track_motion
 from robot.perception.physical_attributes import EstimateStatus, PhysicalAttributes, ScalarEstimate
@@ -238,8 +243,33 @@ def append_chromatic_proposal(rgb, frame, projection, ids, track_id):
         model_name=f"{frame.model_name}+{result.source}")
 
 
+def append_sam_proposal(segmenter, rgb, frame, projection, ids, track_id):
+    segmenter.set_image(rgb)
+    result = segmenter.propose(ids, projection, track_id=track_id)
+    save_json(f"sam-mask-frame-{frame.source_frame_id}.json", {
+        "source": result.source, "prompt_xy": result.prompt_xy,
+        "model_quality": result.model_quality,
+        "projected_track_points": result.projected_track_points,
+        "mask_track_hits": result.mask_track_hits,
+        "rejection_reasons": result.rejection_reasons,
+        "image_encoder_wall_seconds": result.image_encoder_wall_seconds,
+        "decoder_wall_seconds": result.inference_wall_seconds,
+        "checkpoint_sha256": segmenter.checkpoint_sha256,
+        "class_or_density_input": False, "authored_prompt_or_mask": False,
+    })
+    if result.detection is None:
+        raise RuntimeError(f"SAM proposal rejected: {result.rejection_reasons}")
+    mask = result.detection.mask
+    np.save(args.output / f"sam-mask-frame-{frame.source_frame_id}.npy", mask, allow_pickle=False)
+    kept = tuple(item for item in frame.detections
+        if np.count_nonzero(item.mask & mask) / max(1, min(item.mask.sum(), mask.sum())) < .5)
+    return replace(frame, detections=(result.detection, *kept),
+        model_name=f"{frame.model_name}+{result.source}")
+
+
 def main():
     detector = contact_detector = mass_estimator = None
+    sam_segmenter = None
     model_artifacts = {}
     if not args.oracle_comparison:
         # Explicit existing paths prevent automatic weight downloads. Keep the
@@ -271,6 +301,11 @@ def main():
         mass_estimator = VisualMassRuntimeEstimator(VisualMassRuntimeConfig(
             checkpoint_path=paths["mass"], device=device,
         ))
+        if args.sam_instance_proposal:
+            sam_path = Path(os.environ.get("SAM2_CHECKPOINT", ""))
+            sam_segmenter = SamInstanceSegmenter(SamInstanceConfig(sam_path, device=device))
+            model_artifacts["sam"] = {"path": str(sam_path.resolve()),
+                                      "sha256": sam_segmenter.checkpoint_sha256}
     class_policy, guidance_policy, grid_config, field_config = (
         existing.create_fixed_field_configuration()
     )
@@ -450,11 +485,18 @@ def main():
             stage, source_prim_path=stationary.ROBOT_BASE_PRIM_PATH,
             target_prim_path=camera.camera_prim_path,
         )
-        if args.chromatic_instance_proposal:
+        if args.chromatic_instance_proposal or args.sam_instance_proposal:
             proposal_projection = project_fisheye_polynomial_points(obstacle_xyz,
                 camera_from_source=camera_from_robot, calibration=calibration)
-            detections = append_chromatic_proposal(image_rgb, detections,
-                proposal_projection, tracking.point_track_ids, target.track_id)
+            if args.sam_instance_proposal:
+                save_json("yolo-before-sam.json", {"detections": [
+                    {"class": item.semantic_class, "confidence": item.confidence,
+                     "bounding_box": asdict(item.bounding_box)} for item in detections.detections]})
+                detections = append_sam_proposal(sam_segmenter, image_rgb, detections,
+                    proposal_projection, tracking.point_track_ids, target.track_id)
+            else:
+                detections = append_chromatic_proposal(image_rgb, detections,
+                    proposal_projection, tracking.point_track_ids, target.track_id)
         fusion = CameraLidarSemanticFusion(CameraLidarFusionConfig(
             minimum_mask_hits=4, minimum_overlap_fraction=0.10,
             mask_dilation_radius_pixels=6, projected_median_box_margin_pixels=12,
@@ -486,6 +528,8 @@ def main():
         if args.chromatic_instance_proposal and target_association.is_matched:
             observed_semantic = replace(observed_semantic,
                 label_source="lidar_seeded_chromatic_rgb_component")
+        if args.sam_instance_proposal and target_association.is_matched:
+            observed_semantic = replace(observed_semantic, label_source=SAM_INSTANCE_SOURCE)
         part_frame = contact_detector.detect(
             image_rgb, source_frame_id=camera_info.read_index,
             source_timestamp_seconds=camera_info.simulation_time_seconds,
@@ -757,6 +801,9 @@ def main():
                 source_timestamp_seconds=frame_info.simulation_time_seconds)
             if args.chromatic_instance_proposal:
                 frame_detections = append_chromatic_proposal(frame_rgb, frame_detections,
+                    proposal_projection, tracking.point_track_ids, target.track_id)
+            if args.sam_instance_proposal:
+                frame_detections = append_sam_proposal(sam_segmenter, frame_rgb, frame_detections,
                     proposal_projection, tracking.point_track_ids, target.track_id)
             frame_outline_ok = True
             if args.seed_color_outline:
@@ -1104,6 +1151,7 @@ def main():
         "instance_mask_geometry_enabled": args.instance_mask_geometry,
         "instance_mask_margin_pixels": args.instance_mask_margin_pixels,
         "chromatic_instance_proposal_enabled": args.chromatic_instance_proposal,
+        "sam_instance_proposal_enabled": args.sam_instance_proposal,
         "full_target_track_return_count": len(full_track_xyz),
         "unassessed_occupancy_return_count": len(unassessed_points_anchor) if unassessed_points_anchor is not None else 0,
         "unassessed_occupancy_phi": 1.0 if args.instance_mask_geometry else None,

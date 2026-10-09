@@ -118,3 +118,10 @@
   computed-policy replay explicitly offline, with excluded support/environment
   and no wheel motion. Neither replay nor differing platform paths establishes
   a potential-only causal clearance effect. See the paired potential test report.
+- The opt-in SAM 2.1 Tiny adapter uses an observed LiDAR pixel prompt and an
+  audited local checkpoint through the existing Ultralytics backend. Class
+  remains unknown; accepted instance association is distinct from a known class.
+  Keep model mask quality separate from heuristic evidence confidence, reject
+  ambiguous/boundary/contaminated proposals, and retain all unmatched occupancy.
+  See `docs/category_free_perception.md`; the first stationary glossy sphere was
+  recognized by YOLO and must not be described as a detector-miss demonstration.
