@@ -30,6 +30,8 @@ parser.add_argument("--motion", action="store_true")
 parser.add_argument("--oracle-comparison", action="store_true")
 parser.add_argument("--object-plume-policy", action="store_true",
                     help="validate a stationary object-level plume window using this controlled clean fixture")
+parser.add_argument("--plume-control", choices=("none", "intermittent", "persistent"), default="none",
+                    help="rendered RGB fixture control, never supplied as a thermal score")
 parser.add_argument("--ground-continuity-prior", action="store_true",
                     help="explicit bounded flat-floor continuity assumption; result remains PRIOR")
 parser.add_argument("--ground-prior-maximum-extrapolation-m", type=float, default=1.5)
@@ -50,6 +52,8 @@ if (not math.isfinite(args.ground_prior_maximum_extrapolation_m)
     parser.error("ground prior extrapolation must lie in (0, 2.0] m")
 if args.oracle_comparison and (args.require_four_factor_readiness or args.ground_continuity_prior):
     parser.error("ground/four-factor observed readiness is separate from --oracle-comparison")
+if args.plume_control != "none" and (not args.object_plume_policy or args.oracle_comparison):
+    parser.error("plume controls require the observed --object-plume-policy path")
 if args.sphere_density_prior_kg_m3 is not None:
     nominal, lower, upper = args.sphere_density_prior_kg_m3
     if not all(math.isfinite(value) for value in (nominal, lower, upper)) or not 0 < lower <= nominal <= upper:
@@ -230,6 +234,19 @@ def main():
         sphere.AddTranslateOp().Set(Gf.Vec3d(*CENTER_WORLD_XY, RADIUS_M))
         sphere.CreateDisplayColorAttr([Gf.Vec3f(0.15, 0.45, 0.95)])
         UsdPhysics.CollisionAPI.Apply(sphere.GetPrim())
+        # Bounded visual puffs, like the accepted bowl fixture: no temperature,
+        # aerosol physics or collision geometry. Begin hidden for the reference.
+        puffs = []
+        for index in range(4):
+            puff = UsdGeom.Sphere.Define(stage, f"/World/CRASimpleObject/Plume/Puff{index}")
+            puff.CreateRadiusAttr(.035 + .009 * index)
+            puff.AddTranslateOp().Set(Gf.Vec3d(
+                CENTER_WORLD_XY[0], CENTER_WORLD_XY[1] + .012 * (-1)**index,
+                2 * RADIUS_M + .07 + .085 * index))
+            puff.AddScaleOp().Set(Gf.Vec3f(1, 1, 1.4))
+            puff.CreateDisplayColorAttr([Gf.Vec3f(.8, .8, .8)])
+            puff.MakeInvisible()
+            puffs.append(puff)
     root_unchanged_by_fixture = stage.GetRootLayer().ExportToString() == root_before
     controller = NovaCarterController(robot_prim_path=stationary.ROBOT_PRIM_PATH)
     SimulationManager.setup_simulation(
@@ -511,11 +528,17 @@ def main():
     if args.object_plume_policy and detector is not None:
         reference_time = camera_info.simulation_time_seconds
         plume_observations = []
-        for _ in range(3):
+        visible_counts = {"none": (0, 0, 0), "intermittent": (3, 0, 3),
+                          "persistent": (4, 4, 4)}[args.plume_control]
+        for frame_index, count in enumerate(visible_counts):
+            with Usd.EditContext(stage, stage.GetSessionLayer()):
+                for index, puff in enumerate(puffs):
+                    puff.MakeVisible() if index < count else puff.MakeInvisible()
             for _ in range(6):
                 controller.stop()
                 simulation_app.update()
             frame_rgb = camera.get_rgb()
+            plt.imsave(args.output / f"plume-frame-{frame_index}.png", frame_rgb)
             frame_info = camera.get_frame_info()
             frame_detections = detector.detect(frame_rgb, source_frame_id=frame_info.read_index,
                 source_timestamp_seconds=frame_info.simulation_time_seconds)
@@ -535,12 +558,15 @@ def main():
         object_plumes = estimate_object_plume_evidence(image_rgb,
             reference_timestamp_seconds=reference_time, observations=tuple(plume_observations),
             timestamp_seconds=evidence_timestamp, clean_reference_validated=True,
-            negative_validation_scope="controlled fixed-camera sphere fixture with no authored plumes; positive/negative backend controls tested separately")
+            negative_validation_scope="controlled fixed-camera rendered-puff fixture; initially clean reference, same observed object; no temperature or aerosol-identity claim")
         save_json("object-plume-evidence.json", {
             "records": {str(track): asdict(value) for track, value in object_plumes.items()},
             "reference_timestamp": reference_time,
             "camera_stationary": all(item.camera_stationary for item in plume_observations),
             "tracking_geometry_frozen": True,
+            "rendered_control": args.plume_control,
+            "visible_puff_counts": visible_counts,
+            "control_used_as_estimator_score": False,
             "maximum_camera_track_age_seconds": max(item.detections.source_timestamp_seconds-timestamp
                                                       for item in plume_observations),
         })
@@ -809,6 +835,7 @@ def main():
         "prior_assisted_perception_readiness": asdict(prior_readiness),
         "four_factor_readiness_required": args.require_four_factor_readiness or args.ground_continuity_prior,
         "ground_continuity_prior_enabled": args.ground_continuity_prior,
+        "plume_control": args.plume_control,
         "ground_support_configuration": asdict(ground_config) if ground_config is not None else None,
         "sensor_dataflow_passed": sensor_dataflow_passed,
         "camera_lidar_age_seconds": camera_lidar_age,
@@ -853,6 +880,7 @@ def main():
             "ground-support harmful-fall interaction uses a separately labeled worst-case PRIOR upper bound 1, not route probability or absence of risk",
             "no plume is not proof of a cold object; absent thermal prerequisites stay unknown",
             "optional object plume policy accepts low visible cue only with validated stationary clean-reference observations; all track records include rejection reasons",
+            "plume controls alter rendered RGB only; puffs are opaque stylized proxies, not simulated steam or temperature; LiDAR geometry is frozen before puffs appear",
             "kinetic uses nonzero 0.20 m/s relative approach speed even though the object is stationary",
             "authored location selects the target track; authored radius only scores independent clearance",
             "unsupported estimator outputs remain unavailable with per-factor rejection reasons",

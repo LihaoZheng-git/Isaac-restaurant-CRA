@@ -67,6 +67,7 @@ def pipeline(
     velocity=0.0,
     pointed=False,
     plume=False,
+    plume_fraction=1.0,
     continuity=True,
     density=True,
 ):
@@ -126,7 +127,7 @@ def pipeline(
     for i, timestamp in enumerate((1.8, 1.9, 2.0)):
         image = reference.copy()
         if plume:
-            image[140:195, 142:158] = 220
+            image[195 - round(55 * plume_fraction):195, 142:158] = 220
         frame = SemanticDetectionFrame(
             i + 10, timestamp, 300, 300, (detected,), "fixture", 0
         )
@@ -218,3 +219,18 @@ def test_missing_inputs_still_saturate_in_combined_pipeline(change):
     _, result, policy = pipeline(**change)
     assert result.potential.rejection_reasons
     assert policy.risk == 1
+
+
+def test_continuous_plume_coverage_reaches_thermal_factor_and_policy():
+    results = [pipeline(plume=fraction > 0, plume_fraction=fraction)
+               for fraction in (0, .25, 1)]
+    cues = [attrs.thermal.heat_source_likelihood.value for attrs, _, _ in results]
+    thermal = [adapted.profile.thermal.nominal_risk for _, adapted, _ in results]
+    phi = [policy.risk for _, _, policy in results]
+    assert cues[0] < cues[1] < cues[2]
+    assert thermal[0] < thermal[1] < thermal[2]
+    assert phi[0] < phi[1] < phi[2]
+    assert all(policy.tangential_strength == 1.25 for _, _, policy in results)
+    # The paired intervention must not silently change other factor evidence.
+    for name in ("potential", "kinetic", "contact"):
+        assert len({getattr(result[1].profile, name).nominal_risk for result in results}) == 1
