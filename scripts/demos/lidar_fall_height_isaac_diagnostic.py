@@ -1,14 +1,17 @@
 """Validate positive LiDAR fall-height evidence with a stationary Isaac fixture.
 
-The estimator receives only live PandarXT-32 points. Authored support and floor
-heights are read separately after inference for offline scoring. The configured
-fixture location is used only to select its LiDAR cluster from the restaurant;
-object height is never used as fall height. No wheel motion is commanded.
+The surface estimator receives only live PandarXT-32 points. Authored location
+and support-relative height filtering select the controlled object cluster;
+this is a configured component diagnostic, not autonomous object localization.
+Authored support/floor heights separately score the inferred drop. Object height
+is never fall height. Optional explicitly configured mass/interaction priors
+exercise the potential adapter only; other factors remain unknown. No motion.
 """
 
 from __future__ import annotations
 
-from dataclasses import asdict
+from dataclasses import asdict, replace
+import hashlib
 import json
 import math
 import os
@@ -53,6 +56,9 @@ from robot.perception.lidar_fall_surfaces import (
     LidarFallSurfaceConfig,
     estimate_lidar_fall_surfaces,
 )
+from robot.evaluation.factor_specific_cra import diagnose_factor_specific_cra
+from robot.perception.physical_attributes import EstimateStatus, PhysicalAttributes, ScalarEstimate
+from robot.risk.physical_factor_adapter import PhysicalFactorAdapterConfig, adapt_physical_factors
 from robot.runtime.simulation_loop import advance_playing_steps, wait_until_playing
 from robot.safety.obstacle_detection import (
     ObstacleDetectionConfig,
@@ -75,21 +81,32 @@ OUTPUT_DIRECTORY = Path(os.environ.get(
 ))
 FIXTURE_ROOT = "/World/CRA_FallHeightValidation"
 ISOLATED_SCENE = os.environ.get("CRA_FALL_ISOLATED_SCENE", "0") == "1"
-FIXTURE_CENTER_ROBOT_XY = np.asarray((2.0, 0.50), dtype=np.float64)
+FIXTURE_DISTANCE_M = float(os.environ.get("CRA_FALL_FIXTURE_DISTANCE_M", "2.0"))
+if not math.isfinite(FIXTURE_DISTANCE_M) or not 1.3 <= FIXTURE_DISTANCE_M <= 3.0:
+    raise ValueError("fixture distance must lie within [1.3, 3.0] m")
+SUPPORT_WIDTH_M = float(os.environ.get("CRA_FALL_SUPPORT_WIDTH_M", "1.4"))
+OBJECT_LATERAL_M = float(os.environ.get("CRA_FALL_OBJECT_LATERAL_M", "0.5"))
+if (not math.isfinite(SUPPORT_WIDTH_M) or not .5 <= SUPPORT_WIDTH_M <= 1.4
+        or not math.isfinite(OBJECT_LATERAL_M) or not 0 <= OBJECT_LATERAL_M <= SUPPORT_WIDTH_M / 2 - .07):
+    raise ValueError("support width must be in [0.5, 1.4] m and contain the 0.14 m object")
+FIXTURE_CENTER_ROBOT_XY = np.asarray((FIXTURE_DISTANCE_M, OBJECT_LATERAL_M), dtype=np.float64)
 SUPPORT_DROP_M = float(os.environ.get("CRA_FALL_SUPPORT_DROP_M", "0.80"))
 if not math.isfinite(SUPPORT_DROP_M) or SUPPORT_DROP_M <= 0:
     raise ValueError("CRA_FALL_SUPPORT_DROP_M must be positive and finite")
-SUPPORT_SIZE_M = (1.40, 1.40, 0.10)
+SUPPORT_SIZE_M = (SUPPORT_WIDTH_M, SUPPORT_WIDTH_M, 0.10)
 OBJECT_SIZE_M = (0.14, 0.14, 0.34)
 CAPTURE_FRAME_COUNT = 12
 MAXIMUM_SENSOR_WAIT_STEPS = 400
+LANDING_MAXIMUM_OFFSET_M = float(os.environ.get("CRA_FALL_LANDING_MAXIMUM_OFFSET_M", "1.5"))
+if not math.isfinite(LANDING_MAXIMUM_OFFSET_M) or not .12 < LANDING_MAXIMUM_OFFSET_M <= 3:
+    raise ValueError("landing search offset must lie within (0.12, 3.0] m")
 FIXTURE_SURFACE_CONFIG = LidarFallSurfaceConfig(
     support_xy_margin_m=0.30,
     support_maximum_gap_m=0.20,
     minimum_support_overhang_m=0.05,
     # At the mounted scanner's elevation, the first visible floor returns
     # beyond the platform can lie outside the default 0.90 m neighborhood.
-    landing_maximum_offset_m=1.50,
+    landing_maximum_offset_m=LANDING_MAXIMUM_OFFSET_M,
 )
 
 
@@ -127,13 +144,13 @@ def _author_fixture(stage, floor_height_robot_m: float) -> None:
     support = _material(stage, f"{FIXTURE_ROOT}/SupportMaterial", (0.18, 0.42, 0.72))
     target = _material(stage, f"{FIXTURE_ROOT}/TargetMaterial", (0.90, 0.28, 0.10))
     if ISOLATED_SCENE:
-        _cube(stage, f"{FIXTURE_ROOT}/Landing", (2.0, 0.0, floor_height_robot_m - 0.05),
+        _cube(stage, f"{FIXTURE_ROOT}/Landing", (FIXTURE_DISTANCE_M, 0.0, floor_height_robot_m - 0.05),
               (20.0, 20.0, 0.10), support)
     support_center_z = floor_height_robot_m + SUPPORT_DROP_M - SUPPORT_SIZE_M[2] / 2
     _cube(
         stage,
         f"{FIXTURE_ROOT}/Support",
-        (2.0, 0.0, support_center_z),
+        (FIXTURE_DISTANCE_M, 0.0, support_center_z),
         SUPPORT_SIZE_M,
         support,
     )
@@ -181,8 +198,11 @@ def main() -> None:
         robot_prim_path=ROBOT_PRIM_PATH,
         expected_meters_per_unit=EXPECTED_METERS_PER_UNIT,
     )
+    root_before = loaded.stage.GetRootLayer().ExportToString()
+    scene_hash_before = hashlib.sha256(Path(ROBOT_SCENE_PATH).read_bytes()).hexdigest()
     floor_z = floor_height_robot(loaded.stage)
     author_fixture(loaded.stage, floor_z)
+    fixture_root_unchanged = loaded.stage.GetRootLayer().ExportToString() == root_before
     support_bounds = read_world_bounds(loaded.stage, f"{FIXTURE_ROOT}/Support")
     object_bounds = read_world_bounds(loaded.stage, f"{FIXTURE_ROOT}/Target")
     # Independent authored geometry is checked offline, never given to the
@@ -285,6 +305,39 @@ def main() -> None:
     blockers = list(report.blockers)
     if drift > 0.005 or yaw_drift > math.radians(0.1):
         blockers.append("robot did not remain stationary")
+    # Simulation setup may author runtime physics settings. Audit fixture
+    # authoring separately from those transient settings and the saved file.
+    scene_unchanged = (fixture_root_unchanged
+                       and hashlib.sha256(Path(ROBOT_SCENE_PATH).read_bytes()).hexdigest() == scene_hash_before)
+    if not scene_unchanged:
+        blockers.append("saved scene or fixture authoring root layer changed")
+    potential_diagnostic = None
+    configured_mass = os.environ.get("CRA_FALL_FACTOR_MASS_PRIOR_KG", "").strip()
+    if configured_mass:
+        values = tuple(float(value) for value in configured_mass.split(","))
+        if len(values) != 3 or not 0 < values[1] <= values[0] <= values[2]:
+            raise ValueError("mass prior must be NOMINAL,LOWER,UPPER in positive kg")
+        mass = ScalarEstimate(*values, .5, "kg", "matched_potential_component_mass_prior",
+            timestamp, EstimateStatus.PRIOR,
+            ("explicit matched diagnostic mass prior; not a visual mass prediction or measurement",))
+        interaction = ScalarEstimate(1, 0, 1, .5, "1", "potential_component_worst_case_interaction_prior",
+            timestamp, EstimateStatus.PRIOR,
+            ("unmeasured harmful-fall opportunity conservatively bounded by 1; not a collision probability",))
+        attributes = PhysicalAttributes.unknown(track_id=target_track.track_id,
+            timestamp_seconds=timestamp)
+        attributes = replace(attributes, mass=replace(attributes.mass, mass_kg=mass),
+            geometry=replace(attributes.geometry, fall_height_m=fall))
+        adapter = adapt_physical_factors(attributes, timestamp_seconds=timestamp,
+            potential_interaction_likelihood=interaction,
+            config=PhysicalFactorAdapterConfig(potential_energy_scale_j=float(
+                os.environ.get("CRA_FALL_FACTOR_ENERGY_SCALE_J", "100"))))
+        potential_diagnostic = {
+            "scope": "potential_factor_only; configured object selection and mass/interaction priors",
+            "adaptation": adapter.potential.as_dict(),
+            "cra_diagnostics": diagnose_factor_specific_cra(adapter).to_dict(),
+            "aggregate_complete_perception": False, "wheel_motion_permitted": False,
+            "primary_lambda": 1.25,
+        }
     payload = {
         **asdict(report),
         "blockers": blockers,
@@ -292,6 +345,11 @@ def main() -> None:
         "evidence_source": fall.source,
         "evidence_status": fall.status.value,
         "object_height_used_as_fall_height": False,
+        "fall_evidence": asdict(fall),
+        "surface_evidence": asdict(surface_result),
+        "potential_factor_diagnostic": potential_diagnostic,
+        "scene_file_and_fixture_root_layer_unchanged": scene_unchanged,
+        "runtime_physics_root_layer_unchanged": loaded.stage.GetRootLayer().ExportToString() == root_before,
         "fixture_track_id": target_track.track_id,
         "fixture_track_association_distance_m": association_distance,
         "object_point_count": int(object_points.shape[0]),
@@ -303,7 +361,7 @@ def main() -> None:
         "robot_position_drift_m": drift,
         "robot_yaw_drift_degrees": math.degrees(yaw_drift),
         "robot_motion_command": "zero",
-        "oracle_role": "offline_scoring_only",
+        "oracle_role": "fixture authoring, target location/height selection and separate offline scoring; not supplied support/landing heights to inference",
         "fixture_geometry_valid": fixture_geometry_valid,
         "rendered_support_top_world_m": support_bounds.maximum[2],
         "rendered_object_bottom_world_m": object_bounds.minimum[2],
@@ -311,6 +369,9 @@ def main() -> None:
         "rendered_object_height_m": object_bounds.size[2],
         "selection_boundary": "authored target location and height filter; inference uses live LiDAR surfaces",
         "scene_scope": "isolated_visible_fixture" if ISOLATED_SCENE else "restaurant_fixture",
+        "fixture_distance_m": FIXTURE_DISTANCE_M,
+        "fixture_support_width_m": SUPPORT_WIDTH_M,
+        "fixture_object_lateral_m": OBJECT_LATERAL_M,
     }
     OUTPUT_DIRECTORY.mkdir(parents=True, exist_ok=True)
     (OUTPUT_DIRECTORY / "report.json").write_text(

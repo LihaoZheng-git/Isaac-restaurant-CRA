@@ -94,3 +94,9 @@
   preserve that documented miss. The optional spherical-body mass hypothesis
   needs an explicit whole-assembly density PRIOR, never discards occupancy, and
   does not bound appendage mass by its fraction of LiDAR returns.
+- The paired positive-drop fixture is potential-only: target location/height
+  selection and matched mass/interaction are configured priors, other factors
+  stay unknown and aggregate phi stays conservative. A farther observed landing
+  band is not an exact impact site. Require a separate complete raised-object
+  perception/platform-occupancy gate before its wheel experiments; older reports
+  predating current planar-support checks are not current validation.

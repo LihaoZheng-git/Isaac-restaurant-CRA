@@ -161,3 +161,72 @@ Actual RGB outlines and paths: `outputs/contact_pair/comparison.png`.
 Validation: 1,457 unit tests passed, including 16 new RGB refinement
 cases; full Ruff, whitespace and demo syntax checks passed. Stationary results
 are under `outputs/contact_pair/refined_v3_round` and `refined_v3_protrusion`.
+
+## Potential support-drop comparison
+
+Branch: `codex/cra-potential-paired-test`. This is a **stationary potential-only
+component diagnostic**, not complete four-factor raised-object perception or
+navigation. The existing live Pandar surface method estimates support and a
+lower candidate landing band. The 0.14 x 0.14 x 0.34 m object's own height stays
+constant while the authored support drop changes. No object/center height is
+substituted for fall height, and no wheel motion is commanded.
+
+The diagnostic now exposes bounded fixture distance/width/lateral placement and
+landing search range through environment settings. Reproduce the accepted pair
+with `ISAAC_SIM_HEADLESS=1`, `CRA_FALL_ISOLATED_SCENE=1`,
+`CRA_FALL_FIXTURE_DISTANCE_M=1.3`, `CRA_FALL_SUPPORT_WIDTH_M=0.7`,
+`CRA_FALL_OBJECT_LATERAL_M=0.25`, `CRA_FALL_LANDING_MAXIMUM_OFFSET_M=2.0`,
+`CRA_FALL_FACTOR_MASS_PRIOR_KG=1,0.5,2`; set `CRA_FALL_SUPPORT_DROP_M` to 0.3 or
+0.4 and a fresh `CRA_LIDAR_DIAGNOSTIC_DIR`. Run
+`scripts/demos/lidar_fall_height_isaac_diagnostic.py` with the existing Isaac
+Python launcher. The potential energy scale remains 100 J; the optional
+`CRA_FALL_FACTOR_ENERGY_SCALE_J` setting is recorded in adapter diagnostics.
+
+| Authored drop, scoring only | Inferred drop | Absolute error | Potential factor, before uncertainty uplift | Conservative potential factor |
+|---|---:|---:|---:|---:|
+| 0.30 m | 0.301437 m | 0.001437 m | 0.074838 | 0.537419 |
+| 0.40 m | 0.371669 m | 0.028331 m | 0.088617 | 0.544309 |
+
+Both engineering intervals covered the reference drop and passed stationary
+checks. These are single captures, not calibrated accuracy statistics.
+Surface bands can mix nearby top/edge/underside returns; the 0.40 m case
+underestimated by 2.8 cm. Interval/tolerance acceptance does not identify an
+exact support face or prove a falling trajectory. Mass
+1 kg [0.5, 2] and harmful-fall opportunity 1 [0, 1] are explicit matched PRIORS,
+not mass-network predictions or measured probabilities. Other factor inputs
+stay unavailable, aggregate phi remains 1, and no complete-perception or motion
+gate is claimed. The factor-specific result shows continuous potential ordering
+without silently zeroing missing factors.
+
+Visibility failures are preserved under `outputs/potential_pair/`: original
+2.0 m-distance broad-platform cases at drops 0.4/0.6/0.8 failed the current
+support-localization gate. Closer broad-platform cases localized support but
+lacked accepted landing evidence. A smaller platform at 0.2 m still lacked
+adequate support. For the smaller 0.35 m platform, the nearest visible floor was
+1.626 m from the object, beyond the configured 1.5 m search; replay at 2.0 m
+localized a 0.351 m drop. Fresh matched 0.3/0.4 m captures then passed at that
+explicit 2.0 m setting. No surface acceptance threshold or confidence changed;
+the production default surface configuration remains unchanged.
+
+The farther band is observed candidate landing evidence. Immediate unseen edge
+continuity, exact falling trajectory and impact location are not established.
+This fixture's target location and support-relative height filter are configured
+selection inputs. The old `oracle_role=offline_scoring_only` label was therefore
+incorrect and has been corrected. Actual support/landing heights still come
+from live LiDAR inference. A historical 0.8 m report predates the current planar
+support checks and does not count as current validation; its failure to reproduce
+is retained rather than silently accepting the older result.
+
+Fixture edits stay in the session layer and the saved scene files are unchanged.
+Runtime physics setup changes transient root-layer settings; the audit now
+distinguishes those from fixture authoring and saved-file changes. Before a
+raised-object wheel experiment, validate camera instance separation, all four
+object factors and complete platform occupancy in its own stationary gate.
+
+Validation: 79 relevant fall-height/adapter/factor-specific regression tests,
+full Ruff, whitespace and syntax checks passed. The earlier full suite passed
+1,457 tests. Actual point-cloud figure: `outputs/potential_pair/comparison.png`.
+Report SHA-256 values: `final_drop_0.3/report.json`
+`f0729ccb3b997379ea563e691872f6869f012f11a4c66d2897c90db8b01defac`;
+`final_drop_0.4/report.json`
+`3c55b372a37fe4e1af7896f0b5daf13339943d7ff86645d648c19c7b498be4a3`.
