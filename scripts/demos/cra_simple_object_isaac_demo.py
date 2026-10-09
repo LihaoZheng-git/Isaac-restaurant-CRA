@@ -48,6 +48,8 @@ parser.add_argument("--grid-resolution", type=float, default=0.10)
 parser.add_argument("--yaw-slices", type=int, default=16)
 parser.add_argument("--object-radius", type=float, default=0.25,
                     help="authored fixture radius, never supplied to estimators")
+parser.add_argument("--object-appearance", choices=("glossy", "matte"), default="glossy",
+                    help="rendered fixture appearance control, never supplied to segmentation or mass inference")
 parser.add_argument("--support-drop-m", type=float, default=0.0,
                     help="authored platform top above floor; estimator never receives this height")
 parser.add_argument("--support-width-m", type=float, default=0.7)
@@ -138,7 +140,7 @@ from pxr import Gf, Sdf, Usd, UsdGeom, UsdPhysics, UsdShade
 from robot.control.differential_drive import NovaCarterController
 from robot.evaluation.factor_specific_cra import diagnose_factor_specific_cra
 from robot.evaluation.cra_experiments import EvidenceMode, RestaurantScenario
-from robot.evaluation.perception_readiness import evaluate_perception_readiness
+from robot.evaluation.perception_readiness import evaluate_perception_readiness, runtime_factor_evidence_mode
 from robot.evaluation.simple_object_test import (
     ControlledObjectInputs,
     build_assessed_object_field,
@@ -260,6 +262,11 @@ def append_sam_proposal(segmenter, rgb, frame, projection, ids, track_id):
         "decoder_wall_seconds": result.inference_wall_seconds,
         "checkpoint_sha256": segmenter.checkpoint_sha256,
         "class_or_density_input": False, "authored_prompt_or_mask": False,
+        "prior_detection_mask_overlaps": [
+            {"class": item.semantic_class, "confidence": item.confidence,
+             "overlap_fraction": float(np.count_nonzero(item.mask & result.detection.mask)
+                / max(1, min(item.mask.sum(), result.detection.mask.sum())))}
+            for item in frame.detections] if result.detection is not None else [],
     })
     if result.detection is None:
         raise RuntimeError(f"SAM proposal rejected: {result.rejection_reasons}")
@@ -346,7 +353,7 @@ def main():
         sphere.AddTranslateOp().Set(Gf.Vec3d(*CENTER_WORLD_XY, RADIUS_M + args.support_drop_m))
         sphere.CreateDisplayColorAttr([Gf.Vec3f(0.15, 0.45, 0.95)])
         UsdPhysics.CollisionAPI.Apply(sphere.GetPrim())
-        if args.chromatic_instance_proposal:
+        if args.chromatic_instance_proposal or args.object_appearance == "matte":
             # Matched matte appearance defines this bounded RGB test domain.
             # The estimator still discovers the color/outline from real RGB.
             material = UsdShade.Material.Define(stage, "/World/CRASimpleObject/MatteMaterial")
@@ -958,6 +965,10 @@ def main():
     prior_readiness = evaluate_perception_readiness(
         RestaurantScenario("simple_object", "potential", "explicit prior-assisted physical cues",
                            EvidenceMode.PRIOR, 0), sensor_adapter)
+    runtime_evidence_mode = runtime_factor_evidence_mode(sensor_adapter)
+    runtime_readiness = evaluate_perception_readiness(
+        RestaurantScenario("simple_object", "potential", "actual factor input provenance",
+                           runtime_evidence_mode, 0), sensor_adapter)
     mpc, backup = existing.create_controller_stack(controller)
     # Match the geometry checks to the actual physics-step CBF rechecks.
     # The old frozen-field demo only checked MPC interval endpoints.
@@ -1144,19 +1155,20 @@ def main():
         and all(item["success"] for item in predictions.values())
         and (not args.oracle_comparison or all(item["ready"] for item in readiness.values()))
         and (not (args.require_four_factor_readiness or args.ground_continuity_prior) or
-             (prior_readiness.ready if args.ground_continuity_prior else readiness["observed"]["ready"]))
+             runtime_readiness.ready)
     )
     report = {
         "stationary_passed": stationary_passed,
         "mapping_passed": mapping_passed,
         "motion_gate_passed": gate,
         "evidence_mode": ("oracle profiles with measured LiDAR geometry" if args.oracle_comparison
-                          else "prior-assisted camera/LiDAR with conservative uncertainty" if args.ground_continuity_prior
+                          else "prior-assisted camera/LiDAR with conservative uncertainty" if runtime_evidence_mode is EvidenceMode.PRIOR
                           else "observed camera/LiDAR with conservative uncertainty"),
         "acceptance_scope": "oracle controller comparison" if args.oracle_comparison else "uncertainty-aware observed-object navigation; complete four-factor perception is assessed separately",
         "aggregate_sensor_acceptance": False if args.oracle_comparison else readiness["observed"]["aggregate_phi_reportable"],
         "aggregate_prior_assisted_acceptance": prior_readiness.aggregate_phi_reportable,
         "prior_assisted_perception_readiness": asdict(prior_readiness),
+        "runtime_perception_readiness": asdict(runtime_readiness),
         "four_factor_readiness_required": args.require_four_factor_readiness or args.ground_continuity_prior,
         "ground_continuity_prior_enabled": args.ground_continuity_prior,
         "plume_control": args.plume_control,
@@ -1189,6 +1201,7 @@ def main():
         "sensor_attributes": asdict(sensor_attributes),
         "visual_contact_proxy": asdict(visual_contact_proxy) if visual_contact_proxy is not None else None,
         "authored_fixture_radius_m": RADIUS_M,
+        "authored_fixture_appearance": args.object_appearance,
         "sphere_density_prior_kg_m3": args.sphere_density_prior_kg_m3,
         "root_layer_unchanged_by_fixture": root_unchanged_by_fixture,
         "position_drift_m": drift,

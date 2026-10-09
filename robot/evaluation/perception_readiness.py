@@ -70,7 +70,10 @@ def _factor_readiness(
         reasons.append("unsupported factor basis")
     if diagnostic.basis in visual_bases and diagnostic.factor != "contact":
         reasons.append("visual geometry proxy is only valid for contact")
-    if diagnostic.basis == "visual_object_plume_proxy" and diagnostic.factor != "thermal":
+    if (
+        diagnostic.basis == "visual_object_plume_proxy"
+        and diagnostic.factor != "thermal"
+    ):
         reasons.append("object plume proxy is only valid for thermal")
     if diagnostic.estimate.confidence <= 0:
         reasons.append("factor estimate has zero confidence")
@@ -117,20 +120,28 @@ def evaluate_perception_readiness(
         )
 
     diagnostics = {name: getattr(result, name) for name in FACTOR_NAMES}
-    if (result.contact.basis in {"visual_exposed_edge_proxy", "visual_silhouette_geometry_proxy"}
-            and not result.config.allow_visual_contact_proxy):
-        raise ValueError("contact proxy readiness requires adapter configuration opt-in")
-    if result.thermal.basis == "visual_object_plume_proxy" and not result.config.allow_visual_thermal_proxy:
-        raise ValueError("thermal proxy readiness requires adapter configuration opt-in")
+    if (
+        result.contact.basis
+        in {"visual_exposed_edge_proxy", "visual_silhouette_geometry_proxy"}
+        and not result.config.allow_visual_contact_proxy
+    ):
+        raise ValueError(
+            "contact proxy readiness requires adapter configuration opt-in"
+        )
+    if (
+        result.thermal.basis == "visual_object_plume_proxy"
+        and not result.config.allow_visual_thermal_proxy
+    ):
+        raise ValueError(
+            "thermal proxy readiness requires adapter configuration opt-in"
+        )
     checked = (
         FACTOR_NAMES
         if evaluation_scope is EvaluationScope.FOUR_FACTOR
         else (scenario.hazard_family,)
     )
     factors = tuple(
-        _factor_readiness(
-            diagnostics[name], evidence_mode=scenario.evidence_mode
-        )
+        _factor_readiness(diagnostics[name], evidence_mode=scenario.evidence_mode)
         for name in checked
     )
     ready = all(item.accepted for item in factors)
@@ -144,3 +155,21 @@ def evaluate_perception_readiness(
         ),
         factors=factors,
     )
+
+
+def runtime_factor_evidence_mode(result: PhysicalFactorAdapterResult) -> EvidenceMode:
+    """Choose the report mode from actual factor dependencies, not fixture flags.
+
+    Missing evidence does not become accepted by this selection. The subsequent
+    readiness check still validates every input against the selected mode.
+    """
+    statuses = {
+        estimate.status
+        for name in FACTOR_NAMES
+        for _, estimate in getattr(result, name).inputs
+    }
+    if EstimateStatus.ORACLE in statuses:
+        return EvidenceMode.ORACLE
+    if EstimateStatus.PRIOR in statuses or EstimateStatus.FALLBACK in statuses:
+        return EvidenceMode.PRIOR
+    return EvidenceMode.SENSOR
