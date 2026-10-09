@@ -30,6 +30,11 @@ parser.add_argument("--motion", action="store_true")
 parser.add_argument("--oracle-comparison", action="store_true")
 parser.add_argument("--object-plume-policy", action="store_true",
                     help="validate a stationary object-level plume window using this controlled clean fixture")
+parser.add_argument("--ground-continuity-prior", action="store_true",
+                    help="explicit bounded flat-floor continuity assumption; result remains PRIOR")
+parser.add_argument("--ground-prior-maximum-extrapolation-m", type=float, default=1.5)
+parser.add_argument("--require-four-factor-readiness", action="store_true",
+                    help="require all factors in the stated sensor/prior-assisted mode before accepting the test")
 parser.add_argument("--grid-resolution", type=float, default=0.10)
 parser.add_argument("--yaw-slices", type=int, default=16)
 parser.add_argument("--object-radius", type=float, default=0.25,
@@ -40,6 +45,11 @@ parser.add_argument("--sphere-density-prior-kg-m3", type=float, nargs=3,
 args = parser.parse_args()
 if not math.isfinite(args.object_radius) or not 0.08 <= args.object_radius <= 0.5:
     parser.error("--object-radius must be within [0.08, 0.5] m")
+if (not math.isfinite(args.ground_prior_maximum_extrapolation_m)
+        or not 0 < args.ground_prior_maximum_extrapolation_m <= 2.0):
+    parser.error("ground prior extrapolation must lie in (0, 2.0] m")
+if args.oracle_comparison and (args.require_four_factor_readiness or args.ground_continuity_prior):
+    parser.error("ground/four-factor observed readiness is separate from --oracle-comparison")
 if args.sphere_density_prior_kg_m3 is not None:
     nominal, lower, upper = args.sphere_density_prior_kg_m3
     if not all(math.isfinite(value) for value in (nominal, lower, upper)) or not 0 < lower <= nominal <= upper:
@@ -86,6 +96,7 @@ from robot.perception.camera_lidar_fusion import (
 )
 from robot.perception.contact_detection_adapter import associate_contact_parts_to_objects
 from robot.perception.lidar_fall_surfaces import estimate_lidar_fall_surfaces
+from robot.perception.ground_support import GroundSupportConfig, estimate_spherical_ground_support
 from robot.perception.motion_attributes import RouteMotionContext, estimate_track_motion
 from robot.perception.physical_attributes import EstimateStatus, PhysicalAttributes, ScalarEstimate
 from robot.perception.physical_geometry import estimate_track_geometry
@@ -388,6 +399,7 @@ def main():
         )
     selected = tracking.point_track_ids == target.track_id
     object_xyz = obstacle_xyz[selected]
+    spherical = estimate_spherical_geometry(object_xyz, timestamp_seconds=timestamp)
     points_anchor = existing.motion.robot_points_in_anchor_frame(
         object_xyz[:, :2], robot_pose=final_pose, anchor_pose=anchor
     )
@@ -435,7 +447,6 @@ def main():
         )
         learned_mass_available = mass.mass_kg.is_available
         if args.sphere_density_prior_kg_m3 is not None:
-            spherical = estimate_spherical_geometry(object_xyz, timestamp_seconds=timestamp)
             nominal, lower, upper = args.sphere_density_prior_kg_m3
             density = ScalarEstimate(nominal, lower, upper, .35, "kg/m^3",
                 "configured_effective_sphere_density_prior", evidence_timestamp,
@@ -471,6 +482,31 @@ def main():
             "evidence": mass.mass_kg.evidence,
         }
         save_json("vision-model-invocations.json", model_invocations)
+    potential_interaction = None
+    ground_support = None
+    ground_config = None
+    if args.ground_continuity_prior:
+        ground_config = GroundSupportConfig(maximum_extrapolation_m=args.ground_prior_maximum_extrapolation_m)
+        continuity = ScalarEstimate(1, 1, 1, .5, "1",
+            "controlled_flat_floor_continuity_prior", timestamp, EstimateStatus.PRIOR,
+            ("controlled local flat-floor domain; unseen support/landing continuity is an assumption",))
+        ground_support = estimate_spherical_ground_support(scene_xyz, spherical,
+            timestamp_seconds=evidence_timestamp, scene_timestamp_seconds=timestamp,
+            ground_continuity_prior=continuity,
+            prior_scope="controlled simple-object flat-floor fixture; no unseen edge in bounded local neighborhood",
+            config=ground_config)
+        selected_ground = not surfaces.is_available and ground_support.fall_height_m.is_available
+        if selected_ground:
+            sensor_attributes = replace(sensor_attributes,
+                geometry=replace(sensor_attributes.geometry, fall_height_m=ground_support.fall_height_m))
+            potential_interaction = ground_support.potential_interaction_likelihood
+        save_json("ground-support-evidence.json", {
+            "evidence": asdict(ground_support), "selected_as_runtime_fall_evidence": selected_ground,
+            "strict_lidar_surface_rejections": surfaces.rejection_reasons,
+            "authored_height_used_as_estimator_input": False,
+            "ground_continuity_prior": asdict(continuity),
+            "configuration": asdict(ground_config),
+        })
     thermal_interaction = None
     if args.object_plume_policy and detector is not None:
         reference_time = camera_info.simulation_time_seconds
@@ -527,6 +563,7 @@ def main():
     visual_contact_proxy = contact_proxies.get(target.track_id)
     sensor_adapter = adapt_physical_factors(
         sensor_attributes, timestamp_seconds=evidence_timestamp,
+        potential_interaction_likelihood=potential_interaction,
         visual_contact_proxy=visual_contact_proxy,
         visual_contact_basis=SHAPE_CONTACT_BASIS
         if visual_contact_proxy is not None and visual_contact_proxy.source == SHAPE_CONTACT_SOURCE
@@ -578,6 +615,9 @@ def main():
         target, "object", 1.0, "controlled_track_selection_prior"
     )
     fields, policies, factors, predictions, readiness = {}, {}, {}, {}, {}
+    prior_readiness = evaluate_perception_readiness(
+        RestaurantScenario("simple_object", "potential", "explicit prior-assisted physical cues",
+                           EvidenceMode.PRIOR, 0), sensor_adapter)
     mpc, backup = existing.create_controller_stack(controller)
     # Match the geometry checks to the actual physics-step CBF rechecks.
     # The old frozen-field demo only checked MPC interval endpoints.
@@ -753,14 +793,23 @@ def main():
         and mapping_passed
         and all(item["success"] for item in predictions.values())
         and (not args.oracle_comparison or all(item["ready"] for item in readiness.values()))
+        and (not (args.require_four_factor_readiness or args.ground_continuity_prior) or
+             (prior_readiness.ready if args.ground_continuity_prior else readiness["observed"]["ready"]))
     )
     report = {
         "stationary_passed": stationary_passed,
         "mapping_passed": mapping_passed,
         "motion_gate_passed": gate,
-        "evidence_mode": "oracle profiles with measured LiDAR geometry" if args.oracle_comparison else "observed camera/LiDAR with conservative uncertainty",
+        "evidence_mode": ("oracle profiles with measured LiDAR geometry" if args.oracle_comparison
+                          else "prior-assisted camera/LiDAR with conservative uncertainty" if args.ground_continuity_prior
+                          else "observed camera/LiDAR with conservative uncertainty"),
         "acceptance_scope": "oracle controller comparison" if args.oracle_comparison else "uncertainty-aware observed-object navigation; complete four-factor perception is assessed separately",
         "aggregate_sensor_acceptance": False if args.oracle_comparison else readiness["observed"]["aggregate_phi_reportable"],
+        "aggregate_prior_assisted_acceptance": prior_readiness.aggregate_phi_reportable,
+        "prior_assisted_perception_readiness": asdict(prior_readiness),
+        "four_factor_readiness_required": args.require_four_factor_readiness or args.ground_continuity_prior,
+        "ground_continuity_prior_enabled": args.ground_continuity_prior,
+        "ground_support_configuration": asdict(ground_config) if ground_config is not None else None,
         "sensor_dataflow_passed": sensor_dataflow_passed,
         "camera_lidar_age_seconds": camera_lidar_age,
         "model_artifacts": model_artifacts,
@@ -800,6 +849,8 @@ def main():
             "unmatched part masks are not negative evidence; a separately accepted visible silhouette may support a continuous contact proxy",
             "silhouette shape is a 2D visible-outline proxy; hidden features and physical sharpness/hardness remain unknown",
             "optional fitted-sphere mass depends on an explicitly configured effective-density prior; size alone is not measured mass",
+            "optional ground support uses a LiDAR floor plane plus an explicit bounded continuity PRIOR; fitted bottom only gates consistency, never supplies fall height",
+            "ground-support harmful-fall interaction uses a separately labeled worst-case PRIOR upper bound 1, not route probability or absence of risk",
             "no plume is not proof of a cold object; absent thermal prerequisites stay unknown",
             "optional object plume policy accepts low visible cue only with validated stationary clean-reference observations; all track records include rejection reasons",
             "kinetic uses nonzero 0.20 m/s relative approach speed even though the object is stationary",

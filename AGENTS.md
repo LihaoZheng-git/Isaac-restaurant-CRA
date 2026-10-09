@@ -74,3 +74,14 @@
   association. Invalid/missing observations stay unknown. Other sources' air
   regions may be excluded from reference-background checks only while enough
   independent background remains; shared positive plumes remain ambiguous.
+- The simple sphere test may explicitly opt into a bounded local flat-ground
+  continuity PRIOR when its mounting creates a LiDAR blind region. Require an
+  observed floor plane and a consistent fitted sphere bottom; the bottom is a
+  consistency gate, never fall height. Keep inferred plane evidence distinct
+  from assumed unseen support/landing continuity, reject elevated/uncertain
+  fits, and preserve the strict sensor-only surface path and its rejections.
+- Ground-prior trials use a separately labeled worst-case harmful-fall
+  interaction PRIOR with upper bound 1. They must pass four-factor readiness
+  in PRIOR mode before motion and must not be reported as sensor-only results.
+  High phi from low-confidence evidence is an uncertainty-policy finding; do
+  not change confidence, aggregation or fallback values to make a sphere safe.
