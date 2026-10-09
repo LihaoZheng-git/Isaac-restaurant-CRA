@@ -27,6 +27,7 @@ sys.path.insert(0, str(ROOT))
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument("--output", type=Path, required=True)
 parser.add_argument("--motion", action="store_true")
+parser.add_argument("--motion-maximum-seconds", type=float, default=30.0)
 parser.add_argument("--oracle-comparison", action="store_true")
 parser.add_argument("--object-plume-policy", action="store_true",
                     help="validate a stationary object-level plume window using this controlled clean fixture")
@@ -47,12 +48,42 @@ parser.add_argument("--grid-resolution", type=float, default=0.10)
 parser.add_argument("--yaw-slices", type=int, default=16)
 parser.add_argument("--object-radius", type=float, default=0.25,
                     help="authored fixture radius, never supplied to estimators")
+parser.add_argument("--support-drop-m", type=float, default=0.0,
+                    help="authored platform top above floor; estimator never receives this height")
+parser.add_argument("--support-width-m", type=float, default=0.7)
+parser.add_argument("--instance-mask-geometry", action="store_true",
+                    help="estimate the camera-matched instance separately; retain remaining LiDAR occupancy with unknown risk")
+parser.add_argument("--instance-mask-margin-pixels", type=int, default=0,
+                    help="geometry selection margin; association retains its separate six-pixel tolerance")
+parser.add_argument("--chromatic-instance-proposal", action="store_true",
+                    help="explicit separated uniformly chromatic object/contrasting-background RGB domain; class stays unknown")
+parser.add_argument("--worst-case-fall-interaction-prior", action="store_true",
+                    help="explicit harmful-fall interaction prior, upper bound one, independent of route overlap")
+parser.add_argument("--fall-landing-maximum-offset-m", type=float, default=2.0)
 parser.add_argument("--sphere-density-prior-kg-m3", type=float, nargs=3,
                     metavar=("NOMINAL", "LOWER", "UPPER"),
                     help="explicit effective bulk-density prior for accepted sphere fits")
 args = parser.parse_args()
+if not math.isfinite(args.motion_maximum_seconds) or not 0 < args.motion_maximum_seconds <= 60:
+    parser.error("motion duration must lie in (0, 60] seconds")
 if not math.isfinite(args.object_radius) or not 0.08 <= args.object_radius <= 0.5:
     parser.error("--object-radius must be within [0.08, 0.5] m")
+if (not math.isfinite(args.support_drop_m) or not 0 <= args.support_drop_m <= .4
+        or not math.isfinite(args.support_width_m) or not .5 <= args.support_width_m <= 1.0
+        or not math.isfinite(args.fall_landing_maximum_offset_m)
+        or not .12 < args.fall_landing_maximum_offset_m <= 3.0):
+    parser.error("invalid bounded support/drop/landing geometry")
+if args.support_drop_m and (not args.instance_mask_geometry or args.oracle_comparison
+        or not args.worst_case_fall_interaction_prior or args.object_radius > args.support_width_m / 2):
+    parser.error("raised test requires instance geometry, explicit fall-interaction prior, and a contained ball")
+if args.support_drop_m and (args.contact_control != "round" or args.plume_control != "none"):
+    parser.error("raised potential fixture requires unchanged round/no-plume controls")
+if args.instance_mask_geometry and args.oracle_comparison:
+    parser.error("instance geometry requires observed mode")
+if args.chromatic_instance_proposal and not args.instance_mask_geometry:
+    parser.error("chromatic proposal requires instance-mask geometry")
+if not 0 <= args.instance_mask_margin_pixels <= 6:
+    parser.error("instance mask margin must lie within [0, 6] pixels")
 if (not math.isfinite(args.ground_prior_maximum_extrapolation_m)
         or not 0 < args.ground_prior_maximum_extrapolation_m <= 2.0):
     parser.error("ground prior extrapolation must lie in (0, 2.0] m")
@@ -94,7 +125,7 @@ import matplotlib.pyplot as plt
 import cv2
 import numpy as np
 import omni.timeline
-from pxr import Gf, Usd, UsdGeom, UsdPhysics
+from pxr import Gf, Sdf, Usd, UsdGeom, UsdPhysics, UsdShade
 
 from robot.control.differential_drive import NovaCarterController
 from robot.evaluation.factor_specific_cra import diagnose_factor_specific_cra
@@ -110,9 +141,11 @@ from robot.evaluation.simple_object_test import (
 from robot.perception.fall_height import estimate_fall_height
 from robot.perception.camera_lidar_fusion import (
     CameraLidarFusionConfig, CameraLidarSemanticFusion,
+    project_fisheye_polynomial_points,
 )
 from robot.perception.contact_detection_adapter import associate_contact_parts_to_objects
-from robot.perception.lidar_fall_surfaces import estimate_lidar_fall_surfaces
+from robot.perception.lidar_fall_surfaces import LidarFallSurfaceConfig, estimate_lidar_fall_surfaces
+from robot.perception.instance_lidar_geometry import masked_track_return_selection, propose_chromatic_instance
 from robot.perception.ground_support import GroundSupportConfig, estimate_spherical_ground_support
 from robot.perception.motion_attributes import RouteMotionContext, estimate_track_motion
 from robot.perception.physical_attributes import EstimateStatus, PhysicalAttributes, ScalarEstimate
@@ -193,6 +226,18 @@ def refine_frame_target(rgb, frame, index):
         model_name=f"{frame.model_name}+{result.source}"), result
 
 
+def append_chromatic_proposal(rgb, frame, projection, ids, track_id):
+    result = propose_chromatic_instance(rgb, ids, projection, track_id=track_id,
+        separated_chromatic_domain_validated=True)
+    if result.detection is None:
+        raise RuntimeError(f"chromatic instance proposal rejected: {result.rejection_reasons}")
+    mask = result.detection.mask
+    kept = tuple(item for item in frame.detections
+        if np.count_nonzero(item.mask & mask) / max(1, min(item.mask.sum(), mask.sum())) < .5)
+    return replace(frame, detections=(result.detection, *kept),
+        model_name=f"{frame.model_name}+{result.source}")
+
+
 def main():
     detector = contact_detector = mass_estimator = None
     model_artifacts = {}
@@ -240,6 +285,9 @@ def main():
         h_full_config=replace(
             field_config.h_full_config, yaw_slice_count=args.yaw_slices
         ),
+        guidance_field_config=replace(field_config.guidance_field_config,
+            allow_dense_scene_arbitration=(args.instance_mask_geometry
+                or field_config.guidance_field_config.allow_dense_scene_arbitration)),
     )
     loaded = load_robot_scene(
         scene_path=stationary.ROBOT_SCENE_PATH,
@@ -255,9 +303,27 @@ def main():
     with Usd.EditContext(stage, stage.GetSessionLayer()):
         sphere = UsdGeom.Sphere.Define(stage, FIXTURE_PATH)
         sphere.CreateRadiusAttr(RADIUS_M)
-        sphere.AddTranslateOp().Set(Gf.Vec3d(*CENTER_WORLD_XY, RADIUS_M))
+        sphere.AddTranslateOp().Set(Gf.Vec3d(*CENTER_WORLD_XY, RADIUS_M + args.support_drop_m))
         sphere.CreateDisplayColorAttr([Gf.Vec3f(0.15, 0.45, 0.95)])
         UsdPhysics.CollisionAPI.Apply(sphere.GetPrim())
+        if args.chromatic_instance_proposal:
+            # Matched matte appearance defines this bounded RGB test domain.
+            # The estimator still discovers the color/outline from real RGB.
+            material = UsdShade.Material.Define(stage, "/World/CRASimpleObject/MatteMaterial")
+            shader = UsdShade.Shader.Define(stage, "/World/CRASimpleObject/MatteMaterial/Shader")
+            shader.CreateIdAttr("UsdPreviewSurface")
+            shader.CreateInput("diffuseColor", Sdf.ValueTypeNames.Color3f).Set(Gf.Vec3f(.15, .45, .95))
+            shader.CreateInput("roughness", Sdf.ValueTypeNames.Float).Set(1.0)
+            shader.CreateInput("specularColor", Sdf.ValueTypeNames.Color3f).Set(Gf.Vec3f(0))
+            material.CreateSurfaceOutput().ConnectToSource(shader.ConnectableAPI(), "surface")
+            UsdShade.MaterialBindingAPI.Apply(sphere.GetPrim()).Bind(material)
+        if args.support_drop_m:
+            support = UsdGeom.Cube.Define(stage, "/World/CRASimpleObject/Support")
+            support.CreateSizeAttr(1.0)
+            support.AddTranslateOp().Set(Gf.Vec3d(*CENTER_WORLD_XY, args.support_drop_m / 2))
+            support.AddScaleOp().Set(Gf.Vec3f(args.support_width_m, args.support_width_m, args.support_drop_m))
+            support.CreateDisplayColorAttr([Gf.Vec3f(.35, .35, .35)])
+            UsdPhysics.CollisionAPI.Apply(support.GetPrim())
         if args.contact_control == "protrusion":
             tip = UsdGeom.Cone.Define(stage, "/World/CRASimpleObject/Tip")
             tip.CreateRadiusAttr(.055)
@@ -276,7 +342,7 @@ def main():
             puff.CreateRadiusAttr(.035 + .009 * index)
             puff.AddTranslateOp().Set(Gf.Vec3d(
                 CENTER_WORLD_XY[0], CENTER_WORLD_XY[1] + .012 * (-1)**index,
-                2 * RADIUS_M + .07 + .085 * index))
+                args.support_drop_m + 2 * RADIUS_M + .07 + .085 * index))
             puff.AddScaleOp().Set(Gf.Vec3f(1, 1, 1.4))
             puff.CreateDisplayColorAttr([Gf.Vec3f(.8, .8, .8)])
             puff.MakeInvisible()
@@ -358,9 +424,13 @@ def main():
     )
     timestamp = info.sensor_timestamp_nanoseconds * 1e-9
     image_rgb = camera.get_rgb()
+    plt.imsave(args.output / "camera.png", image_rgb)
     camera_info = camera.get_frame_info()
     camera_lidar_age = abs(camera_info.simulation_time_seconds - timestamp)
     evidence_timestamp = max(timestamp, camera_info.simulation_time_seconds)
+    np.savez_compressed(args.output / "preselection-capture.npz",
+        scene_xyz=scene_xyz, obstacle_xyz=obstacle_xyz,
+        point_track_ids=tracking.point_track_ids, target_track_id=target.track_id)
     fusion = detections = contact_association = target_association = None
     contact_proxies = {}
     observed_semantic = None
@@ -380,9 +450,15 @@ def main():
             stage, source_prim_path=stationary.ROBOT_BASE_PRIM_PATH,
             target_prim_path=camera.camera_prim_path,
         )
+        if args.chromatic_instance_proposal:
+            proposal_projection = project_fisheye_polynomial_points(obstacle_xyz,
+                camera_from_source=camera_from_robot, calibration=calibration)
+            detections = append_chromatic_proposal(image_rgb, detections,
+                proposal_projection, tracking.point_track_ids, target.track_id)
         fusion = CameraLidarSemanticFusion(CameraLidarFusionConfig(
             minimum_mask_hits=4, minimum_overlap_fraction=0.10,
             mask_dilation_radius_pixels=6, projected_median_box_margin_pixels=12,
+            require_projected_median_in_box=not args.instance_mask_geometry,
         )).fuse(
             detection_frame=detections, obstacle_points_source_xyz=obstacle_xyz,
             tracking_result=tracking, camera_from_source=camera_from_robot,
@@ -399,6 +475,7 @@ def main():
                 fusion = CameraLidarSemanticFusion(CameraLidarFusionConfig(
                     minimum_mask_hits=4, minimum_overlap_fraction=.10,
                     mask_dilation_radius_pixels=6, projected_median_box_margin_pixels=12,
+                    require_projected_median_in_box=not args.instance_mask_geometry,
                 )).fuse(detection_frame=detections, obstacle_points_source_xyz=obstacle_xyz,
                     tracking_result=tracking, camera_from_source=camera_from_robot, calibration=calibration)
                 target_association = next(item for item in fusion.associations if item.track_id == target.track_id)
@@ -406,6 +483,9 @@ def main():
             item for item in fusion.semantic_labels.semantic_obstacles
             if item.track_id == target.track_id
         )
+        if args.chromatic_instance_proposal and target_association.is_matched:
+            observed_semantic = replace(observed_semantic,
+                label_source="lidar_seeded_chromatic_rgb_component")
         part_frame = contact_detector.detect(
             image_rgb, source_frame_id=camera_info.read_index,
             source_timestamp_seconds=camera_info.simulation_time_seconds,
@@ -443,7 +523,8 @@ def main():
                 contact_proxies[target.track_id] = replace(proxy, evidence=(*proxy.evidence,
                     f"outline source={outline_result.source}; bounded RGB domain opt-in; added_pixels={outline_result.added_pixel_count}"))
         model_invocations = {
-            "objects": {"invoked": True, "detection_count": len(detections.detections)},
+            "objects": {"invoked": True, "detection_count": len(detections.detections),
+                        "backend": detections.model_name},
             "contact": {
                 "invoked": True, "part_detection_count": len(part_frame.detections),
                 "accepted_part_count": contact_association.diagnostics.accepted_part_count,
@@ -480,10 +561,20 @@ def main():
             contact_masks=np.array([item.mask for item in part_frame.detections]),
         )
     selected = tracking.point_track_ids == target.track_id
+    full_track_xyz = obstacle_xyz[selected]
+    if args.instance_mask_geometry:
+        if target_association is None or not target_association.is_matched:
+            raise RuntimeError("instance geometry requires an unambiguous matched camera mask")
+        selected = masked_track_return_selection(tracking.point_track_ids, fusion.projection,
+            detections.detections[target_association.detection_index].mask,
+            track_id=target.track_id, margin_pixels=args.instance_mask_margin_pixels)
     object_xyz = obstacle_xyz[selected]
+    unassessed_points_anchor = (existing.motion.robot_points_in_anchor_frame(
+        obstacle_xyz[~selected, :2], robot_pose=final_pose, anchor_pose=anchor)
+        if args.instance_mask_geometry else None)
     spherical = estimate_spherical_geometry(object_xyz, timestamp_seconds=timestamp)
     full_spherical = spherical
-    spherical_fit_mode = "full_associated_track"
+    spherical_fit_mode = "camera_mask_selected_instance" if args.instance_mask_geometry else "full_associated_track"
     body_xyz = np.empty((0, 3))
     if (args.spherical_body_prior and body_detection is not None
             and outline_result is not None and outline_result.detection is not None
@@ -520,14 +611,31 @@ def main():
     )
     geometry = estimate_track_geometry(
         obstacle_xyz,
-        tracking_result=tracking,
+        tracking_result=(replace(tracking, point_track_ids=np.where(selected, target.track_id, -1))
+                         if args.instance_mask_geometry else tracking),
         track_id=target.track_id,
         floor_height_robot_m=floor,
         association=target_association,
     )
-    surfaces = estimate_lidar_fall_surfaces(
-        scene_xyz, object_xyz, timestamp_seconds=timestamp
-    )
+    surface_config = (LidarFallSurfaceConfig(support_xy_margin_m=.30,
+        support_maximum_gap_m=.20, minimum_support_overhang_m=.05,
+        landing_maximum_offset_m=args.fall_landing_maximum_offset_m)
+        if args.instance_mask_geometry else None)
+    surfaces = estimate_lidar_fall_surfaces(scene_xyz, object_xyz,
+        timestamp_seconds=timestamp, config=surface_config)
+    support_consistency = None
+    if args.instance_mask_geometry and surfaces.is_available:
+        support = surfaces.evidence.support_height_m
+        support_consistency = bool(spherical.radius_m.is_available
+            and spherical.center_xyz is not None
+            and support.lower_bound <= spherical.center_xyz[2] - spherical.radius_m.lower_bound
+            and support.upper_bound >= spherical.center_xyz[2] - spherical.radius_m.upper_bound)
+    save_json("fall-surface-evidence.json", {
+        "result": asdict(surfaces), "configuration": asdict(surface_config) if surface_config else None,
+        "fitted_bottom_consistency_gate": support_consistency,
+        "authored_drop_used_as_estimator_input": False,
+        "scope": "observed local support and candidate landing bands; exact impact site unestablished",
+    })
     if surfaces.is_available:
         geometry = replace(
             geometry,
@@ -601,6 +709,10 @@ def main():
         }
         save_json("vision-model-invocations.json", model_invocations)
     potential_interaction = None
+    if args.worst_case_fall_interaction_prior:
+        potential_interaction = ScalarEstimate(1, 0, 1, .5, "1",
+            "controlled_worst_case_harmful_fall_interaction_prior", evidence_timestamp,
+            EstimateStatus.PRIOR, ("worst-case consequence assumption; not inferred from route crossing",))
     ground_support = None
     ground_config = None
     if args.ground_continuity_prior:
@@ -643,6 +755,9 @@ def main():
             frame_info = camera.get_frame_info()
             frame_detections = detector.detect(frame_rgb, source_frame_id=frame_info.read_index,
                 source_timestamp_seconds=frame_info.simulation_time_seconds)
+            if args.chromatic_instance_proposal:
+                frame_detections = append_chromatic_proposal(frame_rgb, frame_detections,
+                    proposal_projection, tracking.point_track_ids, target.track_id)
             frame_outline_ok = True
             if args.seed_color_outline:
                 preliminary = CameraLidarSemanticFusion(CameraLidarFusionConfig(
@@ -658,6 +773,7 @@ def main():
             frame_fusion = CameraLidarSemanticFusion(CameraLidarFusionConfig(
                 minimum_mask_hits=4, minimum_overlap_fraction=.10,
                 mask_dilation_radius_pixels=6, projected_median_box_margin_pixels=12,
+                require_projected_median_in_box=not args.instance_mask_geometry,
             )).fuse(detection_frame=frame_detections, obstacle_points_source_xyz=obstacle_xyz,
                 tracking_result=tracking, camera_from_source=camera_from_robot, calibration=calibration)
             if not frame_outline_ok:
@@ -723,6 +839,9 @@ def main():
         args.output / "capture.npz",
         scene_xyz=scene_xyz,
         object_xyz=object_xyz,
+        full_track_xyz=full_track_xyz,
+        all_obstacle_xyz=obstacle_xyz,
+        instance_selection=selected,
         body_xyz=body_xyz,
         points_anchor=points_anchor,
         timestamps=[
@@ -740,6 +859,7 @@ def main():
         and association_error <= 0.40
         and root_unchanged_by_fixture
         and sensor_dataflow_passed
+        and support_consistency is not False
     )
     # Known position is only a controlled track-selection and independent
     # collision-scoring input; no authored radius/center enters the field.
@@ -760,6 +880,10 @@ def main():
         # Contains the entire cone's XY projection, including its base corners.
         # Independent oracle monitor only; occupancy still comes from LiDAR.
         scoring_disks.append((sphere_center + np.array([-.32 * s, -.32 * c]), .125))
+    if args.support_drop_m:
+        # Circumscribes the complete authored platform footprint. Conservative
+        # independent scoring only; the controller receives observed returns.
+        scoring_disks.append((sphere_center, args.support_width_m / math.sqrt(2)))
 
     def fixture_clearance(state):
         return min(disk_footprint_clearance(state, center_xy=center,
@@ -768,6 +892,7 @@ def main():
         target, "object", 1.0, "controlled_track_selection_prior"
     )
     fields, policies, factors, predictions, readiness = {}, {}, {}, {}, {}
+    field_risk_cells = {}
     prior_readiness = evaluate_perception_readiness(
         RestaurantScenario("simple_object", "potential", "explicit prior-assisted physical cues",
                            EvidenceMode.PRIOR, 0), sensor_adapter)
@@ -822,6 +947,7 @@ def main():
             points_anchor, adapted=adapted, semantic=semantic,
             class_policy=class_policy, guidance_policy=guidance_policy,
             grid_config=grid_config, field_config=field_config,
+            unassessed_points_xy=unassessed_points_anchor,
         )
         readiness[name] = asdict(
             evaluate_perception_readiness(
@@ -836,6 +962,15 @@ def main():
             )
         )
         fields[name] = field
+        field_risk_cells[name] = {
+            "assessed_phi_cells_per_yaw": [int(np.count_nonzero(grid.occupied_mask
+                & np.isclose(grid.cell_risks, policy.assessment.phi)))
+                for grid in field.configuration_space.occupancy_grids],
+            "unknown_phi_one_cells_per_yaw": [int(np.count_nonzero(grid.occupied_mask
+                & np.isclose(grid.cell_risks, 1.0)))
+                for grid in field.configuration_space.occupancy_grids],
+            "note": "overlapping cells use conservative arbitration; these counts are not object identity accuracy",
+        }
         policies[name] = policy.as_dict()
         factors[name] = diagnose_factor_specific_cra(adapted).to_dict()
         np.savez_compressed(
@@ -966,6 +1101,17 @@ def main():
         "contact_control": args.contact_control,
         "seed_color_outline_enabled": args.seed_color_outline,
         "spherical_fit_mode": spherical_fit_mode,
+        "instance_mask_geometry_enabled": args.instance_mask_geometry,
+        "instance_mask_margin_pixels": args.instance_mask_margin_pixels,
+        "chromatic_instance_proposal_enabled": args.chromatic_instance_proposal,
+        "full_target_track_return_count": len(full_track_xyz),
+        "unassessed_occupancy_return_count": len(unassessed_points_anchor) if unassessed_points_anchor is not None else 0,
+        "unassessed_occupancy_phi": 1.0 if args.instance_mask_geometry else None,
+        "authored_support_drop_m": args.support_drop_m,
+        "authored_support_width_m": args.support_width_m if args.support_drop_m else None,
+        "fall_interaction_prior_enabled": args.worst_case_fall_interaction_prior,
+        "fall_surface_configuration": asdict(surface_config) if surface_config else None,
+        "fitted_bottom_support_consistency": support_consistency,
         "spherical_body_assembly_prior_enabled": args.spherical_body_prior,
         "independent_scoring_disks": [{"center_xy": center.tolist(), "radius_m": radius}
                                       for center, radius in scoring_disks],
@@ -990,6 +1136,7 @@ def main():
         "fall_surface_rejections": surfaces.rejection_reasons,
         "profiles": {name: asdict(value) for name, value in PROFILE_INPUTS.items()} if args.oracle_comparison else {},
         "policies": policies,
+        "field_risk_cells": field_risk_cells,
         "factor_diagnostics": factors,
         "stationary_predictions": predictions,
         "perception_readiness": readiness,
@@ -1018,6 +1165,9 @@ def main():
             "kinetic uses nonzero 0.20 m/s relative approach speed even though the object is stationary",
             "authored location selects the target track; authored radius only scores independent clearance",
             "unsupported estimator outputs remain unavailable with per-factor rejection reasons",
+            "optional chromatic RGB proposals require a validated separated uniformly colored object against contrasting background; no authored color/mask; heuristic confidence .5; class stays unknown",
+            "instance mode permits a merged support/object track median outside the ball box; unique mask overlap and unchanged sphere quality gates remain required",
+            "remaining detected LiDAR returns retain conservative unknown-risk occupancy; existing dense guidance arbitration is an implementation adaptation",
             "complete four-factor readiness is reported separately from uncertainty-aware controller acceptance",
             "fixed geometry, waypoint, controller limits and lambda across comparisons",
         ],
@@ -1081,6 +1231,7 @@ def main():
                 clearance=fixture_clearance,
                 goal_xy=GOAL_XY,
                 physics_dt=stationary.PHYSICS_DT,
+                maximum_seconds=args.motion_maximum_seconds,
                 progress=lambda row: print(
                     json.dumps({"profile": name, "progress": row}), flush=True
                 ),

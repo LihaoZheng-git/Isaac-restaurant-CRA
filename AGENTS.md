@@ -100,3 +100,15 @@
   band is not an exact impact site. Require a separate complete raised-object
   perception/platform-occupancy gate before its wheel experiments; older reports
   predating current planar-support checks are not current validation.
+- The paired raised-sphere test has a separate explicit RGB instance-geometry
+  mode: class-trained YOLO misses remain documented. Its opt-in LiDAR-seeded
+  chromatic proposal requires a separated matte uniformly colored object and
+  contrasting background; class stays unknown, heuristic confidence stays .5,
+  and no authored color/mask/height enters estimation. Exact-mask geometry and
+  unchanged sphere-fit gates separate object mass from support returns.
+- Retain all unassessed support/environment occupancy with conservative risk.
+  In a planar field, unknown support can completely dominate a raised object's
+  computed phi. Report per-yaw risk-cell diagnostics and keep matched-geometry
+  computed-policy replay explicitly offline, with excluded support/environment
+  and no wheel motion. Neither replay nor differing platform paths establishes
+  a potential-only causal clearance effect. See the paired potential test report.

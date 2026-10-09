@@ -1,5 +1,10 @@
 # Paired physical-factor object tests
 
+The later [paired ground/raised sphere navigation test](paired_potential_navigation_test.md)
+adds a complete four-factor raised-object gate and support-inclusive wheel trials.
+Its explicit matched-geometry policy replay and planar support-dominance limitation
+are separate from the potential-only component results below.
+
 These tests extend the [four-factor sphere gate](four_factor_simple_object_readiness.md)
 before restaurant enrichment. Factor values and CRA phi are computed from the
 estimator outputs, never supplied as experimental profiles. Lambda stays 1.25;

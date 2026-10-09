@@ -83,7 +83,8 @@ def test_unknown_sphere_inputs_are_not_replaced_by_the_controlled_profile():
 
 
 @pytest.mark.parametrize("unknown", [True, False])
-def test_assessed_policy_drives_field_and_mpc_even_when_perception_is_incomplete(unknown):
+@pytest.mark.parametrize("retain_support", [True, False])
+def test_assessed_policy_drives_field_and_mpc_even_when_perception_is_incomplete(unknown, retain_support):
     from robot.evaluation.cra_experiments import EvidenceMode, RestaurantScenario
     from robot.evaluation.perception_readiness import evaluate_perception_readiness
     from robot.safety.class_safety_policy import ClassSafetyParameters, ClassSafetyPolicy
@@ -96,6 +97,7 @@ def test_assessed_policy_drives_field_and_mpc_even_when_perception_is_incomplete
     from robot.safety.safe_sage_h_full import SafeSAGEHFullConfig
     from robot.safety.safe_sage_unicycle_mpc import SafeSAGEUnicycleMPC, SafeSAGEUnicycleMPCConfig
     from robot.safety.semantic_obstacle import SemanticObstacle
+    from robot.safety.tangential_laplace_guidance_field import TangentialLaplaceGuidanceFieldConfig
 
     adapted = adapt_physical_factors(
         PhysicalAttributes.unknown(track_id=7, timestamp_seconds=1., semantic_class="sports_ball"),
@@ -120,17 +122,26 @@ def test_assessed_policy_drives_field_and_mpc_even_when_perception_is_incomplete
         field_config=SafeSAGEFieldPipelineConfig(
             SafeSAGEConfigurationSpaceConfig(RectangularRobotFootprint(.1, .1, .1, .1), 4),
             h_full_config=SafeSAGEHFullConfig(yaw_slice_count=4),
+            guidance_field_config=TangentialLaplaceGuidanceFieldConfig(
+                allow_dense_scene_arbitration=retain_support),
         ),
+        unassessed_points_xy=np.array([[2., -1.]]) if retain_support else None,
     )
     assert result.as_dict() == expected.as_dict()
     assert result.assessment.phi == pytest.approx(1. if unknown else .02984851)
     assert result.tangential_strength == 1.25
     for grid in field.configuration_space.occupancy_grids:
-        np.testing.assert_allclose(grid.cell_risks[grid.occupied_mask], expected.assessment.phi)
-        np.testing.assert_allclose(
-            grid.cell_boundary_fluxes[grid.occupied_mask],
-            expected.guidance_parameters.boundary_flux,
-        )
+        risks = grid.cell_risks[grid.occupied_mask]
+        fluxes = grid.cell_boundary_fluxes[grid.occupied_mask]
+        if retain_support:
+            assert np.all(np.isclose(risks, expected.assessment.phi) | np.isclose(risks, 1.0))
+            assert np.any(np.isclose(risks, 1.0))
+            conservative = policy(ControlledObjectInputs(contact_proxy=1.0))[1]
+            assert np.all(np.isclose(fluxes, expected.guidance_parameters.boundary_flux)
+                          | np.isclose(fluxes, conservative.guidance_parameters.boundary_flux))
+        else:
+            np.testing.assert_allclose(risks, expected.assessment.phi)
+            np.testing.assert_allclose(fluxes, expected.guidance_parameters.boundary_flux)
     ready = evaluate_perception_readiness(
         RestaurantScenario("sphere", "contact", "synthetic evidence test",
                            EvidenceMode.SENSOR if unknown else EvidenceMode.ORACLE, 0),
