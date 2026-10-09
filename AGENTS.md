@@ -85,3 +85,7 @@
   in PRIOR mode before motion and must not be reported as sensor-only results.
   High phi from low-confidence evidence is an uncertainty-policy finding; do
   not change confidence, aggregation or fallback values to make a sphere safe.
+- Paired plume fixture results are bounded fixed-camera RGB demonstrations.
+  Preserve the documented low-contrast puff miss; valid observation gates do
+  not guarantee plume recall or establish absence of heat. Rendered puffs never
+  supply factor scores, and endpoint navigation freezes the stationary field.
