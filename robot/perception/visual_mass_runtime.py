@@ -13,6 +13,7 @@ from PIL import Image
 import torch
 from torch import Tensor
 
+from robot.perception.camera_lidar_fusion import TrackSemanticAssociation
 from robot.perception.physical_attributes import (
     EstimateStatus,
     GeometryAttributes,
@@ -20,7 +21,12 @@ from robot.perception.physical_attributes import (
     ScalarEstimate,
     combine_estimate_statuses,
 )
-from robot.perception.semantic_detection import SemanticDetection
+from robot.perception.physical_geometry import GEOMETRY_SOURCE
+from robot.perception.sam_instance_segmentation import SAM_INSTANCE_SOURCE
+from robot.perception.semantic_detection import (
+    SemanticDetection,
+    SemanticDetectionFrame,
+)
 from robot.perception.visual_mass_model import (
     load_visual_mass_checkpoint,
     visual_mass_transform,
@@ -28,6 +34,7 @@ from robot.perception.visual_mass_model import (
 
 
 VISUAL_MASS_RUNTIME_SOURCE = "abo_mobilenet_rgb_lidar_dimensions"
+CATEGORY_FREE_MASS_EVIDENCE = "category_free_instance_domain_extrapolation"
 ABO_SUPPORTED_CLASSES = (
     "bottle",
     "bowl",
@@ -53,6 +60,9 @@ class VisualMassRuntimeConfig:
     domain_confidence_cap: float = 0.25
     supported_classes: tuple[str, ...] = ABO_SUPPORTED_CLASSES
     maximum_geometry_age_seconds: float = 0.5
+    allow_category_free_instances: bool = False
+    minimum_instance_mask_pixels: int = 200
+    minimum_instance_confidence: float = 0.35
 
     def __post_init__(self) -> None:
         path = Path(self.checkpoint_path)
@@ -68,7 +78,9 @@ class VisualMassRuntimeConfig:
         if not math.isfinite(maximum_age) or maximum_age <= 0:
             raise ValueError("maximum_geometry_age_seconds must be positive")
         classes = tuple(sorted(set(self.supported_classes)))
-        if not classes or any(not isinstance(item, str) or not item for item in classes):
+        if not classes or any(
+            not isinstance(item, str) or not item for item in classes
+        ):
             raise ValueError("supported_classes must contain nonempty class names")
         device = str(self.device).strip()
         if device.isdigit():
@@ -83,6 +95,19 @@ class VisualMassRuntimeConfig:
         object.__setattr__(self, "domain_confidence_cap", cap)
         object.__setattr__(self, "maximum_geometry_age_seconds", maximum_age)
         object.__setattr__(self, "supported_classes", classes)
+        if not isinstance(self.allow_category_free_instances, bool):
+            raise TypeError("allow_category_free_instances must be boolean")
+        if (
+            isinstance(self.minimum_instance_mask_pixels, bool)
+            or not isinstance(self.minimum_instance_mask_pixels, int)
+            or self.minimum_instance_mask_pixels < 1
+        ):
+            raise ValueError("minimum_instance_mask_pixels must be a positive integer")
+        if (
+            not math.isfinite(self.minimum_instance_confidence)
+            or not 0 <= self.minimum_instance_confidence <= 1
+        ):
+            raise ValueError("minimum_instance_confidence must lie in [0, 1]")
 
 
 def unavailable_mass(timestamp_seconds: float, reason: str) -> MassAttributes:
@@ -178,17 +203,113 @@ class VisualMassRuntimeEstimator:
             return unavailable_mass(
                 timestamp, f"unsupported semantic class={detection.semantic_class}"
             )
+        return self._estimate_validated(image_rgb, detection, geometry, timestamp)
+
+    def estimate_instance(
+        self,
+        image_rgb: np.ndarray,
+        frame: SemanticDetectionFrame,
+        association: TrackSemanticAssociation | None,
+        geometry: GeometryAttributes,
+        *,
+        track_id: int,
+        timestamp_seconds: float,
+    ) -> MassAttributes:
+        """Explicit category-free extrapolation from a fresh accepted SAM instance.
+
+        Category is not a network input. The legacy ``estimate`` class guard
+        remains unchanged; this path requires live sensor dimensions and a
+        separately accepted instance association. No density is required.
+        """
+        timestamp = float(timestamp_seconds)
+        if not math.isfinite(timestamp) or timestamp < 0:
+            raise ValueError("timestamp_seconds must be finite and nonnegative")
+        if not isinstance(frame, SemanticDetectionFrame) or not isinstance(
+            geometry, GeometryAttributes
+        ):
+            raise TypeError(
+                "frame and geometry must use the validated perception contracts"
+            )
+        reason = None
+        if not self.config.allow_category_free_instances:
+            reason = "category-free instance mass is not enabled"
+        elif association is None or not association.is_matched:
+            reason = "instance association is unavailable or rejected"
+        elif association.track_id != track_id:
+            reason = "instance association belongs to another track"
+        elif (
+            association.detection_index is None
+            or not 0 <= association.detection_index < len(frame.detections)
+        ):
+            reason = "instance detection index does not belong to the source frame"
+        elif SAM_INSTANCE_SOURCE not in frame.model_name.split("+"):
+            reason = "instance source is not the validated SAM adapter"
+        elif (
+            not 0
+            <= timestamp - frame.source_timestamp_seconds
+            <= self.config.maximum_geometry_age_seconds
+        ):
+            reason = "instance camera frame is stale or future evidence"
+        elif any(
+            item.status not in {EstimateStatus.MEASURED, EstimateStatus.INFERRED}
+            or item.source != GEOMETRY_SOURCE
+            for item in (geometry.width_m, geometry.depth_m, geometry.height_m)
+        ):
+            reason = "category-free mass requires live sensor geometry"
+        if reason is not None:
+            return unavailable_mass(timestamp, reason)
+        detection = frame.detections[association.detection_index]
+        mask = detection.mask
+        if (
+            detection.confidence < self.config.minimum_instance_confidence
+            or detection.mask_pixel_count < self.config.minimum_instance_mask_pixels
+            or mask[0].any()
+            or mask[-1].any()
+            or mask[:, 0].any()
+            or mask[:, -1].any()
+        ):
+            return unavailable_mass(
+                timestamp, "instance mask fails confidence, area or boundary gates"
+            )
+        image = np.asarray(image_rgb)
+        if image.dtype != np.uint8 or image.shape != (
+            frame.image_height,
+            frame.image_width,
+            3,
+        ):
+            raise ValueError("category-free RGB must align with its source frame")
+        return self._estimate_validated(
+            image,
+            detection,
+            geometry,
+            timestamp,
+            extra_evidence=(
+                CATEGORY_FREE_MASS_EVIDENCE,
+                f"accepted_instance_track_id={track_id}",
+                f"instance_source={SAM_INSTANCE_SOURCE}; frame_id={frame.source_frame_id}; timestamp={frame.source_timestamp_seconds}",
+                "category and density are not model inputs; rough heaviness only",
+                "visible LiDAR extents can underestimate complete object dimensions",
+            ),
+        )
+
+    def _estimate_validated(
+        self, image_rgb, detection, geometry, timestamp, *, extra_evidence=()
+    ):
         dimensions = (geometry.width_m, geometry.depth_m, geometry.height_m)
         if any(not item.is_available for item in dimensions):
             return unavailable_mass(timestamp, "one or more dimensions unavailable")
         if any(item.timestamp_seconds > timestamp for item in dimensions):
-            return unavailable_mass(timestamp, "one or more dimensions are future evidence")
+            return unavailable_mass(
+                timestamp, "one or more dimensions are future evidence"
+            )
         if any(
             timestamp - item.timestamp_seconds
             > self.config.maximum_geometry_age_seconds
             for item in dimensions
         ):
-            return unavailable_mass(timestamp, "one or more dimensions are stale evidence")
+            return unavailable_mass(
+                timestamp, "one or more dimensions are stale evidence"
+            )
         values = tuple(float(item.value) for item in dimensions)
         if any(value <= 0 for value in values):
             return unavailable_mass(timestamp, "one or more dimensions nonpositive")
@@ -207,13 +328,19 @@ class VisualMassRuntimeEstimator:
             return unavailable_mass(timestamp, "empty instance crop")
         crop[~crop_mask] = 127
         pixels = self.transform(Image.fromarray(crop, mode="RGB")).unsqueeze(0)
-        dimensions_tensor = torch.tensor(
-            values, dtype=torch.float32
-        ).unsqueeze(0)
+        dimensions_tensor = torch.tensor(values, dtype=torch.float32).unsqueeze(0)
         pixels = pixels.to(self.device)
         dimensions_tensor = dimensions_tensor.to(self.device)
         with torch.no_grad():
             prediction = self.backend.predict_mass_kg(pixels, dimensions_tensor)
+        if (
+            prediction.numel() != 1
+            or not torch.isfinite(prediction).all()
+            or float(prediction.reshape(-1)[0]) <= 0
+        ):
+            return unavailable_mass(
+                timestamp, "mass network output is not a single positive finite value"
+            )
         confidence = min(
             detection.confidence, *(item.confidence for item in dimensions)
         )
@@ -223,9 +350,7 @@ class VisualMassRuntimeEstimator:
         dependency_evidence = tuple(
             f"geometry_{name}: status={item.status.value}, source={item.source}, "
             f"timestamp={item.timestamp_seconds}, confidence={item.confidence}"
-            for name, item in zip(
-                ("width", "depth", "height"), dimensions, strict=True
-            )
+            for name, item in zip(("width", "depth", "height"), dimensions, strict=True)
         )
         return mass_attributes_from_prediction(
             float(prediction.reshape(-1)[0]),
@@ -234,5 +359,5 @@ class VisualMassRuntimeEstimator:
             config=self.config,
             checkpoint_sha256=self.checkpoint_sha256,
             evidence_status=evidence_status,
-            dependency_evidence=dependency_evidence,
+            dependency_evidence=(*dependency_evidence, *extra_evidence),
         )

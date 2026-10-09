@@ -14,7 +14,11 @@ from typing import Iterable
 from robot.perception.camera_lidar_fusion import TrackSemanticAssociation
 from robot.perception.physical_attributes import EstimateStatus, PhysicalAttributes
 from robot.perception.physical_geometry import GEOMETRY_SOURCE
-from robot.perception.visual_mass_runtime import VISUAL_MASS_RUNTIME_SOURCE
+from robot.perception.sam_instance_segmentation import SAM_INSTANCE_SOURCE
+from robot.perception.visual_mass_runtime import (
+    VISUAL_MASS_RUNTIME_SOURCE,
+    CATEGORY_FREE_MASS_EVIDENCE,
+)
 
 
 def accepted_detection_index(
@@ -72,7 +76,7 @@ class LiveVisualMassDiagnostic:
             self.ready_for_sensor_domain_accuracy_claim
         )
         payload["evidence_boundary"] = {
-            "rgb_segmentation": "inferred from the configured YOLO checkpoint",
+            "rgb_segmentation": "inferred from the configured instance model; source recorded per track",
             "geometry": "inferred from current LiDAR track returns",
             "mass": "inferred by the configured ABO RGB-plus-geometry checkpoint",
             "mass_reference": "unavailable",
@@ -89,6 +93,7 @@ def evaluate_live_visual_mass_dataflow(
     attributes: Iterable[PhysicalAttributes],
     *,
     checkpoint_sha256: str,
+    instance_associations: Iterable[TrackSemanticAssociation] = (),
 ) -> LiveVisualMassDiagnostic:
     """Check that available masses use inferred RGB and live LiDAR geometry."""
 
@@ -98,6 +103,9 @@ def evaluate_live_visual_mass_dataflow(
         raise ValueError("checkpoint_sha256 must be a hexadecimal SHA-256 digest")
 
     track_rows = []
+    matched_instance_ids = {
+        item.track_id for item in instance_associations if item.is_matched
+    }
     for item in attributes:
         mass = item.mass.mass_kg
         if not mass.is_available:
@@ -121,9 +129,19 @@ def evaluate_live_visual_mass_dataflow(
         if mass.status is not EstimateStatus.INFERRED:
             blockers.append(f"{prefix}: mass is not marked inferred")
         if mass.source != VISUAL_MASS_RUNTIME_SOURCE:
-            blockers.append(f"{prefix}: mass source is not the visual-mass runtime adapter")
+            blockers.append(
+                f"{prefix}: mass source is not the visual-mass runtime adapter"
+            )
         if item.semantic_class == "unknown":
-            blockers.append(f"{prefix}: semantic association is unavailable")
+            if not (
+                item.track_id in matched_instance_ids
+                and item.semantic_source == SAM_INSTANCE_SOURCE
+                and CATEGORY_FREE_MASS_EVIDENCE in mass.evidence
+                and f"accepted_instance_track_id={item.track_id}" in mass.evidence
+            ):
+                blockers.append(
+                    f"{prefix}: category-free instance association is unavailable"
+                )
         track_rows.append(
             LiveVisualMassTrackDiagnostic(
                 track_id=item.track_id,

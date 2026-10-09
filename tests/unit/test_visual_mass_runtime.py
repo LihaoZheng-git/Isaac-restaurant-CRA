@@ -1,4 +1,5 @@
 from pathlib import Path
+from dataclasses import replace
 
 import numpy as np
 import pytest
@@ -11,10 +12,15 @@ from robot.perception.physical_attributes import (
     ScalarEstimate,
 )
 from robot.perception.semantic_detection import PixelBoundingBox, SemanticDetection
+from robot.perception.semantic_detection import SemanticDetectionFrame
+from robot.perception.camera_lidar_fusion import TrackSemanticAssociation
+from robot.perception.physical_geometry import GEOMETRY_SOURCE
+from robot.perception.sam_instance_segmentation import SAM_INSTANCE_SOURCE
 from robot.perception.visual_mass_runtime import (
     VisualMassRuntimeConfig,
     VisualMassRuntimeEstimator,
     mass_attributes_from_prediction,
+    CATEGORY_FREE_MASS_EVIDENCE,
 )
 
 
@@ -38,7 +44,9 @@ def scalar(
 
 
 def geometry():
-    unavailable = ScalarEstimate.unavailable(unit="m", source="none", timestamp_seconds=2)
+    unavailable = ScalarEstimate.unavailable(
+        unit="m", source="none", timestamp_seconds=2
+    )
     return GeometryAttributes(
         scalar(0.5), scalar(0.4), scalar(0.8), unavailable, unavailable
     )
@@ -60,7 +68,9 @@ def geometry_with(*, timestamp=2, status=EstimateStatus.INFERRED):
 def config(tmp_path: Path):
     checkpoint = tmp_path / "model.pt"
     checkpoint.write_bytes(b"checkpoint")
-    return VisualMassRuntimeConfig(checkpoint, validation_mae_kg=2, domain_confidence_cap=0.25)
+    return VisualMassRuntimeConfig(
+        checkpoint, validation_mae_kg=2, domain_confidence_cap=0.25
+    )
 
 
 class Backend:
@@ -77,9 +87,7 @@ def transform(_image):
 def detection(name="chair"):
     mask = np.zeros((10, 12), dtype=np.bool_)
     mask[2:8, 3:10] = True
-    return SemanticDetection(
-        0, name, 0.9, PixelBoundingBox(3, 2, 10, 8), mask
-    )
+    return SemanticDetection(0, name, 0.9, PixelBoundingBox(3, 2, 10, 8), mask)
 
 
 def test_prediction_is_inferred_and_domain_confidence_is_capped(tmp_path):
@@ -99,9 +107,7 @@ def test_prediction_is_inferred_and_domain_confidence_is_capped(tmp_path):
 
 
 def test_ultralytics_numeric_device_is_normalized_for_pytorch(tmp_path):
-    settings = VisualMassRuntimeConfig(
-        config(tmp_path).checkpoint_path, device="0"
-    )
+    settings = VisualMassRuntimeConfig(config(tmp_path).checkpoint_path, device="0")
     assert settings.device == "cuda:0"
 
 
@@ -131,9 +137,7 @@ def test_unsupported_class_and_missing_dimensions_stay_unavailable(tmp_path):
     assert not estimator.estimate(
         image, detection("person"), geometry(), timestamp_seconds=2
     ).mass_kg.is_available
-    missing = PhysicalAttributes.unknown(
-        track_id=1, timestamp_seconds=2
-    ).geometry
+    missing = PhysicalAttributes.unknown(track_id=1, timestamp_seconds=2).geometry
     assert not estimator.estimate(
         image, detection(), missing, timestamp_seconds=2
     ).mass_kg.is_available
@@ -153,7 +157,9 @@ def test_visual_mass_preserves_non_sensor_geometry_dependency(tmp_path):
     )
 
     assert result.mass_kg.status is EstimateStatus.ORACLE
-    assert any("geometry_width: status=oracle" in item for item in result.mass_kg.evidence)
+    assert any(
+        "geometry_width: status=oracle" in item for item in result.mass_kg.evidence
+    )
 
 
 def test_visual_mass_rejects_stale_and_future_geometry(tmp_path):
@@ -173,3 +179,158 @@ def test_visual_mass_rejects_stale_and_future_geometry(tmp_path):
     assert "stale" in stale.mass_kg.evidence[0]
     assert not future.mass_kg.is_available
     assert "future" in future.mass_kg.evidence[0]
+
+
+def instance_inputs():
+    frame = SemanticDetectionFrame(
+        5, 2, 10, 12, (detection("unknown"),), SAM_INSTANCE_SOURCE, 0.1
+    )
+    association = TrackSemanticAssociation(
+        4, "matched", 20, 0, 18, 0.9, 0.75, True, (5.0, 5.0)
+    )
+    observed = geometry()
+    observed = replace(
+        observed,
+        **{
+            name: replace(getattr(observed, name), source=GEOMETRY_SOURCE)
+            for name in ("width_m", "depth_m", "height_m")
+        },
+    )
+    return frame, association, observed
+
+
+def instance_estimator(tmp_path, **changes):
+    settings = replace(
+        config(tmp_path),
+        allow_category_free_instances=True,
+        minimum_instance_mask_pixels=32,
+        **changes,
+    )
+    return VisualMassRuntimeEstimator(settings, backend=Backend(), transform=transform)
+
+
+def test_category_free_instance_needs_no_class_or_density_and_keeps_cap(tmp_path):
+    frame, association, observed = instance_inputs()
+    estimator = instance_estimator(tmp_path)
+    image = np.zeros((10, 12, 3), np.uint8)
+    result = estimator.estimate_instance(
+        image, frame, association, observed, track_id=4, timestamp_seconds=2
+    ).mass_kg
+    assert result.is_available and result.value == 5
+    assert result.status is EstimateStatus.INFERRED and result.confidence == 0.25
+    assert CATEGORY_FREE_MASS_EVIDENCE in result.evidence
+    assert "accepted_instance_track_id=4" in result.evidence
+    # Opt-in does not remove the legacy guard.
+    assert not estimator.estimate(
+        image, frame.detections[0], observed, timestamp_seconds=2
+    ).mass_kg.is_available
+
+
+@pytest.mark.parametrize(
+    "case",
+    [
+        "disabled",
+        "unmatched",
+        "wrong_track",
+        "wrong_index",
+        "wrong_source",
+        "stale_frame",
+        "future_frame",
+        "prior_geometry",
+        "other_geometry",
+        "low_confidence",
+        "small_mask",
+        "boundary",
+    ],
+)
+def test_category_free_instance_rejects_invalid_evidence(tmp_path, case):
+    frame, association, observed = instance_inputs()
+    estimator = instance_estimator(tmp_path)
+    if case == "disabled":
+        estimator.config = replace(
+            estimator.config, allow_category_free_instances=False
+        )
+    elif case == "unmatched":
+        association = replace(association, status="ambiguous")
+    elif case == "wrong_track":
+        association = replace(association, track_id=9)
+    elif case == "wrong_index":
+        association = replace(association, detection_index=2)
+    elif case == "wrong_source":
+        frame = replace(frame, model_name="authored_mask")
+    elif case in {"stale_frame", "future_frame"}:
+        frame = replace(
+            frame, source_timestamp_seconds=1 if case == "stale_frame" else 3
+        )
+    elif case in {"prior_geometry", "other_geometry"}:
+        observed = replace(
+            observed,
+            width_m=replace(
+                observed.width_m,
+                status=EstimateStatus.PRIOR
+                if case == "prior_geometry"
+                else EstimateStatus.INFERRED,
+                source=GEOMETRY_SOURCE if case == "prior_geometry" else "catalog",
+            ),
+        )
+    elif case == "low_confidence":
+        frame = replace(
+            frame, detections=(replace(frame.detections[0], confidence=0.1),)
+        )
+    elif case == "small_mask":
+        estimator.config = replace(estimator.config, minimum_instance_mask_pixels=100)
+    elif case == "boundary":
+        mask = frame.detections[0].mask.copy()
+        mask[0, 5] = True
+        frame = replace(
+            frame,
+            detections=(
+                replace(
+                    frame.detections[0],
+                    mask=mask,
+                    bounding_box=PixelBoundingBox(3, 0, 10, 8),
+                ),
+            ),
+        )
+    result = estimator.estimate_instance(
+        np.zeros((10, 12, 3), np.uint8),
+        frame,
+        association,
+        observed,
+        track_id=4,
+        timestamp_seconds=2,
+    )
+    assert not result.mass_kg.is_available
+
+
+def test_category_free_rgb_frame_alignment_is_required(tmp_path):
+    frame, association, observed = instance_inputs()
+    with pytest.raises(ValueError, match="align"):
+        instance_estimator(tmp_path).estimate_instance(
+            np.zeros((11, 12, 3), np.uint8),
+            frame,
+            association,
+            observed,
+            track_id=4,
+            timestamp_seconds=2,
+        )
+
+
+@pytest.mark.parametrize("output", [float("nan"), -1, float("inf")])
+def test_invalid_network_output_remains_unknown(tmp_path, output):
+    class InvalidBackend:
+        def predict_mass_kg(self, *args):
+            return torch.tensor([output])
+
+    estimator = instance_estimator(tmp_path)
+    estimator.backend = InvalidBackend()
+    frame, association, observed = instance_inputs()
+    result = estimator.estimate_instance(
+        np.zeros((10, 12, 3), np.uint8),
+        frame,
+        association,
+        observed,
+        track_id=4,
+        timestamp_seconds=2,
+    )
+    assert not result.mass_kg.is_available

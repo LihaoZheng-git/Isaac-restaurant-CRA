@@ -55,13 +55,52 @@ Validation: 39 focused segmentation/association tests; **1,508 full unit tests**
 repository-wide Ruff passed. Unit tests cover ambiguity, boundary/area/quality
 gates, competing tracks, coverage, source-image shape and checkpoint hash.
 
+## Explicit category-free mass path
+
+`VisualMassRuntimeEstimator.estimate_instance` is a separate opt-in API. It
+requires an accepted association for the requested track, an audited SAM-source
+frame within the configured age limit, a sufficiently resolved non-truncated
+mask, and current measured/inferred LiDAR dimensions. The legacy `estimate`
+class guard is retained even when the new path is enabled. Unaccepted instances,
+stale/future evidence, non-sensor dimensions and invalid network outputs remain
+unavailable. The live-mass diagnostic accepts category unknown only with the
+separate accepted instance association and matching provenance.
+
+The unchanged ABO MobileNet network consumes RGB plus metric dimensions, never
+category or density. New instances are explicitly labeled
+`category_free_instance_domain_extrapolation`, with the original 0.25 confidence
+cap and ±4.542 kg catalog-MAE engineering allowance. This is rough heaviness
+inference outside the catalog domain, not calibrated mass measurement. Complete
+object dimensions may be underestimated by the visible LiDAR envelope.
+
+The demo opt-in is `--category-free-visual-mass`; it requires SAM and excludes
+the effective-density fallback. The first fresh combined stationary capture
+(`outputs/sam2_integration/mass_small_stationary/`) produced **0.445 kg** with
+inferred provenance and passed live RGB/LiDAR mass dataflow. All four factors
+were available in prior-assisted mode: the floor continuity and harmful-fall
+interaction remain priors; contact is a visible-silhouette proxy; thermal is a
+validated fixed-camera low-plume proxy. Conservative phi was **0.98057**, versus
+nominal diagnostic phi 0.24651, with no unknown-factor fallback. Its high phi is
+an uncertainty-policy result and was not reduced for this test. No wheel motion.
+
+The 0.30 m radius comparison (`mass_large_stationary/`) produced **1.820 kg**,
+above the 0.18 m radius object's 0.445 kg, without category or density input.
+This is sensible size/heaviness ordering for two rendered fixtures, not measured
+mass accuracy. Its mass dataflow passed, but combined readiness **failed**:
+fitted-bottom plus floor-plane uncertainty exceeded the unchanged ground
+consistency gate. Fall height stayed unknown, phi stayed 1, and motion remained
+blocked. A simulator process exit code alone does not establish readiness;
+inspect the written acceptance report.
+
+Mass-path validation: 30 focused tests, **1,526 full unit tests**, and
+repository-wide Ruff passed. No new training, density input, package install or
+dependency upgrade was needed. This does not establish general-object accuracy.
+
 ## Remaining bounded steps
 
-1. Explicit quality-gated category-free RGB-plus-LiDAR mass inference, retaining
-   the legacy class gate by default and uncertainty on domain extrapolation.
-2. Stationary combined four-factor tests, including actual detector misses and
+1. Stationary combined four-factor tests, including actual detector misses and
    rejected/ambiguous inputs; no density prerequisite or invented factor zeros.
-3. Only after readiness: unchanged computed CRA phi in physical pass-by trials,
+2. Only after readiness: unchanged computed CRA phi in physical pass-by trials,
    with fixed lambda 1.25, obstacle-unaware nominal and online MPC/CBF safety.
 
 This track does not claim universal segmentation, general mass accuracy,
