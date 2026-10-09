@@ -96,12 +96,60 @@ Mass-path validation: 30 focused tests, **1,526 full unit tests**, and
 repository-wide Ruff passed. No new training, density input, package install or
 dependency upgrade was needed. This does not establish general-object accuracy.
 
-## Remaining bounded steps
+## Remaining bounded step
 
-1. Stationary combined four-factor tests, including actual detector misses and
-   rejected/ambiguous inputs; no density prerequisite or invented factor zeros.
-2. Only after readiness: unchanged computed CRA phi in physical pass-by trials,
-   with fixed lambda 1.25, obstacle-unaware nominal and online MPC/CBF safety.
+Only after readiness: unchanged computed CRA phi in physical pass-by trials,
+with fixed lambda 1.25, obstacle-unaware nominal and online MPC/CBF safety.
 
 This track does not claim universal segmentation, general mass accuracy,
 physical sharpness, temperature measurement or universal navigation safety.
+
+## Stationary combined benchmark
+
+The session-only `--object-appearance matte` fixture control is not an estimator
+input. SAM records overlap with the preceding raw YOLO masks, so recognized
+objects and actual mask misses can be distinguished rather than inferred from
+the output category `unknown`.
+
+Three fresh matte captures passed all four factors in **prior-assisted** mode:
+
+| Fixture | Raw YOLO target mask | Rough neural mass | Fall height | Computed phi |
+| --- | --- | ---: | --- | ---: |
+| Ground, radius 0.18 m | recognized sports ball | 0.366 kg, inferred | 0 m, ground-continuity prior | 0.98071 |
+| Raised, same radius | missed; only chair masks | 0.555 kg, inferred | 0.301 m, inferred support-to-landing drop | 0.98385 |
+| Ground plus persistent rendered plume | recognized sphere | 0.348 kg, inferred | 0 m, ground-continuity prior | 0.98955 |
+
+The raised capture uses an explicit **2.5 m landing search limit**; 2.0 m failed
+to localize a lower landing band and left potential unknown. The farther band
+is candidate landing evidence, not an exact impact site. Harmful-fall interaction
+still uses a worst-case prior, so even this inferred drop is not a fully
+sensor-only four-factor trial. Contact/thermal remain named visual proxies.
+Mass and other factors vary with the different observed views, so this is not
+a potential-only causal comparison or mass calibration. All unmatched support
+and environmental returns remain conservative unknown-risk occupancy.
+
+The positive plume capture produced continuous visible-plume cue **0.451**.
+Its nominal thermal factor rose from 0.0131 to **0.4708** and conservative
+thermal risk from 0.4572 to **0.7089**. The rendered puffs are stylized RGB
+fixtures, not temperature or simulated steam physics. No thermal score or
+plume-control label enters estimation. This checks positive cue sensitivity
+with SAM associations, while retaining the fixed-camera/reference limitation.
+
+The 0.25 m matte and 0.30 m glossy ground captures produced mass estimates but
+failed complete readiness at the unchanged fitted-bottom uncertainty gate.
+These rejection records remain in the diagnostic set; no zero fall height was
+substituted. The accepted scope is the tested fixtures, not every object size.
+
+`scripts/evaluation/cra_category_free_report.py` reads the actual capture,
+live-mass and SAM reports, fingerprints them, checks unchanged phi/fixed lambda,
+reports missing factors and produces a factor-specific chart. Unknown factors
+have no nominal bar; their separate conservative fallback remains visible.
+It does not supply or equalize any factor score. Actual factor-input provenance
+now selects runtime readiness mode, fixing the earlier ground-flag-only label.
+
+Local accepted artifacts: `unknown_matte_ground_stationary/` and
+`unknown_matte_raised_valid_stationary/`, plus `unknown_matte_plume_stationary/`
+under `outputs/sam2_integration/`;
+comparison `four-factor-summary.json` and `.png`; rejected/accepted diagnostic
+set `all-stationary-diagnostics.json`. No wheel motion in these captures.
+Validation: **80 focused tests**, **1,545 full unit tests**, repository-wide Ruff.

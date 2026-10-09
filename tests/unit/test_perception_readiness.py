@@ -6,6 +6,7 @@ from robot.evaluation.cra_experiments import EvidenceMode, RestaurantScenario
 from robot.evaluation.perception_readiness import (
     EvaluationScope,
     evaluate_perception_readiness,
+    runtime_factor_evidence_mode,
 )
 from robot.perception.physical_attributes import EstimateStatus, ScalarEstimate
 from robot.risk.cra import PhysicalRiskProfile, RiskFactorEstimate
@@ -45,9 +46,7 @@ def diagnostic(name, status=EstimateStatus.INFERRED):
         unit="J", source="fixture", timestamp_seconds=1.0
     )
     reasons = () if accepted else ("cue: unavailable",)
-    return PhysicalFactorDiagnostic(
-        name, (("cue", item),), energy, estimate, reasons
-    )
+    return PhysicalFactorDiagnostic(name, (("cue", item),), energy, estimate, reasons)
 
 
 def adapter_result(status=EstimateStatus.INFERRED):
@@ -76,22 +75,54 @@ def scenario(mode=EvidenceMode.SENSOR, family="thermal"):
     return RestaurantScenario("fixture", family, "fixture", mode, 0)
 
 
+@pytest.mark.parametrize(
+    "status,expected",
+    [
+        (EstimateStatus.INFERRED, EvidenceMode.SENSOR),
+        (EstimateStatus.MEASURED, EvidenceMode.SENSOR),
+        (EstimateStatus.PRIOR, EvidenceMode.PRIOR),
+        (EstimateStatus.ORACLE, EvidenceMode.ORACLE),
+        (EstimateStatus.FALLBACK, EvidenceMode.PRIOR),
+    ],
+)
+def test_runtime_mode_uses_actual_factor_dependencies(status, expected):
+    result = replace(adapter_result(), potential=diagnostic("potential", status))
+    assert runtime_factor_evidence_mode(result) is expected
+
+
+def test_selecting_prior_mode_does_not_accept_missing_or_fallback_evidence():
+    for status in (EstimateStatus.UNAVAILABLE, EstimateStatus.FALLBACK):
+        result = replace(adapter_result(), potential=diagnostic("potential", status))
+        mode = runtime_factor_evidence_mode(result)
+        assert not evaluate_perception_readiness(scenario(mode), result).ready
+
+
 def test_contact_proxy_readiness_is_explicit_and_provenance_is_still_required():
     result = adapter_result()
     result = replace(
-        result, contact=replace(result.contact, basis="visual_exposed_edge_proxy"),
+        result,
+        contact=replace(result.contact, basis="visual_exposed_edge_proxy"),
         config=PhysicalFactorAdapterConfig(allow_visual_contact_proxy=True),
     )
-    readiness = evaluate_perception_readiness(scenario(family="contact"), result,
-                                             scope=EvaluationScope.FACTOR_SPECIFIC)
+    readiness = evaluate_perception_readiness(
+        scenario(family="contact"), result, scope=EvaluationScope.FACTOR_SPECIFIC
+    )
     assert readiness.ready
     assert readiness.factors[0].basis == "visual_exposed_edge_proxy"
-    prior = replace(result, contact=replace(diagnostic("contact", EstimateStatus.PRIOR),
-                                          basis="visual_exposed_edge_proxy"))
-    assert not evaluate_perception_readiness(scenario(family="contact"), prior,
-                                             scope=EvaluationScope.FACTOR_SPECIFIC).ready
+    prior = replace(
+        result,
+        contact=replace(
+            diagnostic("contact", EstimateStatus.PRIOR),
+            basis="visual_exposed_edge_proxy",
+        ),
+    )
+    assert not evaluate_perception_readiness(
+        scenario(family="contact"), prior, scope=EvaluationScope.FACTOR_SPECIFIC
+    ).ready
     with pytest.raises(ValueError, match="opt-in"):
-        evaluate_perception_readiness(scenario(), replace(result, config=PhysicalFactorAdapterConfig()))
+        evaluate_perception_readiness(
+            scenario(), replace(result, config=PhysicalFactorAdapterConfig())
+        )
 
 
 def test_sensor_four_factor_readiness_requires_all_inferred_or_measured():
@@ -161,6 +192,4 @@ def test_fallback_and_unavailable_inputs_are_rejected():
 
 def test_unknown_hazard_family_rejected():
     with pytest.raises(ValueError, match="hazard_family"):
-        evaluate_perception_readiness(
-            scenario(family="unknown"), adapter_result()
-        )
+        evaluate_perception_readiness(scenario(family="unknown"), adapter_result())

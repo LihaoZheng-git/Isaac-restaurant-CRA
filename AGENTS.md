@@ -131,3 +131,10 @@
   domain-extrapolation marker, original confidence cap and engineering bounds.
   Unknown class does not mean missing instance association. These live results
   establish rough-heaviness dataflow, not calibrated general-object mass.
+- Runtime readiness/report mode follows actual factor-input provenance, including
+  fall-interaction priors, rather than only the ground-continuity fixture flag.
+  Selecting prior mode never accepts unavailable, fallback or oracle inputs.
+  The SAM raised matte fixture is an actual YOLO mask miss; its support/landing
+  drop uses the explicitly recorded 2.5 m search scope, not authored height.
+  Larger ground fixtures can fail the unchanged bottom-uncertainty gate even
+  when mass inference succeeds; keep potential unknown and block full motion.
