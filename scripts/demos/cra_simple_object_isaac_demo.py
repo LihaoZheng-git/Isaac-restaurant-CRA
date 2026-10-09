@@ -32,6 +32,12 @@ parser.add_argument("--object-plume-policy", action="store_true",
                     help="validate a stationary object-level plume window using this controlled clean fixture")
 parser.add_argument("--plume-control", choices=("none", "intermittent", "persistent"), default="none",
                     help="rendered RGB fixture control, never supplied as a thermal score")
+parser.add_argument("--contact-control", choices=("round", "protrusion"), default="round",
+                    help="rendered/collidable geometry control; no supplied contact score")
+parser.add_argument("--seed-color-outline", action="store_true",
+                    help="explicit uniform-color separated-object RGB refinement domain")
+parser.add_argument("--spherical-body-prior", action="store_true",
+                    help="allow a detector-segmented spherical body; density must cover the small-appendage assembly")
 parser.add_argument("--ground-continuity-prior", action="store_true",
                     help="explicit bounded flat-floor continuity assumption; result remains PRIOR")
 parser.add_argument("--ground-prior-maximum-extrapolation-m", type=float, default=1.5)
@@ -54,6 +60,12 @@ if args.oracle_comparison and (args.require_four_factor_readiness or args.ground
     parser.error("ground/four-factor observed readiness is separate from --oracle-comparison")
 if args.plume_control != "none" and (not args.object_plume_policy or args.oracle_comparison):
     parser.error("plume controls require the observed --object-plume-policy path")
+if args.contact_control != "round" and (args.oracle_comparison or args.plume_control != "none"):
+    parser.error("contact controls require observed mode and no simultaneous plume intervention")
+if args.spherical_body_prior and (args.sphere_density_prior_kg_m3 is None or not args.seed_color_outline):
+    parser.error("spherical body prior requires density and seed-color outline opt-ins")
+if args.oracle_comparison and args.seed_color_outline:
+    parser.error("RGB outline refinement requires observed mode")
 if args.sphere_density_prior_kg_m3 is not None:
     nominal, lower, upper = args.sphere_density_prior_kg_m3
     if not all(math.isfinite(value) for value in (nominal, lower, upper)) or not 0 < lower <= nominal <= upper:
@@ -79,6 +91,7 @@ import matplotlib
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
+import cv2
 import numpy as np
 import omni.timeline
 from pxr import Gf, Usd, UsdGeom, UsdPhysics
@@ -108,6 +121,7 @@ from robot.perception.specialist_track_evidence import (
     SpecialistAssociationFrame, build_track_shape_contact_proxies, build_track_visual_contact_proxies,
 )
 from robot.perception.spherical_mass import estimate_spherical_geometry, estimate_spherical_mass
+from robot.perception.seed_color_outline import refine_seed_color_outline
 from robot.perception.object_plume_evidence import (
     OBJECT_PLUME_BASIS, ObjectPlumeObservation, estimate_object_plume_evidence,
 )
@@ -167,6 +181,16 @@ def local_state(stage, anchor):
     pose = stationary.read_robot_pose(stage)
     xy, yaw = existing.motion.current_pose_in_field_frame(pose, anchor_pose=anchor)
     return np.array([*xy, yaw])
+
+
+def refine_frame_target(rgb, frame, index):
+    result = refine_seed_color_outline(rgb, frame.detections[index],
+        uniform_color_domain_validated=True)
+    updated = list(frame.detections)
+    if result.detection is not None:
+        updated[index] = result.detection
+    return replace(frame, detections=tuple(updated),
+        model_name=f"{frame.model_name}+{result.source}"), result
 
 
 def main():
@@ -234,6 +258,16 @@ def main():
         sphere.AddTranslateOp().Set(Gf.Vec3d(*CENTER_WORLD_XY, RADIUS_M))
         sphere.CreateDisplayColorAttr([Gf.Vec3f(0.15, 0.45, 0.95)])
         UsdPhysics.CollisionAPI.Apply(sphere.GetPrim())
+        if args.contact_control == "protrusion":
+            tip = UsdGeom.Cone.Define(stage, "/World/CRASimpleObject/Tip")
+            tip.CreateRadiusAttr(.055)
+            tip.CreateHeightAttr(.22)
+            tip.CreateAxisAttr("Y")
+            tip.AddTranslateOp().Set(Gf.Vec3d(*(
+                CENTER_WORLD_XY + np.array([0, -.32])), RADIUS_M))
+            tip.AddRotateXOp().Set(180)
+            tip.CreateDisplayColorAttr([Gf.Vec3f(.15, .45, .95)])
+            UsdPhysics.CollisionAPI.Apply(tip.GetPrim())
         # Bounded visual puffs, like the accepted bowl fixture: no temperature,
         # aerosol physics or collision geometry. Begin hidden for the reference.
         puffs = []
@@ -332,6 +366,7 @@ def main():
     observed_semantic = None
     model_invocations = {}
     sensor_dataflow_passed = True
+    body_detection = outline_result = None
     if detector is not None:
         detections = detector.detect(
             image_rgb, source_frame_id=camera_info.read_index,
@@ -356,6 +391,17 @@ def main():
         target_association = next(
             item for item in fusion.associations if item.track_id == target.track_id
         )
+        if target_association.is_matched:
+            body_detection = detections.detections[target_association.detection_index]
+            if args.seed_color_outline:
+                detections, outline_result = refine_frame_target(image_rgb, detections,
+                    target_association.detection_index)
+                fusion = CameraLidarSemanticFusion(CameraLidarFusionConfig(
+                    minimum_mask_hits=4, minimum_overlap_fraction=.10,
+                    mask_dilation_radius_pixels=6, projected_median_box_margin_pixels=12,
+                )).fuse(detection_frame=detections, obstacle_points_source_xyz=obstacle_xyz,
+                    tracking_result=tracking, camera_from_source=camera_from_robot, calibration=calibration)
+                target_association = next(item for item in fusion.associations if item.track_id == target.track_id)
         observed_semantic = next(
             item for item in fusion.semantic_labels.semantic_obstacles
             if item.track_id == target.track_id
@@ -371,12 +417,31 @@ def main():
                 camera_info.height, camera_info.width, fusion.associations,
             ), contact_association.segmentations_by_object_detection_index,
         )
+        part_contact_proxies = contact_proxies
         contact_proxies = build_track_shape_contact_proxies(
             detections, SpecialistAssociationFrame(
                 camera_info.read_index, camera_info.simulation_time_seconds,
                 camera_info.height, camera_info.width, fusion.associations,
             ), part_proxies=contact_proxies,
         )
+        if outline_result is not None:
+            contact_proxies = dict(contact_proxies)
+            save_json("outline-refinement.json", {
+                "source": outline_result.source, "rejection_reasons": outline_result.rejection_reasons,
+                "added_pixels": outline_result.added_pixel_count,
+                "seed_color_fraction": outline_result.seed_color_fraction,
+                "domain": "explicit uniformly colored separated controlled fixture; touching similar colors unsupported",
+                "authored_mask_or_color_used": False,
+            })
+            if outline_result.detection is None:
+                missing_outline = ScalarEstimate.unavailable(unit="1",
+                    source=SHAPE_CONTACT_SOURCE, timestamp_seconds=evidence_timestamp,
+                    evidence=outline_result.rejection_reasons)
+                contact_proxies[target.track_id] = part_contact_proxies.get(target.track_id, missing_outline)
+            elif target.track_id in contact_proxies:
+                proxy = contact_proxies[target.track_id]
+                contact_proxies[target.track_id] = replace(proxy, evidence=(*proxy.evidence,
+                    f"outline source={outline_result.source}; bounded RGB domain opt-in; added_pixels={outline_result.added_pixel_count}"))
         model_invocations = {
             "objects": {"invoked": True, "detection_count": len(detections.detections)},
             "contact": {
@@ -417,6 +482,39 @@ def main():
     selected = tracking.point_track_ids == target.track_id
     object_xyz = obstacle_xyz[selected]
     spherical = estimate_spherical_geometry(object_xyz, timestamp_seconds=timestamp)
+    full_spherical = spherical
+    spherical_fit_mode = "full_associated_track"
+    body_xyz = np.empty((0, 3))
+    if (args.spherical_body_prior and body_detection is not None
+            and outline_result is not None and outline_result.detection is not None
+            and not spherical.radius_m.is_available):
+        projection = fusion.projection
+        xy = projection.pixel_indices_xy
+        # Match the existing camera/LiDAR association's six-pixel tolerance.
+        # Exact mask clipping loses curved boundary returns under calibration
+        # and segmentation errors; the unchanged sphere residual gate remains.
+        body_mask = cv2.dilate(body_detection.mask.astype(np.uint8),
+            np.ones((13, 13), np.uint8)).astype(bool)
+        np.savez_compressed(args.output / "body-selection-mask.npz",
+            detector_mask=body_detection.mask, association_mask=body_mask)
+        accepted = ((fusion.projected_track_ids == target.track_id)
+                    & body_mask[xy[:, 1], xy[:, 0]])
+        body_xyz = obstacle_xyz[projection.source_indices[accepted]]
+        # A bounded body hypothesis, with full occupancy retained for control.
+        if len(body_xyz) >= .75 * len(object_xyz):
+            candidate = estimate_spherical_geometry(body_xyz, timestamp_seconds=timestamp)
+            if candidate.radius_m.is_available:
+                spherical = candidate
+                spherical_fit_mode = "detector_body_with_assembly_density_prior"
+        save_json("body-geometry-selection.json", {
+            "full_track_fit": asdict(full_spherical), "selected_fit": asdict(spherical),
+            "selected_mode": spherical_fit_mode, "camera_mask_margin_pixels": 6,
+            "maximum_excluded_return_fraction": .25,
+            "body_return_count": len(body_xyz), "full_track_return_count": len(object_xyz),
+            "excluded_fraction_is_mass_bound": False,
+            "whole_assembly_density_is_prior": True,
+            "all_track_returns_retained_for_controller": True,
+        })
     points_anchor = existing.motion.robot_points_in_anchor_frame(
         object_xyz[:, :2], robot_pose=final_pose, anchor_pose=anchor
     )
@@ -469,7 +567,8 @@ def main():
                 "configured_effective_sphere_density_prior", evidence_timestamp,
                 EstimateStatus.PRIOR, (
                     "explicit demonstration assumption; material, hollow fraction and contents are not measured",
-                    "same effective density interval for size comparison; not a universal ball prior",
+                "same effective density interval for size comparison; not a universal ball prior",
+                "detector-body mode uses whole-assembly mass per body-volume PRIOR, including unmodeled small appendages",
                 ))
             spherical_mass = estimate_spherical_mass(spherical,
                 effective_density_kg_m3=density, timestamp_seconds=evidence_timestamp)
@@ -482,6 +581,8 @@ def main():
                 "mass": asdict(spherical_mass),
                 "selected_as_runtime_mass": mass is spherical_mass,
                 "authored_radius_used_as_estimator_input": False,
+                "spherical_fit_mode": spherical_fit_mode,
+                "body_return_count": len(body_xyz), "full_track_return_count": len(object_xyz),
             })
         sensor_attributes = replace(
             sensor_attributes, mass=mass,
@@ -542,11 +643,27 @@ def main():
             frame_info = camera.get_frame_info()
             frame_detections = detector.detect(frame_rgb, source_frame_id=frame_info.read_index,
                 source_timestamp_seconds=frame_info.simulation_time_seconds)
+            frame_outline_ok = True
+            if args.seed_color_outline:
+                preliminary = CameraLidarSemanticFusion(CameraLidarFusionConfig(
+                    minimum_mask_hits=4, minimum_overlap_fraction=.10,
+                    mask_dilation_radius_pixels=6, projected_median_box_margin_pixels=12,
+                )).fuse(detection_frame=frame_detections, obstacle_points_source_xyz=obstacle_xyz,
+                    tracking_result=tracking, camera_from_source=camera_from_robot, calibration=calibration)
+                link = next(item for item in preliminary.associations if item.track_id == target.track_id)
+                frame_outline_ok = link.is_matched
+                if link.is_matched:
+                    frame_detections, frame_outline = refine_frame_target(frame_rgb, frame_detections, link.detection_index)
+                    frame_outline_ok = frame_outline.detection is not None
             frame_fusion = CameraLidarSemanticFusion(CameraLidarFusionConfig(
                 minimum_mask_hits=4, minimum_overlap_fraction=.10,
                 mask_dilation_radius_pixels=6, projected_median_box_margin_pixels=12,
             )).fuse(detection_frame=frame_detections, obstacle_points_source_xyz=obstacle_xyz,
                 tracking_result=tracking, camera_from_source=camera_from_robot, calibration=calibration)
+            if not frame_outline_ok:
+                frame_fusion = replace(frame_fusion, associations=tuple(
+                    replace(item, status="outline_refinement_unavailable") if item.track_id == target.track_id else item
+                    for item in frame_fusion.associations))
             current_pose = stationary.read_robot_pose(stage)
             camera_stationary = (math.hypot(current_pose.x-final_pose.x, current_pose.y-final_pose.y) < .005
                                  and abs(current_pose.yaw-final_pose.yaw) < .005)
@@ -606,6 +723,7 @@ def main():
         args.output / "capture.npz",
         scene_xyz=scene_xyz,
         object_xyz=object_xyz,
+        body_xyz=body_xyz,
         points_anchor=points_anchor,
         timestamps=[
             sample[4].sensor_timestamp_nanoseconds * 1e-9 for sample in samples
@@ -637,6 +755,15 @@ def main():
         stationary.ROBOT_RIGHT_EXTENT,
         stationary.ROBOT_SAFETY_MARGIN,
     )
+    scoring_disks = [(sphere_center, RADIUS_M)]
+    if args.contact_control == "protrusion":
+        # Contains the entire cone's XY projection, including its base corners.
+        # Independent oracle monitor only; occupancy still comes from LiDAR.
+        scoring_disks.append((sphere_center + np.array([-.32 * s, -.32 * c]), .125))
+
+    def fixture_clearance(state):
+        return min(disk_footprint_clearance(state, center_xy=center,
+            radius_m=radius, footprint=footprint) for center, radius in scoring_disks)
     semantic = observed_semantic or SemanticObstacle(
         target, "object", 1.0, "controlled_track_selection_prior"
     )
@@ -836,6 +963,12 @@ def main():
         "four_factor_readiness_required": args.require_four_factor_readiness or args.ground_continuity_prior,
         "ground_continuity_prior_enabled": args.ground_continuity_prior,
         "plume_control": args.plume_control,
+        "contact_control": args.contact_control,
+        "seed_color_outline_enabled": args.seed_color_outline,
+        "spherical_fit_mode": spherical_fit_mode,
+        "spherical_body_assembly_prior_enabled": args.spherical_body_prior,
+        "independent_scoring_disks": [{"center_xy": center.tolist(), "radius_m": radius}
+                                      for center, radius in scoring_disks],
         "ground_support_configuration": asdict(ground_config) if ground_config is not None else None,
         "sensor_dataflow_passed": sensor_dataflow_passed,
         "camera_lidar_age_seconds": camera_lidar_age,
@@ -875,6 +1008,7 @@ def main():
             "observed mode uses the computed conservative sensor policy unchanged, including phi saturation",
             "unmatched part masks are not negative evidence; a separately accepted visible silhouette may support a continuous contact proxy",
             "silhouette shape is a 2D visible-outline proxy; hidden features and physical sharpness/hardness remain unknown",
+            "optional protrusion is actual visible/collidable geometry; spherical mass extrapolation must still pass its unchanged residual gate and is only a rough body-volume hypothesis",
             "optional fitted-sphere mass depends on an explicitly configured effective-density prior; size alone is not measured mass",
             "optional ground support uses a LiDAR floor plane plus an explicit bounded continuity PRIOR; fitted bottom only gates consistency, never supplies fall height",
             "ground-support harmful-fall interaction uses a separately labeled worst-case PRIOR upper bound 1, not route probability or absence of risk",
@@ -944,12 +1078,7 @@ def main():
                 read_state=lambda: local_state(stage, anchor),
                 advance=advance,
                 stop=controller.stop,
-                clearance=lambda state: disk_footprint_clearance(
-                    state,
-                    center_xy=sphere_center,
-                    radius_m=RADIUS_M,
-                    footprint=footprint,
-                ),
+                clearance=fixture_clearance,
                 goal_xy=GOAL_XY,
                 physics_dt=stationary.PHYSICS_DT,
                 progress=lambda row: print(
@@ -964,10 +1093,7 @@ def main():
                 advance(0.0, 0.0)
                 state = local_state(stage, anchor)
                 stopping_states.append(state.tolist())
-                stopping_clearances.append(disk_footprint_clearance(
-                    state, center_xy=sphere_center, radius_m=RADIUS_M,
-                    footprint=footprint,
-                ))
+                stopping_clearances.append(fixture_clearance(state))
             stopping_passed = bool(
                 np.isfinite(stopping_states).all()
                 and min(stopping_clearances) > 0.02
