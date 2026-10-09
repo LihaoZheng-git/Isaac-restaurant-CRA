@@ -174,3 +174,15 @@ The evaluator correctly keeps `ready_for_sensor_domain_claim` false because its
 geometry is authored oracle data. The pan proxy was the weakest class at 1.936
 kg MAE, underscoring that these simple shapes are a plumbing diagnostic rather
 than a mass-model validation result.
+
+The 2026-10-09 [Image2Mass comparison](image2mass_comparison.md) evaluates the
+original released shape-aware weights against this same checkpoint on all 152
+held-out ABO products and the ten-object stationary Isaac fixture. The existing
+model has stronger relative-heaviness ordering on both sets; Image2Mass has
+lower Isaac MAE and lower view variation, but weaker ordering. This is an
+offline raw-network comparison and leaves the runtime adapter, class gate,
+confidence/interval policy, unknown handling, and sensor-readiness status
+unchanged. Both networks take RGB plus dimensions without a category input;
+the existing adapter's class gate is a domain safeguard rather than a network
+input. The report records source hashes, numerical conformance, provenance,
+licensing gaps, and reproduction commands.
