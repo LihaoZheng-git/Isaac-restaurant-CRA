@@ -26,6 +26,12 @@
 - Mass acceptance prioritizes continuous relative heaviness and sensible
   potential/kinetic risk ordering in a small independent test set. Exact
   kilograms and a large general-object mass study are secondary.
+- The original 2017 Image2Mass weights have an offline numeric comparison, not
+  a runtime integration. Keep its legacy-unit conversion, published-output
+  conformance gate and license gap explicit. Both mass networks are category-free
+  internally; the existing runtime class gate remains a domain safeguard.
+  See `docs/image2mass_comparison.md`; oracle/catalog benchmark results must
+  not remove current uncertainty or domain gates.
 - The primary contact demonstration may use an explicitly named continuous
   visual exposed-edge geometry proxy. Preserve the general hazard taxonomy for
   future work, and never relabel that proxy as physical sharpness or hardness.
