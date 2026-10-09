@@ -89,3 +89,8 @@
   Preserve the documented low-contrast puff miss; valid observation gates do
   not guarantee plume recall or establish absence of heat. Rendered puffs never
   supply factor scores, and endpoint navigation freezes the stationary field.
+- Seed-color outline refinement requires explicit validated uniform-color and
+  separated-object scope. A class-trained body mask can omit a real protrusion;
+  preserve that documented miss. The optional spherical-body mass hypothesis
+  needs an explicit whole-assembly density PRIOR, never discards occupancy, and
+  does not bound appendage mass by its fraction of LiDAR returns.
