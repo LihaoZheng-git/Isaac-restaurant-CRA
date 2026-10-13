@@ -146,3 +146,11 @@
   category-free report's `--require-motion` rejects stationary-only records.
   Preserve failed larger-ground/shorter-landing diagnostics and the documented
   conservative uncertainty/support dominance. See `docs/category_free_perception.md`.
+- The next accepted target is live perception/CRA/field updates during continuous
+  navigation, without scheduled observation pauses. Keep safety stops and the
+  stationary development gate. Epoch alignment uses acquisition-time ego pose
+  history without extrapolation; asynchronous results retain their source time.
+  Camera metadata currently lacks an independent acquisition clock, so the
+  simulation read-time approximation and oracle pose/extrinsic references must
+  remain explicit. No per-ray deskew or real-time guarantee is established.
+  See `docs/live_cra_navigation.md`; frozen-field trials are not live validation.
