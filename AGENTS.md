@@ -154,3 +154,10 @@
   simulation read-time approximation and oracle pose/extrinsic references must
   remain explicit. No per-ray deskew or real-time guarantee is established.
   See `docs/live_cra_navigation.md`; frozen-field trials are not live validation.
+- The moving-view plume component is a separate registered clean-reference RGB
+  method. It requires explicit clean-reference validation, background/source/
+  coverage/photometric gates and a validated negative-observation scope; a failed
+  registration stays unknown. Static visible plume may count; camera/plume
+  motion is not itself temperature. Synthetic image shifts and stationary
+  sensor replays do not establish actual moving-camera acceptance. Preserve the
+  original fixed-camera method and their separate domain/provenance records.

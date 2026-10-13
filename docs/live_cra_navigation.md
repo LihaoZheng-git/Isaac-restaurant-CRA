@@ -58,3 +58,37 @@ was unchanged. Artifact: `outputs/live_cra/sensor_epoch_stationary_final/report.
    accepted perception/field updates, goal completion, safety margins and stopping.
    Record processing latency and safety stops; do not claim real-time performance
    merely because the simulator can wait for computation.
+
+## Registered moving-view plume component
+
+`robot/perception/moving_camera_plume.py` is separate from the old stationary
+method. Independent background corners, forward/backward optical flow, RANSAC
+homography, spatial coverage, source consistency, view coverage and photometric
+checks validate registration. The initial clean reference is warped through
+accepted view changes; source/disocclusion regions are excluded, and enough
+usable air region must remain. A poor alignment yields unknown evidence.
+
+The method requires an **explicitly validated clean reference**, not an arbitrary
+first frame. It retains that reference's ID/time and a declared age limit.
+It accepts static visible plume cues, so upward motion is not a prerequisite.
+The registered foreground masks feed the unchanged continuous area/extent/
+persistence mapping, with confidence capped at 0.55. No trained weights, class
+labels, temperature or aerosol identity are supplied. Negative cue observations
+require an explicit validated domain. Shared positive foreground or duplicate
+instance claims across a batch remain ambiguous and unknown.
+
+Validated domains so far: synthetic camera translations with static/no visible
+plume, and historical stationary Isaac captures with explicitly labeled pixel
+shifts. The historical replay preserves frozen LiDAR timestamps and declares its
+0.5 s stationary gate; the live source-age default remains 0.15 s. Results were
+0.0000 (no plume) and 0.4520 (persistent plume). These are **not actual moving-
+camera sensor validation**; driving integration must still test real pose/view
+changes. Significant parallax, newly revealed backgrounds, poor texture,
+lighting changes, opaque plume lookalikes and faint cues remain limitations.
+
+Reproduction: `scripts/evaluation/moving_plume_replay.py --capture
+outputs/sam2_integration/unknown_matte_plume_stationary --pixel-shift 2 1 --output
+outputs/live_cra/plume-replay-positive.json`; the matched no-plume capture is
+`unknown_matte_ground_stationary`. The earlier stationary method is unchanged.
+Validation: 52 focused tests, **1,589 full unit tests**, repository-wide Ruff.
+The actual moving-camera and continuous-navigation gates remain pending.
