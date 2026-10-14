@@ -82,6 +82,85 @@ def _finite_real(value: object, *, name: str) -> float:
     return result
 
 
+@dataclass
+class SafeSAGEPlanExecutionLease:
+    """Separate old optimizer candidates from freshly verified execution.
+
+    The caller must validate the entire horizon from the current state against
+    the current field with exact DTCBF/dense geometry checks before recording
+    success. Source age is never renewed. This does not extend field/evidence
+    freshness, and the analytical CBF still checks each executed physics step.
+    """
+
+    source_timestamp_seconds: float
+    maximum_candidate_age_seconds: float = 0.2
+    execution_interval_seconds: float = 0.2
+    revalidation_interval_seconds: float = 0.15
+    validated_timestamp_seconds: float | None = None
+    validated_generation: int | None = None
+
+    def __post_init__(self):
+        for name in (
+            "source_timestamp_seconds",
+            "maximum_candidate_age_seconds",
+            "execution_interval_seconds",
+            "revalidation_interval_seconds",
+        ):
+            value = _finite_real(getattr(self, name), name=name)
+            if value < 0 or (name != "source_timestamp_seconds" and value == 0):
+                raise ValueError(f"{name} must be nonnegative/positive")
+            setattr(self, name, value)
+        if self.revalidation_interval_seconds >= self.execution_interval_seconds:
+            raise ValueError(
+                "revalidation must precede the verified first interval's expiry"
+            )
+        if (
+            self.validated_timestamp_seconds is not None
+            or self.validated_generation is not None
+        ):
+            raise ValueError("a new optimizer candidate is never prevalidated")
+
+    def candidate_available(self, now):
+        age = _finite_real(now, name="current time") - self.source_timestamp_seconds
+        return 0 <= age <= self.maximum_candidate_age_seconds + 1e-9
+
+    def needs_validation(self, now, generation):
+        return (
+            self.validated_timestamp_seconds is None
+            or self.validated_generation != generation
+            or _finite_real(now, name="current time") - self.validated_timestamp_seconds
+            >= self.revalidation_interval_seconds
+        )
+
+    def record_validation(self, now, generation, *, accepted):
+        if not isinstance(accepted, bool):
+            raise TypeError("horizon validation must supply an explicit boolean result")
+        if (
+            isinstance(generation, bool)
+            or not isinstance(generation, int)
+            or generation < 0
+        ):
+            raise ValueError("field generation must be a nonnegative integer")
+        self.validated_timestamp_seconds = None
+        self.validated_generation = None
+        if accepted and self.candidate_available(now):
+            self.validated_timestamp_seconds = _finite_real(now, name="current time")
+            self.validated_generation = generation
+
+    def can_execute(self, now, generation, *, field_fresh):
+        if not isinstance(field_fresh, bool):
+            raise TypeError("field freshness must be an explicit boolean")
+        return bool(
+            field_fresh
+            and self.candidate_available(now)
+            and self.validated_timestamp_seconds is not None
+            and self.validated_generation == generation
+            and 0
+            <= now - self.validated_timestamp_seconds
+            <= self.execution_interval_seconds + 1e-9
+        )
+
+
 def _finite_vector(value: object, *, size: int, name: str) -> np.ndarray:
     """Return one immutable finite vector."""
 

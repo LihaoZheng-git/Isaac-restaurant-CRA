@@ -51,11 +51,19 @@ parser.add_argument(
     help="maximum simulation seconds per wall second; reported explicitly",
 )
 parser.add_argument("--maximum-seconds", type=float, default=40.0)
+parser.add_argument(
+    "--planner-result-max-age",
+    type=float,
+    default=0.2,
+    help="optimizer candidate age cap; every executed horizon still needs fresh exact validation",
+)
 args = parser.parse_args()
 if args.evidence_gap_diagnostic and (args.motion or args.disable_evidence_retention):
     parser.error("evidence-gap diagnostic requires retention and zero wheel motion")
 if not 0 < args.simulation_rate <= 1 or not 0 < args.maximum_seconds <= 120:
     parser.error("invalid bounded simulation rate/duration")
+if not 0.1 <= args.planner_result_max_age <= 0.5:
+    parser.error("planner candidate age must be within [.1, .5] seconds")
 args.output.mkdir(parents=True, exist_ok=True)
 os.environ.setdefault("WARP_CACHE_PATH", str(args.output / "warp"))
 os.environ.setdefault("ISAAC_SIM_HEADLESS", "1")
@@ -116,7 +124,10 @@ from robot.safety.safe_sage_live_field import (
     SafeSAGELiveFieldBuffer,
     SafeSAGELiveFieldSnapshot,
 )
-from robot.safety.safe_sage_runtime import SafeSAGEControlRuntime
+from robot.safety.safe_sage_runtime import (
+    SafeSAGEControlRuntime,
+    SafeSAGEPlanExecutionLease,
+)
 from robot.safety.safe_sage_unicycle_mpc import SafeSAGEUnicycleMPC
 from robot.scene.camera_calibration import read_fisheye_polynomial_calibration
 from robot.scene.loader import load_robot_scene
@@ -769,15 +780,14 @@ def main():
             initial_command_guess=data[3],
             preferred_lateral_direction_grid_y=-1.0,
         ),
-        maximum_result_age_seconds=0.2,
+        maximum_result_age_seconds=args.planner_result_max_age,
     )
     start_sim = float(timeline.get_current_time())
     start_wall = time.perf_counter()
     plan_id = 0
     next_plan_due = float(timeline.get_current_time())
     active_plan = None
-    active_plan_time = None
-    active_plan_generation = None
+    active_plan_lease = None
     warm = None
     command = np.zeros(2)
     trajectory, commands, stops, live_fields, plan_events = [], [], [], [], []
@@ -876,17 +886,33 @@ def main():
                         "reason": plan_outcome.rejection_reason
                         if result is None
                         else result.status,
+                        "source_age_seconds": now
+                        - plan_outcome.sensor_timestamp_seconds,
+                        "first_command": None
+                        if result is None
+                        else result.first_command,
+                        "nominal_first_command": None
+                        if result is None
+                        else result.nominal_first_command,
+                        "minimum_dtcbf_margin": None
+                        if result is None
+                        else result.minimum_dtcbf_margin,
                     }
                 )
                 if accepted:
                     active_plan = result
-                    active_plan_time = plan_outcome.sensor_timestamp_seconds
+                    active_plan_lease = SafeSAGEPlanExecutionLease(
+                        plan_outcome.sensor_timestamp_seconds,
+                        maximum_candidate_age_seconds=args.planner_result_max_age,
+                        execution_interval_seconds=mpc.config.time_step,
+                        revalidation_interval_seconds=0.75 * mpc.config.time_step,
+                    )
                     # Always revalidate delayed results at receipt, including
                     # state drift and any field changes during the solve.
-                    active_plan_generation = None
                     warm = control.shifted_warm_start(result)
                 else:
                     active_plan = None
+                    active_plan_lease = None
             status = buffer.inspect(current_simulation_time_seconds=now)
             fresh = not status.fail_closed
             if fresh and not planner.busy and now >= next_plan_due:
@@ -914,13 +940,13 @@ def main():
             command = np.zeros(2)
             if not fresh:
                 stop_reason = "stale_field"
-            elif active_plan is None or now - active_plan_time > 0.2:
+            elif active_plan is None or not active_plan_lease.candidate_available(now):
                 stop_reason = "waiting_for_fresh_valid_plan"
             else:
                 # Re-evaluate the complete remaining horizon from the actual
                 # state against each newly accepted field, with identical exact
                 # DTCBF and dense geometry gates. This performs no new solve.
-                if active_plan_generation != buffer.generation:
+                if active_plan_lease.needs_validation(now, buffer.generation):
                     valid = mpc.revalidate_commands(
                         current,
                         active_plan.command_sequence,
@@ -929,12 +955,15 @@ def main():
                         guidance_fields=latest.field.pipeline.guidance_fields,
                         temporal_safety_derivative=latest.field.temporal_safety_derivative,
                     )
+                    active_plan_lease.record_validation(
+                        now, buffer.generation, accepted=valid
+                    )
                     if not valid:
                         active_plan = None
                         stop_reason = "new_field_invalidated_plan"
-                    else:
-                        active_plan_generation = buffer.generation
-                if active_plan is not None:
+                if active_plan is not None and active_plan_lease.can_execute(
+                    now, buffer.generation, field_fresh=fresh
+                ):
                     filtered = control.filter_command(
                         (active_plan.linear_velocity, active_plan.angular_velocity),
                         current,
@@ -958,6 +987,8 @@ def main():
                     else:
                         stop_reason = "cbf_fail_closed"
                         active_plan = None
+                elif active_plan is not None:
+                    stop_reason = "unverified_command_lease"
             if stop_reason:
                 stops.append({"time": now - start_sim, "reason": stop_reason})
             trajectory.append(current.tolist())
@@ -969,6 +1000,13 @@ def main():
                     "field_age": status.field_age_seconds,
                     "generation": buffer.generation,
                     "stop_reason": stop_reason,
+                    "optimizer_candidate_source_age": None
+                    if active_plan_lease is None
+                    else now - active_plan_lease.source_timestamp_seconds,
+                    "horizon_validation_age": None
+                    if active_plan_lease is None
+                    or active_plan_lease.validated_timestamp_seconds is None
+                    else now - active_plan_lease.validated_timestamp_seconds,
                 }
             )
             step(command, paced=True)
@@ -1055,6 +1093,8 @@ def main():
         "scene_unchanged": scene_unchanged,
         "simulation_rate_limit": args.simulation_rate,
         "maximum_simulation_seconds": args.maximum_seconds,
+        "planner_candidate_maximum_age_seconds": args.planner_result_max_age,
+        "verified_command_interval_seconds": mpc.config.time_step,
         "wall_seconds": time.perf_counter() - start_wall,
         "fixed_lambda": 1.25,
         "plume_control": args.plume_control,

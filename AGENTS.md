@@ -213,3 +213,15 @@
   diagnostics never supply geometry or factor inputs. The eight-second moving
   audit is not waypoint-completion acceptance; moving plume registration remains
   unresolved and its rejected alternatives must not be described as integrated.
+- Optimizer candidate age is separate from verified command execution. The
+  live demo's legacy 0.2 s age cap has an explicit opt-in up to 0.5 s; never renew
+  original optimizer source times or physical input/field freshness. Every
+  accepted candidate must pass full exact DTCBF/dense geometry validation from
+  the current state against the current field, again on field changes and after
+  0.15 s. Verified execution expires after the first 0.2 s interval; analytical
+  CBF checks remain per physics step. Preserve failed/future/expired stops and
+  report this as a bounded runtime adaptation, not paper equivalence/real time.
+  The no-plume and positive-plume reuse trials reached their waypoints but each
+  had only one complete factor assessment; navigation success is not moving-view
+  perception acceptance. The proposed replacement plume method is a pending
+  research choice, not an integrated model or a granted training/data decision.

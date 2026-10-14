@@ -340,3 +340,63 @@ an opt-in budget up to 120 s; the default remains 40 s. An explicitly longer
 90 s run is separate from the failed 60 s comparison and cannot establish a
 speed improvement or erase that failure. The thermal method choice and full
 live perception acceptance remain unresolved; PR #117 remains a draft.
+
+## Fresh verification of delayed optimizer candidates
+
+At a 0.1 simulation-seconds/wall-second pacing limit, the separate
+`deskew-none-live-90` trial exposed optimizer starvation: median solve latency
+was 2.855 wall seconds, above its 0.2 simulation-second candidate budget.
+259 results were rejected for source age. It did not reach the goal and finally
+stopped on repeated stale perception results; clearance was 0.26937 m. Another
+stationary Kit process overlapped its final portion, so this is a development
+load/failure diagnostic, not a controlled performance comparison.
+
+`SafeSAGEPlanExecutionLease` separates candidate computation age from current
+execution verification. `--planner-result-max-age` defaults to the legacy
+0.2 s; an explicit bounded opt-in permits up to 0.5 s. Original optimizer
+timestamps are retained and repeated verification never renews that source-age
+cap. A delayed result is only a proposal: its entire command horizon must pass
+the unchanged exact DTCBF and dense padded geometry checks from the **current
+state against the current accepted field**. Every field generation invalidates
+that verification; periodic checks occur after 0.15 s even if the field is
+unchanged. Successful verification lasts at most the first 0.2 s interval,
+and the analytical CBF still checks every commanded physics step. Failed,
+expired, future or unverified candidates stop. Physical input/field age limits,
+confidence, phi, lambda, arrival and clearance gates are unchanged. This is a
+bounded unicycle/runtime adaptation, not exact paper equivalence or a new
+real-time guarantee.
+
+The stationary lease-code gate passed with zero wheels. **1,665 full unit tests
+passed**, including candidate expiry, original-clock preservation, changed/stale
+fields, failed verification and short execution leases; Ruff passed.
+
+`verified-plan-reuse-none-live`, with a 0.5 s candidate cap at the explicitly
+paced 0.1 rate, reached the actual waypoint in approximately 45.6 simulation
+seconds (557 wall seconds). It committed 390 fields, 290 during translation,
+with 0.22916 m minimum oracle fixture clearance and 0.00252 m stopping drift.
+107 of 1,485 nonzero commands used candidates older than 0.2 s. Maximum
+executed source age was 0.2833 s, verification age 0.1500 s and field age
+0.2667 s; source clocks were not rewritten. The separate command-lease audit
+records these values. There were still 1,107 waiting-for-plan stops and 144
+rejections after full-horizon revalidation. No uninterrupted-motion claim is
+supported, and the earlier failed trials remain failures.
+
+This is a **conservative navigation pass, not complete moving-view perception**:
+there were 18 fresh instances, three potential-ready updates and one complete
+assessment.
+
+The `verified-plan-reuse-positive-live` repeat also reached the actual waypoint,
+with 356 fields (264 during translation), 0.19535 m minimum fixture clearance,
+and 0.00225 m stopping drift, taking approximately 41.5 simulation seconds and
+503 wall seconds. It retained 41 mass and 27 contact observations, but had just
+13 fresh instances, three potential-ready updates and one complete assessment.
+Puffs contribute actual LiDAR occupancy: differing times/clearances between
+these controls do **not** establish a thermal-only causal effect.
+
+These two passes validate the bounded navigation/reuse behavior, not complete
+moving-view perception. The user has been asked to choose between a bounded
+Isaac-trained plume segmenter feeding the existing continuous cue score and
+real steam footage first. No replacement model, weights, dataset, license or
+moving-camera accuracy is claimed as integrated. Camera truncation and limited
+close-range LiDAR coverage also remain explicit. PR #117 remains a draft pending
+its intended perception gate; restaurant enrichment is still later work.
