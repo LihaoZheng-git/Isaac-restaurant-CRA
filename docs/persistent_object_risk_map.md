@@ -111,7 +111,46 @@ complete visual estimation for every track. Navigation uses initial plume
 persistence and current kinetic/context/field updates; it is a different
 experiment from the previous moving-plume-registration target.
 
-Validation results and motion limitations are recorded below after diagnostics.
+## Validation results (2026-10-14)
+
+The final full regression suite passed **1,681 tests** in 39.48 s, repository-wide
+Ruff passed, and diff checks passed. No new packages or weights were installed.
+
+| Diagnostic | Result | Scope |
+| --- | --- | --- |
+| `no-plume-final` recorded stationary replay | 12 frames, 25–28 clusters/frame, 12 accepted visual-instance updates, 42 retained-property uses; final phi range .56432–.68359 | Real recorded sensor frames with injected missing SAM outputs after frame 6; pose/floor oracle, property and factor priors explicit. |
+| `positive-plume-final` recorded stationary replay | 12 frames, 25–27 clusters/frame, 12 accepted visual-instance updates, 26 retained-property uses; final phi range .63327–.90473 | Positive cue with partial inputs/priors; zero complete physical-input assessments. High numeric phi does not mean all four estimators succeeded. |
+| `fresh-stationary` Isaac positive fixture | 12 accepted fields, zero wheel commands | Fresh stationary numeric-policy gate; many background clusters use factor priors. This preceded the later field/recovery refinements. |
+| `live-recovery` final no-plume wheel gate | Actual arrival and safe stopping; 565 live fields, 399 translating; minimum fixture clearance .22061 m, minimum analytical CBF margin .23770, stop drift .00250 m | Prior-assisted cached-property experiment with fixed lambda 1.25, explicit .05 simulation-seconds/wall-second pacing, and a separate 90 s simulation budget. |
+
+The successful run reached its waypoint at about 56.6 simulation seconds and
+took 1,735 wall seconds after the stationary phase. It recorded 15,877 current
+cluster assessments, 77 accepted visual instances, 105 prior-mode physical-input
+readiness assessments, 60,696 configured-factor-prior uses and 2,900 retained-
+property uses. These are update counts, not unique-object counts or detection
+accuracy. Most background factors are priors; numeric policy completeness does
+not establish complete visual estimation across the environment.
+
+The nonzero-command audit retained optimizer source clocks: maximum candidate
+age .23333 s, horizon-validation age .11667 s, and field age .15000 s. There
+were 1,408 waiting-for-plan and 226 changed-field safety stops; no uninterrupted
+motion or real-time claim is supported. Scene and fixture-root invariants passed.
+
+Earlier failed artifacts remain separate: `live-none` aborted on a diagnostic
+key mismatch; `live-none-v2` stopped on inference/temporal failures after 46 fields
+with .27988 m clearance and .00029 m drift; `live-none-paced` failed its original
+60 s arrival budget after 503 fields despite .21475 m clearance/.00082 m drift;
+`live-stable-policy` stopped on temporal gaps after 68 fields with .28510 m
+clearance/.00120 m drift. The final run changed property handling, field grouping,
+recovery and pacing/budget, so it is not a controlled speed-improvement comparison.
+
+There is no new positive-plume wheel comparison, multi-actor restaurant gate,
+causal CRA advantage, calibrated mass/prior policy, physical sharpness,
+temperature or moving-camera plume-detector validation. Identity loss/ambiguity
+and original expiry can return an object to factor priors. Crowded crossings,
+dynamic heat/support changes and motion-aware occupancy clearing remain outside
+this bounded static-scene persistence demonstration. PR #118 is stacked on the
+unmerged live-development PR #117; main remains unchanged.
 
 The new map opts into connected equal-policy field regions. Geometry with
 identical phi, normal flux, lambda and passing side shares one connected field
