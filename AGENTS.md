@@ -263,3 +263,16 @@
   within the unchanged derivative limit, retaining both epochs and all field/
   command freshness and exact verification gates. Never substitute missing
   temporal evidence with zero during motion or renew source clocks.
+- The separated multi-object fixture opts into 3D connected clustering with
+  planar association/velocity, sparse projected-depth visibility and a separated
+  foreground mask depth-layer assumption. Keep original return IDs and all
+  physical occupancy; nearby foreign/ambiguous masks still fail unchanged SAM
+  quality/coverage/boundary gates. These are bounded association adaptations,
+  not complete 3D segmentation or directly measured camera visibility.
+- The opt-in equal-height landing mode may infer vertical support-to-landing
+  drop when all candidate lower landing bands agree, while impact direction/site
+  remains unknown. Keep the spherical bottom consistency gate, explicit 2.5 m
+  search scope and worst-case fall-interaction PRIOR separate; height is never
+  fall height. Preserve strict directional defaults and mismatched-band failures.
+  See docs/restaurant_readiness_gate.md; numeric completeness alone cannot pass
+  its independent fixture-evidence or combined navigation acceptance.

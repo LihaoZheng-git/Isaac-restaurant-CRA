@@ -17,7 +17,7 @@ from robot.evaluation.perception_readiness import (
     evaluate_perception_readiness,
     runtime_factor_evidence_mode,
 )
-from robot.perception.camera_lidar_fusion import project_fisheye_polynomial_points
+from robot.perception.camera_lidar_fusion import project_fisheye_polynomial_points, depth_visible_projection
 from robot.perception.physical_attributes import PhysicalAttributes
 from robot.risk.object_risk_policy import evaluate_object_risk
 from robot.risk.physical_factor_adapter import adapt_physical_factors
@@ -59,6 +59,7 @@ def assess_all_objects(worker, packet):
         robot_position_world_xy=np.array(packet.robot_position_world_xy),
         robot_yaw=packet.robot_yaw,
         timestamp_seconds=packet.sensor_timestamp_seconds,
+        clustering_points_robot_xyz=packet.obstacle_xyz if worker.cluster_in_3d else None,
     )
     tracks = tracking.tracked_obstacles
     if not tracks:
@@ -68,6 +69,9 @@ def assess_all_objects(worker, packet):
         camera_from_source=packet.camera_from_scan_robot,
         calibration=worker.calibration,
     )
+    projected_count = len(projection.source_indices)
+    if worker.camera_visibility_radius_pixels:
+        projection = depth_visible_projection(projection, radius_pixels=worker.camera_visibility_radius_pixels)
     visible = {
         track.track_id
         for track in tracks
@@ -226,6 +230,12 @@ def assess_all_objects(worker, packet):
         )
         detail = {
             "track_id": track.track_id,
+            "centroid_world_xy": track.centroid_world_xy,
+            "velocity_world_xy": track.velocity_world_xy,
+            "observation_count": track.observation_count,
+            "camera_occluded_return_count": projected_count - len(projection.source_indices),
+            "instance_centroid_world_xyz": world[selected].mean(axis=0).tolist()
+            if assessment["accepted"] else None,
             "camera_observable": track.track_id in visible,
             "visual_attempted": track.track_id in attempted,
             "accepted_instance": assessment["accepted"],

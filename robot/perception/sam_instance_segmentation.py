@@ -13,7 +13,7 @@ import time
 
 import numpy as np
 
-from robot.perception.camera_lidar_fusion import ProjectedLidarPoints
+from robot.perception.camera_lidar_fusion import ProjectedLidarPoints, mask_foreground_hits
 from robot.perception.semantic_detection import PixelBoundingBox, SemanticDetection
 
 
@@ -35,8 +35,13 @@ class SamInstanceConfig:
     equivalent_mask_iou: float = 0.85
     ambiguity_quality_gap: float = 0.05
     confidence_cap: float = 0.75
+    foreground_depth_gap_m: float | None = None
 
     def __post_init__(self):
+        if self.foreground_depth_gap_m is not None and (
+            not math.isfinite(self.foreground_depth_gap_m) or not 0.3 <= self.foreground_depth_gap_m <= 1.0
+        ):
+            raise ValueError("foreground depth gap must lie within [.3, 1] m")
         if not Path(self.checkpoint_path).is_file():
             raise FileNotFoundError("SAM checkpoint must be an existing local file")
         if not str(self.checkpoint_path).endswith("sam2.1_t.pt"):
@@ -213,6 +218,9 @@ class SamInstanceSegmenter:
         for mask, quality in zip(masks, qualities):
             area = int(mask.sum())
             hits = mask[xy[:, 1], xy[:, 0]]
+            original_hit_count = int(hits.sum())
+            if self.config.foreground_depth_gap_m is not None:
+                hits = mask_foreground_hits(projection, mask, gap_m=self.config.foreground_depth_gap_m)
             own_hits = int(np.count_nonzero(hits & owned))
             foreign_hits = int(np.count_nonzero(hits & ~owned))
             boundary = bool(
@@ -229,6 +237,7 @@ class SamInstanceSegmenter:
                     "projected_owned_points": count,
                     "track_coverage": own_hits / count,
                     "foreign_mask_hits": foreign_hits,
+                    "farther_depth_layer_mask_hits": original_hit_count - int(hits.sum()),
                     "foreign_hit_fraction": foreign_hits
                     / max(1, own_hits + foreign_hits),
                 }

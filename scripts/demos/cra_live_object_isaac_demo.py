@@ -28,6 +28,8 @@ parser.add_argument(
     help="all-track numeric CRA with explicitly labeled factor/property priors",
 )
 parser.add_argument("--object-factor-prior-risk", type=float, default=0.25)
+parser.add_argument("--fixture-layout", choices=("single", "three"), default="single")
+parser.add_argument("--stationary-frames", type=int, default=12)
 parser.add_argument(
     "--evidence-gap-diagnostic",
     action="store_true",
@@ -64,6 +66,10 @@ parser.add_argument(
     help="optimizer candidate age cap; every executed horizon still needs fresh exact validation",
 )
 args = parser.parse_args()
+if not 12 <= args.stationary_frames <= 60:
+    parser.error("stationary frames must be within [12, 60]")
+if args.fixture_layout != "single" and not args.persistent_object_risk_map:
+    parser.error("multi-object fixture requires the all-track risk map")
 if not 0 < args.object_factor_prior_risk < 1:
     parser.error("object factor prior must be strictly between zero and one")
 if args.persistent_object_risk_map and args.evidence_gap_diagnostic:
@@ -124,6 +130,7 @@ from robot.navigation.waypoint_controller import (
 from robot.perception.live_inference import LiveInferenceRunner
 from robot.perception.lidar_deskew import deskew_uncompensated_lidar
 from robot.perception.physical_attributes import EstimateStatus
+from robot.perception.lidar_fall_surfaces import LidarFallSurfaceConfig
 from robot.perception.sensor_epochs import (
     EgoPoseHistory,
     EgoPoseSample,
@@ -154,7 +161,7 @@ from robot.sensor.lidar_geometry import filter_valid_points, transform_points
 stationary = existing.stationary
 app = existing.simulation_app
 RADIUS = 0.18
-GOAL = (2.5, 0.0)
+GOAL = (3.5 if args.fixture_layout == "three" else 2.5, 0.0)
 GROUND_SCOPE = "bounded separated ground sphere; observed flat plane with assumed unseen local support/landing continuity"
 PLUME_SCOPE = "bounded rendered matte sphere and opaque bright puffs; validated initial clean reference; registered object-associated visible-plume proxy only"
 
@@ -247,7 +254,8 @@ def main():
         }
     device = os.environ.get("YOLO_DEVICE", "0")
     segmenter = SamInstanceSegmenter(
-        SamInstanceConfig(Path(weights["sam"]["path"]), device=device)
+        SamInstanceConfig(Path(weights["sam"]["path"]), device=device,
+                          foreground_depth_gap_m=0.5 if args.fixture_layout == "three" else None)
     )
     mass = VisualMassRuntimeEstimator(
         VisualMassRuntimeConfig(
@@ -277,42 +285,61 @@ def main():
     )
     stage = loaded.stage
     center_world = np.array(stationary.ROBOT_START_POSITION_WORLD[:2]) + [1.3, 0.0]
+    fixture_specs = [
+        {"name": "ground", "offset_xy": (1.3, 0.3 if args.fixture_layout == "three" else 0.0), "drop_m": 0.0,
+         "color": (0.15, 0.45, 0.95), "plume": args.fixture_layout == "single"},
+    ]
+    if args.fixture_layout == "three":
+        fixture_specs.extend([
+            {"name": "raised", "offset_xy": (2.6, 1.5), "drop_m": 0.30,
+             "color": (0.85, 0.25, 0.15), "plume": False},
+            {"name": "plume", "offset_xy": (2.2, -0.65), "drop_m": 0.0,
+             "color": (0.2, 0.8, 0.3), "plume": True},
+        ])
+    fixtures = []
     root_before = stage.GetRootLayer().ExportToString()
     with Usd.EditContext(stage, stage.GetSessionLayer()):
-        sphere = UsdGeom.Sphere.Define(stage, "/World/CRALiveObject/Sphere")
-        sphere.CreateRadiusAttr(RADIUS)
-        sphere.AddTranslateOp().Set(Gf.Vec3d(*center_world, RADIUS))
-        sphere.CreateDisplayColorAttr([Gf.Vec3f(0.15, 0.45, 0.95)])
-        UsdPhysics.CollisionAPI.Apply(sphere.GetPrim())
-        material = UsdShade.Material.Define(stage, "/World/CRALiveObject/Matte")
-        shader = UsdShade.Shader.Define(stage, "/World/CRALiveObject/Matte/Shader")
-        shader.CreateIdAttr("UsdPreviewSurface")
-        shader.CreateInput("diffuseColor", Sdf.ValueTypeNames.Color3f).Set(
-            Gf.Vec3f(0.15, 0.45, 0.95)
-        )
-        shader.CreateInput("roughness", Sdf.ValueTypeNames.Float).Set(1.0)
-        shader.CreateInput("specularColor", Sdf.ValueTypeNames.Color3f).Set(Gf.Vec3f(0))
-        material.CreateSurfaceOutput().ConnectToSource(
-            shader.ConnectableAPI(), "surface"
-        )
-        UsdShade.MaterialBindingAPI.Apply(sphere.GetPrim()).Bind(material)
         puffs = []
-        for index in range(4):
-            puff = UsdGeom.Sphere.Define(
-                stage, f"/World/CRALiveObject/Plume/Puff{index}"
-            )
-            puff.CreateRadiusAttr(0.035 + 0.009 * index)
-            puff.AddTranslateOp().Set(
-                Gf.Vec3d(
-                    center_world[0],
-                    center_world[1] + 0.012 * (-1) ** index,
-                    2 * RADIUS + 0.07 + 0.085 * index,
+        for spec in fixture_specs:
+            xy = np.array(stationary.ROBOT_START_POSITION_WORLD[:2]) + spec["offset_xy"]
+            base = f"/World/CRALiveObject/{spec['name']}"
+            sphere = UsdGeom.Sphere.Define(stage, base + "/Sphere")
+            sphere.CreateRadiusAttr(RADIUS)
+            sphere.AddTranslateOp().Set(Gf.Vec3d(*xy, RADIUS + spec["drop_m"]))
+            sphere.CreateDisplayColorAttr([Gf.Vec3f(*spec["color"])])
+            UsdPhysics.CollisionAPI.Apply(sphere.GetPrim())
+            material = UsdShade.Material.Define(stage, base + "/Matte")
+            shader = UsdShade.Shader.Define(stage, base + "/Matte/Shader")
+            shader.CreateIdAttr("UsdPreviewSurface")
+            shader.CreateInput("diffuseColor", Sdf.ValueTypeNames.Color3f).Set(Gf.Vec3f(*spec["color"]))
+            shader.CreateInput("roughness", Sdf.ValueTypeNames.Float).Set(1.0)
+            shader.CreateInput("specularColor", Sdf.ValueTypeNames.Color3f).Set(Gf.Vec3f(0))
+            material.CreateSurfaceOutput().ConnectToSource(shader.ConnectableAPI(), "surface")
+            UsdShade.MaterialBindingAPI.Apply(sphere.GetPrim()).Bind(material)
+            fixtures.append({**spec, "center_world_xy": xy.tolist(), "radius_m": RADIUS,
+                             "center_world_xyz": [*xy.tolist(), RADIUS + spec["drop_m"]],
+                             "monitor_radius_m": 0.7 / math.sqrt(2) if spec["drop_m"] else RADIUS})
+            if spec["drop_m"]:
+                support = UsdGeom.Cube.Define(stage, base + "/Support")
+                support.CreateSizeAttr(1.0)
+                support.AddTranslateOp().Set(Gf.Vec3d(*xy, spec["drop_m"] / 2))
+                support.AddScaleOp().Set(Gf.Vec3f(0.7, 0.7, spec["drop_m"]))
+                support.CreateDisplayColorAttr([Gf.Vec3f(0.35)])
+                UsdPhysics.CollisionAPI.Apply(support.GetPrim())
+            if not spec["plume"]:
+                continue
+            for index in range(4):
+                puff = UsdGeom.Sphere.Define(stage, base + f"/Plume/Puff{index}")
+                puff.CreateRadiusAttr((0.035 + 0.009 * index) * (1.7 if args.fixture_layout == "three" else 1.0))
+                puff.AddTranslateOp().Set(
+                    Gf.Vec3d(xy[0], xy[1] + 0.012 * (-1) ** index,
+                             spec["drop_m"] + 2 * RADIUS + 0.07 + 0.085 * index)
                 )
-            )
-            puff.AddScaleOp().Set(Gf.Vec3f(1, 1, 1.4))
-            puff.CreateDisplayColorAttr([Gf.Vec3f(0.8, 0.8, 0.8)])
-            puff.MakeInvisible()
-            puffs.append(puff)
+                puff.AddScaleOp().Set(Gf.Vec3f(1, 1, 1.4))
+                puff.CreateDisplayColorAttr([Gf.Vec3f(0.8)])
+                puff.MakeInvisible()
+                puffs.append(puff)
+    save_json("fixture-monitor.json", {"fixtures": fixtures, "scope": "authored geometry for rendering and independent validation only; never estimator inputs"})
     root_unchanged_by_fixture = stage.GetRootLayer().ExportToString() == root_before
     controller = NovaCarterController(robot_prim_path=stationary.ROBOT_PRIM_PATH)
     SimulationManager.setup_simulation(
@@ -414,6 +441,16 @@ def main():
         )
         if args.persistent_object_risk_map
         else None,
+        fall_surface_config=LidarFallSurfaceConfig(
+            support_xy_margin_m=0.30, support_maximum_gap_m=0.20,
+            minimum_support_overhang_m=0.05, landing_maximum_offset_m=2.5,
+            allow_equal_height_multiple_landings=True,
+        ) if args.fixture_layout == "three" else None,
+        fall_interaction_prior_scope="bounded multi-object support test; worst-case harmful fall interaction, not measured fall probability"
+        if args.fixture_layout == "three" else None,
+        cluster_in_3d=args.fixture_layout == "three",
+        camera_visibility_radius_pixels=4 if args.fixture_layout == "three" else 0,
+        mask_foreground_depth_gap_m=0.5 if args.fixture_layout == "three" else None,
     )
     history = EgoPoseHistory()
     captures, rejections, records = [], [], []
@@ -653,7 +690,7 @@ def main():
                 if args.plume_control == "persistent":
                     for puff in puffs:
                         puff.MakeVisible()
-        if len(records) >= 12:
+        if len(records) >= args.stationary_frames:
             cv2.imwrite(
                 str(args.output / "stationary-current.png"), packet.rgb[:, :, ::-1]
             )
@@ -681,6 +718,7 @@ def main():
         "frames": len(records),
         "nonzero_wheel_commands": 0,
         "plume_control": args.plume_control,
+        "fixture_layout": args.fixture_layout,
         "rejections": sorted(set(rejections)),
         "weights": weights,
         "last_readiness": None if latest is None else asdict(latest.readiness),

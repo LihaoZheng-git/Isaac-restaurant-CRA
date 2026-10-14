@@ -705,3 +705,20 @@ def test_invalid_obstacle_points_are_rejected(
             robot_yaw=0.0,
             timestamp_seconds=0.0,
         )
+
+
+def test_optional_3d_clustering_separates_vertical_returns_and_preserves_point_ids():
+    from robot.safety.obstacle_tracking import ObstacleTrackerConfig
+
+    points = np.array([[1, 0, 0.2], [1.01, 0, 0.2], [1, 0, 0.6], [1.01, 0, 0.6]])
+    tracker = ObstacleTracker(ObstacleTrackerConfig(cluster_radius=0.1))
+    result = tracker.update(points[:, :2], clustering_points_robot_xyz=points,
+                            robot_position_world_xy=np.zeros(2), robot_yaw=0, timestamp_seconds=1)
+    assert len(result.tracked_obstacles) == 2
+    assert result.point_track_ids.tolist() == [0, 0, 1, 1]
+    legacy = ObstacleTracker(ObstacleTrackerConfig(cluster_radius=0.1)).update(
+        points[:, :2], robot_position_world_xy=np.zeros(2), robot_yaw=0, timestamp_seconds=1)
+    assert len(legacy.tracked_obstacles) == 1
+    with pytest.raises(ValueError, match="point order"):
+        tracker.update(points[:, :2], clustering_points_robot_xyz=points[::-1],
+                       robot_position_world_xy=np.zeros(2), robot_yaw=0, timestamp_seconds=2)

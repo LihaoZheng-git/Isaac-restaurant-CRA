@@ -33,6 +33,33 @@ def make_calibration() -> FThetaCameraCalibration:
     )
 
 
+def test_depth_visibility_is_mask_independent_and_preserves_original_source_indices():
+    from robot.perception.camera_lidar_fusion import ProjectedLidarPoints, depth_visible_projection
+
+    projection = ProjectedLidarPoints(np.array([2, 7, 9, 11]),
+                                      np.array([[20, 20], [21, 20], [22, 20], [50, 50]]),
+                                      np.array([[20, 20], [21, 20], [22, 20], [50, 50]]),
+                                      np.array([1, 4, 1.1, 5]))
+    visible = depth_visible_projection(projection)
+    assert visible.source_indices.tolist() == [2, 9, 11]
+    assert projection.source_indices.tolist() == [2, 7, 9, 11]
+    assert not visible.source_indices.flags.writeable
+
+
+def test_mask_foreground_layer_retains_nearby_competitors_and_does_not_modify_projection():
+    from robot.perception.camera_lidar_fusion import ProjectedLidarPoints, mask_foreground_hits
+
+    points = np.tile([[20, 20]], (11, 1))
+    projection = ProjectedLidarPoints(np.arange(11), points, points,
+                                      np.array([1, 1, 1, 1, 1, 1, 1, 1.1, 1.2, 4, 4.1]))
+    hits = mask_foreground_hits(projection, np.ones((30, 30), bool))
+    assert hits.tolist() == [True] * 9 + [False, False]
+    assert len(projection.source_indices) == 11
+    # An isolated near outlier cannot remove a well-observed farther object.
+    altered = ProjectedLidarPoints(np.arange(11), points, points, np.array([1] + [4] * 10))
+    assert mask_foreground_hits(altered, np.ones((30, 30), bool)).all()
+
+
 def make_track(track_id: int, point_count: int = 2) -> TrackedObstacle:
     return TrackedObstacle(
         track_id=track_id,
