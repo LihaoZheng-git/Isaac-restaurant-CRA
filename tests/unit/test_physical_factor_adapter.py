@@ -75,6 +75,47 @@ def test_energy_equations_and_unknown_specialists():
     assert CRARiskAssessor().assess(result.profile).phi == 1.0
 
 
+def test_retained_property_age_extension_never_extends_motion_fall_or_thermal():
+    from robot.perception.temporal_object_evidence import TEMPORAL_EVIDENCE_MARKER
+
+    old = replace(scalar(4,'kg',timestamp=0,status=EstimateStatus.PRIOR),
+                  evidence=(TEMPORAL_EVIDENCE_MARKER,))
+    item = attributes()
+    item = replace(item,mass=MassAttributes(old))
+    assert 'mass_kg: stale evidence' in adapt(item).kinetic.rejection_reasons
+    config = PhysicalFactorAdapterConfig(maximum_retained_mass_age_seconds=3,
+                                         maximum_retained_contact_age_seconds=3,
+                                         allow_visual_contact_proxy=True)
+    result = adapt(item,config=config)
+    assert not result.kinetic.rejection_reasons
+    assert result.kinetic.estimate.confidence == .5
+    # Even a marked prior cannot borrow the mass age limit for dynamic inputs.
+    old_speed = replace(scalar(2,'m/s',timestamp=0,status=EstimateStatus.PRIOR),evidence=old.evidence)
+    old_height = replace(scalar(1,'m',timestamp=0,status=EstimateStatus.PRIOR),evidence=old.evidence)
+    old_heat = replace(scalar(.1,timestamp=0,status=EstimateStatus.PRIOR),evidence=old.evidence)
+    item = replace(item,motion=replace(item.motion,relative_speed_mps=old_speed),
+                   geometry=replace(item.geometry,fall_height_m=old_height),
+                   thermal=replace(item.thermal,heat_source_likelihood=old_heat))
+    result = adapt(item,config=config,thermal_interaction_likelihood=scalar(.5),
+                   visual_contact_proxy=replace(old_heat,source='visual_silhouette_contact_proxy'),
+                   visual_contact_basis='visual_silhouette_geometry_proxy',
+                   contact_interaction_likelihood=scalar(.5))
+    assert 'relative_speed_mps: stale evidence' in result.kinetic.rejection_reasons
+    assert 'fall_height_m: stale evidence' in result.potential.rejection_reasons
+    assert 'heat_source_likelihood: stale evidence' in result.thermal.rejection_reasons
+    assert not result.contact.rejection_reasons
+    result = adapt(item,config=replace(config,allow_priors=False))
+    assert 'mass_kg: priors disabled' in result.kinetic.rejection_reasons
+
+
+def test_age_extension_requires_temporal_marker_and_prior_status():
+    config=PhysicalFactorAdapterConfig(maximum_retained_mass_age_seconds=3)
+    item=attributes()
+    for old in (scalar(4,'kg',timestamp=0), scalar(4,'kg',timestamp=0,status=EstimateStatus.PRIOR)):
+        result=adapt(replace(item,mass=MassAttributes(old)),config=config)
+        assert 'mass_kg: stale evidence' in result.kinetic.rejection_reasons
+
+
 def test_explicit_visual_contact_path_does_not_invent_physical_inputs():
     item = attributes()
     with pytest.raises(ValueError, match="opt-in"):

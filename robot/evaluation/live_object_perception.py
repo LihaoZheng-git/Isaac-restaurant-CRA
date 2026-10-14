@@ -51,6 +51,7 @@ from robot.perception.specialist_track_evidence import (
 )
 from robot.perception.spherical_mass import estimate_spherical_geometry
 from robot.perception.thermal_interaction import estimate_thermal_route_interaction
+from robot.perception.temporal_object_evidence import TemporalObjectEvidence
 from robot.perception.visual_shape_contact import (
     SHAPE_CONTACT_BASIS,
     SHAPE_CONTACT_SOURCE,
@@ -209,6 +210,7 @@ class LiveObjectPerception:
         occupancy_retention_seconds=0.0,
         static_occupancy_memory_prior_scope=None,
         component_prompt_radius_m=0.04,
+        evidence_retention_config=None,
     ):
         self.segmenter, self.mass_estimator, self.contact_detector = (
             segmenter,
@@ -216,6 +218,12 @@ class LiveObjectPerception:
             contact_detector,
         )
         self.calibration = calibration
+        self.evidence_memory = (
+            TemporalObjectEvidence(evidence_retention_config)
+            if evidence_retention_config is not None
+            else None
+        )
+        self.last_visual_track_id = None
         if (
             not math.isfinite(component_prompt_radius_m)
             or not 0.005 <= component_prompt_radius_m <= 0.1
@@ -272,6 +280,7 @@ class LiveObjectPerception:
             raise ValueError("live sensor epochs must increase")
         candidate_tracker = copy.deepcopy(self.tracker)
         candidate_plume = copy.deepcopy(self.plume)
+        candidate_memory = copy.deepcopy(self.evidence_memory)
         tracking = candidate_tracker.update(
             packet.obstacle_xyz[:, :2],
             robot_position_world_xy=np.array(packet.robot_position_world_xy),
@@ -298,14 +307,27 @@ class LiveObjectPerception:
             >= 8
         ]
         eligible.sort(key=lambda track: np.linalg.norm(track.centroid_robot_xy))
-        target = (
-            eligible[0]
-            if eligible
-            else min(
+        preferred = next(
+            (
+                track
+                for track in tracking.tracked_obstacles
+                if track.track_id == self.last_visual_track_id
+                and candidate_memory is not None
+                and candidate_memory.has_unexpired(
+                    track.track_id, packet.camera_timestamp_seconds
+                )
+            ),
+            None,
+        )
+        if preferred is not None and (preferred in eligible or not eligible):
+            target = preferred
+        elif eligible:
+            target = eligible[0]
+        else:
+            target = min(
                 tracking.tracked_obstacles,
                 key=lambda track: np.linalg.norm(track.centroid_robot_xy),
             )
-        )
         timestamp = packet.camera_timestamp_seconds
         frame = SemanticDetectionFrame(
             packet.camera_frame_id,
@@ -319,7 +341,7 @@ class LiveObjectPerception:
         fusion = association = proxy = None
         reasons, sam_quality = [], None
         prompt_basis = "projected_track_median"
-        if eligible:
+        if target in eligible:
             self.segmenter.set_image(packet.rgb)
             proposal = self.segmenter.propose(
                 tracking.point_track_ids, projection, track_id=target.track_id
@@ -556,6 +578,22 @@ class LiveObjectPerception:
                 timestamp_seconds=timestamp,
             )
         physical_done = time.perf_counter()
+        retention_diagnostics = {"enabled": candidate_memory is not None}
+        if candidate_memory is not None:
+            retained_mass, proxy, detail = candidate_memory.resolve(
+                track=target,
+                tracked_obstacles=tracking.tracked_obstacles,
+                sensor_timestamp_seconds=packet.sensor_timestamp_seconds,
+                timestamp_seconds=timestamp,
+                camera_frame_id=packet.camera_frame_id,
+                ego_position_world_xy=packet.robot_position_world_xy,
+                fresh_mass=attributes.mass.mass_kg,
+                fresh_contact=proxy,
+            )
+            attributes = replace(
+                attributes, mass=replace(attributes.mass, mass_kg=retained_mass)
+            )
+            retention_diagnostics.update(detail)
         adapted = adapt_physical_factors(
             attributes,
             timestamp_seconds=timestamp,
@@ -573,7 +611,14 @@ class LiveObjectPerception:
             in {"object_visible_plume_proxy", "registered_rgb_object_plume_proxy"}
             else "physical",
             config=PhysicalFactorAdapterConfig(
-                allow_visual_contact_proxy=True, allow_visual_thermal_proxy=True
+                allow_visual_contact_proxy=True,
+                allow_visual_thermal_proxy=True,
+                maximum_retained_mass_age_seconds=candidate_memory.config.maximum_mass_age_seconds
+                if candidate_memory is not None
+                else None,
+                maximum_retained_contact_age_seconds=candidate_memory.config.maximum_contact_age_seconds
+                if candidate_memory is not None
+                else None,
             ),
         )
         semantic = SemanticObstacle(
@@ -721,6 +766,9 @@ class LiveObjectPerception:
             retained + [current_placements] if self.occupancy_retention_seconds else []
         )
         self.static_points = candidate_static
+        self.evidence_memory = candidate_memory
+        if accepted:
+            self.last_visual_track_id = target.track_id
         if self.static_scope and self.static_oldest_time is None:
             self.static_oldest_time = packet.sensor_timestamp_seconds
         diagnostics = {
@@ -733,6 +781,28 @@ class LiveObjectPerception:
             "camera_timestamp": timestamp,
             "lidar_timestamp": packet.sensor_timestamp_seconds,
             "accepted_instance": accepted,
+            "visual_processing_reason": None
+            if accepted
+            else (
+                "no eligible projected geometric track"
+                if target not in eligible
+                else "mask proposal rejected"
+                if not frame.detections
+                else "camera-LiDAR association or exact-mask return selection rejected"
+            ),
+            "target_track_id": target.track_id,
+            "target_point_count": target.point_count,
+            "target_centroid_world_xy": target.centroid_world_xy,
+            "target_velocity_world_xy": target.velocity_world_xy,
+            "target_observation_count": target.observation_count,
+            "target_matched_previous_track": target.matched_previous_track,
+            "projected_target_return_count": int(
+                np.count_nonzero(
+                    tracking.point_track_ids[projection.source_indices]
+                    == target.track_id
+                )
+            ),
+            "temporal_object_evidence": retention_diagnostics,
             "selected_return_count": int(selected.sum()),
             "unassessed_return_count": int((~selected).sum()),
             "sam_model_quality": sam_quality,

@@ -182,3 +182,18 @@
   reference or reinterpret absent plume as measured low temperature. A SAM retry
   may select another actually observed owned 3D return, keeping the original
   mask quality, boundary, ambiguity and LiDAR association gates.
+- The user approved bounded temporal retention of earlier mass/contact cues.
+  `TemporalObjectEvidence` is separate from static occupancy memory: default
+  source-age limits are 3 s for mass and 1 s for contact, with identity,
+  point-count, competitor and contact-viewpoint gates. Borrowed values retain
+  original timestamps/frame IDs, become persistence PRIORS, lose confidence
+  and widen bounds; repeated borrowing never renews them. Preserve stronger
+  contact cues only until their original expiry. Do not extend this allowance
+  to motion, plume, route interaction, support or fall-height inputs.
+- The temporal gap diagnostic uses real stationary sensor frames with explicitly
+  injected missing SAM outputs. It is not natural occlusion, moving-view
+  perception or sensor-only acceptance. The demo separates navigation gates,
+  fresh-instance counts, per-factor readiness and retained-property counts.
+  Keep unknown potential/thermal handling intact even when temporal mass or
+  contact is available. Crowded identity merges/crossings remain outside this
+  bounded separated-object validation.

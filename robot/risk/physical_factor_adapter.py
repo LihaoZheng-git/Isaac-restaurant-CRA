@@ -20,6 +20,7 @@ from robot.perception.physical_attributes import (
     combine_estimate_statuses,
 )
 from robot.risk.cra import PhysicalRiskProfile, RiskFactorEstimate
+from robot.perception.temporal_object_evidence import TEMPORAL_EVIDENCE_MARKER
 
 
 ADAPTER_SOURCE = "physical_evidence_cra_adapter"
@@ -54,8 +55,17 @@ class PhysicalFactorAdapterConfig:
     contact_sharpness_weight: float = 0.7
     allow_visual_contact_proxy: bool = False
     allow_visual_thermal_proxy: bool = False
+    maximum_retained_mass_age_seconds: float | None = None
+    maximum_retained_contact_age_seconds: float | None = None
 
     def __post_init__(self) -> None:
+        for name in ("maximum_retained_mass_age_seconds", "maximum_retained_contact_age_seconds"):
+            value = getattr(self, name)
+            if value is not None:
+                value = _number(value, name)
+                if value <= 0:
+                    raise ValueError(f"{name} must be positive")
+                object.__setattr__(self, name, value)
         for name in (
             "potential_energy_scale_j",
             "kinetic_energy_scale_j",
@@ -135,6 +145,19 @@ def _effective_confidence(
     return item.confidence
 
 
+def _maximum_input_age(name, item, config):
+    """Extend only explicitly retained mass/contact, never dynamic inputs."""
+    if item.status is EstimateStatus.PRIOR and TEMPORAL_EVIDENCE_MARKER in item.evidence:
+        attribute = {
+            "mass_kg": "maximum_retained_mass_age_seconds",
+            "visual_exposed_edge_proxy": "maximum_retained_contact_age_seconds",
+            "visual_silhouette_geometry_proxy": "maximum_retained_contact_age_seconds",
+        }.get(name)
+        if attribute is not None and getattr(config, attribute) is not None:
+            return getattr(config, attribute) + 1e-9
+    return config.maximum_evidence_age_seconds
+
+
 def _factor(
     factor: str,
     inputs: tuple[tuple[str, ScalarEstimate], ...],
@@ -146,7 +169,7 @@ def _factor(
     for name, item in inputs:
         if item.timestamp_seconds > timestamp:
             reasons.append(f"{name}: future evidence")
-        elif timestamp - item.timestamp_seconds > config.maximum_evidence_age_seconds:
+        elif timestamp - item.timestamp_seconds > _maximum_input_age(name, item, config):
             reasons.append(f"{name}: stale evidence")
         if not item.is_available:
             reasons.append(f"{name}: unavailable")
@@ -241,7 +264,7 @@ def _direct_factor(
             reasons.append(f"{name}: unavailable")
         elif item.timestamp_seconds > timestamp:
             reasons.append(f"{name}: future evidence")
-        elif timestamp - item.timestamp_seconds > config.maximum_evidence_age_seconds:
+        elif timestamp - item.timestamp_seconds > _maximum_input_age(name, item, config):
             reasons.append(f"{name}: stale evidence")
         if item.status is EstimateStatus.PRIOR and not config.allow_priors:
             reasons.append(f"{name}: priors disabled")

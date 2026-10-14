@@ -23,6 +23,12 @@ parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument("--output", type=Path, required=True)
 parser.add_argument("--motion", action="store_true")
 parser.add_argument(
+    "--evidence-gap-diagnostic",
+    action="store_true",
+    help="stationary-only controlled SAM-output loss and recovery; never a natural-occlusion claim",
+)
+parser.add_argument("--disable-evidence-retention", action="store_true")
+parser.add_argument(
     "--static-occupancy-memory-prior",
     action="store_true",
     help="explicit static fixture/environment assumption to retain positive occupancy through LiDAR blind regions",
@@ -36,6 +42,8 @@ parser.add_argument(
 )
 parser.add_argument("--maximum-seconds", type=float, default=40.0)
 args = parser.parse_args()
+if args.evidence_gap_diagnostic and (args.motion or args.disable_evidence_retention):
+    parser.error("evidence-gap diagnostic requires retention and zero wheel motion")
 if not 0 < args.simulation_rate <= 1 or not 0 < args.maximum_seconds <= 60:
     parser.error("invalid bounded simulation rate/duration")
 args.output.mkdir(parents=True, exist_ok=True)
@@ -50,8 +58,10 @@ from robot.perception.visual_mass_runtime import (
 )
 from robot.perception.sam_instance_segmentation import (
     SamInstanceConfig,
+    SamInstanceResult,
     SamInstanceSegmenter,
 )
+from robot.perception.temporal_object_evidence import TemporalObjectEvidenceConfig
 from robot.perception.yolo_detector import (
     YoloSegmentationConfig,
     YoloSegmentationDetector,
@@ -322,6 +332,9 @@ def main():
         static_occupancy_memory_prior_scope="bounded static sphere/environment; positive occupancy remains until experiment end; no dynamic-actor or free-space-clearing claim"
         if args.static_occupancy_memory_prior
         else None,
+        evidence_retention_config=None
+        if args.disable_evidence_retention
+        else TemporalObjectEvidenceConfig(),
     )
     history = EgoPoseHistory()
     captures, rejections, records = [], [], []
@@ -509,6 +522,96 @@ def main():
     if not stationary_ready:
         controller.stop()
         raise RuntimeError("stationary four-factor gate failed; wheels are blocked")
+    if args.evidence_gap_diagnostic:
+        # Real fresh RGB/LiDAR continue; explicitly suppress only the visual
+        # instance output. This is a fault-injection continuity diagnostic,
+        # not a claim that the camera naturally occluded the object.
+        original_set_image, original_propose = segmenter.set_image, segmenter.propose
+        gap_records, recovery_records = [], []
+        segmenter.set_image = lambda rgb: None
+        segmenter.propose = lambda *a, **kw: SamInstanceResult(
+            None, ("stationary diagnostic injected missing instance output",)
+        )
+        try:
+            for _ in range(200):
+                now = step()
+                try:
+                    packet = capture()
+                except (RuntimeError, ValueError):
+                    continue
+                if packet is None:
+                    continue
+                latest = perception(packet)
+                gap_records.append(field_record(latest, now))
+                if len(gap_records) == 1:
+                    cv2.imwrite(
+                        str(args.output / "gap-current.png"), packet.rgb[:, :, ::-1]
+                    )
+                if len(gap_records) >= 13:
+                    break
+        finally:
+            segmenter.set_image, segmenter.propose = (
+                original_set_image,
+                original_propose,
+            )
+        for _ in range(100):
+            now = step()
+            try:
+                packet = capture()
+            except (RuntimeError, ValueError):
+                continue
+            if packet is None:
+                continue
+            latest = perception(packet)
+            recovery_records.append(field_record(latest, now))
+            if len(recovery_records) >= 5:
+                break
+        retained_mass = sum(
+            r["diagnostics"]["temporal_object_evidence"]["mass"]["mode"] == "retained"
+            for r in gap_records
+        )
+        retained_contact = sum(
+            r["diagnostics"]["temporal_object_evidence"]["contact"]["mode"]
+            == "retained"
+            for r in gap_records
+        )
+        expired_contact = sum(
+            "contact" in r["diagnostics"]["unknown_factors"] for r in gap_records
+        )
+        recovered = latest.diagnostics["accepted_instance"] and latest.readiness.ready
+        unchanged = (
+            original_hash
+            == hashlib.sha256(
+                Path(stationary.ROBOT_SCENE_PATH).read_bytes()
+            ).hexdigest()
+        )
+        report = {
+            "passed": len(gap_records) == 13
+            and retained_mass > 0
+            and retained_contact > 0
+            and expired_contact > 0
+            and recovered
+            and unchanged
+            and root_unchanged_by_fixture,
+            "scope": "stationary fresh sensor data with explicitly injected missing SAM output; no natural occlusion or moving-view acceptance",
+            "nonzero_wheel_commands": 0,
+            "gap_frames": len(gap_records),
+            "retained_mass_frames": retained_mass,
+            "retained_contact_frames": retained_contact,
+            "contact_unavailable_after_expiry_frames": expired_contact,
+            "recovered_four_factor_readiness": bool(recovered),
+            "scene_unchanged": unchanged,
+            "retention_config": asdict(perception.evidence_memory.config),
+        }
+        save_json("evidence-gap-fields.json", gap_records)
+        save_json("evidence-recovery-fields.json", recovery_records)
+        save_json("evidence-gap-report.json", report)
+        print(json.dumps(report, default=json_default), flush=True)
+        controller.stop()
+        timeline.stop()
+        if not report["passed"]:
+            raise RuntimeError("stationary evidence continuity diagnostic failed")
+        return
     if not args.motion:
         controller.stop()
         timeline.stop()
@@ -778,11 +881,20 @@ def main():
         step()
     final_state = state()
     stop_drift = float(np.linalg.norm(final_state[:2] - arrival_state[:2]))
+    moving_field_count = sum(
+        np.linalg.norm(
+            np.asarray(live_fields[i]["state_at_commit"][:2])
+            - np.asarray(live_fields[i - 1]["state_at_commit"][:2])
+        )
+        > 0.001
+        for i in range(1, len(live_fields))
+    )
     completed = (
         arrived
         and minimum_clearance > 0.02
         and stop_drift < 0.05
         and len(live_fields) >= 10
+        and moving_field_count >= 10
     )
     scene_unchanged = (
         original_hash
@@ -793,6 +905,7 @@ def main():
     save_json("commands.json", commands)
     save_json("trajectory.json", trajectory)
     report = {
+        "acceptance_scope": "bounded_conservative_navigation; four-factor availability reported separately",
         "passed": completed and scene_unchanged and root_unchanged_by_fixture,
         "completed": arrived,
         "reason": reason,
@@ -803,14 +916,39 @@ def main():
         "stop_drift_m": stop_drift,
         "last_state": final_state.tolist(),
         "live_field_count": len(live_fields),
-        "fields_committed_while_translating": sum(
-            np.linalg.norm(
-                live_fields[i]["state_at_commit"][:2]
-                - np.asarray(live_fields[i - 1]["state_at_commit"][:2])
-            )
-            > 0.001
-            for i in range(1, len(live_fields))
-        ),
+        "fields_committed_while_translating": moving_field_count,
+        "perception_evidence_counts": {
+            "accepted_current_instances": sum(
+                r["diagnostics"]["accepted_instance"] for r in live_fields
+            ),
+            "four_factor_ready_updates": sum(
+                r["readiness"]["ready"] for r in live_fields
+            ),
+            "ready_updates_by_factor": {
+                name: sum(
+                    next(
+                        f["accepted"]
+                        for f in r["readiness"]["factors"]
+                        if f["factor"] == name
+                    )
+                    for r in live_fields
+                )
+                for name in ("potential", "kinetic", "contact", "thermal")
+            },
+            "retained_updates_by_property": {
+                name: sum(
+                    r["diagnostics"]["temporal_object_evidence"]
+                    .get(name, {})
+                    .get("mode")
+                    in {"retained", "retained_stronger_contact"}
+                    for r in live_fields
+                )
+                for name in ("mass", "contact")
+            },
+        },
+        "temporal_evidence_config": None
+        if perception.evidence_memory is None
+        else asdict(perception.evidence_memory.config),
         "safety_stops": stops,
         "plan_events": plan_events,
         "rejections": sorted(set(rejections)),
@@ -820,7 +958,7 @@ def main():
         "fixed_lambda": 1.25,
         "plume_control": args.plume_control,
         "scheduled_observation_pauses": 0,
-        "rtx_max_history_transform_count": carb.settings.get_settings().get(
+        "rtx_history_setting_requested": carb.settings.get_settings().get(
             "/rtx/scenedb/maxHistoryTransformCount"
         ),
         "boundaries": [
@@ -828,6 +966,8 @@ def main():
             "RGB read time approximates acquisition; LiDAR scans are not per-ray deskewed",
             "oracle USD ego poses/extrinsics and fixture clearance monitor",
             "ground/fall interaction priors remain explicit",
+            "short-lived retained mass/contact are persistence priors with original timestamps; no cached motion/plume/fall-height evidence",
+            "renderer internal history warning remains unresolved despite the requested setting",
             "SAM-associated category-free rough heaviness, visual contact silhouette and registered visible-plume proxies",
             "rendered puffs are opaque visual fixtures, not steam physics/temperature; all live LiDAR occupancy retained",
             "single source with clean-reference registration; no restaurant/human/crowd generalization",

@@ -188,3 +188,78 @@ coverage without weakening unknown handling, confidence or CRA aggregation.
 Stationary controls must pass again before another wheel trial. Restaurant
 enrichment, moving actors and matched CRA/controller comparisons remain later
 work.
+
+The matched pre-retention no-plume trial subsequently also reached the goal:
+`outputs/live_cra/live-none-final/report.json` passed with 540 fresh fields,
+0.26640 m minimum fixture clearance and 0.00225 m stopping drift. It showed
+the same limited moving-view four-factor coverage. Both endpoint successes
+remain conservative navigation results rather than complete live perception.
+
+## Bounded temporal mass/contact evidence
+
+The user approved preserving useful earlier object estimates across brief
+visual association gaps. The opt-in `TemporalObjectEvidence` store now retains
+mass for at most **3 s** and visible contact proxies for at most **1 s** from
+their original camera source time. The demo enables this path; the worker API
+and older callers remain opt-in. `--disable-evidence-retention` provides the
+legacy baseline. These limits and identity/uncertainty parameters are
+configurable engineering assumptions, not calibrated physical guarantees.
+
+Borrowing requires the same currently observed geometric track, consecutive
+observation counts, agreement with the source's world-position/velocity
+prediction, bounded point-count change and no close competing track. Contact
+also requires a bounded source-to-current viewpoint change (15 degrees by
+default, using the declared chassis-position reference). Broken continuity,
+disappearance, ambiguity, excessive viewpoint change or expiry removes the
+retained evidence. These checks do not prove identity through crowded merges
+or occluded crossings; that remains outside the separated-object domain.
+
+Every borrowed scalar retains its source, timestamp and original camera-frame
+ID. It becomes a **property-persistence PRIOR**, its confidence halves per
+second of source age, and its interval widens. Repeated borrowing never renews
+the original timestamp. A stronger accepted contact cue can survive a weaker
+current silhouette only until the original cue expires; it cannot be refreshed
+by that weaker observation. Fresh available mass replaces its earlier estimate.
+
+The adapter's explicit retained-property age allowances affect only marked
+prior mass and visual contact inputs. Motion, route interaction, plume,
+support and fall height retain their independent freshness rules and are not
+stored here. Missing fall-height/plume evidence can therefore still give
+aggregate phi=1 even when retained mass/contact support valid factor-specific
+diagnostics. No confidence cap, unknown fallback, aggregation, lambda or
+controller constraint was weakened to reduce phi.
+
+`--evidence-gap-diagnostic` is stationary-only and cannot be combined with
+`--motion`. After the ordinary 12-observation readiness gate, it deliberately
+suppresses SAM output for 13 distinct real RGB/LiDAR epochs, then restores the
+model for five epochs. This is labeled fault injection, not natural occlusion.
+`outputs/live_cra/temporal-gap-stationary/evidence-gap-report.json` passed:
+mass was retained for all 13 gap frames; contact was retained for four, then
+expired in the remaining nine. Contact expired earlier because its stronger
+source cue predated the first dropped output; the lease was not reset at the
+drop. Full stationary readiness recovered after model output resumed. All
+wheel commands were zero and the scene file was unchanged.
+
+Validation at this refinement: **1,635 unit tests passed**, repository-wide
+Ruff passed. Tests cover expiry, uncertainty decay, track reset/discontinuity,
+nearby competitors, viewpoint changes, stronger-cue preservation, separate
+dynamic-input freshness and rollback on a failed field transaction. The live
+report now separates navigation acceptance from per-factor availability and
+counts retained evidence separately from fresh instance estimates.
+
+The follow-up `outputs/live_cra/temporal-positive-live/report.json` recorded
+549 field commits, 380 during translation. Mass was available in 118 updates
+(43 fresh, 75 retained); contact was available in 56 (27 fresh, 29 retained,
+including stronger older cues). This demonstrates actual short-gap reuse,
+not improved mass accuracy or restored long-term visibility. Potential was
+ready in 11 updates, thermal in one, and complete four-factor readiness in one.
+
+That trial **failed navigation acceptance**: its 60 s simulation deadline
+expired about 0.236 m from the goal. Minimum oracle fixture clearance was
+0.28311 m and stopping drift 0.00450 m, but those values do not count as arrival.
+It took 911 wall seconds under the declared pacing. Preserve the failed report;
+neither longer property leases nor reduced confidence/fallback conservatism
+were used to make it pass. The bounded retention repair is validated by unit,
+stationary fault-injection and actual moving sensor evidence; full moving-view
+perception and consistent navigation completion remain unresolved. PR #117
+remains a draft rather than a completed restaurant-readiness gate.

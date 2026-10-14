@@ -199,3 +199,67 @@ def test_static_memory_retains_older_unseen_geometry_as_prior_without_retiming_i
     assert grid.occupied_mask[6, 8]
     assert latest.policy.risk == 1.0
     assert not latest.readiness.ready
+
+
+def seed_observed_properties(runtime, result):
+    from robot.perception.physical_attributes import ScalarEstimate
+    from robot.perception.temporal_object_evidence import TemporalObjectEvidence
+
+    runtime.evidence_memory = TemporalObjectEvidence()
+    track = result.field.tracking_result.tracked_obstacles[0]
+    runtime.evidence_memory.resolve(
+        track=track,
+        tracked_obstacles=(track,),
+        sensor_timestamp_seconds=1.0,
+        timestamp_seconds=1.1,
+        camera_frame_id=1,
+        ego_position_world_xy=(0, 0),
+        fresh_mass=ScalarEstimate(
+            4, 3, 5, 0.25, "kg", "controlled_mass", 1.1, EstimateStatus.INFERRED
+        ),
+        fresh_contact=ScalarEstimate(
+            0.2,
+            0.1,
+            0.3,
+            0.7,
+            "1",
+            "visual_silhouette_contact_proxy",
+            1.1,
+            EstimateStatus.INFERRED,
+        ),
+    )
+
+
+def test_missing_current_instance_borrows_only_stable_properties_with_fresh_motion():
+    runtime = worker()
+    first = runtime(packet())
+    seed_observed_properties(runtime, first)
+    latest = runtime(packet(2, 1.1, 0.02))
+    assert not latest.diagnostics["accepted_instance"]
+    assert latest.attributes.mass.mass_kg.value == 4
+    assert latest.attributes.mass.mass_kg.timestamp_seconds == 1.1
+    assert latest.attributes.mass.mass_kg.status is EstimateStatus.PRIOR
+    assert latest.adapted.contact.basis == "visual_silhouette_geometry_proxy"
+    assert latest.adapted.contact.inputs[0][1].timestamp_seconds == 1.1
+    assert latest.attributes.motion.relative_speed_mps.timestamp_seconds == 1.1
+    assert latest.attributes.motion.relative_speed_mps.value == pytest.approx(0.2)
+    assert not latest.adapted.kinetic.rejection_reasons
+    assert not latest.adapted.contact.rejection_reasons
+    assert latest.diagnostics["unknown_factors"] == ["potential", "thermal"]
+    assert latest.policy.risk == 1 and not latest.readiness.ready
+    assert latest.field.all_obstacle_point_count == 4
+    assert latest.diagnostics["unassessed_return_count"] == 4
+    assert not latest.attributes.contact.sharpness.is_available
+
+
+def test_failed_field_transaction_does_not_advance_retained_evidence_identity():
+    runtime = worker()
+    first = runtime(packet())
+    seed_observed_properties(runtime, first)
+    sources = runtime.evidence_memory.sources.copy()
+    with pytest.raises(ValueError):
+        runtime(packet(2, 1.5))
+    assert runtime.evidence_memory.sources == sources
+    latest = runtime(packet(3, 1.1))
+    assert latest.attributes.mass.mass_kg.is_available
+    assert latest.diagnostics["temporal_object_evidence"]["mass"]["mode"] == "retained"
