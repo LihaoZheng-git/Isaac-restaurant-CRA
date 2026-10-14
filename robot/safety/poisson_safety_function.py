@@ -65,8 +65,11 @@ class PoissonSafetyFunctionConfig:
     convergence_tolerance: float = 1e-6
     maximum_iterations: int = 20_000
     residual_check_interval: int = 10
+    solver_backend: str = "jacobi"
 
     def __post_init__(self) -> None:
+        if self.solver_backend not in {"jacobi", "sparse_direct"}:
+            raise ValueError("unsupported Poisson solver backend")
         forcing = _validated_real(
             self.forcing,
             name="forcing",
@@ -216,6 +219,34 @@ def solve_poisson_safety_function(
         )
 
     resolution = occupancy_grid.config.resolution
+    if solver_config.solver_backend == "sparse_direct":
+        from robot.safety.sparse_dirichlet import solve_five_point_dirichlet
+
+        values = solve_five_point_dirichlet(
+            values, boundary_mask, forcing=resolved_forcing, resolution=resolution
+        )
+        residual = _maximum_poisson_residual(
+            values,
+            solution_mask=solution_mask,
+            forcing_field=resolved_forcing,
+            resolution=resolution,
+        )
+        if (
+            not np.isfinite(values).all()
+            or residual > solver_config.convergence_tolerance
+        ):
+            raise RuntimeError(
+                "direct Poisson solution failed the unchanged residual gate"
+            )
+        return _make_result(
+            values,
+            boundary_mask,
+            iteration_count=1,
+            maximum_residual=residual,
+            scalar_forcing=scalar_forcing,
+            forcing_field=None if forcing_field is None else resolved_forcing,
+            resolution=resolution,
+        )
     source_term = -resolved_forcing[1:-1, 1:-1] * resolution**2
     maximum_residual = math.inf
 

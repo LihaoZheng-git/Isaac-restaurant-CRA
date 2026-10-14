@@ -23,12 +23,14 @@ def test_control_thread_can_continue_while_single_worker_is_busy():
     runner = LiveInferenceRunner(work)
     try:
         assert runner.submit(frame_id=1, sensor_timestamp_seconds=1.0, packet=2)
+        assert runner.busy
         assert entered.wait(timeout=1)
         assert runner.poll(current_sensor_time_seconds=1.1) is None
         assert not runner.submit(frame_id=2, sensor_timestamp_seconds=1.1, packet=3)
         release.set()
         completed(runner)
         result = runner.poll(current_sensor_time_seconds=1.2)
+        assert not runner.busy
         assert result.accepted and result.value == 4
         assert result.sensor_timestamp_seconds == 1.0
         assert runner.submit(frame_id=2, sensor_timestamp_seconds=1.1, packet=3)

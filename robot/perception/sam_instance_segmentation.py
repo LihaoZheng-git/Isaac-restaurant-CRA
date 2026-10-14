@@ -146,7 +146,14 @@ class SamInstanceSegmenter:
         self.backend.set_image(rgb)
         self.image_encoder_wall_seconds = time.perf_counter() - start
 
-    def propose(self, point_track_ids, projection: ProjectedLidarPoints, *, track_id):
+    def propose(
+        self,
+        point_track_ids,
+        projection: ProjectedLidarPoints,
+        *,
+        track_id,
+        prompt_source_index=None,
+    ):
         if self.image_shape is None:
             raise RuntimeError("set_image is required for each camera frame")
         ids = np.asarray(point_track_ids)
@@ -179,6 +186,15 @@ class SamInstanceSegmenter:
         prompt = tuple(
             int(v) for v in points[np.argmin(np.sum((points - median) ** 2, axis=1))]
         )
+        if prompt_source_index is not None:
+            if isinstance(prompt_source_index, bool) or not isinstance(
+                prompt_source_index, (int, np.integer)
+            ):
+                raise ValueError("explicit prompt must name an observed owned return")
+            matches = np.flatnonzero(owned & (indices == prompt_source_index))
+            if len(matches) != 1:
+                raise ValueError("explicit prompt must name an observed owned return")
+            prompt = tuple(int(value) for value in xy[matches[0]])
         start = time.perf_counter()
         masks, qualities = self.backend.predict(prompt)
         elapsed = time.perf_counter() - start

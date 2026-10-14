@@ -161,3 +161,24 @@
   motion is not itself temperature. Synthetic image shifts and stationary
   sensor replays do not establish actual moving-camera acceptance. Preserve the
   original fixed-camera method and their separate domain/provenance records.
+- The live four-factor development branch has a successful prior-assisted
+  conservative navigation trial, not completed moving-view perception
+  acceptance. In `live-positive-v3`, 548 fresh fields and actual arrival were
+  recorded, but only 39 updates had an accepted visual instance and only one
+  had all four factor inputs. Preserve those failures and unknown/phi=1 results;
+  do not report live field commits as complete physical estimation. Keep that
+  branch unmerged until its intended perception acceptance is sound. See
+  `docs/live_cra_navigation.md` for the remaining gate.
+- Live static-scene occupancy memory is an explicit PRIOR, retaining positive
+  geometry with original source times through sensor blind regions. It does
+  not refresh missing factor evidence, infer free space or support moving humans.
+  Gravity-aligned filtering uses the declared oracle pose/ground reference;
+  scan-interval occupancy unions are not per-ray deskew. The renderer history
+  warning remains unresolved even when its requested setting is 128.
+- The live plume opt-in may rectify calibrated fisheye pixels, use above-source
+  independent background and recover registration from the originally validated
+  clean reference. Preserve the separate coverage/valid-pixel gates and legacy
+  defaults. Do not silently accept poor registration, use an arbitrary new clean
+  reference or reinterpret absent plume as measured low temperature. A SAM retry
+  may select another actually observed owned 3D return, keeping the original
+  mask quality, boundary, ambiguity and LiDAR association gates.

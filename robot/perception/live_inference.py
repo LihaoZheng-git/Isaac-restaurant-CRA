@@ -44,6 +44,11 @@ class LiveInferenceRunner:
         self.last_time = -1.0
         self.closed = False
 
+    @property
+    def busy(self):
+        """Whether the single slot still owns a pending or unconsumed job."""
+        return self.pending is not None
+
     def submit(self, *, frame_id, sensor_timestamp_seconds, packet):
         if self.closed:
             raise RuntimeError("inference runner is closed")

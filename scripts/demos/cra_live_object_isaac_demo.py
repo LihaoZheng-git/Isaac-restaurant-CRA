@@ -1,0 +1,866 @@
+"""Live RGB/LiDAR CRA in a bounded session fixture, stationary gate first.
+
+Perception and MPC run off the simulation thread on copied observations.
+During navigation the simulator advances continuously; stale evidence/failed
+control causes a recorded safety stop, never a scheduled observation pause.
+Simulation pacing is explicit and is not a real-time performance claim.
+"""
+
+import argparse
+from dataclasses import asdict, replace
+import hashlib
+import json
+import math
+import os
+from pathlib import Path
+import sys
+import time
+import traceback
+
+ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT))
+parser = argparse.ArgumentParser(description=__doc__)
+parser.add_argument("--output", type=Path, required=True)
+parser.add_argument("--motion", action="store_true")
+parser.add_argument(
+    "--static-occupancy-memory-prior",
+    action="store_true",
+    help="explicit static fixture/environment assumption to retain positive occupancy through LiDAR blind regions",
+)
+parser.add_argument("--plume-control", choices=("none", "persistent"), default="none")
+parser.add_argument(
+    "--simulation-rate",
+    type=float,
+    default=0.1,
+    help="maximum simulation seconds per wall second; reported explicitly",
+)
+parser.add_argument("--maximum-seconds", type=float, default=40.0)
+args = parser.parse_args()
+if not 0 < args.simulation_rate <= 1 or not 0 < args.maximum_seconds <= 60:
+    parser.error("invalid bounded simulation rate/duration")
+args.output.mkdir(parents=True, exist_ok=True)
+os.environ.setdefault("WARP_CACHE_PATH", str(args.output / "warp"))
+os.environ.setdefault("ISAAC_SIM_HEADLESS", "1")
+os.environ.setdefault("ISAAC_RTX_HISTORY_TRANSFORM_COUNT", "128")
+
+# Import the existing vision stack before Kit changes package resolution.
+from robot.perception.visual_mass_runtime import (
+    VisualMassRuntimeConfig,
+    VisualMassRuntimeEstimator,
+)
+from robot.perception.sam_instance_segmentation import (
+    SamInstanceConfig,
+    SamInstanceSegmenter,
+)
+from robot.perception.yolo_detector import (
+    YoloSegmentationConfig,
+    YoloSegmentationDetector,
+)
+from scripts.demos import safe_sage_unicycle_mpc_motion_demo as existing
+
+import cv2
+import carb
+import numpy as np
+import omni.timeline
+from isaacsim.core.simulation_manager import SimulationManager
+import isaacsim.core.experimental.utils.app as app_utils
+from pxr import Gf, Sdf, Usd, UsdGeom, UsdPhysics, UsdShade
+from robot.control.differential_drive import NovaCarterController
+from robot.evaluation.live_object_perception import (
+    LiveObjectPacket,
+    LiveObjectPerception,
+)
+from robot.evaluation.factor_specific_cra import diagnose_factor_specific_cra
+from robot.evaluation.simple_object_test import disk_footprint_clearance
+from robot.navigation.waypoint_controller import (
+    RobotPose2D,
+    Waypoint,
+    WaypointController,
+    WaypointControllerConfig,
+)
+from robot.perception.live_inference import LiveInferenceRunner
+from robot.perception.physical_attributes import EstimateStatus
+from robot.perception.sensor_epochs import (
+    EgoPoseHistory,
+    EgoPoseSample,
+    align_camera_lidar_epoch,
+    gravity_aligned_robot_transform,
+)
+from robot.safety.obstacle_detection import (
+    ObstacleDetectionConfig,
+    detect_obstacle_points_3d,
+)
+from robot.safety.safe_sage_configuration_space import RectangularRobotFootprint
+from robot.safety.safe_sage_live_field import (
+    SafeSAGELiveFieldBuffer,
+    SafeSAGELiveFieldSnapshot,
+)
+from robot.safety.safe_sage_runtime import SafeSAGEControlRuntime
+from robot.safety.safe_sage_unicycle_mpc import SafeSAGEUnicycleMPC
+from robot.scene.camera_calibration import read_fisheye_polynomial_calibration
+from robot.scene.loader import load_robot_scene
+from robot.scene.transforms import compute_relative_prim_transform
+from robot.sensor.camera import NovaCarterCamera
+from robot.sensor.lidar import NovaCarterLidar
+from robot.sensor.lidar_geometry import filter_valid_points, transform_points
+
+stationary = existing.stationary
+app = existing.simulation_app
+RADIUS = 0.18
+GOAL = (2.5, 0.0)
+GROUND_SCOPE = "bounded separated ground sphere; observed flat plane with assumed unseen local support/landing continuity"
+PLUME_SCOPE = "bounded rendered matte sphere and opaque bright puffs; validated initial clean reference; registered object-associated visible-plume proxy only"
+
+
+def json_default(value):
+    if isinstance(value, np.generic):
+        return value.item()
+    if isinstance(value, np.ndarray):
+        return value.tolist()
+    raise TypeError(f"unsupported report type: {type(value).__name__}")
+
+
+def save_json(name, value):
+    (args.output / name).write_text(
+        json.dumps(value, indent=2, allow_nan=False, default=json_default) + "\n",
+        encoding="utf-8",
+    )
+
+
+def field_record(result, now, state=None):
+    return {
+        "sensor_frame_id": result.field.sensor_frame_id,
+        "sensor_timestamp": result.field.sensor_timestamp_seconds,
+        "commit_simulation_time": now,
+        "build_wall_seconds": result.field.build_wall_seconds,
+        "phi": result.policy.risk,
+        "factor_specific_diagnostics": diagnose_factor_specific_cra(
+            result.adapted
+        ).to_dict(),
+        "boundary_flux": result.policy.boundary_flux,
+        "readiness": asdict(result.readiness),
+        "factors": {
+            name: asdict(getattr(result.adapted, name))
+            for name in ("potential", "kinetic", "contact", "thermal")
+        },
+        "attributes": asdict(result.attributes),
+        "diagnostics": result.diagnostics,
+        "state_at_commit": None if state is None else state.tolist(),
+    }
+
+
+def main():
+    print("Auditing/loading existing local models...", flush=True)
+    weights = {}
+    for name, variable, default in (
+        ("sam", "SAM2_CHECKPOINT", "outputs/sam2_integration/sam2.1_t.pt"),
+        (
+            "mass",
+            "VISUAL_MASS_CHECKPOINT",
+            "outputs/visual_mass_data/abo/baseline_frozen_final_v2/best.pt",
+        ),
+        (
+            "contact",
+            "CONTACT_SEGMENTATION_CHECKPOINT",
+            "runs/segment/outputs/contact_perception/training/yolo11n_seg_paco_geometry/weights/best.pt",
+        ),
+    ):
+        path = Path(os.environ.get(variable, default)).resolve()
+        if not path.is_file():
+            raise FileNotFoundError(f"{variable} requires existing local weights")
+        weights[name] = {
+            "path": str(path),
+            "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+        }
+    device = os.environ.get("YOLO_DEVICE", "0")
+    segmenter = SamInstanceSegmenter(
+        SamInstanceConfig(Path(weights["sam"]["path"]), device=device)
+    )
+    mass = VisualMassRuntimeEstimator(
+        VisualMassRuntimeConfig(
+            Path(weights["mass"]["path"]),
+            device=device,
+            allow_category_free_instances=True,
+        )
+    )
+    contact = YoloSegmentationDetector(
+        YoloSegmentationConfig(
+            Path(weights["contact"]["path"]),
+            device=device,
+            confidence_threshold=0.25,
+            allowed_classes=("exposed_edge",),
+        )
+    )
+    contact.initialize()
+    print("Local models ready; loading the unchanged scene...", flush=True)
+    original_hash = hashlib.sha256(
+        Path(stationary.ROBOT_SCENE_PATH).read_bytes()
+    ).hexdigest()
+    loaded = load_robot_scene(
+        scene_path=stationary.ROBOT_SCENE_PATH,
+        simulation_app=app,
+        robot_prim_path=stationary.ROBOT_PRIM_PATH,
+        expected_meters_per_unit=1.0,
+    )
+    stage = loaded.stage
+    center_world = np.array(stationary.ROBOT_START_POSITION_WORLD[:2]) + [1.3, 0.0]
+    root_before = stage.GetRootLayer().ExportToString()
+    with Usd.EditContext(stage, stage.GetSessionLayer()):
+        sphere = UsdGeom.Sphere.Define(stage, "/World/CRALiveObject/Sphere")
+        sphere.CreateRadiusAttr(RADIUS)
+        sphere.AddTranslateOp().Set(Gf.Vec3d(*center_world, RADIUS))
+        sphere.CreateDisplayColorAttr([Gf.Vec3f(0.15, 0.45, 0.95)])
+        UsdPhysics.CollisionAPI.Apply(sphere.GetPrim())
+        material = UsdShade.Material.Define(stage, "/World/CRALiveObject/Matte")
+        shader = UsdShade.Shader.Define(stage, "/World/CRALiveObject/Matte/Shader")
+        shader.CreateIdAttr("UsdPreviewSurface")
+        shader.CreateInput("diffuseColor", Sdf.ValueTypeNames.Color3f).Set(
+            Gf.Vec3f(0.15, 0.45, 0.95)
+        )
+        shader.CreateInput("roughness", Sdf.ValueTypeNames.Float).Set(1.0)
+        shader.CreateInput("specularColor", Sdf.ValueTypeNames.Color3f).Set(Gf.Vec3f(0))
+        material.CreateSurfaceOutput().ConnectToSource(
+            shader.ConnectableAPI(), "surface"
+        )
+        UsdShade.MaterialBindingAPI.Apply(sphere.GetPrim()).Bind(material)
+        puffs = []
+        for index in range(4):
+            puff = UsdGeom.Sphere.Define(
+                stage, f"/World/CRALiveObject/Plume/Puff{index}"
+            )
+            puff.CreateRadiusAttr(0.035 + 0.009 * index)
+            puff.AddTranslateOp().Set(
+                Gf.Vec3d(
+                    center_world[0],
+                    center_world[1] + 0.012 * (-1) ** index,
+                    2 * RADIUS + 0.07 + 0.085 * index,
+                )
+            )
+            puff.AddScaleOp().Set(Gf.Vec3f(1, 1, 1.4))
+            puff.CreateDisplayColorAttr([Gf.Vec3f(0.8, 0.8, 0.8)])
+            puff.MakeInvisible()
+            puffs.append(puff)
+    root_unchanged_by_fixture = stage.GetRootLayer().ExportToString() == root_before
+    controller = NovaCarterController(robot_prim_path=stationary.ROBOT_PRIM_PATH)
+    SimulationManager.setup_simulation(
+        dt=stationary.PHYSICS_DT, device=stationary.PHYSICS_DEVICE
+    )
+    timeline = omni.timeline.get_timeline_interface()
+    timeline.play()
+    app_utils.update_app(steps=10)
+    controller.verify_articulation()
+    stationary.position_robot_for_experiment(controller)
+    for _ in range(stationary.SETTLE_STEPS):
+        controller.stop()
+        app.update()
+    anchor = stationary.read_robot_pose(stage)
+    delta = center_world - [anchor.x, anchor.y]
+    c, s = math.cos(anchor.yaw), math.sin(anchor.yaw)
+    center_local = np.array([c * delta[0] + s * delta[1], -s * delta[0] + c * delta[1]])
+    calibration = read_fisheye_polynomial_calibration(
+        stage,
+        camera_prim_path=NovaCarterCamera().camera_prim_path,
+        output_resolution=(480, 640),
+    )
+    camera, lidar = (
+        NovaCarterCamera(),
+        NovaCarterLidar(lidar_prim_path=stationary.PANDAR_XT32_LIDAR_PRIM_PATH),
+    )
+    camera.initialize()
+    lidar.initialize()
+    robot_from_lidar = compute_relative_prim_transform(
+        stage,
+        source_prim_path=stationary.PANDAR_XT32_LIDAR_PRIM_PATH,
+        target_prim_path=stationary.ROBOT_BASE_PRIM_PATH,
+    )
+    camera_from_robot = compute_relative_prim_transform(
+        stage,
+        source_prim_path=stationary.ROBOT_BASE_PRIM_PATH,
+        target_prim_path=camera.camera_prim_path,
+    )
+    policies = existing.create_fixed_field_configuration()
+    class_policy, guidance, grid, field_config = policies
+    grid = replace(grid, resolution=0.1)
+    field_config = replace(
+        field_config,
+        configuration_space_config=replace(
+            field_config.configuration_space_config, yaw_slice_count=16
+        ),
+        h_full_config=replace(field_config.h_full_config, yaw_slice_count=16),
+        guidance_field_config=replace(
+            field_config.guidance_field_config,
+            allow_dense_scene_arbitration=True,
+            solver_backend="sparse_direct",
+            interface_backend="vectorized",
+        ),
+    )
+    field_config = replace(
+        field_config,
+        h_full_config=replace(
+            field_config.h_full_config,
+            poisson_config=replace(
+                field_config.h_full_config.poisson_config,
+                solver_backend="sparse_direct",
+            ),
+        ),
+    )
+    perception = LiveObjectPerception(
+        segmenter=segmenter,
+        mass_estimator=mass,
+        contact_detector=contact,
+        calibration=calibration,
+        class_policy=class_policy,
+        guidance_policy=guidance,
+        grid_config=grid,
+        field_config=field_config,
+        anchor_position_world_xy=(anchor.x, anchor.y),
+        anchor_yaw=anchor.yaw,
+        ground_prior_scope=GROUND_SCOPE,
+        negative_plume_scope=PLUME_SCOPE,
+        rectify_plume=True,
+        occupancy_retention_seconds=0.5,
+        static_occupancy_memory_prior_scope="bounded static sphere/environment; positive occupancy remains until experiment end; no dynamic-actor or free-space-clearing claim"
+        if args.static_occupancy_memory_prior
+        else None,
+    )
+    history = EgoPoseHistory()
+    captures, rejections, records = [], [], []
+    last_sensor_id = -1
+
+    def state():
+        pose = stationary.read_robot_pose(stage)
+        dx, dy = pose.x - anchor.x, pose.y - anchor.y
+        c, s = math.cos(anchor.yaw), math.sin(anchor.yaw)
+        return np.array(
+            [
+                c * dx + s * dy,
+                -s * dx + c * dy,
+                (pose.yaw - anchor.yaw + math.pi) % math.tau - math.pi,
+            ]
+        )
+
+    def step(command=(0.0, 0.0), paced=False):
+        started = time.perf_counter()
+        controller.apply_command(*command)
+        app.update()
+        now = float(timeline.get_current_time())
+        matrix = compute_relative_prim_transform(
+            stage,
+            source_prim_path=stationary.ROBOT_BASE_PRIM_PATH,
+            target_prim_path="/World",
+        )
+        history.append(
+            EgoPoseSample(now, matrix, EstimateStatus.ORACLE, "isaac_usd_chassis_pose")
+        )
+        if paced:
+            time.sleep(
+                max(
+                    0.0,
+                    stationary.PHYSICS_DT / args.simulation_rate
+                    - (time.perf_counter() - started),
+                )
+            )
+        return now
+
+    def capture(clean=False):
+        nonlocal last_sensor_id
+        raw = lidar.get_point_cloud()
+        info = lidar.get_frame_info()
+        if info.sensor_frame_id <= last_sensor_id:
+            return None
+        rgb = camera.get_rgb()
+        camera_info = camera.get_frame_info()
+        scan_time = info.sensor_timestamp_nanoseconds * 1e-9
+        epoch = align_camera_lidar_epoch(
+            history,
+            lidar_timestamp_seconds=scan_time,
+            camera_timestamp_seconds=camera_info.simulation_time_seconds,
+            camera_from_robot=camera_from_robot,
+        )
+        velocity = history.velocity_world_xy(scan_time)
+        scene = transform_points(filter_valid_points(raw), robot_from_lidar)
+        pose = epoch.lidar_pose.world_from_robot
+        yaw = math.atan2(pose[1, 0], pose[0, 0])
+        gravity_from_body = gravity_aligned_robot_transform(pose)
+        body_from_gravity = np.linalg.inv(gravity_from_body)
+        scene = transform_points(scene, gravity_from_body)
+        floor = -float(pose[2, 3])
+        points = detect_obstacle_points_3d(
+            scene,
+            ObstacleDetectionConfig(
+                minimum_height=floor + 0.05,
+                maximum_height=floor + 1.0,
+                minimum_range=0.15,
+                maximum_range=5.0,
+                forward_only=False,
+                angular_bin_size_degrees=None,
+            ),
+        )
+        c, s = math.cos(anchor.yaw), math.sin(anchor.yaw)
+        goal_world = (
+            anchor.x + c * GOAL[0] - s * GOAL[1],
+            anchor.y + s * GOAL[0] + c * GOAL[1],
+        )
+        packet = LiveObjectPacket(
+            info.sensor_frame_id,
+            scan_time,
+            camera_info.read_index,
+            camera_info.simulation_time_seconds,
+            rgb,
+            scene,
+            points,
+            tuple(pose[:2, 3]),
+            yaw,
+            velocity,
+            epoch.camera_from_scan_robot @ body_from_gravity,
+            floor,
+            goal_world,
+            clean,
+            epoch.lidar_pose.source,
+            epoch.lidar_pose.status,
+            np.stack(
+                [pose]
+                + [
+                    item.world_from_robot
+                    for item in history.samples
+                    if scan_time
+                    < item.timestamp_seconds
+                    <= camera_info.simulation_time_seconds
+                ]
+            )
+            @ body_from_gravity,
+            "bounded static sphere/environment; completed scan returns acquired within header-to-read-time interval; conservative union of observed placements, not per-ray deskew",
+        )
+        last_sensor_id = info.sensor_frame_id
+        captures.append(
+            {
+                "lidar_id": info.sensor_frame_id,
+                "lidar_time": scan_time,
+                "camera_id": camera_info.read_index,
+                "camera_time": camera_info.simulation_time_seconds,
+                "state": state().tolist(),
+            }
+        )
+        return packet
+
+    # Stationary calibration/development gate, distinct from navigation.
+    # Let the RGB renderer/reference domain settle before its clean reference.
+    for _ in range(60):
+        step()
+    latest = None
+    for _ in range(400):
+        now = step()
+        try:
+            packet = capture(clean=not records)
+        except (RuntimeError, ValueError) as error:
+            rejections.append(str(error))
+            continue
+        if packet is None:
+            continue
+        latest = perception(packet)
+        print(
+            json.dumps(
+                {
+                    "stationary_frame": len(records) + 1,
+                    "build_wall_seconds": latest.field.build_wall_seconds,
+                    "readiness": latest.readiness.ready,
+                    "unknown": latest.diagnostics["unknown_factors"],
+                    "timings": latest.diagnostics["stage_wall_seconds"],
+                    "thermal_evidence": latest.attributes.thermal.heat_source_likelihood.evidence,
+                },
+                default=json_default,
+            ),
+            flush=True,
+        )
+        records.append(field_record(latest, now))
+        if len(records) == 1:
+            cv2.imwrite(
+                str(args.output / "clean-reference.png"), packet.rgb[:, :, ::-1]
+            )
+            if not latest.diagnostics["accepted_instance"]:
+                raise RuntimeError(
+                    "stationary clean reference lacks an accepted instance"
+                )
+            with Usd.EditContext(stage, stage.GetSessionLayer()):
+                if args.plume_control == "persistent":
+                    for puff in puffs:
+                        puff.MakeVisible()
+        if len(records) >= 12:
+            cv2.imwrite(
+                str(args.output / "stationary-current.png"), packet.rgb[:, :, ::-1]
+            )
+            break
+    save_json("stationary-fields.json", records)
+    stationary_ready = (
+        latest is not None and len(records) >= 12 and latest.readiness.ready
+    )
+    gate = {
+        "passed": stationary_ready,
+        "frames": len(records),
+        "nonzero_wheel_commands": 0,
+        "plume_control": args.plume_control,
+        "rejections": sorted(set(rejections)),
+        "weights": weights,
+        "last_readiness": None if latest is None else asdict(latest.readiness),
+        "scope": "live fresh stationary RGB/LiDAR; category-free rough mass, explicit local ground/fall interaction priors, visual contact/plume proxies",
+    }
+    save_json("stationary-gate.json", gate)
+    print(json.dumps(gate), flush=True)
+    if not stationary_ready:
+        controller.stop()
+        raise RuntimeError("stationary four-factor gate failed; wheels are blocked")
+    if not args.motion:
+        controller.stop()
+        timeline.stop()
+        return
+
+    mpc, backup = existing.create_controller_stack(controller)
+    substeps = round(mpc.config.time_step / stationary.PHYSICS_DT)
+    mpc = SafeSAGEUnicycleMPC(
+        mpc.paper_filter,
+        replace(
+            mpc.config,
+            safety_substeps_per_interval=substeps,
+            integration_substeps_per_interval=substeps,
+            enable_progress_seeds=True,
+            progress_seed_linear_fraction=0.5,
+            configuration_position_padding_m=0.025,
+            configuration_yaw_padding_radians=0.21,
+            configuration_padding_initial_fraction=0.1,
+        ),
+    )
+    control = SafeSAGEControlRuntime(mpc=mpc, backup_filter=backup)
+    waypoint = WaypointController(
+        [Waypoint(*GOAL)],
+        config=WaypointControllerConfig(
+            maximum_linear_velocity=0.2,
+            maximum_angular_velocity=0.6,
+            rotate_in_place_threshold_radians=math.radians(100),
+            minimum_alignment_scale=0.25,
+        ),
+    )
+    footprint = RectangularRobotFootprint(
+        stationary.ROBOT_FRONT_EXTENT,
+        stationary.ROBOT_REAR_EXTENT,
+        stationary.ROBOT_LEFT_EXTENT,
+        stationary.ROBOT_RIGHT_EXTENT,
+        stationary.ROBOT_SAFETY_MARGIN,
+    )
+    buffer = SafeSAGELiveFieldBuffer()
+
+    def commit(result, now):
+        snapshot = SafeSAGELiveFieldSnapshot(
+            result.field.sensor_frame_id,
+            result.field.sensor_timestamp_seconds,
+            now,
+            result.field.build_wall_seconds,
+            result,
+        )
+        (buffer.commit if buffer.initialized else buffer.initialize)(snapshot)
+
+    commit(latest, float(timeline.get_current_time()))
+    inference = LiveInferenceRunner(perception)
+    planner = LiveInferenceRunner(
+        lambda data: control.plan(
+            data[0],
+            data[1],
+            data[2],
+            initial_command_guess=data[3],
+            preferred_lateral_direction_grid_y=-1.0,
+        ),
+        maximum_result_age_seconds=0.2,
+    )
+    start_sim = float(timeline.get_current_time())
+    start_wall = time.perf_counter()
+    plan_id = 0
+    next_plan_due = float(timeline.get_current_time())
+    active_plan = None
+    active_plan_time = None
+    active_plan_generation = None
+    warm = None
+    command = np.zeros(2)
+    trajectory, commands, stops, live_fields, plan_events = [], [], [], [], []
+    minimum_clearance = math.inf
+    minimum_cbf_margin = math.inf
+    arrived = False
+    reason = "duration_limit"
+    consecutive_failures = 0
+    try:
+        while float(timeline.get_current_time()) - start_sim < args.maximum_seconds:
+            now = float(timeline.get_current_time())
+            current = state()
+            clearance = disk_footprint_clearance(
+                current, center_xy=center_local, radius_m=RADIUS, footprint=footprint
+            )
+            minimum_clearance = min(minimum_clearance, clearance)
+            if clearance <= 0.02:
+                reason = "clearance_guard"
+                break
+            nominal = waypoint.compute_command(RobotPose2D(*current))
+            if nominal.route_complete:
+                arrived, reason = True, "goal_reached"
+                break
+            outcome = inference.poll(current_sensor_time_seconds=now)
+            if outcome is not None:
+                if outcome.value is not None:
+                    consecutive_failures = 0
+                    commit(outcome.value, now)
+                    latest = outcome.value
+                    live_fields.append(field_record(latest, now, current))
+                    if len(live_fields) == 1 or len(live_fields) % 20 == 0:
+                        save_json("live-fields.json", live_fields)
+                        save_json("commands.json", commands)
+                        if packet.camera_frame_id == latest.detections.source_frame_id:
+                            cv2.imwrite(
+                                str(args.output / "live-current.png"),
+                                packet.rgb[:, :, ::-1],
+                            )
+                    if len(live_fields) % 20 == 0:
+                        print(
+                            json.dumps(
+                                {
+                                    "live_fields": len(live_fields),
+                                    "sim_seconds": now - start_sim,
+                                    "state": current.tolist(),
+                                    "phi": latest.policy.risk,
+                                    "unknown": latest.diagnostics["unknown_factors"],
+                                }
+                            ),
+                            flush=True,
+                        )
+                else:
+                    rejections.append(outcome.rejection_reason)
+                    consecutive_failures += 1
+                    print(
+                        json.dumps(
+                            {
+                                "inference_rejected": outcome.rejection_reason,
+                                "sim_seconds": now - start_sim,
+                            }
+                        ),
+                        flush=True,
+                    )
+                    if consecutive_failures >= 5:
+                        reason = "repeated_inference_failure"
+                        break
+            if not inference.busy:
+                try:
+                    packet = capture()
+                    if packet is not None:
+                        inference.submit(
+                            frame_id=packet.sensor_frame_id,
+                            sensor_timestamp_seconds=packet.sensor_timestamp_seconds,
+                            packet=packet,
+                        )
+                except (RuntimeError, ValueError) as error:
+                    rejections.append(str(error))
+            plan_outcome = planner.poll(current_sensor_time_seconds=now)
+            if plan_outcome is not None:
+                result = plan_outcome.value
+                accepted = (
+                    result is not None
+                    and result.success
+                    and not result.fallback_active
+                    and result.minimum_dtcbf_margin >= -mpc.config.constraint_tolerance
+                    and result.minimum_predicted_safety_value
+                    >= -mpc.config.constraint_tolerance
+                )
+                plan_events.append(
+                    {
+                        "time": now - start_sim,
+                        "accepted": bool(accepted),
+                        "wall_seconds": plan_outcome.wall_seconds,
+                        "reason": plan_outcome.rejection_reason
+                        if result is None
+                        else result.status,
+                    }
+                )
+                if accepted:
+                    active_plan = result
+                    active_plan_time = plan_outcome.sensor_timestamp_seconds
+                    # Always revalidate delayed results at receipt, including
+                    # state drift and any field changes during the solve.
+                    active_plan_generation = None
+                    warm = control.shifted_warm_start(result)
+                else:
+                    active_plan = None
+            status = buffer.inspect(current_simulation_time_seconds=now)
+            fresh = not status.fail_closed
+            if fresh and not planner.busy and now >= next_plan_due:
+                reuse = buffer.reuse(current_simulation_time_seconds=now)
+                fresh = not reuse.fail_closed
+                next_plan_due = now + 0.75 * mpc.config.time_step
+            else:
+                reuse = None
+            if fresh and reuse is not None:
+                horizon = waypoint.predict_commands(
+                    RobotPose2D(*current),
+                    horizon_steps=mpc.config.horizon_steps,
+                    time_step=mpc.config.time_step,
+                )
+                sequence = np.array(
+                    [[item.linear_velocity, item.angular_velocity] for item in horizon]
+                )
+                planner.submit(
+                    frame_id=plan_id,
+                    sensor_timestamp_seconds=now,
+                    packet=(current.copy(), sequence, latest.field, warm),
+                )
+                plan_id += 1
+            stop_reason = None
+            command = np.zeros(2)
+            if not fresh:
+                stop_reason = "stale_field"
+            elif active_plan is None or now - active_plan_time > 0.2:
+                stop_reason = "waiting_for_fresh_valid_plan"
+            else:
+                # Re-evaluate the complete remaining horizon from the actual
+                # state against each newly accepted field, with identical exact
+                # DTCBF and dense geometry gates. This performs no new solve.
+                if active_plan_generation != buffer.generation:
+                    valid = mpc.revalidate_commands(
+                        current,
+                        active_plan.command_sequence,
+                        configuration_space=latest.field.pipeline.configuration_space,
+                        h_full=latest.field.pipeline.h_full,
+                        guidance_fields=latest.field.pipeline.guidance_fields,
+                        temporal_safety_derivative=latest.field.temporal_safety_derivative,
+                    )
+                    if not valid:
+                        active_plan = None
+                        stop_reason = "new_field_invalidated_plan"
+                    else:
+                        active_plan_generation = buffer.generation
+                if active_plan is not None:
+                    filtered = control.filter_command(
+                        (active_plan.linear_velocity, active_plan.angular_velocity),
+                        current,
+                        latest.field,
+                    )
+                    if (
+                        filtered.constraint_feasible
+                        and filtered.constraint_satisfied
+                        and not filtered.emergency_stop_active
+                        and math.isfinite(filtered.cbf_margin)
+                    ):
+                        command = np.array(
+                            [
+                                filtered.safe_linear_velocity,
+                                filtered.safe_angular_velocity,
+                            ]
+                        )
+                        minimum_cbf_margin = min(
+                            minimum_cbf_margin, filtered.cbf_margin
+                        )
+                    else:
+                        stop_reason = "cbf_fail_closed"
+                        active_plan = None
+            if stop_reason:
+                stops.append({"time": now - start_sim, "reason": stop_reason})
+            trajectory.append(current.tolist())
+            commands.append(
+                {
+                    "time": now - start_sim,
+                    "v": float(command[0]),
+                    "omega": float(command[1]),
+                    "field_age": status.field_age_seconds,
+                    "generation": buffer.generation,
+                    "stop_reason": stop_reason,
+                }
+            )
+            step(command, paced=True)
+    finally:
+        controller.stop()
+        inference.close()
+        planner.close()
+    arrival_state = state()
+    for _ in range(60):
+        step()
+    final_state = state()
+    stop_drift = float(np.linalg.norm(final_state[:2] - arrival_state[:2]))
+    completed = (
+        arrived
+        and minimum_clearance > 0.02
+        and stop_drift < 0.05
+        and len(live_fields) >= 10
+    )
+    scene_unchanged = (
+        original_hash
+        == hashlib.sha256(Path(stationary.ROBOT_SCENE_PATH).read_bytes()).hexdigest()
+    )
+    save_json("live-fields.json", live_fields)
+    save_json("captures.json", captures)
+    save_json("commands.json", commands)
+    save_json("trajectory.json", trajectory)
+    report = {
+        "passed": completed and scene_unchanged and root_unchanged_by_fixture,
+        "completed": arrived,
+        "reason": reason,
+        "minimum_clearance_m": minimum_clearance,
+        "minimum_cbf_margin": None
+        if not math.isfinite(minimum_cbf_margin)
+        else minimum_cbf_margin,
+        "stop_drift_m": stop_drift,
+        "last_state": final_state.tolist(),
+        "live_field_count": len(live_fields),
+        "fields_committed_while_translating": sum(
+            np.linalg.norm(
+                live_fields[i]["state_at_commit"][:2]
+                - np.asarray(live_fields[i - 1]["state_at_commit"][:2])
+            )
+            > 0.001
+            for i in range(1, len(live_fields))
+        ),
+        "safety_stops": stops,
+        "plan_events": plan_events,
+        "rejections": sorted(set(rejections)),
+        "scene_unchanged": scene_unchanged,
+        "simulation_rate_limit": args.simulation_rate,
+        "wall_seconds": time.perf_counter() - start_wall,
+        "fixed_lambda": 1.25,
+        "plume_control": args.plume_control,
+        "scheduled_observation_pauses": 0,
+        "rtx_max_history_transform_count": carb.settings.get_settings().get(
+            "/rtx/scenedb/maxHistoryTransformCount"
+        ),
+        "boundaries": [
+            "paced simulation; not real-time",
+            "RGB read time approximates acquisition; LiDAR scans are not per-ray deskewed",
+            "oracle USD ego poses/extrinsics and fixture clearance monitor",
+            "ground/fall interaction priors remain explicit",
+            "SAM-associated category-free rough heaviness, visual contact silhouette and registered visible-plume proxies",
+            "rendered puffs are opaque visual fixtures, not steam physics/temperature; all live LiDAR occupancy retained",
+            "single source with clean-reference registration; no restaurant/human/crowd generalization",
+        ],
+    }
+    save_json("report.json", report)
+    print(
+        json.dumps(
+            {
+                key: report[key]
+                for key in (
+                    "passed",
+                    "completed",
+                    "reason",
+                    "minimum_clearance_m",
+                    "live_field_count",
+                    "fields_committed_while_translating",
+                    "stop_drift_m",
+                )
+            },
+            default=json_default,
+        ),
+        flush=True,
+    )
+    timeline.stop()
+    if not report["passed"]:
+        raise RuntimeError("live wheel gate failed; inspect saved diagnostics")
+
+
+try:
+    main()
+except Exception:
+    traceback.print_exc()
+    raise
+finally:
+    app.close()

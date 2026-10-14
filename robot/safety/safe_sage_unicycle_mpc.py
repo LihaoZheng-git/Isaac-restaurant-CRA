@@ -431,6 +431,48 @@ class SafeSAGEUnicycleMPC:
         if not isinstance(self.config, SafeSAGEUnicycleMPCConfig):
             raise TypeError("config must be a SafeSAGEUnicycleMPCConfig.")
 
+    def revalidate_commands(
+        self,
+        initial_chassis_state_grid,
+        commands,
+        *,
+        configuration_space,
+        h_full,
+        guidance_fields,
+        temporal_safety_derivative=0.0,
+    ) -> bool:
+        """Check an asynchronous horizon at the current state/field, no solve.
+
+        The exact nonlinear DTCBF, actuator bounds and dense configuration
+        checks are identical to plan acceptance. A field generation change or
+        delayed planner result never grants permission to execute an old plan.
+        """
+        initial = _finite_vector(
+            initial_chassis_state_grid, size=3, name="initial_chassis_state_grid"
+        )
+        sequence = np.asarray(commands, dtype=float)
+        if (
+            sequence.shape != (self.config.horizon_steps, 2)
+            or not np.isfinite(sequence).all()
+        ):
+            raise ValueError("commands must be a finite complete horizon")
+        if not np.array_equal(sequence, self._clip_commands(sequence)):
+            return False
+        temporal = validate_temporal_safety_derivative(
+            temporal_safety_derivative,
+            h_full=h_full,
+            grid_config=configuration_space.occupancy_grids[0].config,
+        )
+        evaluated = self._evaluate_trajectory(
+            initial,
+            sequence,
+            configuration_space=configuration_space,
+            h_full=h_full,
+            guidance_fields=guidance_fields,
+            temporal_safety_derivative=temporal,
+        )
+        return evaluated is not None and self._trajectory_is_safe(evaluated)
+
     def plan(
         self,
         initial_chassis_state_grid: Sequence[float] | np.ndarray,

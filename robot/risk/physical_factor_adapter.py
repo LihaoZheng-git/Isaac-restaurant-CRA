@@ -400,7 +400,9 @@ def adapt_physical_factors(
     if thermal_basis == "visual_object_plume_proxy":
         if not settings.allow_visual_thermal_proxy:
             raise ValueError("object plume proxy requires explicit configuration opt-in")
-        if attributes.thermal.heat_source_likelihood.source != "object_visible_plume_proxy":
+        if attributes.thermal.heat_source_likelihood.source not in {
+            "object_visible_plume_proxy", "registered_rgb_object_plume_proxy",
+        }:
             raise ValueError("object plume basis requires object plume evidence source")
     thermal = _direct_factor(
         "thermal",

@@ -55,6 +55,20 @@ class EgoPoseSample:
         object.__setattr__(self, "status", status)
 
 
+def gravity_aligned_robot_transform(world_from_robot):
+    """Rotate robot points into the scan-time heading frame with world Z up.
+
+    The reference origin stays at the chassis. Pose provenance belongs to the
+    caller; this geometry operation does not turn oracle poses into odometry.
+    """
+    pose = rigid_transform(world_from_robot)
+    yaw = math.atan2(pose[1, 0], pose[0, 0])
+    c, s = math.cos(yaw), math.sin(yaw)
+    result = np.eye(4)
+    result[:3, :3] = np.array([[c, s, 0], [-s, c, 0], [0, 0, 1.0]]) @ pose[:3, :3]
+    return rigid_transform(result)
+
+
 class EgoPoseHistory:
     def __init__(self, *, maximum_samples=256, maximum_interpolation_gap_seconds=0.05):
         if (

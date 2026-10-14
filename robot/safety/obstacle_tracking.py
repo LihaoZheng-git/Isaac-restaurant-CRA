@@ -35,8 +35,11 @@ class ObstacleTrackerConfig:
     minimum_consecutive_motion_updates: int = 1
     maximum_missed_updates: int = 3
     minimum_time_delta: float = 1e-6
+    clustering_backend: str = "dense"
 
     def __post_init__(self) -> None:
+        if self.clustering_backend not in {"dense", "kdtree"}:
+            raise ValueError("unsupported clustering backend")
         positive_values = {
             "cluster_radius": self.cluster_radius,
             "maximum_association_distance": (
@@ -242,9 +245,8 @@ class ObstacleTracker:
         clusters = _cluster_point_indices(
             points_robot,
             cluster_radius=self.config.cluster_radius,
-            minimum_cluster_points=(
-                self.config.minimum_cluster_points
-            ),
+            backend=self.config.clustering_backend,
+            minimum_cluster_points=(self.config.minimum_cluster_points),
         )
 
         point_velocities_robot = np.zeros(
@@ -742,6 +744,7 @@ def _cluster_point_indices(
     *,
     cluster_radius: float,
     minimum_cluster_points: int,
+    backend: str = "dense",
 ) -> tuple[np.ndarray, ...]:
     """Return connected Euclidean point clusters.
 
@@ -754,7 +757,29 @@ def _cluster_point_indices(
 
     if point_count == 0:
         return ()
+    if backend == "kdtree":
+        from scipy.spatial import cKDTree
+        from scipy.sparse import coo_matrix
+        from scipy.sparse.csgraph import connected_components
 
+        pairs = cKDTree(points_xy).query_pairs(
+            np.nextafter(cluster_radius, math.inf), output_type="ndarray"
+        )
+        # Preserve the baseline's exact squared-distance boundary convention.
+        deltas = points_xy[pairs[:, 0]] - points_xy[pairs[:, 1]]
+        pairs = pairs[np.einsum("ij,ij->i", deltas, deltas) <= cluster_radius**2]
+        graph = coo_matrix(
+            (np.ones(len(pairs)), (pairs[:, 0], pairs[:, 1])),
+            shape=(point_count, point_count),
+        ).tocsr()
+        _, labels = connected_components(graph, directed=False)
+        groups = [np.flatnonzero(labels == label) for label in np.unique(labels)]
+        return tuple(
+            sorted(
+                (group for group in groups if len(group) >= minimum_cluster_points),
+                key=lambda group: int(group[0]),
+            )
+        )
     offsets = (
         points_xy[:, np.newaxis, :]
         - points_xy[np.newaxis, :, :]

@@ -74,8 +74,11 @@ class TangentialLaplaceGuidanceFieldConfig(LaplaceGuidanceFieldConfig):
 
     tangential_buffer_radius: float = 0.6
     allow_dense_scene_arbitration: bool = False
+    interface_backend: str = "loop"
 
     def __post_init__(self) -> None:
+        if self.interface_backend not in {"loop", "vectorized"}:
+            raise ValueError("unsupported normal interface backend")
         super().__post_init__()
 
         radius = _validated_real(
@@ -125,9 +128,7 @@ def solve_tangential_laplace_guidance_field(
     *,
     guidance_policy: SafeSAGEGuidancePolicy,
     semantic_obstacles: Iterable[SemanticObstacle] = (),
-    track_guidance_parameters: (
-        Mapping[int, SafeSAGEGuidanceParameters] | None
-    ) = None,
+    track_guidance_parameters: (Mapping[int, SafeSAGEGuidanceParameters] | None) = None,
     config: TangentialLaplaceGuidanceFieldConfig | None = None,
 ) -> TangentialLaplaceGuidanceFieldResult:
     """Solve a Laplace field with normal and tangential interfaces.
@@ -179,13 +180,15 @@ def solve_tangential_laplace_guidance_field(
         obstacle_interface_mask,
         obstacle_normals,
         normal_boundary_vectors,
-    ) = _normal_interface_data(
+    ) = (
+        _normal_interface_data_vectorized
+        if solver_config.interface_backend == "vectorized"
+        else _normal_interface_data
+    )(
         occupancy_grid,
         component_labels=component_labels,
         components=components,
-        allow_dense_scene_arbitration=(
-            solver_config.allow_dense_scene_arbitration
-        ),
+        allow_dense_scene_arbitration=(solver_config.allow_dense_scene_arbitration),
     )
 
     outer_boundary_mask = _outer_boundary_mask(occupancy_grid.shape)
@@ -199,9 +202,8 @@ def solve_tangential_laplace_guidance_field(
         obstacle_interface_mask=obstacle_interface_mask,
         outer_boundary_mask=outer_boundary_mask,
         buffer_radius=solver_config.tangential_buffer_radius,
-        allow_dense_scene_arbitration=(
-            solver_config.allow_dense_scene_arbitration
-        ),
+        use_spatial_index=solver_config.interface_backend == "vectorized",
+        allow_dense_scene_arbitration=(solver_config.allow_dense_scene_arbitration),
     )
 
     fixed_mask = outer_boundary_mask.copy()
@@ -402,6 +404,45 @@ def _validated_track_guidance_parameters(
     return parameters
 
 
+def _normal_interface_data_vectorized(
+    occupancy_grid, *, component_labels, components, allow_dense_scene_arbitration
+):
+    """Apply the same ordered eight-neighbor sums/flux minimum in arrays."""
+    shape = occupancy_grid.shape
+    normals = np.zeros(shape + (2,))
+    vectors = np.zeros_like(normals)
+    interface = np.zeros(shape, bool)
+    normal_sum = np.zeros((shape[0] - 2, shape[1] - 2, 2))
+    count = np.zeros(normal_sum.shape[:2], int)
+    flux = np.full(count.shape, np.inf)
+    flux_by_label = np.array(
+        [component.parameters.boundary_flux for component in components]
+    )
+    for dy, dx in _NEIGHBOR_OFFSETS:
+        labels = component_labels[
+            1 + dy : shape[0] - 1 + dy, 1 + dx : shape[1] - 1 + dx
+        ]
+        occupied = labels >= 0
+        normal_sum[:, :, 0] += occupied * (dx / math.hypot(dy, dx))
+        normal_sum[:, :, 1] += occupied * (dy / math.hypot(dy, dx))
+        count += occupied
+        if np.any(occupied):
+            flux[occupied] = np.minimum(flux[occupied], flux_by_label[labels[occupied]])
+    active = (count > 0) & ~occupancy_grid.occupied_mask[1:-1, 1:-1]
+    magnitude = np.linalg.norm(normal_sum, axis=2)
+    ambiguous = active & (magnitude <= 1e-12)
+    if np.any(ambiguous) and not allow_dense_scene_arbitration:
+        row, column = np.argwhere(ambiguous)[0] + 1
+        raise ValueError(
+            f"Cannot determine a unique obstacle normal at cell ({row}, {column}); increase obstacle inflation or grid resolution."
+        )
+    resolved = active & ~ambiguous
+    interface[1:-1, 1:-1] = active
+    normals[1:-1, 1:-1][resolved] = normal_sum[resolved] / magnitude[resolved, None]
+    vectors[1:-1, 1:-1][resolved] = flux[resolved, None] * normals[1:-1, 1:-1][resolved]
+    return interface, normals, vectors
+
+
 def _normal_interface_data(
     occupancy_grid: LocalOccupancyGrid,
     *,
@@ -487,6 +528,7 @@ def _tangential_interface_data(
     outer_boundary_mask: np.ndarray,
     buffer_radius: float,
     allow_dense_scene_arbitration: bool,
+    use_spatial_index: bool = False,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Construct buffered tangential Dirichlet cells and vectors."""
 
@@ -516,7 +558,11 @@ def _tangential_interface_data(
 
     distance_data: dict[int, tuple[np.ndarray, np.ndarray]] = {}
     for component in components:
-        distances, nearest_normal_sums = _distance_and_normal_sums(
+        distances, nearest_normal_sums = (
+            _distance_and_normal_sums_tree
+            if use_spatial_index
+            else _distance_and_normal_sums
+        )(
             row_grid,
             column_grid,
             component.occupied_indices,
@@ -527,9 +573,8 @@ def _tangential_interface_data(
             nearest_normal_sums,
         )
 
-        coverage_mask = (
-            ~occupancy_grid.occupied_mask
-            & (distances <= buffer_radius + half_width + 1e-12)
+        coverage_mask = ~occupancy_grid.occupied_mask & (
+            distances <= buffer_radius + half_width + 1e-12
         )
         coverage_count[coverage_mask] += 1
 
@@ -674,6 +719,34 @@ def _tangential_interface_data(
             )
 
     return interface_mask, normals, prescribed_vectors
+
+
+def _distance_and_normal_sums_tree(
+    row_grid, column_grid, occupied_indices, *, resolution
+):
+    """Exact integer-grid nearest distances, including all equal-distance ties."""
+    from scipy.spatial import cKDTree
+
+    queries = np.column_stack((row_grid.ravel(), column_grid.ravel()))
+    tree = cKDTree(occupied_indices)
+    _, indices = tree.query(queries, k=min(2, len(occupied_indices)))
+    if len(occupied_indices) == 1:
+        indices = np.asarray(indices)[:, None]
+    offsets = occupied_indices[indices[:, 0]] - queries
+    squared = np.einsum("ij,ij->i", offsets, offsets)
+    sums = offsets[:, ::-1].astype(float)
+    if len(occupied_indices) > 1:
+        second_offsets = occupied_indices[indices[:, 1]] - queries
+        second_squared = np.einsum("ij,ij->i", second_offsets, second_offsets)
+        ties = np.flatnonzero(second_squared == squared)
+        neighbors = tree.query_ball_point(queries[ties], np.sqrt(squared[ties]) + 1e-10)
+        for index, candidates in zip(ties, neighbors):
+            deltas = occupied_indices[candidates] - queries[index]
+            equal = np.einsum("ij,ij->i", deltas, deltas) == squared[index]
+            sums[index] = deltas[equal, ::-1].sum(axis=0)
+    return resolution * np.sqrt(squared).reshape(row_grid.shape), sums.reshape(
+        (*row_grid.shape, 2)
+    )
 
 
 def _distance_and_normal_sums(

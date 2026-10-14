@@ -56,6 +56,18 @@ def test_prompt_is_an_observed_return_and_category_stays_unknown(tmp_path):
     assert backend.prompts == [result.prompt_xy]
 
 
+def test_alternate_prompt_must_be_an_observed_return_of_the_same_track(tmp_path):
+    segmenter, backend, projection, ids = fixture(tmp_path)
+    result = segmenter.propose(ids, projection, track_id=7, prompt_source_index=0)
+    assert result.prompt_xy == tuple(projection.pixel_indices_xy[0])
+    assert result.detection.confidence == 0.75
+    ids[0] = 8
+    with pytest.raises(ValueError, match="owned return"):
+        segmenter.propose(ids, projection, track_id=7, prompt_source_index=0)
+    with pytest.raises(ValueError, match="owned return"):
+        segmenter.propose(ids, projection, track_id=7, prompt_source_index=1000)
+
+
 def test_nonprojected_and_other_track_occupancy_is_retained(tmp_path):
     segmenter, _, projection, ids = fixture(tmp_path)
     ids[0] = 8

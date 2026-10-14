@@ -81,7 +81,9 @@ from robot.config import (
 from isaacsim import SimulationApp
 
 
-RTX_HISTORY_TRANSFORM_COUNT = 20
+RTX_HISTORY_TRANSFORM_COUNT = int(os.environ.get("ISAAC_RTX_HISTORY_TRANSFORM_COUNT", "20"))
+if not 2 <= RTX_HISTORY_TRANSFORM_COUNT <= 256:
+    raise ValueError("RTX history transform count must lie within [2, 256]")
 SIMULATION_HEADLESS = os.environ.get(
     "ISAAC_SIM_HEADLESS",
     "0",
