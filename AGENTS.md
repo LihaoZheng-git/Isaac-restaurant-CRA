@@ -225,3 +225,27 @@
   had only one complete factor assessment; navigation success is not moving-view
   perception acceptance. The proposed replacement plume method is a pending
   research choice, not an integrated model or a granted training/data decision.
+
+- The user's later policy decision supersedes the automatic unit-risk handling
+  for the new opt-in persistent multi-object experiment. Every current LiDAR
+  track gets four numeric control scores using accepted evidence or configured,
+  explicitly labeled factor priors. Default uncalibrated priors are .25 per
+  factor (all-unknown noisy-OR phi .68359375); retain the legacy strict policy
+  separately. Numeric policy completeness is not complete visual estimation,
+  and unavailable physical inputs must remain visible in diagnostics.
+- Persistent multi-object memory may retain mass, visible contact geometry,
+  support/drop and the initial plume cue under an explicit unchanged-scene
+  session PRIOR (default original-source expiry 120 s). Complete the explicit
+  stationary plume acquisition window before freezing its cue; a clean reference
+  alone is not an initial source assessment. Preserve source epochs/confidence,
+  reject ambiguous/broken identity, and invalidate support after displacement or
+  a visible vertical change. Height is only an invalidation cue, never fall
+  height. Motion and route interaction remain current; heat/support changes
+  outside the declared scope require reassessment.
+- The new all-track path retains exact accepted-mask occupancy ownership. Its
+  opt-in static 3D bounds support a separately labeled positive association
+  PRIOR through brief mask gaps; unmatched support/environment and unclustered
+  returns receive their own factor priors. A LiDAR cluster need not be one
+  physical object. Do not claim every environmental object is visually assessed
+  or every return lies within the bounded field. Report per-object policies,
+  prior uses, readiness and discarded/out-of-domain geometry separately.

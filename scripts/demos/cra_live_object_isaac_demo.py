@@ -23,6 +23,12 @@ parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument("--output", type=Path, required=True)
 parser.add_argument("--motion", action="store_true")
 parser.add_argument(
+    "--persistent-object-risk-map",
+    action="store_true",
+    help="all-track numeric CRA with explicitly labeled factor/property priors",
+)
+parser.add_argument("--object-factor-prior-risk", type=float, default=0.25)
+parser.add_argument(
     "--evidence-gap-diagnostic",
     action="store_true",
     help="stationary-only controlled SAM-output loss and recovery; never a natural-occlusion claim",
@@ -58,6 +64,12 @@ parser.add_argument(
     help="optimizer candidate age cap; every executed horizon still needs fresh exact validation",
 )
 args = parser.parse_args()
+if not 0 < args.object_factor_prior_risk < 1:
+    parser.error("object factor prior must be strictly between zero and one")
+if args.persistent_object_risk_map and args.evidence_gap_diagnostic:
+    parser.error(
+        "use cra_object_risk_map_replay.py for the new map's stationary gap diagnostic"
+    )
 if args.evidence_gap_diagnostic and (args.motion or args.disable_evidence_retention):
     parser.error("evidence-gap diagnostic requires retention and zero wheel motion")
 if not 0 < args.simulation_rate <= 1 or not 0 < args.maximum_seconds <= 120:
@@ -80,6 +92,9 @@ from robot.perception.sam_instance_segmentation import (
     SamInstanceSegmenter,
 )
 from robot.perception.temporal_object_evidence import TemporalObjectEvidenceConfig
+from robot.perception.persistent_object_evidence import PersistentObjectEvidenceConfig
+from robot.risk.object_risk_policy import ObjectRiskPriorConfig
+from robot.risk.cra import PhysicalRiskVector
 from robot.perception.yolo_detector import (
     YoloSegmentationConfig,
     YoloSegmentationDetector,
@@ -166,6 +181,19 @@ def field_record(result, now, state=None):
         "commit_simulation_time": now,
         "build_wall_seconds": result.field.build_wall_seconds,
         "phi": result.policy.risk,
+        "primary_record_scope": "first geometric track only; use objects for the all-track experiment"
+        if result.objects
+        else "legacy selected target",
+        "objects": [
+            {
+                "track_id": item.attributes.track_id,
+                "cra_control": item.policy.as_dict(),
+                "readiness": asdict(item.readiness),
+                "attributes": asdict(item.attributes),
+                "diagnostics": item.diagnostics,
+            }
+            for item in result.objects
+        ],
         "factor_specific_diagnostics": diagnose_factor_specific_cra(
             result.adapted
         ).to_dict(),
@@ -369,8 +397,23 @@ def main():
         if args.static_occupancy_memory_prior
         else None,
         evidence_retention_config=None
-        if args.disable_evidence_retention
+        if args.disable_evidence_retention or args.persistent_object_risk_map
         else TemporalObjectEvidenceConfig(),
+        persistent_property_config=PersistentObjectEvidenceConfig(
+            "bounded separated static fixture/environment for this session; observed mass, visible contact outline, support and plume assumed unchanged; motion and route interaction remain live"
+        )
+        if args.persistent_object_risk_map
+        else None,
+        object_factor_prior_config=ObjectRiskPriorConfig(
+            PhysicalRiskVector(
+                args.object_factor_prior_risk,
+                args.object_factor_prior_risk,
+                args.object_factor_prior_risk,
+                args.object_factor_prior_risk,
+            )
+        )
+        if args.persistent_object_risk_map
+        else None,
     )
     history = EgoPoseHistory()
     captures, rejections, records = [], [], []
@@ -584,8 +627,9 @@ def main():
                     "stationary_frame": len(records) + 1,
                     "build_wall_seconds": latest.field.build_wall_seconds,
                     "readiness": latest.readiness.ready,
-                    "unknown": latest.diagnostics["unknown_factors"],
-                    "timings": latest.diagnostics["stage_wall_seconds"],
+                    "unknown": latest.diagnostics.get("unknown_factors"),
+                    "timings": latest.diagnostics.get("stage_wall_seconds"),
+                    "objects": len(latest.objects),
                     "thermal_evidence": latest.attributes.thermal.heat_source_likelihood.evidence,
                 },
                 default=json_default,
@@ -598,7 +642,10 @@ def main():
             cv2.imwrite(
                 str(args.output / "clean-reference.png"), packet.rgb[:, :, ::-1]
             )
-            if not latest.diagnostics["accepted_instance"]:
+            if not (
+                latest.diagnostics.get("accepted_instance")
+                or latest.diagnostics.get("accepted_instance_count", 0)
+            ):
                 raise RuntimeError(
                     "stationary clean reference lacks an accepted instance"
                 )
@@ -616,6 +663,19 @@ def main():
     stationary_ready = (
         latest is not None and len(records) >= 12 and latest.readiness.ready
     )
+    if args.persistent_object_risk_map:
+        stationary_ready = (
+            latest is not None
+            and len(records) >= 12
+            and all(
+                record["diagnostics"]["controller_numeric_policy_ready"]
+                for record in records
+            )
+            and any(
+                record["diagnostics"]["accepted_instance_count"] > 0
+                for record in records
+            )
+        )
     gate = {
         "passed": stationary_ready,
         "frames": len(records),
@@ -624,13 +684,29 @@ def main():
         "rejections": sorted(set(rejections)),
         "weights": weights,
         "last_readiness": None if latest is None else asdict(latest.readiness),
-        "scope": "live fresh stationary RGB/LiDAR; category-free rough mass, explicit local ground/fall interaction priors, visual contact/plume proxies",
+        "persistent_object_risk_map": args.persistent_object_risk_map,
+        "last_objects": []
+        if latest is None
+        else [
+            {
+                "track_id": item.attributes.track_id,
+                "phi": item.policy.risk,
+                "perception_ready": item.readiness.ready,
+                "factor_scores": item.diagnostics["factor_scores"],
+            }
+            for item in latest.objects
+        ],
+        "scope": "stationary all-track numeric-policy dataflow with accepted visual observations and configured factor priors; not complete visual estimation for every track"
+        if args.persistent_object_risk_map
+        else "live fresh stationary RGB/LiDAR; category-free rough mass, explicit local ground/fall interaction priors, visual contact/plume proxies",
     }
     save_json("stationary-gate.json", gate)
     print(json.dumps(gate), flush=True)
     if not stationary_ready:
         controller.stop()
         raise RuntimeError("stationary four-factor gate failed; wheels are blocked")
+    if args.persistent_object_risk_map:
+        perception.persistent_properties.freeze_properties()
     if args.evidence_gap_diagnostic:
         # Real fresh RGB/LiDAR continue; explicitly suppress only the visual
         # instance output. This is a fault-injection continuity diagnostic,
@@ -836,7 +912,10 @@ def main():
                                     "sim_seconds": now - start_sim,
                                     "state": current.tolist(),
                                     "phi": latest.policy.risk,
-                                    "unknown": latest.diagnostics["unknown_factors"],
+                                    "unknown": latest.diagnostics.get(
+                                        "unknown_factors"
+                                    ),
+                                    "objects": len(latest.objects),
                                 }
                             ),
                             flush=True,
@@ -1043,7 +1122,9 @@ def main():
     save_json("commands.json", commands)
     save_json("trajectory.json", trajectory)
     report = {
-        "acceptance_scope": "bounded_conservative_navigation; four-factor availability reported separately",
+        "acceptance_scope": "bounded_navigation_with_explicit_factor_and_property_priors; all-track numeric scores are separate from physical perception readiness"
+        if args.persistent_object_risk_map
+        else "bounded_conservative_navigation; four-factor availability reported separately",
         "passed": completed and scene_unchanged and root_unchanged_by_fixture,
         "completed": arrived,
         "reason": reason,
@@ -1057,7 +1138,7 @@ def main():
         "fields_committed_while_translating": moving_field_count,
         "perception_evidence_counts": {
             "accepted_current_instances": sum(
-                r["diagnostics"]["accepted_instance"] for r in live_fields
+                r["diagnostics"].get("accepted_instance", False) for r in live_fields
             ),
             "four_factor_ready_updates": sum(
                 r["readiness"]["ready"] for r in live_fields
@@ -1075,7 +1156,8 @@ def main():
             },
             "retained_updates_by_property": {
                 name: sum(
-                    r["diagnostics"]["temporal_object_evidence"]
+                    r["diagnostics"]
+                    .get("temporal_object_evidence", {})
                     .get(name, {})
                     .get("mode")
                     in {"retained", "retained_stronger_contact"}
@@ -1084,6 +1166,34 @@ def main():
                 for name in ("mass", "contact")
             },
         },
+        "all_object_policy_counts": {
+            "object_assessments": sum(len(r["objects"]) for r in live_fields),
+            "accepted_visual_instances": sum(
+                r["diagnostics"].get("accepted_instance_count", 0) for r in live_fields
+            ),
+            "perception_ready_assessments": sum(
+                r["diagnostics"].get("complete_perception_count", 0)
+                for r in live_fields
+            ),
+            "configured_factor_prior_uses": sum(
+                value["mode"] == "configured_prior"
+                for r in live_fields
+                for item in r["objects"]
+                for value in item["diagnostics"]["factor_scores"].values()
+            ),
+            "persistent_property_uses": sum(
+                value["mode"] == "persistence_prior"
+                for r in live_fields
+                for item in r["objects"]
+                for value in item["diagnostics"]["property_evidence"].values()
+            ),
+        },
+        "object_factor_prior_risk": args.object_factor_prior_risk
+        if args.persistent_object_risk_map
+        else None,
+        "persistent_property_config": asdict(perception.persistent_properties.config)
+        if args.persistent_object_risk_map
+        else None,
         "temporal_evidence_config": None
         if perception.evidence_memory is None
         else asdict(perception.evidence_memory.config),
@@ -1112,7 +1222,9 @@ def main():
             else "RGB read time approximates acquisition; legacy scans are not per-return deskewed",
             "oracle USD ego poses/extrinsics and fixture clearance monitor",
             "ground/fall interaction priors remain explicit",
-            "short-lived retained mass/contact are persistence priors with original timestamps; no cached motion/plume/fall-height evidence",
+            "session-persistent mass, visible contact, support and initial plume are explicit unchanged-property priors; original timestamps retained; motion/route interaction remain live"
+            if args.persistent_object_risk_map
+            else "short-lived retained mass/contact are persistence priors with original timestamps; no cached motion/plume/fall-height evidence",
             "renderer internal history warning remains unresolved despite the requested setting",
             "SAM-associated category-free rough heaviness, visual contact silhouette and registered visible-plume proxies",
             "rendered puffs are opaque visual fixtures, not steam physics/temperature; all live LiDAR occupancy retained",
