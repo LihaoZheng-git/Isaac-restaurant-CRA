@@ -135,6 +135,35 @@ def test_thermal_acquisition_is_not_frozen_by_the_first_low_observation():
     assert attrs.thermal.heat_source_likelihood.timestamp_seconds == 2
 
 
+def test_frozen_intrinsic_estimate_is_not_renewed_by_new_view_dependent_outputs():
+    track = worker()(packet()).field.tracking_result.tracked_obstacles[0]
+    memory = PersistentObjectEvidence(
+        PersistentObjectEvidenceConfig("explicitly unchanged unit object")
+    )
+    resolve(
+        memory,
+        track,
+        observed(),
+        1.1,
+        contact=scalar(0.02, source="visual_silhouette_contact_proxy"),
+    )
+    memory.finish_epoch((track,), 1.1)
+    memory.freeze_properties()
+    later = replace(track, observation_count=2, matched_previous_track=True)
+    current = observed(2)
+    current = replace(current, mass=replace(current.mass, mass_kg=scalar(3, "kg", 2)))
+    attrs, _, contact, _ = resolve(
+        memory,
+        later,
+        current,
+        2,
+        contact=scalar(0.04, t=2, source="visual_silhouette_contact_proxy"),
+    )
+    assert attrs.mass.mass_kg.value == 2 and attrs.mass.mass_kg.timestamp_seconds == 1.1
+    assert contact.value == 0.02 and contact.timestamp_seconds == 1.1
+    assert attrs.mass.mass_kg.status is EstimateStatus.PRIOR
+
+
 def test_observed_high_risk_can_still_reach_one_and_prior_sensitivity_is_explicit():
     adapted = adapt_physical_factors(unknown(), timestamp_seconds=1.1)
     profile = replace(
@@ -384,6 +413,24 @@ def test_failed_multi_object_field_does_not_commit_tracker_or_property_memory():
     )
 
 
+def test_temporal_gap_requires_unpublished_baseline_then_actual_fresh_pair():
+    runtime = mapped_worker()
+    first = runtime(multi_packet())
+    with pytest.raises(ValueError, match="unpublished recovery baseline"):
+        runtime(multi_packet(2, 1.5))
+    assert runtime.previous is first.field
+    assert runtime.temporal_recovery_baseline[:2] == (2, 1.5)
+    recovered = runtime(multi_packet(3, 1.6))
+    assert recovered.field.sensor_timestamp_seconds == 1.6
+    assert (
+        recovered.field.temporal_safety_derivative.time_delta_seconds
+        == pytest.approx(0.1)
+    )
+    assert recovered.diagnostics["temporal_gap_recovery"]["used"]
+    assert recovered.diagnostics["temporal_gap_recovery"]["baseline_timestamp"] == 1.5
+    assert runtime.temporal_recovery_baseline is None
+
+
 def test_frozen_visual_cadence_keeps_all_track_motion_current_and_shares_image_encoding():
     from robot.perception.sam_instance_segmentation import SamInstanceResult
 
@@ -409,6 +456,7 @@ def test_frozen_visual_cadence_keeps_all_track_motion_current_and_shares_image_e
             (
                 np.repeat(base.obstacle_xyz, 2, axis=0),
                 np.repeat(base.obstacle_xyz + [0, 0.45, 0], 2, axis=0),
+                np.repeat(base.obstacle_xyz + [0.5, 0, 0], 2, axis=0),
             )
         )
         return replace(
@@ -416,17 +464,21 @@ def test_frozen_visual_cadence_keeps_all_track_motion_current_and_shares_image_e
         )
 
     result = runtime(value(1, 1))
-    assert len(result.objects) == 2
-    assert segmenter.images == 1 and segmenter.proposals == 2
+    assert len(result.objects) == 3
+    assert segmenter.images == 1 and segmenter.proposals == 3
     runtime.persistent_properties.freeze_properties()
     result = runtime(value(2, 1.1))
-    assert segmenter.images == 1 and segmenter.proposals == 2
+    assert segmenter.images == 1 and segmenter.proposals == 3
     assert all(not item.diagnostics["visual_attempted"] for item in result.objects)
     assert all(
         item.attributes.motion.relative_speed_mps.timestamp_seconds == 1.1
         for item in result.objects
     )
-    for index in range(2, 12):
+    for index in range(2, 11):
         result = runtime(value(index + 1, 1 + index * 0.1))
-    assert segmenter.images == 2 and segmenter.proposals == 4
+    assert segmenter.images == 2 and segmenter.proposals == 5
+    assert sum(item.diagnostics["visual_attempted"] for item in result.objects) == 2
+    result = runtime(value(12, 2.1))
+    assert segmenter.images == 3 and segmenter.proposals == 6
+    assert sum(item.diagnostics["visual_attempted"] for item in result.objects) == 1
     assert all(len(item.diagnostics["factor_scores"]) == 4 for item in result.objects)

@@ -249,3 +249,17 @@
   physical object. Do not claim every environmental object is visually assessed
   or every return lies within the bounded field. Report per-object policies,
   prior uses, readiness and discarded/out-of-domain geometry separately.
+- After initial acquisition, the new map freezes accepted intrinsic property
+  values under its explicit unchanged-scene prior. Vision retries use an
+  explicit one-second per-track cadence and a two-track per-update budget with
+  oldest-attempt fairness; all tracks still get current motion and numeric
+  policies each processed scan. Support invalidation/expiry remain effective.
+  Connected occupied regions with identical phi/flux/lambda/side may share a
+  field component to avoid arbitrary identity seams. Preserve differing
+  policies, disconnected regions, original track metadata and legacy defaults.
+- A temporal source gap in the new map may record an unpublished numerical
+  baseline for recovery; it must return no control field and leave accepted
+  tracker/evidence state uncommitted. Resume only from a real fresh source pair
+  within the unchanged derivative limit, retaining both epochs and all field/
+  command freshness and exact verification gates. Never substitute missing
+  temporal evidence with zero during motion or renew source clocks.

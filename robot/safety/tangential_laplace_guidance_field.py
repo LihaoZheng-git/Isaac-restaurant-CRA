@@ -75,6 +75,7 @@ class TangentialLaplaceGuidanceFieldConfig(LaplaceGuidanceFieldConfig):
     tangential_buffer_radius: float = 0.6
     allow_dense_scene_arbitration: bool = False
     interface_backend: str = "loop"
+    merge_equal_policy_regions: bool = False
 
     def __post_init__(self) -> None:
         if self.interface_backend not in {"loop", "vectorized"}:
@@ -86,13 +87,11 @@ class TangentialLaplaceGuidanceFieldConfig(LaplaceGuidanceFieldConfig):
             name="tangential_buffer_radius",
         )
         if radius <= 0.0:
-            raise ValueError(
-                "tangential_buffer_radius must be greater than zero."
-            )
+            raise ValueError("tangential_buffer_radius must be greater than zero.")
         if not isinstance(self.allow_dense_scene_arbitration, bool):
-            raise TypeError(
-                "allow_dense_scene_arbitration must be a boolean."
-            )
+            raise TypeError("allow_dense_scene_arbitration must be a boolean.")
+        if not isinstance(self.merge_equal_policy_regions, bool):
+            raise TypeError("merge_equal_policy_regions must be a boolean")
 
         object.__setattr__(self, "tangential_buffer_radius", radius)
 
@@ -150,22 +149,16 @@ def solve_tangential_laplace_guidance_field(
     if not isinstance(occupancy_grid, LocalOccupancyGrid):
         raise TypeError("occupancy_grid must be a LocalOccupancyGrid.")
     if not isinstance(guidance_policy, SafeSAGEGuidancePolicy):
-        raise TypeError(
-            "guidance_policy must be a SafeSAGEGuidancePolicy."
-        )
+        raise TypeError("guidance_policy must be a SafeSAGEGuidancePolicy.")
 
     solver_config = config or TangentialLaplaceGuidanceFieldConfig()
     if not isinstance(
         solver_config,
         TangentialLaplaceGuidanceFieldConfig,
     ):
-        raise TypeError(
-            "config must be a TangentialLaplaceGuidanceFieldConfig."
-        )
+        raise TypeError("config must be a TangentialLaplaceGuidanceFieldConfig.")
 
-    semantic_by_track_id = _semantic_obstacles_by_track_id(
-        semantic_obstacles
-    )
+    semantic_by_track_id = _semantic_obstacles_by_track_id(semantic_obstacles)
     guidance_by_track_id = _validated_track_guidance_parameters(
         track_guidance_parameters
     )
@@ -174,6 +167,7 @@ def solve_tangential_laplace_guidance_field(
         guidance_policy=guidance_policy,
         semantic_by_track_id=semantic_by_track_id,
         guidance_by_track_id=guidance_by_track_id,
+        merge_equal_policy_regions=solver_config.merge_equal_policy_regions,
     )
 
     (
@@ -215,9 +209,7 @@ def solve_tangential_laplace_guidance_field(
         occupancy_grid.shape + (2,),
         dtype=np.float64,
     )
-    vectors[obstacle_interface_mask] = normal_boundary_vectors[
-        obstacle_interface_mask
-    ]
+    vectors[obstacle_interface_mask] = normal_boundary_vectors[obstacle_interface_mask]
     vectors[tangential_interface_mask] = tangential_boundary_vectors[
         tangential_interface_mask
     ]
@@ -253,24 +245,17 @@ def _semantic_obstacles_by_track_id(
     try:
         obstacles = tuple(semantic_obstacles)
     except TypeError as error:
-        raise TypeError(
-            "semantic_obstacles must be an iterable."
-        ) from error
+        raise TypeError("semantic_obstacles must be an iterable.") from error
 
     by_track_id: dict[int, SemanticObstacle] = {}
     for obstacle in obstacles:
         if not isinstance(obstacle, SemanticObstacle):
-            raise TypeError(
-                "Every semantic obstacle must be a SemanticObstacle."
-            )
+            raise TypeError("Every semantic obstacle must be a SemanticObstacle.")
         if obstacle.track_id < 0:
-            raise ValueError(
-                "Semantic obstacle track IDs cannot be negative."
-            )
+            raise ValueError("Semantic obstacle track IDs cannot be negative.")
         if obstacle.track_id in by_track_id:
             raise ValueError(
-                "semantic_obstacles contains duplicate track ID "
-                f"{obstacle.track_id}."
+                f"semantic_obstacles contains duplicate track ID {obstacle.track_id}."
             )
 
         by_track_id[obstacle.track_id] = obstacle
@@ -284,29 +269,23 @@ def _obstacle_components(
     guidance_policy: SafeSAGEGuidancePolicy,
     semantic_by_track_id: dict[int, SemanticObstacle],
     guidance_by_track_id: dict[int, SafeSAGEGuidanceParameters],
+    merge_equal_policy_regions: bool = False,
 ) -> tuple[np.ndarray, tuple[_ObstacleComponent, ...]]:
     """Group occupied cells by track and connected unknown regions."""
 
     labels = np.full(occupancy_grid.shape, -1, dtype=np.int64)
     components: list[_ObstacleComponent] = []
 
-    occupied_track_ids = occupancy_grid.cell_track_ids[
-        occupancy_grid.occupied_mask
-    ]
+    occupied_track_ids = occupancy_grid.cell_track_ids[occupancy_grid.occupied_mask]
     if occupied_track_ids.size and np.any(occupied_track_ids < -1):
-        raise ValueError(
-            "Occupied-cell track IDs cannot be smaller than -1."
-        )
+        raise ValueError("Occupied-cell track IDs cannot be smaller than -1.")
 
     tracked_ids = sorted(
-        int(track_id)
-        for track_id in np.unique(occupied_track_ids)
-        if track_id >= 0
+        int(track_id) for track_id in np.unique(occupied_track_ids) if track_id >= 0
     )
     for track_id in tracked_ids:
         occupied_indices = np.argwhere(
-            occupancy_grid.occupied_mask
-            & (occupancy_grid.cell_track_ids == track_id)
+            occupancy_grid.occupied_mask & (occupancy_grid.cell_track_ids == track_id)
         )
         parameters = guidance_by_track_id.get(track_id)
         if parameters is None:
@@ -314,9 +293,7 @@ def _obstacle_components(
             parameters = (
                 guidance_policy.parameters_for_obstacle(semantic_obstacle)
                 if semantic_obstacle is not None
-                else guidance_policy.parameters_for(
-                    guidance_policy.unknown_class
-                )
+                else guidance_policy.parameters_for(guidance_policy.unknown_class)
             )
         label = len(components)
         labels[occupied_indices[:, 0], occupied_indices[:, 1]] = label
@@ -328,9 +305,7 @@ def _obstacle_components(
             )
         )
 
-    unknown_mask = occupancy_grid.occupied_mask & (
-        occupancy_grid.cell_track_ids == -1
-    )
+    unknown_mask = occupancy_grid.occupied_mask & (occupancy_grid.cell_track_ids == -1)
     visited = np.zeros(occupancy_grid.shape, dtype=bool)
     for seed_row, seed_column in np.argwhere(unknown_mask):
         if visited[seed_row, seed_column]:
@@ -375,6 +350,52 @@ def _obstacle_components(
             )
         )
 
+    if merge_equal_policy_regions:
+        # Instance identity stays in perception/grid metadata. For field
+        # boundaries, a connected keep-out region with identical phi, flux,
+        # lambda and side must not gain seams from arbitrary track IDs.
+        groups = {}
+        for component in components:
+            parameters = component.parameters
+            key = (
+                parameters.risk,
+                parameters.boundary_flux,
+                parameters.tangential_strength,
+                parameters.passing_side.value,
+            )
+            if key not in groups:
+                groups[key] = (np.zeros(labels.shape, dtype=bool), parameters)
+            mask = groups[key][0]
+            indices = component.occupied_indices
+            mask[indices[:, 0], indices[:, 1]] = True
+        components = []
+        labels.fill(-1)
+        for key in sorted(groups):
+            mask, parameters = groups[key]
+            visited = np.zeros(labels.shape, dtype=bool)
+            for row, column in np.argwhere(mask):
+                if visited[row, column]:
+                    continue
+                queue = deque([(int(row), int(column))])
+                visited[row, column] = True
+                cells = []
+                while queue:
+                    r, c = queue.popleft()
+                    cells.append((r, c))
+                    for dr, dc in _NEIGHBOR_OFFSETS:
+                        nr, nc = r + dr, c + dc
+                        if (
+                            0 <= nr < mask.shape[0]
+                            and 0 <= nc < mask.shape[1]
+                            and mask[nr, nc]
+                            and not visited[nr, nc]
+                        ):
+                            visited[nr, nc] = True
+                            queue.append((nr, nc))
+                indices = np.asarray(cells, dtype=np.int64)
+                label = len(components)
+                labels[indices[:, 0], indices[:, 1]] = label
+                components.append(_ObstacleComponent(label, indices, parameters))
     return labels, tuple(components)
 
 
@@ -392,13 +413,10 @@ def _validated_track_guidance_parameters(
         if isinstance(track_id, bool) or not isinstance(track_id, int):
             raise TypeError("Track guidance-parameter IDs must be integers.")
         if track_id < 0:
-            raise ValueError(
-                "Track guidance-parameter IDs cannot be negative."
-            )
+            raise ValueError("Track guidance-parameter IDs cannot be negative.")
         if not isinstance(track_parameters, SafeSAGEGuidanceParameters):
             raise TypeError(
-                "Every track guidance override must be "
-                "SafeSAGEGuidanceParameters."
+                "Every track guidance override must be SafeSAGEGuidanceParameters."
             )
         parameters[track_id] = track_parameters
     return parameters
@@ -471,9 +489,7 @@ def _normal_interface_data(
             for row_offset, column_offset in _NEIGHBOR_OFFSETS:
                 neighbor_row = row_index + row_offset
                 neighbor_column = column_index + column_offset
-                component_label = int(
-                    component_labels[neighbor_row, neighbor_column]
-                )
+                component_label = int(component_labels[neighbor_row, neighbor_column])
                 if component_label < 0:
                     continue
 
@@ -513,9 +529,7 @@ def _normal_interface_data(
 
             interface_mask[row_index, column_index] = True
             normals[row_index, column_index] = normal
-            prescribed_vectors[row_index, column_index] = (
-                boundary_flux * normal
-            )
+            prescribed_vectors[row_index, column_index] = boundary_flux * normal
 
     return interface_mask, normals, prescribed_vectors
 
@@ -590,9 +604,8 @@ def _tangential_interface_data(
     selected_priorities.fill(None)
     for component in active_components:
         distances, nearest_normal_sums = distance_data[component.label]
-        coverage_mask = (
-            ~occupancy_grid.occupied_mask
-            & (distances <= buffer_radius + half_width + 1e-12)
+        coverage_mask = ~occupancy_grid.occupied_mask & (
+            distances <= buffer_radius + half_width + 1e-12
         )
         if (
             np.any(coverage_mask & outer_boundary_mask)
@@ -648,8 +661,7 @@ def _tangential_interface_data(
 
         component_normals = np.zeros_like(normals)
         component_normals[ring_mask] = (
-            nearest_normal_sums[ring_mask]
-            / normal_magnitudes[ring_mask, None]
+            nearest_normal_sums[ring_mask] / normal_magnitudes[ring_mask, None]
         )
         component_tangents = _oriented_tangents(
             component_normals,
@@ -673,8 +685,7 @@ def _tangential_interface_data(
                 (int(row), int(column))
                 for row, column in candidate_indices
                 if selected_priorities[int(row), int(column)] is None
-                or priority
-                > selected_priorities[int(row), int(column)]
+                or priority > selected_priorities[int(row), int(column)]
             ]
             if not selected_indices:
                 continue
@@ -714,8 +725,7 @@ def _tangential_interface_data(
             interface_mask[ring_mask] = True
             normals[ring_mask] = component_normals[ring_mask]
             prescribed_vectors[ring_mask] = (
-                component.parameters.tangential_strength
-                * component_tangents[ring_mask]
+                component.parameters.tangential_strength * component_tangents[ring_mask]
             )
 
     return interface_mask, normals, prescribed_vectors
@@ -877,9 +887,7 @@ def _make_result(
         resolution=float(resolution),
         tangential_interface_mask=frozen_tangential_mask,
         tangential_normals_robot_xy=frozen_tangential_normals,
-        tangential_boundary_vectors_robot_xy=(
-            frozen_tangential_vectors
-        ),
+        tangential_boundary_vectors_robot_xy=(frozen_tangential_vectors),
         obstacle_component_labels=frozen_component_labels,
         tangential_buffer_radius=float(buffer_radius),
     )

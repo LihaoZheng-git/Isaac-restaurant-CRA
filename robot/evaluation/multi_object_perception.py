@@ -84,6 +84,15 @@ def assess_all_objects(worker, packet):
         - memory.last_visual_attempt.get(track_id, -math.inf)
         >= memory.config.minimum_visual_reassessment_interval_seconds
     }
+    if memory.frozen:
+        # Fair oldest-attempt scheduling bounds expensive vision while every
+        # track still gets fresh motion and a numeric policy for this scan.
+        attempted = set(
+            sorted(
+                attempted,
+                key=lambda key: (memory.last_visual_attempt.get(key, -math.inf), key),
+            )[: memory.config.maximum_visual_tracks_per_update]
+        )
     if attempted:
         worker.segmenter.set_image(packet.rgb)
     world = packet.obstacle_xyz.copy()
@@ -362,21 +371,56 @@ def assess_all_objects(worker, packet):
     pipeline = build_safe_sage_field_pipeline(
         grid,
         guidance_policy=worker.guidance_policy,
-        config=worker.field_config,
+        config=replace(
+            worker.field_config,
+            guidance_field_config=replace(
+                worker.field_config.guidance_field_config,
+                merge_equal_policy_regions=True,
+            ),
+        ),
         semantic_obstacles=semantics,
         track_guidance_parameters={
             key: value.guidance_parameters for key, value in policies.items()
         },
     )
     temporal = 0.0
+    recovery = {"used": False}
     if worker.previous is not None:
         old = worker.previous.temporal_safety_derivative
+        previous_h = worker.previous.pipeline.h_full
+        previous_time = worker.previous.sensor_timestamp_seconds
+        baseline = getattr(worker, "temporal_recovery_baseline", None)
+        if (
+            baseline is not None
+            and previous_time < baseline[1] < packet.sensor_timestamp_seconds
+            and baseline[0] < packet.sensor_frame_id
+        ):
+            previous_h, previous_time = baseline[2], baseline[1]
+            old = None
+            recovery = {
+                "used": True,
+                "baseline_frame_id": baseline[0],
+                "baseline_timestamp": baseline[1],
+                "scope": "two actual perception fields after a temporal gap; first bootstrap was not published for control",
+            }
+        delta = packet.sensor_timestamp_seconds - previous_time
+        if delta > worker.temporal.config.maximum_time_delta_seconds:
+            # A gap must stop control, but must not permanently prevent later
+            # fresh fields from recovering. Keep only an unpublished numerical
+            # baseline; tracker, evidence and accepted field stay transactional.
+            worker.temporal_recovery_baseline = (
+                packet.sensor_frame_id,
+                packet.sensor_timestamp_seconds,
+                pipeline.h_full,
+            )
+            raise ValueError(
+                "temporal source gap; unpublished recovery baseline recorded; no control field"
+            )
         temporal = worker.temporal.estimate(
-            previous_h_full=worker.previous.pipeline.h_full,
+            previous_h_full=previous_h,
             current_h_full=pipeline.h_full,
             grid_config=worker.grid_config,
-            time_delta_seconds=packet.sensor_timestamp_seconds
-            - worker.previous.sensor_timestamp_seconds,
+            time_delta_seconds=delta,
             egomotion_translation_grid_xy=(0.0, 0.0),
             previous_estimate=old
             if isinstance(old, SafeSAGETemporalDerivativeResult)
@@ -405,6 +449,7 @@ def assess_all_objects(worker, packet):
         field,
     )
     worker.static_points, worker.object_ownership_bounds = static, ownership
+    worker.temporal_recovery_baseline = None
     worker.multi_retained = (
         retained + [current_placement] if worker.occupancy_retention_seconds else []
     )
@@ -441,10 +486,13 @@ def assess_all_objects(worker, packet):
         "maximum_property_age_seconds": memory.config.maximum_property_age_seconds,
         "initial_plume_acquisition_frozen": memory.frozen,
         "visual_reassessment_interval_seconds": memory.config.minimum_visual_reassessment_interval_seconds,
+        "maximum_visual_tracks_per_update": memory.config.maximum_visual_tracks_per_update,
         "retained_occupancy_epochs": [
             {"timestamp": item[0], "sensor_frame_id": item[1]} for item in retained
         ],
         "fixed_lambda": 1.25,
+        "merge_equal_policy_regions": True,
+        "temporal_gap_recovery": recovery,
         "occupancy_retention_scope": worker.static_scope,
         "field_raw_placement_count": len(points),
         "field_cell_representative_count": len(first),

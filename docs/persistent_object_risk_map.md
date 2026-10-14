@@ -57,7 +57,10 @@ visible contact and visible-plume inputs for a configured session. It never
 caches velocity or route interaction. Default original-source lifetime is
 120 s and confidence half-life is 60 s; these are scenario assumptions.
 Borrowed values become PRIORS, retaining source frame/time, original status and
-bounds. Repeated borrowing never refreshes their age. Oracle/fallback estimates
+bounds. After acquisition, accepted intrinsic values are frozen; new
+view-dependent mass/contact estimates do not renew them. Support invalidation
+and original expiry still apply, and newly available missing properties can be
+acquired. Repeated borrowing never refreshes their age. Oracle/fallback estimates
 cannot enter the observed-property store.
 
 Track observation continuity and a 25 cm prediction-error gate are required;
@@ -76,7 +79,9 @@ registration. This validates persistence of an initial cue, not moving-view
 plume detection or temperature measurement.
 
 After acquisition, visual reassessment is attempted at most once per second
-per observable track by default. Newly visible tracks are attempted immediately.
+per observable track by default, with at most two visual tracks per update.
+Oldest-attempt scheduling prioritizes never-assessed tracks and prevents
+starvation. Newly visible tracks receive numeric priors while awaiting vision.
 All tracks still receive current kinetic/context estimates and numeric policies
 on each processed scan, with priors while visual work is deferred. This cadence
 is explicit in diagnostics, not an evidence timestamp renewal, discarded
@@ -107,3 +112,21 @@ persistence and current kinetic/context/field updates; it is a different
 experiment from the previous moving-plume-registration target.
 
 Validation results and motion limitations are recorded below after diagnostics.
+
+The new map opts into connected equal-policy field regions. Geometry with
+identical phi, normal flux, lambda and passing side shares one connected field
+component regardless of arbitrary LiDAR track fragmentation. Different policies
+and disconnected physical regions stay separate. Per-object identities,
+occupancy, scalar policy values and diagnostics remain unchanged. A synthetic
+fragmented/joined-region test checks identical boundary vectors and full solved
+guidance fields. This is a field representation adaptation, not exact paper
+equivalence or proof of global navigation convergence; legacy callers keep
+their previous grouping default.
+
+Temporal gaps require a separate unpublished recovery baseline. If consecutive
+perception fields are farther apart than the unchanged .35 s derivative limit,
+no control field is returned and tracker/evidence/accepted-field state stays
+uncommitted. The next actual field can recover only using a real baseline-to-
+current source interval within that limit; source epochs are not renewed and
+missing derivatives are not replaced with zero for motion. Field/command age
+checks and full current-state MPC/CBF verification still apply after recovery.

@@ -26,10 +26,17 @@ class PersistentObjectEvidenceConfig:
     maximum_support_displacement_m: float = 0.15
     maximum_visible_height_change_m: float = 0.10
     minimum_visual_reassessment_interval_seconds: float = 1.0
+    maximum_visual_tracks_per_update: int = 2
 
     def __post_init__(self):
         if not isinstance(self.scope, str) or not self.scope.strip():
             raise ValueError("property persistence requires an explicit scene scope")
+        if isinstance(self.maximum_visual_tracks_per_update, bool) or not isinstance(
+            self.maximum_visual_tracks_per_update, int
+        ):
+            raise ValueError(
+                "maximum_visual_tracks_per_update must be a positive integer"
+            )
         for name, value in vars(self).items():
             if name == "scope":
                 continue
@@ -179,6 +186,18 @@ class PersistentObjectEvidence:
                 and PERSISTENT_PROPERTY_MARKER not in item.evidence
                 and 0 <= timestamp - item.timestamp_seconds <= 1.0
             )
+            # The user-selected mode freezes accepted intrinsic observations
+            # for this declared static session. Current view-dependent network
+            # outputs do not renew or replace them. Support invalidation above
+            # and original expiry still take precedence.
+            if (
+                self.frozen
+                and key in self.properties
+                and 0
+                <= timestamp - self.properties[key].estimate.timestamp_seconds
+                <= self.config.maximum_property_age_seconds
+            ):
+                usable = False
             if usable:
                 resolved[name] = item
                 details[name] = {
