@@ -276,3 +276,12 @@
   fall height. Preserve strict directional defaults and mismatched-band failures.
   See docs/restaurant_readiness_gate.md; numeric completeness alone cannot pass
   its independent fixture-evidence or combined navigation acceptance.
+- The moving-sphere opt-in may translate accepted instance bounds using current
+  observed centroid displacement only after persistence identity/competitor
+  checks. Preserve original epochs and the unchanged-shape planar-translation
+  PRIOR label, legacy static bounds, unmatched occupancy and moved-support
+  invalidation. Moving-actor diagnostics use .15 s positive-occupancy expiry;
+  never enable permanent static occupancy memory for them. Scripted .12/.24 m/s
+  motion is oracle evaluation truth only, never estimator input. Accumulated
+  scans/centroid filtering can underestimate speed; report transition exclusions
+  and errors, not exact dynamic velocity or crowded tracking acceptance.

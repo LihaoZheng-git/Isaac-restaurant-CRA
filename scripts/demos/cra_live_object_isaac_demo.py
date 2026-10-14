@@ -30,6 +30,7 @@ parser.add_argument(
 parser.add_argument("--object-factor-prior-risk", type=float, default=0.25)
 parser.add_argument("--fixture-layout", choices=("single", "three"), default="single")
 parser.add_argument("--stationary-frames", type=int, default=12)
+parser.add_argument("--kinetic-diagnostic", action="store_true")
 parser.add_argument(
     "--evidence-gap-diagnostic",
     action="store_true",
@@ -66,6 +67,8 @@ parser.add_argument(
     help="optimizer candidate age cap; every executed horizon still needs fresh exact validation",
 )
 args = parser.parse_args()
+if args.kinetic_diagnostic and (args.motion or args.fixture_layout != "single" or not args.persistent_object_risk_map or args.static_occupancy_memory_prior or args.plume_control != "none"):
+    parser.error("kinetic diagnostic requires single/no-plume persistent map, zero wheels, and no static occupancy memory")
 if not 12 <= args.stationary_frames <= 60:
     parser.error("stationary frames must be within [12, 60]")
 if args.fixture_layout != "single" and not args.persistent_object_risk_map:
@@ -120,6 +123,7 @@ from robot.evaluation.live_object_perception import (
     LiveObjectPerception,
 )
 from robot.evaluation.factor_specific_cra import diagnose_factor_specific_cra
+from robot.evaluation.kinetic_fixture import actor_offset_velocity, summarize_kinetic_records
 from robot.evaluation.simple_object_test import disk_footprint_clearance
 from robot.navigation.waypoint_controller import (
     RobotPose2D,
@@ -297,6 +301,8 @@ def main():
              "color": (0.2, 0.8, 0.3), "plume": True},
         ])
     fixtures = []
+    actor_translate = None
+    actor_start_time = None
     root_before = stage.GetRootLayer().ExportToString()
     with Usd.EditContext(stage, stage.GetSessionLayer()):
         puffs = []
@@ -305,7 +311,10 @@ def main():
             base = f"/World/CRALiveObject/{spec['name']}"
             sphere = UsdGeom.Sphere.Define(stage, base + "/Sphere")
             sphere.CreateRadiusAttr(RADIUS)
-            sphere.AddTranslateOp().Set(Gf.Vec3d(*xy, RADIUS + spec["drop_m"]))
+            translate = sphere.AddTranslateOp()
+            translate.Set(Gf.Vec3d(*xy, RADIUS + spec["drop_m"]))
+            if spec["name"] == "ground":
+                actor_translate = translate
             sphere.CreateDisplayColorAttr([Gf.Vec3f(*spec["color"])])
             UsdPhysics.CollisionAPI.Apply(sphere.GetPrim())
             material = UsdShade.Material.Define(stage, base + "/Matte")
@@ -419,7 +428,7 @@ def main():
         ground_prior_scope=GROUND_SCOPE,
         negative_plume_scope=PLUME_SCOPE,
         rectify_plume=True,
-        occupancy_retention_seconds=0.5,
+        occupancy_retention_seconds=0.15 if args.kinetic_diagnostic else 0.5,
         static_occupancy_memory_prior_scope="bounded static sphere/environment; positive occupancy remains until experiment end; no dynamic-actor or free-space-clearing claim"
         if args.static_occupancy_memory_prior
         else None,
@@ -427,7 +436,8 @@ def main():
         if args.disable_evidence_retention or args.persistent_object_risk_map
         else TemporalObjectEvidenceConfig(),
         persistent_property_config=PersistentObjectEvidenceConfig(
-            "bounded separated static fixture/environment for this session; observed mass, visible contact outline, support and plume assumed unchanged; motion and route interaction remain live"
+            "bounded separated fixture: mass/visible contact/plume assumed unchanged; support invalidates on displacement; current motion/route; moving actor uses short occupancy expiry",
+            translate_instance_bounds_prior=args.kinetic_diagnostic,
         )
         if args.persistent_object_risk_map
         else None,
@@ -470,6 +480,10 @@ def main():
 
     def step(command=(0.0, 0.0), paced=False):
         started = time.perf_counter()
+        if actor_start_time is not None:
+            offset, _, _ = actor_offset_velocity(max(0, float(timeline.get_current_time()) - actor_start_time))
+            with Usd.EditContext(stage, stage.GetSessionLayer()):
+                actor_translate.Set(Gf.Vec3d(center_world[0], center_world[1] + offset, RADIUS))
         controller.apply_command(*command)
         app.update()
         now = float(timeline.get_current_time())
@@ -745,6 +759,56 @@ def main():
         raise RuntimeError("stationary four-factor gate failed; wheels are blocked")
     if args.persistent_object_risk_map:
         perception.persistent_properties.freeze_properties()
+    if args.kinetic_diagnostic:
+        actor_start_time = float(timeline.get_current_time())
+        kinetic_records = []
+        while float(timeline.get_current_time()) - actor_start_time < 12.1:
+            now = step()
+            try:
+                packet = capture()
+                if packet is None:
+                    continue
+                latest = perception(packet)
+            except (ValueError, RuntimeError) as error:
+                rejections.append(str(error))
+                continue
+            elapsed = packet.sensor_timestamp_seconds - actor_start_time
+            if elapsed < 0:
+                continue
+            offset, speed, phase = actor_offset_velocity(elapsed)
+            record = field_record(latest, now, state())
+            record["actor_monitor"] = {
+                "elapsed_seconds": elapsed, "phase": phase,
+                "center_world_xy": [center_world[0], center_world[1] + offset],
+                "velocity_world_xy": [0, speed],
+                "scope": "authored kinematic motion truth for evaluation only; never perception or factor input",
+            }
+            kinetic_records.append(record)
+            if len(kinetic_records) % 20 == 0:
+                print(json.dumps({"kinetic_frames": len(kinetic_records), "elapsed": elapsed, "phase": phase}), flush=True)
+        report = summarize_kinetic_records(kinetic_records)
+        report.update(nonzero_wheel_commands=0, rejections=sorted(set(rejections)),
+                      occupancy_retention_seconds=perception.occupancy_retention_seconds,
+                      scene_unchanged=original_hash == hashlib.sha256(Path(stationary.ROBOT_SCENE_PATH).read_bytes()).hexdigest())
+        report["maximum_robot_translation_m"] = max(np.linalg.norm(record["state_at_commit"][:2]) for record in kinetic_records)
+        report["maximum_robot_yaw_radians"] = max(abs(record["state_at_commit"][2]) for record in kinetic_records)
+        report["checks"]["stationary_robot"] = bool(report["maximum_robot_translation_m"] < 0.02 and report["maximum_robot_yaw_radians"] < 0.03)
+        report["checks"]["scene_invariants"] = report["scene_unchanged"] and root_unchanged_by_fixture
+        report["maximum_retained_occupancy_age_seconds"] = max(
+            (record["sensor_timestamp"] - item["timestamp"]
+             for record in kinetic_records
+             for item in record["diagnostics"]["retained_occupancy_epochs"]), default=0.0)
+        report["checks"]["bounded_old_occupancy"] = report["maximum_retained_occupancy_age_seconds"] <= 0.15 + 1e-8
+        report["passed"] = all(report["checks"].values())
+        save_json("kinetic-fields.json", kinetic_records)
+        save_json("kinetic-gate.json", report)
+        cv2.imwrite(str(args.output / "kinetic-current.png"), packet.rgb[:, :, ::-1])
+        print(json.dumps(report), flush=True)
+        controller.stop()
+        timeline.stop()
+        if not report["passed"]:
+            raise RuntimeError("moving-object kinetic gate failed")
+        return
     if args.evidence_gap_diagnostic:
         # Real fresh RGB/LiDAR continue; explicitly suppress only the visual
         # instance output. This is a fault-injection continuity diagnostic,

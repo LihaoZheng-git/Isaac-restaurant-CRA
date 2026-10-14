@@ -91,6 +91,48 @@ from independently authored motion truth, invalidate moved support priors, and
 report stale occupancy. A stationary development gate precedes any robot wheel
 motion. Static occupancy memory is not appropriate for moving actors.
 
+`--kinetic-diagnostic` animates the sphere only after the zero-wheel acquisition
+gate and freezes accepted intrinsic cues. It records a 12 s stopped/slow/stopped/
+fast-reverse/stopped profile. The .12/.24 m/s scripted velocities are independent
+oracle evaluation truth; the tracker/CRA receives actual simulated RGB/LiDAR and
+ego pose references, not actor truth. .4 s intervals around phase changes are
+excluded explicitly to avoid claiming instantaneous accumulated-scan/filter
+response. Per-return ego deskew still does not correct actor motion.
+
+The first `kinetic-stationary-v1` run passed speed/energy ordering: stopped median
+.0173 m/s; .12 m/s truth produced .0980 m/s; .24 m/s truth produced .1814 m/s.
+Median vector error was .0286/.0659 m/s for slow/fast phases. It has measurable
+underestimation, not exact velocity calibration. The repeat gate additionally
+requires current returns to own the computed policy, robot stationarity, scene
+invariants and bounded old-occupancy age.
+
+The moving-actor opt-in may translate earlier accepted instance bounds by the
+**observed track centroid displacement**, after the original identity/competitor
+and property-persistence checks. It is an unchanged-shape, planar-translation
+association PRIOR, not a mask measurement, actor truth or rotation/occlusion
+solution. Original bounds/property source times are retained; unmatched returns
+remain separately occupied with priors. Legacy static bounds stay the default.
+Moved support is invalidated independently. Positive occupancy has an explicit
+.15 s expiry in this diagnostic and never establishes free space or preserves
+moving actors indefinitely. Unit tests verify original epochs, translated
+ownership and expiry; no confidence/energy/phi threshold is tuned to the fixture.
+
+The final `kinetic-stationary-v2` gate **passed** all eight checks, including
+policy ownership, scene invariants and robot stationarity. Steady-phase usable
+counts were 12/22/12/22/12. Median relative speeds were .0174/.0955/.0161/.1805/
+.0159 m/s; slow/fast median vector errors were .0283/.0686 m/s. Energy severity
+ordered .000622 < .001384 < .002553 for initial stopped/slow/fast phases. These
+engineering upper-bound severities are small under the unchanged 100 J scale;
+aggregate phi also responds to current route interaction, support invalidation,
+confidence decay and factor priors, not velocity alone.
+
+Maximum robot displacement was .01618 m and yaw .000293 rad; zero wheel commands
+were issued. Maximum retained-occupancy source age was .10 s under the .15 s limit.
+Full regression: 1,691 passed, with repository-wide Ruff and diff checks passed.
+The sensor plot is `outputs/cra_readiness/kinetic-stationary-v2/kinetic-validation.png`.
+This is a stationary-robot dynamic-actor gate, not yet simultaneous robot/actor
+navigation or a general moving-human model.
+
 Combined navigation must use each obstacle's computed policy with all occupancy,
 fresh exact MPC/DTCBF and analytical CBF checks, actual waypoint arrival, clearance
 and safe stopping. Record simulation pacing, latency, field/evidence/prior counts,
