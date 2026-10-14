@@ -29,6 +29,16 @@ parser.add_argument(
 )
 parser.add_argument("--disable-evidence-retention", action="store_true")
 parser.add_argument(
+    "--disable-lidar-deskew",
+    action="store_true",
+    help="legacy whole-scan start-time transform baseline",
+)
+parser.add_argument(
+    "--save-sensor-snapshots",
+    action="store_true",
+    help="save bounded early/periodic copied RGB/XYZ/timing diagnostic snapshots",
+)
+parser.add_argument(
     "--static-occupancy-memory-prior",
     action="store_true",
     help="explicit static fixture/environment assumption to retain positive occupancy through LiDAR blind regions",
@@ -44,7 +54,7 @@ parser.add_argument("--maximum-seconds", type=float, default=40.0)
 args = parser.parse_args()
 if args.evidence_gap_diagnostic and (args.motion or args.disable_evidence_retention):
     parser.error("evidence-gap diagnostic requires retention and zero wheel motion")
-if not 0 < args.simulation_rate <= 1 or not 0 < args.maximum_seconds <= 60:
+if not 0 < args.simulation_rate <= 1 or not 0 < args.maximum_seconds <= 120:
     parser.error("invalid bounded simulation rate/duration")
 args.output.mkdir(parents=True, exist_ok=True)
 os.environ.setdefault("WARP_CACHE_PATH", str(args.output / "warp"))
@@ -89,6 +99,7 @@ from robot.navigation.waypoint_controller import (
     WaypointControllerConfig,
 )
 from robot.perception.live_inference import LiveInferenceRunner
+from robot.perception.lidar_deskew import deskew_uncompensated_lidar
 from robot.perception.physical_attributes import EstimateStatus
 from robot.perception.sensor_epochs import (
     EgoPoseHistory,
@@ -157,6 +168,19 @@ def field_record(result, now, state=None):
         "diagnostics": result.diagnostics,
         "state_at_commit": None if state is None else state.tolist(),
     }
+
+
+def save_instance_snapshot(result):
+    if not args.save_sensor_snapshots or not result.detections.detections:
+        return
+    snapshot = args.output / "sensor-snapshots"
+    snapshot.mkdir(exist_ok=True)
+    np.savez_compressed(
+        snapshot / f"{result.field.sensor_frame_id:06d}-instance.npz",
+        mask=result.detections.detections[0].mask,
+        camera_frame_id=result.detections.source_frame_id,
+        camera_timestamp=result.detections.source_timestamp_seconds,
+    )
 
 
 def main():
@@ -272,6 +296,7 @@ def main():
         camera_prim_path=NovaCarterCamera().camera_prim_path,
         output_resolution=(480, 640),
     )
+    save_json("camera-calibration.json", asdict(calibration))
     camera, lidar = (
         NovaCarterCamera(),
         NovaCarterLidar(lidar_prim_path=stationary.PANDAR_XT32_LIDAR_PRIM_PATH),
@@ -383,6 +408,33 @@ def main():
             return None
         rgb = camera.get_rgb()
         camera_info = camera.get_frame_info()
+        metadata = lidar.get_scan_metadata()
+        scan_audit = metadata.summary()
+        for name, scan_pose in (
+            ("start", metadata.frame_start),
+            ("end", metadata.frame_end),
+        ):
+            if scan_pose is None:
+                continue
+            try:
+                from scipy.spatial.transform import Rotation
+
+                sensor_pose = (
+                    history.sample(
+                        scan_pose.timestamp_nanoseconds * 1e-9
+                    ).world_from_robot
+                    @ robot_from_lidar
+                )
+                rotation = Rotation.from_quat(scan_pose.orientation_xyzw).as_matrix()
+                angle = Rotation.from_matrix(
+                    sensor_pose[:3, :3].T @ rotation
+                ).magnitude()
+                scan_audit[f"{name}_usd_position_error_m"] = float(
+                    np.linalg.norm(sensor_pose[:3, 3] - scan_pose.position_m)
+                )
+                scan_audit[f"{name}_usd_rotation_error_radians"] = float(angle)
+            except ValueError as error:
+                scan_audit[f"{name}_pose_comparison_unavailable"] = str(error)
         scan_time = info.sensor_timestamp_nanoseconds * 1e-9
         epoch = align_camera_lidar_epoch(
             history,
@@ -391,7 +443,19 @@ def main():
             camera_from_robot=camera_from_robot,
         )
         velocity = history.velocity_world_xy(scan_time)
-        scene = transform_points(filter_valid_points(raw), robot_from_lidar)
+        if args.disable_lidar_deskew:
+            scene = transform_points(filter_valid_points(raw), robot_from_lidar)
+            scan_audit["ego_motion_correction"] = {
+                "method": "legacy_scan_start_transform"
+            }
+        else:
+            scene, scan_audit["ego_motion_correction"] = deskew_uncompensated_lidar(
+                raw,
+                metadata,
+                history,
+                robot_from_sensor=robot_from_lidar,
+                reference_timestamp_seconds=scan_time,
+            )
         pose = epoch.lidar_pose.world_from_robot
         yaw = math.atan2(pose[1, 0], pose[0, 0])
         gravity_from_body = gravity_aligned_robot_transform(pose)
@@ -431,18 +495,24 @@ def main():
             clean,
             epoch.lidar_pose.source,
             epoch.lidar_pose.status,
-            np.stack(
-                [pose]
-                + [
-                    item.world_from_robot
-                    for item in history.samples
-                    if scan_time
-                    < item.timestamp_seconds
-                    <= camera_info.simulation_time_seconds
-                ]
+            (
+                np.stack(
+                    [pose]
+                    + [
+                        item.world_from_robot
+                        for item in history.samples
+                        if scan_time
+                        < item.timestamp_seconds
+                        <= camera_info.simulation_time_seconds
+                    ]
+                )
+                if args.disable_lidar_deskew
+                else np.stack([pose])
             )
             @ body_from_gravity,
-            "bounded static sphere/environment; completed scan returns acquired within header-to-read-time interval; conservative union of observed placements, not per-ray deskew",
+            "bounded static sphere/environment; legacy conservative scan-interval union, not per-return deskew"
+            if args.disable_lidar_deskew
+            else "bounded static sphere/environment; per-return ego-motion deskew to retained scan-header pose; no independently moving object correction",
         )
         last_sensor_id = info.sensor_frame_id
         captures.append(
@@ -452,8 +522,34 @@ def main():
                 "camera_id": camera_info.read_index,
                 "camera_time": camera_info.simulation_time_seconds,
                 "state": state().tolist(),
+                "scan_metadata": scan_audit,
             }
         )
+        if args.save_sensor_snapshots and (
+            len(captures) <= 24 or len(captures) % 20 == 0
+        ):
+            snapshot = args.output / "sensor-snapshots"
+            snapshot.mkdir(exist_ok=True)
+            stem = f"{info.sensor_frame_id:06d}"
+            cv2.imwrite(str(snapshot / f"{stem}.png"), rgb[:, :, ::-1])
+            np.savez_compressed(
+                snapshot / f"{stem}.npz",
+                raw_sensor_xyz=raw,
+                scene_xyz=scene,
+                obstacle_xyz=points,
+                point_time_offsets_ns=np.empty(0, dtype=np.int64)
+                if metadata.point_time_offsets_nanoseconds is None
+                else metadata.point_time_offsets_nanoseconds,
+                point_timing_available=metadata.point_time_offsets_nanoseconds
+                is not None,
+                robot_from_lidar=robot_from_lidar,
+                world_from_robot=pose,
+                camera_from_scan_robot=packet.camera_from_scan_robot,
+            )
+            (snapshot / f"{stem}.json").write_text(
+                json.dumps(captures[-1], indent=2, default=json_default) + "\n",
+                encoding="utf-8",
+            )
         return packet
 
     # Stationary calibration/development gate, distinct from navigation.
@@ -486,6 +582,7 @@ def main():
             flush=True,
         )
         records.append(field_record(latest, now))
+        save_instance_snapshot(latest)
         if len(records) == 1:
             cv2.imwrite(
                 str(args.output / "clean-reference.png"), packet.rgb[:, :, ::-1]
@@ -504,6 +601,7 @@ def main():
             )
             break
     save_json("stationary-fields.json", records)
+    save_json("captures.json", captures)
     stationary_ready = (
         latest is not None and len(records) >= 12 and latest.readiness.ready
     )
@@ -710,6 +808,8 @@ def main():
                     commit(outcome.value, now)
                     latest = outcome.value
                     live_fields.append(field_record(latest, now, current))
+                    if len(live_fields) <= 12 or len(live_fields) % 20 == 0:
+                        save_instance_snapshot(latest)
                     if len(live_fields) == 1 or len(live_fields) % 20 == 0:
                         save_json("live-fields.json", live_fields)
                         save_json("commands.json", commands)
@@ -954,16 +1054,22 @@ def main():
         "rejections": sorted(set(rejections)),
         "scene_unchanged": scene_unchanged,
         "simulation_rate_limit": args.simulation_rate,
+        "maximum_simulation_seconds": args.maximum_seconds,
         "wall_seconds": time.perf_counter() - start_wall,
         "fixed_lambda": 1.25,
         "plume_control": args.plume_control,
         "scheduled_observation_pauses": 0,
+        "lidar_ego_motion_correction": "legacy_scan_start_transform"
+        if args.disable_lidar_deskew
+        else "per_return_ego_motion_deskew",
         "rtx_history_setting_requested": carb.settings.get_settings().get(
             "/rtx/scenedb/maxHistoryTransformCount"
         ),
         "boundaries": [
             "paced simulation; not real-time",
-            "RGB read time approximates acquisition; LiDAR scans are not per-ray deskewed",
+            "RGB read time approximates acquisition; per-return ego deskew uses oracle pose history and corrects only sensor motion"
+            if not args.disable_lidar_deskew
+            else "RGB read time approximates acquisition; legacy scans are not per-return deskewed",
             "oracle USD ego poses/extrinsics and fixture clearance monitor",
             "ground/fall interaction priors remain explicit",
             "short-lived retained mass/contact are persistence priors with original timestamps; no cached motion/plume/fall-height evidence",

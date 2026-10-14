@@ -152,7 +152,8 @@
   history without extrapolation; asynchronous results retain their source time.
   Camera metadata currently lacks an independent acquisition clock, so the
   simulation read-time approximation and oracle pose/extrinsic references must
-  remain explicit. No per-ray deskew or real-time guarantee is established.
+  remain explicit. That epoch-only gate established neither per-return deskew
+  nor a real-time guarantee; the later opt-in scan audit is described below.
   See `docs/live_cra_navigation.md`; frozen-field trials are not live validation.
 - The moving-view plume component is a separate registered clean-reference RGB
   method. It requires explicit clean-reference validation, background/source/
@@ -197,3 +198,18 @@
   Keep unknown potential/thermal handling intact even when temporal mass or
   contact is available. Crowded identity merges/crossings remain outside this
   bounded separated-object validation.
+- The live demo now audits copied RTX per-return offsets and explicitly opts
+  into ego-motion deskew for audited SENSOR/NONCOMPENSATED/identity-transform
+  scans. Keep original header/return epochs and oracle pose/extrinsic provenance;
+  reject unsupported compensation, mixed/missing poses, excessive gaps and
+  future returns. GMO start/end poses describe a final tick in the observed
+  accumulated scan, not full-scan endpoint poses. Deskew does not correct moving
+  actors or establish an independent RGB acquisition clock. Preserve the legacy
+  whole-scan baseline and the unresolved renderer-history warning.
+- Preserve detailed sphere/ground/support and SAM candidate rejection metrics.
+  High model mask quality does not override truncation/foreign-return gates.
+  Close approaches can legitimately lose LiDAR curved-surface coverage; turns
+  can move a sphere out of the front camera. Independent oracle-selected scan
+  diagnostics never supply geometry or factor inputs. The eight-second moving
+  audit is not waypoint-completion acceptance; moving plume registration remains
+  unresolved and its rejected alternatives must not be described as integrated.

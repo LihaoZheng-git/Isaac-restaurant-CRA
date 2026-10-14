@@ -134,3 +134,19 @@ def test_hash_mismatch_is_rejected_before_backend_initialization(tmp_path):
     path.write_bytes(b"not-the-release")
     with pytest.raises(ValueError, match="hash"):
         SamInstanceSegmenter(SamInstanceConfig(path))
+
+
+def test_rejected_mask_diagnostics_preserve_quality_and_association_metrics(tmp_path):
+    segmenter, backend, projection, ids = fixture(tmp_path)
+    backend.scores[:] = 0.7
+    result = segmenter.propose(ids, projection, track_id=7)
+    assert result.detection is None
+    detail = result.candidate_diagnostics[0]
+    assert detail["model_quality"] == 0.7
+    assert detail["track_coverage"] == 1
+    assert detail["foreign_hit_fraction"] == 0
+    assert not detail["touches_image_boundary"]
+    assert detail["contains_observed_prompt"]
+    # A useful diagnostic must not convert a rejected mask into evidence.
+    assert result.model_quality is None
+    assert result.mask_track_hits == 0

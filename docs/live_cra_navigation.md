@@ -263,3 +263,80 @@ were used to make it pass. The bounded retention repair is validated by unit,
 stationary fault-injection and actual moving sensor evidence; full moving-view
 perception and consistent navigation completion remain unresolved. PR #117
 remains a draft rather than a completed restaurant-readiness gate.
+
+## Return-time scan audit and ego-motion correction
+
+The current Pandar wrapper now copies GMO per-return time offsets, frame-of-
+reference, motion-compensation state, model-to-app transform and start/end
+poses. The same validity mask filters XYZ and times, so asynchronous consumers
+cannot accidentally pair times with different returns. These are simulator
+sensor records, not measured odometry. The authored sensor profile, mounting,
+10 Hz rate and accumulation remain unchanged.
+
+The installed output was audited as **SENSOR / NONCOMPENSATED**, with an identity
+model-to-app transform and return offsets spanning approximately 0–0.1 s. Its
+GMO start/end poses describe the final renderer tick, not the entire accumulated
+scan. The [NVIDIA GMO contract](https://docs.isaacsim.omniverse.nvidia.com/6.0.0/py/docs/source/generic_model_output/generic_model_output.html)
+defines element times relative to the header timestamp; the
+[sensor-pose helper](https://docs.isaacsim.omniverse.nvidia.com/6.0.0/py/api/function__lidar_config_helper_8h_1a31c74a3fa965f9a818bee5eea79406db.html)
+identifies the quaternion order as `(x, y, z, w)`.
+
+`deskew_uncompensated_lidar` maps each return through its retained acquisition-
+time chassis pose into a common header-time chassis frame. Translation is
+interpolated linearly and orientation by Slerp. Missing/future poses, excessive
+history gaps, mixed provenance, unsupported frames/compensation, nonidentity
+model transforms and scans exceeding the configurable 0.15 s duration are
+rejected. It does not correct independently moving objects, invent missing
+returns, or extrapolate. Pose/extrinsic references remain **ORACLE** here.
+The live demo enables this bounded path; `--disable-lidar-deskew` keeps the
+legacy whole-scan start-time transform/interval-union baseline. Other callers
+are unchanged.
+
+`scan-audit-stationary`, `deskew-stationary` and `deskew-none-stationary` passed
+their 12-frame zero-wheel development gates in prior mode. Snapshot capture
+is explicit via `--save-sensor-snapshots`, including raw returns, times, RGB,
+calibration, aligned transforms and accepted masks. Geometry diagnostics now
+preserve the strict support/landing rejection, sphere fit and ground-plane
+rejection; SAM diagnostics preserve candidate quality, area, boundary, owned
+coverage and foreign-return contamination without accepting rejected masks.
+
+The eight-second `deskew-moving-audit` is a **duration-limited diagnostic**, not
+arrival acceptance: 74 live fields, 69 during translation, 37 fresh instances
+and one complete factor assessment. Its minimum oracle fixture clearance was
+0.33804 m. Partial curved-surface coverage and failed plume registration remained
+unknown. An independent, explicitly oracle-selected sphere audit on the
+no-plume moving captures compares the same raw returns with/without correction:
+for example, frame 168's 95th-percentile radial discrepancy fell from 0.0436 m
+to 0.0205 m; other frames remained mixed. This is a bounded geometry diagnostic,
+not a calibrated sensor accuracy result or an input to mass/CRA estimation.
+
+Actual later mask replay found high-quality proposals that touched the image
+boundary or included too many other-track returns. Those rejections are kept;
+unknown class is not the cause. The front camera can lose the sphere during
+avoidance turns, and the top-mounted LiDAR loses lower-surface coverage on close
+approach. Neither missing view establishes low physical risk.
+
+Offline trials of descriptor matching, rotation-seeded flow, tiled features and
+larger reprojection thresholds did not reliably restore the plume coverage
+gate. None of those experimental changes is integrated, and registration,
+confidence, fallback, aggregation and controller acceptance gates were not
+relaxed. A replacement moving-view plume method is a separate research choice.
+The unresolved renderer-history warning and approximate RGB acquisition clock
+remain explicit. Full moving-view four-factor acceptance is still pending.
+
+The subsequent `deskew-none-live` 60 s trial failed its arrival deadline:
+589 fields (361 during translation), minimum oracle clearance 0.21544 m,
+stopping drift 0.00073 m, and final goal distance approximately 0.825 m.
+There were 29 fresh instances, six potential-ready updates and one thermal/
+complete assessment. Short-gap retention was used 20 times for mass and
+21 for contact. The trial's final legacy report boundary string predates the
+report-label correction; its saved scan metadata records the actual per-return
+deskew. Preserve this failure and the snapshot/oracle audit rather than
+reinterpreting conservative motion as arrival or full perception readiness.
+
+At this refinement, **1,655 unit tests passed** and repository-wide Ruff passed.
+The demo now records its maximum simulation duration explicitly and permits
+an opt-in budget up to 120 s; the default remains 40 s. An explicitly longer
+90 s run is separate from the failed 60 s comparison and cannot establish a
+speed improvement or erase that failure. The thermal method choice and full
+live perception acceptance remain unresolved; PR #117 remains a draft.

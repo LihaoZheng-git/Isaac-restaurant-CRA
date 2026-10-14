@@ -28,9 +28,9 @@ from robot.config import (
     ROBOT_PRIM_PATH,
 )
 from robot.sensor.lidar_geometry import (
-    filter_valid_points,
     spherical_to_cartesian,
 )
+from robot.sensor.lidar_scan_metadata import LidarScanMetadata, copy_scan_metadata
 
 
 # ---------------------------------------------------------------------------
@@ -178,6 +178,7 @@ class NovaCarterLidar:
         self._lidar_sensor: LidarSensor | None = None
 
         self._last_frame_info: LidarFrameInfo | None = None
+        self._last_scan_metadata: LidarScanMetadata | None = None
         self._last_annotator_info: dict[str, Any] = {}
         self._read_index = 0
 
@@ -402,13 +403,16 @@ class NovaCarterLidar:
                 f"GenericModelOutput: {coordinate_type_name}"
             )
 
+        valid = np.ones(len(points), dtype=bool)
         if self.filter_invalid_points:
-            points = filter_valid_points(points)
-        else:
-            points = np.ascontiguousarray(
-                points,
-                dtype=np.float32,
+            valid = np.isfinite(points).all(axis=1) & (np.linalg.norm(points, axis=1) > 0)
+        metadata = copy_scan_metadata(generic_output, valid)
+        if metadata.frame_of_reference not in {"SENSOR", "UNAVAILABLE"}:
+            raise RuntimeError(
+                "The sensor-frame LiDAR wrapper cannot return "
+                f"{metadata.frame_of_reference} coordinates as sensor coordinates."
             )
+        points = np.ascontiguousarray(points[valid], dtype=np.float32)
 
         if points.shape[0] == 0:
             raise RuntimeError(
@@ -420,6 +424,7 @@ class NovaCarterLidar:
         self._last_annotator_info = dict(
             annotator_info or {}
         )
+        self._last_scan_metadata = metadata
 
         timeline = omni.timeline.get_timeline_interface()
 
@@ -457,3 +462,13 @@ class NovaCarterLidar:
         """Return annotator metadata from the latest successful read."""
 
         return dict(self._last_annotator_info)
+
+    def get_scan_metadata(self) -> LidarScanMetadata:
+        """Owned scan poses and per-point times aligned with the returned cloud.
+
+        This does not change the authored scan or apply motion compensation.
+        Unavailable fields remain explicit in ``unavailable_reasons``.
+        """
+        if self._last_scan_metadata is None:
+            raise RuntimeError("No LiDAR scan has been read yet.")
+        return self._last_scan_metadata

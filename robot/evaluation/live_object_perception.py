@@ -6,7 +6,7 @@ available to this worker. Unassessed returns always retain conservative risk.
 """
 
 import copy
-from dataclasses import dataclass, replace
+from dataclasses import asdict, dataclass, replace
 import math
 import time
 
@@ -341,10 +341,18 @@ class LiveObjectPerception:
         fusion = association = proxy = None
         reasons, sam_quality = [], None
         prompt_basis = "projected_track_median"
+        sam_candidates = []
         if target in eligible:
             self.segmenter.set_image(packet.rgb)
             proposal = self.segmenter.propose(
                 tracking.point_track_ids, projection, track_id=target.track_id
+            )
+            sam_candidates.append(
+                {
+                    "prompt_basis": prompt_basis,
+                    "prompt_xy": proposal.prompt_xy,
+                    "candidates": getattr(proposal, "candidate_diagnostics", ()),
+                }
             )
             if proposal.detection is None and proposal.rejection_reasons == (
                 "no mask passes quality, boundary and LiDAR association gates",
@@ -392,6 +400,15 @@ class LiveObjectPerception:
                         prompt_source_index=seed,
                     )
                     prompt_basis = "nearest_observed_3d_component_retry"
+                    sam_candidates.append(
+                        {
+                            "prompt_basis": prompt_basis,
+                            "prompt_xy": proposal.prompt_xy,
+                            "candidates": getattr(
+                                proposal, "candidate_diagnostics", ()
+                            ),
+                        }
+                    )
             reasons.extend(proposal.rejection_reasons)
             sam_quality = proposal.model_quality
             if proposal.detection is not None:
@@ -478,6 +495,7 @@ class LiveObjectPerception:
             timestamp_seconds=timestamp,
         )
         thermal_interaction = None
+        geometry_diagnostics = {"accepted_instance": accepted}
         if accepted:
             geometry = estimate_track_geometry(
                 packet.obstacle_xyz,
@@ -502,6 +520,7 @@ class LiveObjectPerception:
                 object_xyz,
                 timestamp_seconds=packet.sensor_timestamp_seconds,
             )
+            geometry_diagnostics["strict_fall_surfaces"] = asdict(surfaces)
             geometry = replace(
                 geometry,
                 fall_height_m=estimate_fall_height(
@@ -509,11 +528,12 @@ class LiveObjectPerception:
                 ),
             )
             if self.ground_scope is not None:
+                sphere = estimate_spherical_geometry(
+                    object_xyz, timestamp_seconds=packet.sensor_timestamp_seconds
+                )
                 ground = estimate_spherical_ground_support(
                     packet.scene_xyz,
-                    estimate_spherical_geometry(
-                        object_xyz, timestamp_seconds=packet.sensor_timestamp_seconds
-                    ),
+                    sphere,
                     timestamp_seconds=timestamp,
                     scene_timestamp_seconds=packet.sensor_timestamp_seconds,
                     ground_continuity_prior=ScalarEstimate(
@@ -529,6 +549,8 @@ class LiveObjectPerception:
                     ),
                     prior_scope=self.ground_scope,
                 )
+                geometry_diagnostics["sphere_fit"] = asdict(sphere)
+                geometry_diagnostics["ground_support"] = asdict(ground)
                 if ground.fall_height_m.is_available:
                     geometry = replace(geometry, fall_height_m=ground.fall_height_m)
                     potential = ground.potential_interaction_likelihood
@@ -554,7 +576,10 @@ class LiveObjectPerception:
                 frame, links, part_proxies=parts
             ).get(target.track_id)
             observation = TrackedRgbObjectFrame(
-                packet.rgb, frame, association, packet.sensor_timestamp_seconds
+                packet.rgb,
+                frame,
+                association,
+                packet.sensor_timestamp_seconds,
             )
             if self.rectify_plume:
                 from robot.perception.fisheye_plume_view import (
@@ -803,12 +828,14 @@ class LiveObjectPerception:
                 )
             ),
             "temporal_object_evidence": retention_diagnostics,
+            "geometry_evidence": geometry_diagnostics,
             "selected_return_count": int(selected.sum()),
             "unassessed_return_count": int((~selected).sum()),
             "sam_model_quality": sam_quality,
             "sam_prompt_basis": prompt_basis,
             "component_prompt_radius_m": self.component_prompt_radius_m,
             "sam_rejections": reasons,
+            "sam_candidate_diagnostics": sam_candidates,
             "plume_registration": self.plume.last_diagnostics.get(target.track_id, {}),
             "fixed_lambda": policy.tangential_strength,
             "plume_coordinates": "calibrated_pinhole_140_degrees"

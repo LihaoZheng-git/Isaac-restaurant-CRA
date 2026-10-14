@@ -70,6 +70,7 @@ class SamInstanceResult:
     inference_wall_seconds: float = 0.0
     image_encoder_wall_seconds: float = 0.0
     source: str = SAM_INSTANCE_SOURCE
+    candidate_diagnostics: tuple[dict, ...] = ()
 
 
 class _UltralyticsBackend:
@@ -208,8 +209,30 @@ class SamInstanceSegmenter:
         ):
             raise ValueError("SAM model-quality scores must be finite values in [0, 1]")
         candidates = []
+        candidate_diagnostics = []
         for mask, quality in zip(masks, qualities):
             area = int(mask.sum())
+            hits = mask[xy[:, 1], xy[:, 0]]
+            own_hits = int(np.count_nonzero(hits & owned))
+            foreign_hits = int(np.count_nonzero(hits & ~owned))
+            boundary = bool(
+                mask[0].any() or mask[-1].any() or mask[:, 0].any() or mask[:, -1].any()
+            )
+            candidate_diagnostics.append(
+                {
+                    "model_quality": float(quality),
+                    "mask_pixels": area,
+                    "image_fraction": area / (height * width),
+                    "contains_observed_prompt": bool(mask[prompt[1], prompt[0]]),
+                    "touches_image_boundary": boundary,
+                    "owned_mask_hits": own_hits,
+                    "projected_owned_points": count,
+                    "track_coverage": own_hits / count,
+                    "foreign_mask_hits": foreign_hits,
+                    "foreign_hit_fraction": foreign_hits
+                    / max(1, own_hits + foreign_hits),
+                }
+            )
             if (
                 quality < self.config.minimum_model_quality
                 or area < self.config.minimum_mask_pixels
@@ -221,11 +244,6 @@ class SamInstanceSegmenter:
                 or mask[:, -1].any()
             ):
                 continue
-            hits = mask[xy[:, 1], xy[:, 0]]
-            own_hits, foreign_hits = (
-                int(np.count_nonzero(hits & owned)),
-                int(np.count_nonzero(hits & ~owned)),
-            )
             if (
                 own_hits / count < self.config.minimum_track_coverage
                 or foreign_hits / max(1, own_hits + foreign_hits)
@@ -239,6 +257,7 @@ class SamInstanceSegmenter:
             projected_track_points=count,
             inference_wall_seconds=elapsed,
             image_encoder_wall_seconds=self.image_encoder_wall_seconds,
+            candidate_diagnostics=tuple(candidate_diagnostics),
         )
         if not candidates:
             return SamInstanceResult(
