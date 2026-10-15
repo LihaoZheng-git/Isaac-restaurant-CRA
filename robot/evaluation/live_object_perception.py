@@ -219,6 +219,7 @@ class LiveObjectPerception:
         cluster_in_3d=False,
         camera_visibility_radius_pixels=0,
         mask_foreground_depth_gap_m=None,
+        plume_view_fov_degrees=140.0,
     ):
         self.segmenter, self.mass_estimator, self.contact_detector = (
             segmenter,
@@ -246,6 +247,9 @@ class LiveObjectPerception:
         self.cluster_in_3d = cluster_in_3d
         self.camera_visibility_radius_pixels = camera_visibility_radius_pixels
         self.mask_foreground_depth_gap_m = mask_foreground_depth_gap_m
+        if not math.isfinite(plume_view_fov_degrees) or not 30 <= plume_view_fov_degrees < 170:
+            raise ValueError("plume view FOV must lie within [30, 170) degrees")
+        self.plume_view_fov_degrees = float(plume_view_fov_degrees)
         self.evidence_memory = (
             TemporalObjectEvidence(evidence_retention_config)
             if evidence_retention_config is not None
@@ -902,8 +906,16 @@ class LiveObjectPerception:
                 )
                 geometry_diagnostics["sphere_fit"] = asdict(sphere)
                 geometry_diagnostics["ground_support"] = asdict(ground)
-                if ground.fall_height_m.is_available and not geometry.fall_height_m.is_available:
-                    geometry = replace(geometry, fall_height_m=ground.fall_height_m)
+                if ground.fall_height_m.is_available:
+                    if not geometry.fall_height_m.is_available:
+                        geometry = replace(geometry, fall_height_m=ground.fall_height_m)
+                    else:
+                        geometry_diagnostics["strict_vs_ground_drop_bounds_disagree"] = bool(
+                            geometry.fall_height_m.lower_bound > ground.fall_height_m.upper_bound
+                            or ground.fall_height_m.lower_bound > geometry.fall_height_m.upper_bound
+                        )
+                    # A valid ground check supplies its separate worst-case
+                    # interaction prior even when the strict drop is retained.
                     potential = ground.potential_interaction_likelihood
             if (
                 geometry.fall_height_m.is_available
@@ -954,7 +966,7 @@ class LiveObjectPerception:
                     )
 
                     observation = rectify_plume_observation(
-                        observation, self.calibration
+                        observation, self.calibration, horizontal_fov_degrees=self.plume_view_fov_degrees
                     )
                 if packet.clean_reference_validated:
                     candidate_plume.set_reference(

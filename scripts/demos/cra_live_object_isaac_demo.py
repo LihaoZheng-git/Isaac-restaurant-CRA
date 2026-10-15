@@ -29,8 +29,17 @@ parser.add_argument(
 )
 parser.add_argument("--object-factor-prior-risk", type=float, default=0.25)
 parser.add_argument("--fixture-layout", choices=("single", "three"), default="single")
+parser.add_argument("--fixture-spacing", choices=("tight", "separated"), default="tight")
+parser.add_argument("--progress-timeout-seconds", type=float, default=0.0)
 parser.add_argument("--stationary-frames", type=int, default=12)
 parser.add_argument("--kinetic-diagnostic", action="store_true")
+parser.add_argument("--moving-actor", action="store_true")
+parser.add_argument("--visual-reassessment-interval", type=float, default=1.0,
+                    help="explicit frozen-property vision retry interval; geometry/motion and numeric scores remain current")
+parser.add_argument("--vectorized-fields", action="store_true")
+parser.add_argument("--stream-live-records", action="store_true",
+                    help="append complete field records as compact JSONL; JSON checkpoint contains only the latest five fields")
+parser.add_argument("--plume-view-fov", type=float, default=140.0)
 parser.add_argument(
     "--evidence-gap-diagnostic",
     action="store_true",
@@ -67,6 +76,16 @@ parser.add_argument(
     help="optimizer candidate age cap; every executed horizon still needs fresh exact validation",
 )
 args = parser.parse_args()
+if not 30 <= args.plume_view_fov < 170:
+    parser.error("plume view FOV must lie within [30, 170) degrees")
+if args.progress_timeout_seconds != 0 and not 10 <= args.progress_timeout_seconds <= 30:
+    parser.error("progress watchdog must be disabled or within [10, 30] seconds")
+if args.fixture_spacing != "tight" and args.fixture_layout != "three":
+    parser.error("spacing option requires the three-object fixture")
+if not 1 <= args.visual_reassessment_interval <= 10:
+    parser.error("visual reassessment interval must lie within [1, 10] seconds")
+if args.moving_actor and (not args.motion or args.kinetic_diagnostic or args.fixture_layout != "single" or not args.persistent_object_risk_map or args.static_occupancy_memory_prior or args.plume_control != "none"):
+    parser.error("moving actor requires single/no-plume live motion, persistent map, and no static occupancy memory")
 if args.kinetic_diagnostic and (args.motion or args.fixture_layout != "single" or not args.persistent_object_risk_map or args.static_occupancy_memory_prior or args.plume_control != "none"):
     parser.error("kinetic diagnostic requires single/no-plume persistent map, zero wheels, and no static occupancy memory")
 if not 12 <= args.stationary_frames <= 60:
@@ -86,6 +105,8 @@ if not 0 < args.simulation_rate <= 1 or not 0 < args.maximum_seconds <= 120:
 if not 0.1 <= args.planner_result_max_age <= 0.5:
     parser.error("planner candidate age must be within [.1, .5] seconds")
 args.output.mkdir(parents=True, exist_ok=True)
+if args.stream_live_records and (args.output / "live-fields.jsonl").exists():
+    parser.error("streaming diagnostics require a fresh output directory")
 os.environ.setdefault("WARP_CACHE_PATH", str(args.output / "warp"))
 os.environ.setdefault("ISAAC_SIM_HEADLESS", "1")
 os.environ.setdefault("ISAAC_RTX_HISTORY_TRANSFORM_COUNT", "128")
@@ -123,7 +144,8 @@ from robot.evaluation.live_object_perception import (
     LiveObjectPerception,
 )
 from robot.evaluation.factor_specific_cra import diagnose_factor_specific_cra
-from robot.evaluation.kinetic_fixture import actor_offset_velocity, summarize_kinetic_records
+from robot.evaluation.kinetic_fixture import actor_offset_velocity, summarize_kinetic_records, summarize_live_relative_motion
+from robot.evaluation.object_map_validation import summarize_fixture_assessments, bounded_fixture_checks
 from robot.evaluation.simple_object_test import disk_footprint_clearance
 from robot.navigation.waypoint_controller import (
     RobotPose2D,
@@ -165,7 +187,7 @@ from robot.sensor.lidar_geometry import filter_valid_points, transform_points
 stationary = existing.stationary
 app = existing.simulation_app
 RADIUS = 0.18
-GOAL = (3.5 if args.fixture_layout == "three" else 2.5, 0.0)
+GOAL = (3.8 if args.fixture_spacing == "separated" else 3.5 if args.fixture_layout == "three" else 2.5, 0.0)
 GROUND_SCOPE = "bounded separated ground sphere; observed flat plane with assumed unseen local support/landing continuity"
 PLUME_SCOPE = "bounded rendered matte sphere and opaque bright puffs; validated initial clean reference; registered object-associated visible-plume proxy only"
 
@@ -297,7 +319,7 @@ def main():
         fixture_specs.extend([
             {"name": "raised", "offset_xy": (2.6, 1.5), "drop_m": 0.30,
              "color": (0.85, 0.25, 0.15), "plume": False},
-            {"name": "plume", "offset_xy": (2.2, -0.65), "drop_m": 0.0,
+            {"name": "plume", "offset_xy": (3.0 if args.fixture_spacing == "separated" else 2.2, -0.65), "drop_m": 0.0,
              "color": (0.2, 0.8, 0.3), "plume": True},
         ])
     fixtures = []
@@ -363,9 +385,9 @@ def main():
         controller.stop()
         app.update()
     anchor = stationary.read_robot_pose(stage)
-    delta = center_world - [anchor.x, anchor.y]
-    c, s = math.cos(anchor.yaw), math.sin(anchor.yaw)
-    center_local = np.array([c * delta[0] + s * delta[1], -s * delta[0] + c * delta[1]])
+    save_json("fixture-monitor.json", {"fixtures": fixtures,
+        "anchor_world_xy_yaw": [anchor.x, anchor.y, anchor.yaw],
+        "scope": "authored fixture and oracle anchor for independent evaluation/rendering only; never factor input"})
     calibration = read_fisheye_polynomial_calibration(
         stage,
         camera_prim_path=NovaCarterCamera().camera_prim_path,
@@ -394,7 +416,8 @@ def main():
     field_config = replace(
         field_config,
         configuration_space_config=replace(
-            field_config.configuration_space_config, yaw_slice_count=16
+            field_config.configuration_space_config, yaw_slice_count=16,
+            expansion_backend="vectorized" if args.vectorized_fields else "loop",
         ),
         h_full_config=replace(field_config.h_full_config, yaw_slice_count=16),
         guidance_field_config=replace(
@@ -428,7 +451,7 @@ def main():
         ground_prior_scope=GROUND_SCOPE,
         negative_plume_scope=PLUME_SCOPE,
         rectify_plume=True,
-        occupancy_retention_seconds=0.15 if args.kinetic_diagnostic else 0.5,
+        occupancy_retention_seconds=0.15 if args.kinetic_diagnostic or args.moving_actor else 0.5,
         static_occupancy_memory_prior_scope="bounded static sphere/environment; positive occupancy remains until experiment end; no dynamic-actor or free-space-clearing claim"
         if args.static_occupancy_memory_prior
         else None,
@@ -437,7 +460,8 @@ def main():
         else TemporalObjectEvidenceConfig(),
         persistent_property_config=PersistentObjectEvidenceConfig(
             "bounded separated fixture: mass/visible contact/plume assumed unchanged; support invalidates on displacement; current motion/route; moving actor uses short occupancy expiry",
-            translate_instance_bounds_prior=args.kinetic_diagnostic,
+            translate_instance_bounds_prior=args.kinetic_diagnostic or args.moving_actor,
+            minimum_visual_reassessment_interval_seconds=args.visual_reassessment_interval,
         )
         if args.persistent_object_risk_map
         else None,
@@ -461,6 +485,7 @@ def main():
         cluster_in_3d=args.fixture_layout == "three",
         camera_visibility_radius_pixels=4 if args.fixture_layout == "three" else 0,
         mask_foreground_depth_gap_m=0.5 if args.fixture_layout == "three" else None,
+        plume_view_fov_degrees=args.plume_view_fov,
     )
     history = EgoPoseHistory()
     captures, rejections, records = [], [], []
@@ -733,6 +758,8 @@ def main():
         "nonzero_wheel_commands": 0,
         "plume_control": args.plume_control,
         "fixture_layout": args.fixture_layout,
+        "fixture_spacing": args.fixture_spacing,
+        "plume_view_fov_degrees": args.plume_view_fov,
         "rejections": sorted(set(rejections)),
         "weights": weights,
         "last_readiness": None if latest is None else asdict(latest.readiness),
@@ -752,6 +779,11 @@ def main():
         if args.persistent_object_risk_map
         else "live fresh stationary RGB/LiDAR; category-free rough mass, explicit local ground/fall interaction priors, visual contact/plume proxies",
     }
+    if args.fixture_layout == "three" or args.moving_actor:
+        object_summary = summarize_fixture_assessments(records, fixtures, maximum_distance_m=0.25)
+        gate["bounded_fixture_checks"] = bounded_fixture_checks(object_summary)
+        gate["passed"] = stationary_ready = bool(stationary_ready and gate["bounded_fixture_checks"] and all(gate["bounded_fixture_checks"].values()))
+        save_json("stationary-object-validation.json", object_summary)
     save_json("stationary-gate.json", gate)
     print(json.dumps(gate), flush=True)
     if not stationary_ready:
@@ -961,6 +993,8 @@ def main():
         maximum_result_age_seconds=args.planner_result_max_age,
     )
     start_sim = float(timeline.get_current_time())
+    if args.moving_actor:
+        actor_start_time = start_sim
     start_wall = time.perf_counter()
     plan_id = 0
     next_plan_due = float(timeline.get_current_time())
@@ -974,13 +1008,29 @@ def main():
     arrived = False
     reason = "duration_limit"
     consecutive_failures = 0
+    best_goal_distance = math.inf
+    last_goal_progress = start_sim
     try:
         while float(timeline.get_current_time()) - start_sim < args.maximum_seconds:
             now = float(timeline.get_current_time())
             current = state()
-            clearance = disk_footprint_clearance(
-                current, center_xy=center_local, radius_m=RADIUS, footprint=footprint
-            )
+            goal_distance = float(np.linalg.norm(np.asarray(GOAL) - current[:2]))
+            if goal_distance < best_goal_distance - 0.025:
+                best_goal_distance, last_goal_progress = goal_distance, now
+            elif args.progress_timeout_seconds and now - last_goal_progress > args.progress_timeout_seconds:
+                reason = "progress_timeout"
+                break
+            clearances = []
+            for fixture in fixtures:
+                xy = np.array(fixture["center_world_xy"])
+                if args.moving_actor and fixture["name"] == "ground":
+                    xy[1] += actor_offset_velocity(max(0, now - actor_start_time))[0]
+                delta = xy - [anchor.x, anchor.y]
+                c, s = math.cos(anchor.yaw), math.sin(anchor.yaw)
+                local = np.array([c * delta[0] + s * delta[1], -s * delta[0] + c * delta[1]])
+                clearances.append(disk_footprint_clearance(current, center_xy=local,
+                    radius_m=fixture["monitor_radius_m"], footprint=footprint))
+            clearance = min(clearances)
             minimum_clearance = min(minimum_clearance, clearance)
             if clearance <= 0.02:
                 reason = "clearance_guard"
@@ -996,10 +1046,19 @@ def main():
                     commit(outcome.value, now)
                     latest = outcome.value
                     live_fields.append(field_record(latest, now, current))
+                    if args.moving_actor:
+                        elapsed = latest.field.sensor_timestamp_seconds - actor_start_time
+                        offset, speed, phase = actor_offset_velocity(max(0, elapsed))
+                        live_fields[-1]["actor_monitor"] = {"elapsed_seconds": elapsed, "phase": phase,
+                            "center_world_xy": [center_world[0], center_world[1] + offset],
+                            "velocity_world_xy": [0, speed], "scope": "independent authored monitor only"}
+                    if args.stream_live_records:
+                        with (args.output / "live-fields.jsonl").open("a", encoding="utf-8") as stream:
+                            stream.write(json.dumps(live_fields[-1], default=json_default, allow_nan=False, separators=(",", ":")) + "\n")
                     if len(live_fields) <= 12 or len(live_fields) % 20 == 0:
                         save_instance_snapshot(latest)
                     if len(live_fields) == 1 or len(live_fields) % 20 == 0:
-                        save_json("live-fields.json", live_fields)
+                        save_json("live-fields.json", live_fields[-5:] if args.stream_live_records else live_fields)
                         save_json("commands.json", commands)
                         if packet.camera_frame_id == latest.detections.source_frame_id:
                             cv2.imwrite(
@@ -1014,10 +1073,13 @@ def main():
                                     "sim_seconds": now - start_sim,
                                     "state": current.tolist(),
                                     "phi": latest.policy.risk,
+                                    "phi_scope": "first geometric track only",
+                                    "all_object_phi_range": [min(item.policy.risk for item in latest.objects), max(item.policy.risk for item in latest.objects)] if latest.objects else None,
                                     "unknown": latest.diagnostics.get(
                                         "unknown_factors"
                                     ),
                                     "objects": len(latest.objects),
+                                    "stage_wall_seconds": latest.diagnostics.get("stage_wall_seconds"),
                                 }
                             ),
                             flush=True,
@@ -1215,11 +1277,26 @@ def main():
         and len(live_fields) >= 10
         and moving_field_count >= 10
     )
+    simultaneous_kinetic_updates = 0
+    live_kinetic_validation = None
+    if args.moving_actor:
+        for record in live_fields:
+            monitor = record["actor_monitor"]
+            if (abs(monitor["velocity_world_xy"][1]) <= 0
+                or np.linalg.norm(record["diagnostics"]["measured_robot_velocity_world_xy"]) <= 0.02):
+                continue
+            matches = [item for item in record["objects"] if np.linalg.norm(
+                np.array(item["diagnostics"]["centroid_world_xy"]) - monitor["center_world_xy"]) < 0.4]
+            if (len(matches) == 1 and matches[0]["diagnostics"]["policy_return_count"] > 0
+                and matches[0]["diagnostics"]["factor_scores"]["kinetic"]["mode"] == "evidence_supported"):
+                simultaneous_kinetic_updates += 1
+        live_kinetic_validation = summarize_live_relative_motion(live_fields)
+        completed = completed and simultaneous_kinetic_updates >= 5 and live_kinetic_validation["passed"]
     scene_unchanged = (
         original_hash
         == hashlib.sha256(Path(stationary.ROBOT_SCENE_PATH).read_bytes()).hexdigest()
     )
-    save_json("live-fields.json", live_fields)
+    save_json("live-fields.json", live_fields[-5:] if args.stream_live_records else live_fields)
     save_json("captures.json", captures)
     save_json("commands.json", commands)
     save_json("trajectory.json", trajectory)
@@ -1237,7 +1314,11 @@ def main():
         "stop_drift_m": stop_drift,
         "last_state": final_state.tolist(),
         "live_field_count": len(live_fields),
+        "live_field_record_storage": "full history in live-fields.jsonl; live-fields.json is latest-five checkpoint"
+        if args.stream_live_records else "full history in live-fields.json",
         "fields_committed_while_translating": moving_field_count,
+        "simultaneous_robot_actor_kinetic_updates": simultaneous_kinetic_updates,
+        "live_relative_motion_validation": live_kinetic_validation,
         "perception_evidence_counts": {
             "accepted_current_instances": sum(
                 r["diagnostics"].get("accepted_instance", False) for r in live_fields
@@ -1310,6 +1391,13 @@ def main():
         "wall_seconds": time.perf_counter() - start_wall,
         "fixed_lambda": 1.25,
         "plume_control": args.plume_control,
+        "fixture_layout": args.fixture_layout,
+        "moving_actor": args.moving_actor,
+        "plume_view_fov_degrees": args.plume_view_fov,
+        "goal_local_xy": GOAL,
+        "fixture_spacing": args.fixture_spacing,
+        "progress_timeout_seconds": args.progress_timeout_seconds,
+        "clearance_monitor_scope": "independent authored sphere disks and circumscribed support disk; never control/factor input",
         "scheduled_observation_pauses": 0,
         "lidar_ego_motion_correction": "legacy_scan_start_transform"
         if args.disable_lidar_deskew
@@ -1330,7 +1418,7 @@ def main():
             "renderer internal history warning remains unresolved despite the requested setting",
             "SAM-associated category-free rough heaviness, visual contact silhouette and registered visible-plume proxies",
             "rendered puffs are opaque visual fixtures, not steam physics/temperature; all live LiDAR occupancy retained",
-            "single source with clean-reference registration; no restaurant/human/crowd generalization",
+            "bounded separated sources with validated initial clean-reference registration and retained cues; no moving-view plume/human/crowd generalization",
         ],
     }
     save_json("report.json", report)

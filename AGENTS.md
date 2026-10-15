@@ -285,3 +285,16 @@
   motion is oracle evaluation truth only, never estimator input. Accumulated
   scans/centroid filtering can underestimate speed; report transition exclusions
   and errors, not exact dynamic velocity or crowded tracking acceptance.
+- The combined readiness experiments preserve failed tight mixed-risk layouts:
+  positive clearance and stopping do not establish arrival or global unicycle
+  convergence. A separately spaced fixture is a different bounded scenario,
+  never a retroactive pass. A no-progress watchdog can only reject a trial.
+- Vectorized configuration expansion preserves exact occupancy and legacy
+  risk/flux/known-ID/first-source metadata priority. Eight-connected equal-policy
+  regions and all nearest-distance ties retain the same numerical field (tested
+  through h_full/gradients), not paper equivalence or a new safety theorem.
+- Calibrated plume-view FOV is explicit (legacy 140 degrees; separated fixture
+  opt-in 120). Keep native source pixel counts through remapping: upsampling
+  cannot launder an unresolved native source. Preserve all confidence, source
+  epoch, clean-reference, background, coverage and ambiguity gates; no claim of
+  temperature or moving-view plume acceptance follows from this stationary view.

@@ -5,6 +5,7 @@ import pytest
 from robot.evaluation.object_map_validation import (
     prior_sensitivity,
     summarize_fixture_assessments,
+    bounded_fixture_checks,
 )
 from robot.risk.cra import PhysicalRiskProfile, RiskFactorEstimate
 from robot.safety.cra_safe_sage_policy import CRASafeSAGEPolicy
@@ -65,3 +66,29 @@ def test_fixture_report_rejects_ambiguous_matches_and_uses_observed_height_for_m
     )
     assert rows["fixtures"]["raised"]["latest"] is None
     assert rows["fixtures"]["raised"]["ambiguous_updates"] == 1
+
+
+@pytest.mark.parametrize(
+    "status, accepted",
+    [
+        ("inferred", True),
+        ("prior", True),
+        ("oracle", False),
+        ("fallback", False),
+        ("unavailable", False),
+    ],
+)
+def test_fixture_evidence_gate_does_not_promote_oracle_or_fallback_mass(
+    status, accepted
+):
+    row = object_row()
+    row["attributes"] = {
+        "mass": {"mass_kg": {"value": 1, "status": status}},
+        "geometry": {"fall_height_m": {"value": 0, "status": "prior"}},
+    }
+    row["diagnostics"]["factor_scores"] = {
+        "contact": {"mode": "evidence_supported"},
+        "potential": {"mode": "evidence_supported"},
+    }
+    report = {"fixtures": {"ground": {"latest": row, "accepted_visual_updates": 3}}}
+    assert bounded_fixture_checks(report)["ground_mass_contact"] is accepted

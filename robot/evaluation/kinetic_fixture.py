@@ -88,3 +88,77 @@ def summarize_kinetic_records(records):
         "phases": rows,
         "scope": "stationary robot, actual simulated LiDAR/RGB; independently authored actor motion is evaluation truth only; excludes .4 s phase transitions; not crowded or real-time validation",
     }
+
+
+def summarize_live_relative_motion(records):
+    """Audit simultaneous motion without supplying truth to the estimator."""
+    errors = []
+    seen_sources = set()
+    for record in records:
+        source = (record["sensor_frame_id"], record["sensor_timestamp"])
+        if source in seen_sources:
+            continue
+        seen_sources.add(source)
+        truth = record["actor_monitor"]
+        elapsed = truth["elapsed_seconds"]
+        if any(abs(elapsed - boundary) < 0.4 for boundary in (0, 2, 5, 7, 10)):
+            continue
+        actor_velocity = np.asarray(truth["velocity_world_xy"])
+        robot_velocity = np.asarray(
+            record["diagnostics"]["measured_robot_velocity_world_xy"]
+        )
+        if (
+            np.linalg.norm(actor_velocity) == 0
+            or np.linalg.norm(robot_velocity) <= 0.02
+        ):
+            continue
+        matches = [
+            item
+            for item in record["objects"]
+            if np.linalg.norm(
+                np.asarray(item["diagnostics"]["centroid_world_xy"])
+                - truth["center_world_xy"]
+            )
+            < 0.4
+        ]
+        if len(matches) != 1:
+            continue
+        item = matches[0]
+        speed = item["attributes"]["motion"]["relative_speed_mps"]
+        if (
+            item["diagnostics"]["policy_return_count"] == 0
+            or speed["value"] is None
+            or speed["status"] not in {"measured", "inferred"}
+            or item["diagnostics"]["factor_scores"]["kinetic"]["mode"]
+            != "evidence_supported"
+        ):
+            continue
+        expected = float(np.linalg.norm(actor_velocity - robot_velocity))
+        errors.append(
+            (
+                abs(speed["value"] - expected),
+                float(
+                    np.linalg.norm(
+                        np.asarray(item["diagnostics"]["velocity_world_xy"])
+                        - actor_velocity
+                    )
+                ),
+            )
+        )
+    relative_error = float(np.median(np.asarray(errors)[:, 0])) if errors else None
+    velocity_error = float(np.median(np.asarray(errors)[:, 1])) if errors else None
+    checks = {
+        "enough_simultaneous_updates": len(errors) >= 5,
+        "bounded_relative_speed_error": relative_error is not None
+        and relative_error < 0.10,
+        "bounded_world_velocity_error": velocity_error is not None
+        and velocity_error < 0.10,
+    }
+    return {
+        "passed": all(checks.values()),
+        "checks": checks,
+        "usable_updates": len(errors),
+        "median_relative_speed_error_mps": relative_error,
+        "median_world_velocity_error_mps": velocity_error,
+        "scope": "actual simultaneous robot/actor sensor updates; actor truth is independent evaluation metadata; ego velocity uses declared oracle-pose references; .4 s transitions excluded; not crowded or real-time acceptance",
+    }

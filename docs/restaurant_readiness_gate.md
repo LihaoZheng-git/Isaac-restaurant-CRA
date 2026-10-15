@@ -139,6 +139,81 @@ and safe stopping. Record simulation pacing, latency, field/evidence/prior count
 identity failures and safety stops. Slowed simulation is not real-time operation.
 Repeated combined acceptance is required before claiming restaurant readiness.
 
+The first `combined-live-v1` three-hazard navigation trial **failed** its 100 s
+simulation budget: final local state (1.67695, -.34533, .27263), 184 committed
+fields/168 translating updates, minimum independent fixture clearance .08894 m,
+minimum analytical CBF margin .17076, stop drift .000938 m. Pacing was .1
+simulation s/wall s; wall duration after stationarity was 1,233 s. Clearance and
+safe stopping do not replace waypoint arrival. Latency/temporal-gap rejections
+and safe stops remain recorded; this is not a successful pass-by.
+
+The live demo now exposes a separately recorded frozen-property vision retry
+interval (legacy 1 s; bounded experiment 5 s). It never slows current geometry,
+motion, route interaction or numeric scoring, renews sources or relaxes freshness.
+Stage timers separate perception/ownership/occupancy from field construction.
+An offline representative **uniform-prior** sensor-occupancy profile identified
+Python configuration-space propagation and connected-component work; it is not
+a four-factor or navigation result.
+
+The opt-in vectorized configuration expansion preserves the exact legacy
+risk/absolute-flux/known-ID/first-source overlap priority, all occupancy, metadata
+and counters. Vectorized equal-policy connected-region grouping preserves
+eight-neighbor geometry and deterministic seed labels; nearest-distance tie
+normal sums are aggregated exactly. Tests compare every yaw's metadata and
+complete guidance/h_full values, gradients and forcing to the legacy path
+(1e-12 tolerance). No phi rounding, discarded geometry, PDE tolerance, safety
+constraint, nominal or lambda changes are involved. Motion acceptance of these
+optimizations is still a separate gate.
+
+`combined-live-v2` also **failed** the 100 s budget with 5 s vision retries:
+216 fields/187 translating, final (1.61156, -.37671, .27181), clearance .14714 m,
+CBF margin .14131, stop drift .000905 m, 1,264 wall seconds. Faster field
+construction was then verified locally (1,699 unit tests and Ruff passed).
+The optimized `.05`-paced `combined-live-v3` reached a similar tight-layout
+standoff; it was explicitly aborted, with 280-field checkpoints preserved at
+source time 38.1, local state (1.67886, -.36601, .23151). It has **no completed
+arrival or safe-stop report** and is not acceptance. These mixed-risk tight
+layouts expose a bounded unicycle-navigation/liveness limitation; numerical
+field equivalence is not global convergence.
+
+The separate selected readiness layout moves the visible-plume sphere from
+local x=2.2 to x=3.0 and uses waypoint (3.8, 0), preserving sphere/support sizes
+and all estimator inputs/gates. This is a different, explicitly separated
+scenario, not a successful replay of the failed tight layout. A 20 s no-progress
+watchdog can only fail a run; arrival remains mandatory.
+
+Its first stationary gate (`separated-live-v1`) correctly blocked wheels: mass,
+contact and fall checks passed but the 140-degree rectified plume source was
+unresolved. The opt-in calibrated 120-degree view preserves more native source
+detail; the narrower view is recorded and retains unchanged confidence, source
+timestamps, clean-reference/background/coverage and pixel-count gates. Native
+source mask pixel counts are carried separately, and an unresolved native
+source cannot pass by remap upsampling. Mass/contact/fusion remain in native
+camera pixels. `separated-live-v2` passed all seven independent stationary
+checks before its wheel trial; motion acceptance is still recorded separately.
+
+The combined moving-actor gate also compares actual relative speed with the
+independent actor velocity minus the source-epoch ego velocity. It requires at
+least five distinct, owned, evidence-supported simultaneous-motion updates and
+median world-velocity/relative-speed errors below .10 m/s, excluding .4 s phase
+transitions. Actor truth never supplies estimator inputs. This remains a
+separated translating-sphere diagnostic, not human/crowd acceptance.
+
+Full regression reached 1,701 passed; the final source-deduplication change also
+passed its affected kinetic tests, and Ruff/diff checks passed. Two earlier
+invocations had 113 temporary-directory setup errors (Windows access denied),
+not assertion failures. The successful run used a fresh workspace `--basetemp`;
+no package or environment upgrade was made.
+
+Long multi-object diagnostics can produce nearly a gigabyte of indented records.
+The explicit `--stream-live-records` opt-in appends every complete record once to
+`live-fields.jsonl`; `live-fields.json` is only the latest-five checkpoint in
+that mode. The report names the storage contract. It requires a fresh stream,
+retains every original source epoch and factor/provenance record, and changes
+neither scores nor control verification. This avoids repeated full-history
+serialization hitches; simulation pacing and any remaining latency are still
+reported, with no real-time claim.
+
 Mass calibration, physical sharpness/hardness, temperature, moving-view plume
 re-estimation, crowded identity crossings, hidden heat/support changes and causal
 CRA superiority remain outside these bounded component gates.

@@ -361,3 +361,27 @@ def test_result_diagnostics_are_consistent() -> None:
     assert result.h_full.maximum_residuals.shape == (3,)
     assert np.all(result.h_full.maximum_residuals <= 1e-7)
     assert not result.yaw_angles_radians.flags.writeable
+
+
+def test_vectorized_geometry_and_regions_preserve_complete_guidance_and_h_full():
+    semantic = make_semantic_obstacle()
+    grid = build_local_occupancy_grid(
+        np.array([[8.5, 8.5], [12.5, 12.5], [15.5, 13.5]]),
+        point_track_ids=np.full(3, semantic.track_id), semantic_obstacles=(semantic,),
+        class_safety_policy=make_class_policy(), config=make_grid().config)
+    config = make_pipeline_config(yaw_slice_count=8, footprint=RectangularRobotFootprint(.7, 1.2, .5, .5, .1))
+    config = replace(config,
+        guidance_field_config=replace(config.guidance_field_config, solver_backend="sparse_direct", allow_dense_scene_arbitration=True, merge_equal_policy_regions=True),
+        h_full_config=replace(config.h_full_config, poisson_config=replace(config.h_full_config.poisson_config, solver_backend="sparse_direct")))
+    old = build_safe_sage_field_pipeline(grid, guidance_policy=make_guidance_policy(chair_tangential_strength=1.25),
+                                       semantic_obstacles=(semantic,), config=config)
+    fast_config = replace(config,
+        configuration_space_config=replace(config.configuration_space_config, expansion_backend="vectorized"),
+        guidance_field_config=replace(config.guidance_field_config, interface_backend="vectorized"))
+    new = build_safe_sage_field_pipeline(grid, guidance_policy=make_guidance_policy(chair_tangential_strength=1.25),
+                                       semantic_obstacles=(semantic,), config=fast_config)
+    for a, b in zip(old.guidance_fields, new.guidance_fields, strict=True):
+        np.testing.assert_array_equal(a.obstacle_component_labels, b.obstacle_component_labels)
+        np.testing.assert_allclose(a.vectors_robot_xy, b.vectors_robot_xy, rtol=0, atol=1e-12)
+    for name in ("values", "spatial_gradients_robot_xy", "yaw_derivatives", "forcing_fields"):
+        np.testing.assert_allclose(getattr(old.h_full, name), getattr(new.h_full, name), rtol=0, atol=1e-12)

@@ -184,8 +184,11 @@ class SafeSAGEConfigurationSpaceConfig:
 
     footprint: RobotFootprint
     yaw_slice_count: int = 10
+    expansion_backend: str = "loop"
 
     def __post_init__(self) -> None:
+        if self.expansion_backend not in {"loop", "vectorized"}:
+            raise ValueError("unsupported configuration expansion backend")
         if not isinstance(
             self.footprint,
             (RectangularRobotFootprint, CircularRobotFootprint),
@@ -244,7 +247,7 @@ def build_safe_sage_configuration_space(
             resolution=source_grid.config.resolution,
         )
         expanded_grids.append(
-            _expand_grid_with_offsets(source_grid, offsets)
+            (_expand_grid_with_offsets_vectorized if config.expansion_backend == "vectorized" else _expand_grid_with_offsets)(source_grid, offsets)
         )
         footprint_cell_counts.append(len(offsets))
 
@@ -538,6 +541,42 @@ def _expand_grid_with_offsets(
         input_point_count=source_grid.input_point_count,
         rasterized_point_count=source_grid.rasterized_point_count,
     )
+
+
+def _expand_grid_with_offsets_vectorized(source_grid, offsets):
+    """Exact dilation with legacy risk/flux/known-ID/first-source priority."""
+    shape = source_grid.shape
+    occupied = np.zeros(shape, bool)
+    ids = np.full(shape, -1, np.int64)
+    risks, fluxes = np.zeros(shape), np.zeros(shape)
+    winner = np.full(shape, np.iinfo(np.int64).max, np.int64)
+    source_order = np.arange(np.prod(shape)).reshape(shape)
+    for dr, dc in offsets:
+        r0, r1 = max(0, -dr), min(shape[0], shape[0] - dr)
+        c0, c1 = max(0, -dc), min(shape[1], shape[1] - dc)
+        if r0 >= r1 or c0 >= c1:
+            continue
+        source = np.s_[r0:r1, c0:c1]
+        target = np.s_[r0+dr:r1+dr, c0+dc:c1+dc]
+        candidate = source_grid.occupied_mask[source]
+        risk, flux, identity = (source_grid.cell_risks[source],
+                                source_grid.cell_boundary_fluxes[source], source_grid.cell_track_ids[source])
+        equal_risk = risk == risks[target]
+        equal_flux = np.abs(flux) == np.abs(fluxes[target])
+        known, old_known = identity >= 0, ids[target] >= 0
+        choose = candidate & (~occupied[target] | (risk > risks[target]) |
+            (equal_risk & ((np.abs(flux) > np.abs(fluxes[target])) |
+            (equal_flux & ((known & ~old_known) |
+             ((known == old_known) & (source_order[source] < winner[target])))))))
+        ids[target][choose] = identity[choose]
+        risks[target][choose] = risk[choose]
+        fluxes[target][choose] = flux[choose]
+        winner[target][choose] = source_order[source][choose]
+        occupied[target] |= candidate
+    for array in (occupied, ids, risks, fluxes):
+        array.setflags(write=False)
+    return LocalOccupancyGrid(source_grid.config, occupied, ids, risks, fluxes,
+                              source_grid.input_point_count, source_grid.rasterized_point_count)
 
 
 def _candidate_has_priority(
