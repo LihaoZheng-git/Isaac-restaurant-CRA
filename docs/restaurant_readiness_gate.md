@@ -342,7 +342,48 @@ disables only that optional watchdog under the same 90 s overall bound; actual
 arrival, source freshness, continuity, exact MPC/DTCBF, analytical CBF, clearance
 and stopping checks remain mandatory.
 
-Final software regression before this retry: **1,712 unit tests passed**; Ruff
+The separate all-phase sensor audit of `capsule-live-v1` also found 11 fast-phase
+observations (mostly with the robot stopped): median world/relative velocity
+errors .03192/.02911 m/s. In 132 observations with a stopped actor and moving
+robot, median world-velocity error was .00913 m/s (95th percentile .03142), and
+median relative-speed error .00830 m/s. This supports bounded ego-motion
+compensation beyond the simultaneous slow-phase subset; it remains an oracle-
+ego-pose-referenced simulation audit, not independent physical odometry
+validation. See its `all-phase-motion-audit.json`; the navigation outcome remains
+failed and is evaluated separately.
+
+`capsule-live-v2` **failed the 90 s duration limit**, with positive tracking and
+no continuity stop: final (1.52331, -1.03301, .11099), .19691 m clearance,
+.150834 analytical CBF margin, .000733 m stop drift, 604 fields/459 translating.
+Its velocity audit passed 22 simultaneous steady updates (20 slow, two fast),
+with .02607/.02687 m/s median relative/world errors. Safe waiting and positive
+margins are not actual arrival. Late inference results remained rejected.
+
+### Live recovery correction
+
+Inspection found that the live caller always supplied a world-grid negative-y
+recovery hint. The recovery pool enforces this hint as a final lateral-progress
+constraint, including after the robot has moved below an obstacle and needs to
+return upward toward its waypoint. The live caller now leaves that optional
+hint unset; per-obstacle Safe-SAGE guidance and the obstacle-unaware waypoint
+nominal are unchanged. This does not enforce a passing side or prove convergence.
+
+An explicit MPC opt-in skips recovery candidates whose exact clipped command
+cost cannot improve an already verified feasible candidate. This recovery pool
+has no state-path objective; ties preserve the original first candidate. The
+same pool, objective, exact DTCBF/dense-geometry checks, lambda, factor priors,
+field freshness and command execution limits remain. Other callers retain the
+legacy exhaustive default. Mirrored regression cases selected identical command
+arrays, trajectories and safety margins. One offline case took 3.997 s exhaustive
+and .980 s pruned, with identical .12053515625 cost; this is not a representative
+runtime benchmark or real-time guarantee.
+
+`capsule-live-v3` retries the unchanged actor, motion profile and 90 s bound after
+this correction, with no optional goal-distance watchdog. Actual arrival and
+the independent clearance, current sensing, exact-control and stopping gates
+remain mandatory.
+
+Software regression after this correction: **1,716 unit tests passed**; Ruff
 and diff checks passed. No new models, packages, datasets or global environment
 settings were installed or upgraded.
 

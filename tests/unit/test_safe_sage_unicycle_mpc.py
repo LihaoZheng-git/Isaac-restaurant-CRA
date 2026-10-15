@@ -773,6 +773,7 @@ def test_unsafe_current_configuration_fails_closed() -> None:
         {"cbf_slack_weight": 0.0},
         {"line_search_contraction": 1.0},
         {"enable_progress_seeds": 1},
+        {"enable_recovery_cost_pruning": 1},
         {"progress_seed_linear_fraction": 0.0},
         {"progress_seed_linear_fraction": 1.0},
         {"configuration_position_padding_m": -0.01},
@@ -829,6 +830,53 @@ def test_progress_pool_can_restore_an_infeasible_nominal_horizon():
     assert result.status == "exact_safe_seed_feasibility_recovered"
     assert result.minimum_dtcbf_margin >= -1e-6
     assert result.predicted_chassis_states[-1, 1] < 0
+
+
+@pytest.mark.parametrize("direction", [-1.0, 1.0])
+def test_recovery_cost_pruning_matches_exhaustive_exact_winner(direction, monkeypatch):
+    fields = make_fields(guidance=(0, direction), gradient=(0, direction, 0), safety_value=.15)
+    kwargs = dict(configuration_space=fields[0], h_full=fields[1], guidance_fields=fields[2], temporal_safety_derivative=0.0)
+    state = np.array([0., 0., -.8 * direction])
+    outputs = []
+    for prune in (False, True):
+        mpc = make_mpc(horizon_steps=30, enable_recovery_cost_pruning=prune)
+        nominal = mpc._nominal_sequence(np.array([.25, 0.]))
+        reference = mpc._evaluate_trajectory(state, nominal, **kwargs)
+        assert reference is not None
+        original = mpc._evaluate_trajectory
+        calls = []
+
+        def counted(*args, **kw):
+            calls.append(1)
+            return original(*args, **kw)
+
+        with monkeypatch.context() as patch:
+            patch.setattr(mpc, "_evaluate_trajectory", counted)
+            candidate, status = mpc._recover_feasible_command_horizon(
+                reference, initial_state=state, nominal_sequence=nominal, **kwargs)
+        assert candidate is not None and mpc._trajectory_is_safe(candidate)
+        outputs.append((candidate, status, len(calls)))
+    np.testing.assert_array_equal(outputs[0][0].commands, outputs[1][0].commands)
+    np.testing.assert_allclose(outputs[0][0].chassis_states, outputs[1][0].chassis_states, atol=1e-12)
+    np.testing.assert_allclose(outputs[0][0].margins, outputs[1][0].margins, atol=1e-12)
+    assert outputs[0][1] == outputs[1][1]
+    assert outputs[1][2] < outputs[0][2]
+
+
+def test_unhinted_recovery_can_return_upward_with_lower_nominal_cost():
+    fields = make_fields(guidance=(0, 1), gradient=(0, 1, 0), safety_value=.15)
+    kwargs = dict(configuration_space=fields[0], h_full=fields[1], guidance_fields=fields[2], temporal_safety_derivative=0.0)
+    mpc = make_mpc(horizon_steps=30, enable_recovery_cost_pruning=True)
+    state = np.array([0., 0., -.8])
+    nominal = mpc._nominal_sequence(np.array([.25, 0.]))
+    reference = mpc._evaluate_trajectory(state, nominal, **kwargs)
+    free, _ = mpc._recover_feasible_command_horizon(reference, initial_state=state, nominal_sequence=nominal, **kwargs)
+    forced, _ = mpc._recover_feasible_command_horizon(reference, initial_state=state, nominal_sequence=nominal,
+                                                   preferred_lateral_direction_grid_y=-1., **kwargs)
+    assert free is not None and forced is not None
+    assert free.chassis_states[-1, 1] > 0 > forced.chassis_states[-1, 1]
+    assert mpc._objective_value(free.commands, nominal) < mpc._objective_value(forced.commands, nominal)
+    assert mpc._trajectory_is_safe(free) and mpc._trajectory_is_safe(forced)
 
 
 def test_geometry_padding_grows_within_first_execution_interval(monkeypatch):

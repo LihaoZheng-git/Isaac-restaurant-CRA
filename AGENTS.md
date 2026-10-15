@@ -324,3 +324,11 @@
   of global nonconvergence. Bounded retries may disable that optional watchdog
   while retaining the overall time limit, actual-arrival requirement and every
   freshness, continuity, exact MPC/DTCBF, analytical CBF and stopping gate.
+- The live caller leaves the optional world-grid lateral recovery hint unset:
+  a constant negative-y final-progress constraint can prevent a return toward
+  the goal after passing below an obstacle. Keep per-obstacle Safe-SAGE guidance,
+  the obstacle-unaware nominal and observed passing-side diagnostics. The live
+  MPC may opt into exact command-cost pruning of its recovery pool; unchanged
+  ties retain the first feasible candidate and every winner still passes the
+  same exact checks. Legacy callers retain exhaustive recovery by default.
+  Neither change establishes convergence, paper equivalence or real time.
