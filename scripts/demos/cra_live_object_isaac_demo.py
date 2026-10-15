@@ -971,6 +971,7 @@ def main():
             integration_substeps_per_interval=substeps,
             enable_progress_seeds=True,
             enable_recovery_cost_pruning=True,
+            enable_recovery_feasibility_pruning=True,
             progress_seed_linear_fraction=0.5,
             configuration_position_padding_m=0.025,
             configuration_yaw_padding_radians=0.21,
@@ -1012,14 +1013,41 @@ def main():
     if coverage_guard is not None:
         coverage_result = coverage_guard.observe(latest.field.tracking_result.tracked_obstacles,
             source_time=latest.field.sensor_timestamp_seconds, robot_world_xy=(anchor.x, anchor.y))
-    inference = LiveInferenceRunner(perception)
-    planner = LiveInferenceRunner(
-        lambda data: control.plan(
+    def infer_with_timing(packet):
+        started = time.perf_counter()
+        result = perception(packet)
+        elapsed = time.perf_counter() - started
+        if elapsed > 3.0:
+            print(json.dumps({"slow_perception_compute": {
+                "source_frame_id": packet.sensor_frame_id,
+                "source_timestamp": packet.sensor_timestamp_seconds,
+                "wall_seconds": elapsed,
+                "stage_wall_seconds": result.diagnostics.get("stage_wall_seconds"),
+            }}), flush=True)
+        return result
+
+    def plan_with_timing(data):
+        started = time.perf_counter()
+        result = control.plan(
             data[0],
             data[1],
             data[2],
             initial_command_guess=data[3],
-        ),
+        )
+        elapsed = time.perf_counter() - started
+        if elapsed > 3.0:
+            print(json.dumps({"slow_planner_compute": {
+                "field_frame_id": data[2].sensor_frame_id,
+                "wall_seconds": elapsed,
+                "status": result.status,
+                "sqp_iteration_count": result.sqp_iteration_count,
+                "solver_iteration_count": result.solver_iteration_count,
+            }}), flush=True)
+        return result
+
+    inference = LiveInferenceRunner(infer_with_timing)
+    planner = LiveInferenceRunner(
+        plan_with_timing,
         maximum_result_age_seconds=args.planner_result_max_age,
     )
     start_sim = float(timeline.get_current_time())
@@ -1438,6 +1466,7 @@ def main():
         "planner_candidate_maximum_age_seconds": args.planner_result_max_age,
         "recovery_lateral_hint_grid_y": None,
         "recovery_cost_pruning": mpc.config.enable_recovery_cost_pruning,
+        "recovery_feasibility_pruning": mpc.config.enable_recovery_feasibility_pruning,
         "immediate_replan_after_invalidations": args.immediate_replan,
         "verified_command_interval_seconds": mpc.config.time_step,
         "wall_seconds": time.perf_counter() - start_wall,

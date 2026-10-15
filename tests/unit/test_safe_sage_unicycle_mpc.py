@@ -774,6 +774,7 @@ def test_unsafe_current_configuration_fails_closed() -> None:
         {"line_search_contraction": 1.0},
         {"enable_progress_seeds": 1},
         {"enable_recovery_cost_pruning": 1},
+        {"enable_recovery_feasibility_pruning": 1},
         {"progress_seed_linear_fraction": 0.0},
         {"progress_seed_linear_fraction": 1.0},
         {"configuration_position_padding_m": -0.01},
@@ -839,7 +840,8 @@ def test_recovery_cost_pruning_matches_exhaustive_exact_winner(direction, monkey
     state = np.array([0., 0., -.8 * direction])
     outputs = []
     for prune in (False, True):
-        mpc = make_mpc(horizon_steps=30, enable_recovery_cost_pruning=prune)
+        mpc = make_mpc(horizon_steps=30, enable_recovery_cost_pruning=prune,
+                       enable_recovery_feasibility_pruning=prune)
         nominal = mpc._nominal_sequence(np.array([.25, 0.]))
         reference = mpc._evaluate_trajectory(state, nominal, **kwargs)
         assert reference is not None
@@ -861,6 +863,38 @@ def test_recovery_cost_pruning_matches_exhaustive_exact_winner(direction, monkey
     np.testing.assert_allclose(outputs[0][0].margins, outputs[1][0].margins, atol=1e-12)
     assert outputs[0][1] == outputs[1][1]
     assert outputs[1][2] < outputs[0][2]
+
+
+@pytest.mark.parametrize("temporal_derivative", [0.0, -1.0])
+def test_recovery_feasibility_pruning_only_skips_already_failed_dtcbf(temporal_derivative, monkeypatch):
+    fields = make_fields(safety_value=.15, gradient=(0, 1, 0), guidance=(0, 1))
+    mpc = make_mpc(horizon_steps=3, safety_substeps_per_interval=12,
+                   integration_substeps_per_interval=12)
+    kwargs = dict(configuration_space=fields[0], h_full=fields[1], guidance_fields=fields[2],
+                  temporal_safety_derivative=temporal_derivative)
+    commands = mpc._nominal_sequence(np.array([.1, 0.]))
+    original = mpc._inter_sample_unsafe_mask
+    calls = []
+
+    def counted(*args, **kw):
+        calls.append(1)
+        return original(*args, **kw)
+
+    with monkeypatch.context() as patch:
+        patch.setattr(mpc, "_inter_sample_unsafe_mask", counted)
+        legacy = mpc._evaluate_trajectory(np.zeros(3), commands, **kwargs)
+        assert legacy is not None and len(calls) == 1
+        calls.clear()
+        pruned = mpc._evaluate_trajectory(np.zeros(3), commands, require_feasible=True, **kwargs)
+    if temporal_derivative < 0:
+        assert not mpc._trajectory_is_safe(legacy)
+        assert pruned is None and calls == []
+    else:
+        assert pruned is not None and mpc._trajectory_is_safe(pruned)
+        assert len(calls) == 1
+        np.testing.assert_array_equal(legacy.commands, pruned.commands)
+        np.testing.assert_array_equal(legacy.margins, pruned.margins)
+        np.testing.assert_array_equal(legacy.chassis_states, pruned.chassis_states)
 
 
 def test_unhinted_recovery_can_return_upward_with_lower_nominal_cost():

@@ -332,3 +332,10 @@
   ties retain the first feasible candidate and every winner still passes the
   same exact checks. Legacy callers retain exhaustive recovery by default.
   Neither change establishes convergence, paper equivalence or real time.
+- A separate opt-in may reject recovery candidates with already failing exact
+  DTCBF margins before dense geometry work; every feasible candidate still gets
+  all geometry checks. Keep infeasible main-solver references for restoration.
+  Both recovery optimizations are disabled for legacy callers. Worker-compute
+  diagnostics retain original source epochs and never make late results usable.
+  Preserve the failed 90 s capsule retries separately from velocity acceptance;
+  positive clearance, CBF margins and stopping alone do not establish arrival.

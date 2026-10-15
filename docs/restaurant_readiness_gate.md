@@ -383,9 +383,36 @@ this correction, with no optional goal-distance watchdog. Actual arrival and
 the independent clearance, current sensing, exact-control and stopping gates
 remain mandatory.
 
+That retry, at source revision `4055e65`, **failed the 90 s duration limit**:
+final (1.94754, -.98004, .37564), .19976 m minimum fixture clearance, .206111
+minimum analytical CBF margin, .001975 m stop drift, 473 fields/392 translating,
+1,928 wall seconds. The continuity guard remained clear. Its 21-sample live
+velocity audit passed (.02390/.02586 m/s median relative/world errors; 20 slow,
+one fast). All these component results remain separate from failed arrival.
+Of 411 planner results, 32 were rejected as stale; median/95th/max job-to-poll
+wall times were .415/29.440/41.332 s. Perception also repeatedly missed its
+unchanged deadline. These are diagnostic latencies, not a controlled performance
+benchmark: targeted CPU unit tests also ran briefly late in the trial, after
+deadline misses had already been observed.
+
+A later separate opt-in rejects an already infeasible exact DTCBF recovery
+candidate before dense geometry sampling. Dense geometry cannot repair that
+margin; every feasible candidate still receives all geometry checks. The main
+solver retains infeasible references for restoration and is unchanged. The
+live demo enables this optimization with cost pruning; other callers keep both
+disabled. Mirrored winner regressions and explicit feasible/infeasible dense-
+check tests cover the distinction. This change was **not** in `capsule-live-v3`.
+Slow worker diagnostics now separate actual perception/planning compute from
+job-to-poll time, retaining source epochs and recording planner iteration counts.
+The logs never renew evidence, supply factor values or accept a stale result.
+
 Software regression after this correction: **1,716 unit tests passed**; Ruff
 and diff checks passed. No new models, packages, datasets or global environment
 settings were installed or upgraded.
+
+After the separate feasibility-pruning change, **1,719 unit tests passed**.
+The next short capsule run is a timing diagnostic, not an endpoint-navigation
+acceptance trial; a duration-limit result must remain failed navigation.
 
 Mass calibration, physical sharpness/hardness, temperature, moving-view plume
 re-estimation, crowded identity crossings, hidden heat/support changes and causal
