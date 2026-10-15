@@ -339,3 +339,10 @@
   diagnostics retain original source epochs and never make late results usable.
   Preserve the failed 90 s capsule retries separately from velocity acceptance;
   positive clearance, CBF margins and stopping alone do not establish arrival.
+- The demo's live QP iteration budget is explicit (legacy 4,000; opt-in bounded
+  lower budgets). A lower limit changes numerical search and may use exact-safe
+  recovery more often; it never relaxes constraints, freshness or stopping.
+  Report the budget in matched comparisons and preserve failed/short diagnostic
+  trials separately from endpoint acceptance. Worker timing identified exhausted
+  QP calls, but does not establish that all historical latency tails share that
+  cause. Keep fixed lambda and factor priors unchanged in these runtime trials.

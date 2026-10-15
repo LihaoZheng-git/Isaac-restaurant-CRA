@@ -414,6 +414,22 @@ After the separate feasibility-pruning change, **1,719 unit tests passed**.
 The next short capsule run is a timing diagnostic, not an endpoint-navigation
 acceptance trial; a duration-limit result must remain failed navigation.
 
+`capsule-timing-v1` at revision `7b8d32f` completed that 15 s timing scope and
+**did not pass navigation** (`duration_limit`): 129 fields, .23089 m clearance,
+.220855 CBF margin and .000885 m stop drift. Its velocity audit passed 21 samples.
+Slow-worker records identify several QP calls ending at 4,000 solver iterations
+with `exact_safe_seed_feasibility_recovered`; individual compute times included
+3.15--4.48 s. Some concurrent perception jobs spent 2.48--4.02 s building fields.
+These diagnostics do not prove that every earlier long tail had the same cause.
+
+The demo exposes an explicit `--qp-iteration-limit` (legacy 4,000; bounded
+100--4,000) for a separate 1,000-iteration timing comparison. A lower budget may
+change the numerical search result and increase reliance on exact-safe recovery;
+it does not change the objective or permit an infeasible/expired command. All
+field/source clocks and exact-control checks remain. Other MPC callers retain
+their existing configuration. The comparison is not a change to lambda or
+factor scores, and matched future baselines must report the same solver budget.
+
 Mass calibration, physical sharpness/hardness, temperature, moving-view plume
 re-estimation, crowded identity crossings, hidden heat/support changes and causal
 CRA superiority remain outside these bounded component gates.
