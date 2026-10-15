@@ -158,6 +158,8 @@ class SafeSAGEUnicycleMPCConfig:
     line_search_contraction: float = 0.5
     maximum_line_search_iterations: int = 8
     enable_progress_seeds: bool = False
+    enable_recovery_cost_pruning: bool = False
+    enable_recovery_feasibility_pruning: bool = False
     progress_seed_linear_fraction: float = 0.25
     configuration_position_padding_m: float = 0.0
     configuration_yaw_padding_radians: float = 0.0
@@ -166,6 +168,10 @@ class SafeSAGEUnicycleMPCConfig:
     def __post_init__(self) -> None:
         if not isinstance(self.enable_progress_seeds, bool):
             raise TypeError("enable_progress_seeds must be a boolean.")
+        if not isinstance(self.enable_recovery_cost_pruning, bool):
+            raise TypeError("enable_recovery_cost_pruning must be a boolean.")
+        if not isinstance(self.enable_recovery_feasibility_pruning, bool):
+            raise TypeError("enable_recovery_feasibility_pruning must be a boolean.")
         integer_values = {
             "horizon_steps": _positive_integer(
                 self.horizon_steps,
@@ -1168,9 +1174,17 @@ class SafeSAGEUnicycleMPC:
                                 * steering_linear_fraction
                             )
                             commands[:steering_step_count, 1] = steering_rate
+                            if self.config.enable_recovery_cost_pruning:
+                                commands = self._clip_commands(commands)
+                                # This recovery pool has no state-path cost.
+                                # Its clipped command cost is exact; a tie would
+                                # retain the earlier candidate in the old loop.
+                                if self._objective_value(commands, nominal_sequence) >= best_objective:
+                                    continue
                             candidate = self._evaluate_trajectory(
                                 initial_state,
                                 commands,
+                                require_feasible=self.config.enable_recovery_feasibility_pruning,
                                 configuration_space=configuration_space,
                                 h_full=h_full,
                                 guidance_fields=guidance_fields,
@@ -1841,6 +1855,7 @@ class SafeSAGEUnicycleMPC:
         h_full: SafeSAGEHFullResult,
         guidance_fields: Sequence[LaplaceGuidanceFieldResult],
         temporal_safety_derivative: TemporalSafetyDerivativeInput,
+        require_feasible: bool = False,
     ) -> _TrajectoryEvaluation | None:
         """Roll out and sample one complete command sequence."""
 
@@ -1856,6 +1871,17 @@ class SafeSAGEUnicycleMPC:
                 temporal_safety_derivative=temporal_safety_derivative,
             )
         except (TypeError, ValueError):
+            return None
+        safety_values = self._time_adjusted_safety_values(samples)
+        margins = safety_values[1:] - self.config.dtcbf_decay * safety_values[:-1]
+        if require_feasible and (
+            not np.isfinite(margins).all()
+            or np.any(samples.unsafe_configuration_mask)
+            or float(np.min(margins)) < -self.config.constraint_tolerance
+        ):
+            # Dense geometry cannot repair an already failed exact DTCBF
+            # constraint. Recovery does not use infeasible evaluations for
+            # gradients or restoration, unlike the main solver.
             return None
         if not np.any(samples.unsafe_configuration_mask) and (
             self.config.safety_substeps_per_interval > 1
@@ -1873,8 +1899,6 @@ class SafeSAGEUnicycleMPC:
                 samples,
                 unsafe_configuration_mask=unsafe_mask,
             )
-        safety_values = self._time_adjusted_safety_values(samples)
-        margins = safety_values[1:] - self.config.dtcbf_decay * safety_values[:-1]
         return _TrajectoryEvaluation(
             commands=clipped_commands,
             chassis_states=chassis_states,

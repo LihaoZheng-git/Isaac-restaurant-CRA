@@ -207,6 +207,7 @@ class ObstacleTracker:
         robot_position_world_xy: np.ndarray,
         robot_yaw: float,
         timestamp_seconds: float,
+        clustering_points_robot_xyz: np.ndarray | None = None,
     ) -> ObstacleTrackingResult:
         """Process one new LiDAR frame.
 
@@ -230,6 +231,15 @@ class ObstacleTracker:
         points_robot = self._validate_points(
             obstacle_points_robot_xy
         )
+        cluster_points = points_robot
+        if clustering_points_robot_xyz is not None:
+            cluster_points = np.asarray(clustering_points_robot_xyz, dtype=np.float64)
+            if (
+                cluster_points.shape != (len(points_robot), 3)
+                or not np.isfinite(cluster_points).all()
+                or not np.array_equal(cluster_points[:, :2], points_robot)
+            ):
+                raise ValueError("3D clustering points must preserve finite input XY and point order")
         robot_position_world = self._validate_vector(
             robot_position_world_xy,
             name="robot_position_world_xy",
@@ -243,7 +253,7 @@ class ObstacleTracker:
         )
 
         clusters = _cluster_point_indices(
-            points_robot,
+            cluster_points,
             cluster_radius=self.config.cluster_radius,
             backend=self.config.clustering_backend,
             minimum_cluster_points=(self.config.minimum_cluster_points),

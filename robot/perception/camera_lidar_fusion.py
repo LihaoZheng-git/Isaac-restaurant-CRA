@@ -205,8 +205,16 @@ class CameraLidarFusionConfig:
     minimum_camera_depth: float = 0.05
     require_projected_median_in_box: bool = True
     projected_median_box_margin_pixels: int = 8
+    visibility_radius_pixels: int = 0
+    mask_foreground_depth_gap_m: float | None = None
 
     def __post_init__(self) -> None:
+        if self.mask_foreground_depth_gap_m is not None and (
+            not math.isfinite(self.mask_foreground_depth_gap_m) or not 0.3 <= self.mask_foreground_depth_gap_m <= 1.0
+        ):
+            raise ValueError("foreground depth gap must lie within [.3, 1] m")
+        if isinstance(self.visibility_radius_pixels, bool) or not isinstance(self.visibility_radius_pixels, int) or not 0 <= self.visibility_radius_pixels <= 8:
+            raise ValueError("visibility radius must be an integer within [0, 8]")
         for name in ("minimum_visible_points", "minimum_mask_hits"):
             _positive_integer(getattr(self, name), name=name)
         dilation = self.mask_dilation_radius_pixels
@@ -297,6 +305,49 @@ class CameraLidarFusionResult:
         )
         projected_track_ids.setflags(write=False)
         object.__setattr__(self, "projected_track_ids", projected_track_ids)
+
+
+def mask_foreground_hits(projection, mask, *, gap_m=0.5, minimum_layer_points=8):
+    """Mask hits in the first observed depth layer, independent of track IDs.
+
+    A separated depth-layer hypothesis is an association assumption. Farther
+    returns remain obstacles. Nearby competing returns remain contamination.
+    """
+    hits = mask[projection.pixel_indices_xy[:, 1], projection.pixel_indices_xy[:, 0]]
+    indices = np.flatnonzero(hits)
+    if len(indices) < minimum_layer_points:
+        return hits
+    ordered = indices[np.argsort(projection.camera_depths[indices], kind="stable")]
+    depths = projection.camera_depths[ordered]
+    gaps = np.flatnonzero(np.diff(depths) >= gap_m)
+    if len(gaps) and gaps[0] + 1 >= minimum_layer_points:
+        hits = hits.copy()
+        hits[ordered[gaps[0] + 1:]] = False
+    return hits
+
+
+def depth_visible_projection(projection: ProjectedLidarPoints, *, radius_pixels=4, depth_allowance_m=0.15):
+    """Remove farther projected returns behind observed nearer returns.
+
+    This sparse depth-neighborhood approximation is independent of masks and
+    track identity. It filters camera association only, never obstacle occupancy.
+    It does not establish visibility between rays or through thin/hidden surfaces.
+    """
+    from scipy.spatial import cKDTree
+
+    if not isinstance(radius_pixels, int) or isinstance(radius_pixels, bool) or not 1 <= radius_pixels <= 8:
+        raise ValueError("visibility radius must lie within [1, 8] pixels")
+    if not math.isfinite(depth_allowance_m) or not 0 < depth_allowance_m <= 0.3:
+        raise ValueError("depth allowance must lie within (0, .3] m")
+    if not len(projection.source_indices):
+        return projection
+    neighbors = cKDTree(projection.pixel_xy).query_ball_point(projection.pixel_xy, radius_pixels)
+    nearest = np.array([projection.camera_depths[indices].min() for indices in neighbors])
+    visible = projection.camera_depths <= nearest + depth_allowance_m
+    return ProjectedLidarPoints(
+        projection.source_indices[visible], projection.pixel_xy[visible],
+        projection.pixel_indices_xy[visible], projection.camera_depths[visible],
+    )
 
 
 def project_fisheye_polynomial_points(
@@ -434,6 +485,8 @@ class CameraLidarSemanticFusion:
             calibration=calibration,
             minimum_camera_depth=self.config.minimum_camera_depth,
         )
+        if self.config.visibility_radius_pixels:
+            projection = depth_visible_projection(projection, radius_pixels=self.config.visibility_radius_pixels)
         visible_track_ids = track_ids[projection.source_indices]
         masks = tuple(
             _dilate_mask(
@@ -464,7 +517,10 @@ class CameraLidarSemanticFusion:
             for detection_index, (detection, mask) in enumerate(
                 zip(detection_frame.detections, masks, strict=True)
             ):
-                hits = int(np.count_nonzero(mask[pixels[:, 1], pixels[:, 0]]))
+                mask_hits = mask[projection.pixel_indices_xy[:, 1], projection.pixel_indices_xy[:, 0]]
+                if self.config.mask_foreground_depth_gap_m is not None:
+                    mask_hits = mask_foreground_hits(projection, mask, gap_m=self.config.mask_foreground_depth_gap_m)
+                hits = int(np.count_nonzero(mask_hits[track_mask]))
                 overlap = hits / visible_count
                 score = overlap * detection.confidence
                 box = detection.bounding_box

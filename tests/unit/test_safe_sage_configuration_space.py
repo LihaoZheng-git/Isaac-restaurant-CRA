@@ -68,6 +68,24 @@ def centered_obstacle_grid() -> LocalOccupancyGrid:
     )
 
 
+@pytest.mark.parametrize("footprint", [CircularRobotFootprint(0.3), RectangularRobotFootprint(.04, .68, .25, .25, .05)])
+def test_vectorized_expansion_preserves_exact_legacy_overlap_metadata(footprint):
+    from dataclasses import replace
+
+    rng = np.random.default_rng(20261014)
+    cells = tuple((int(r), int(c), int(rng.choice([-1, 2, 90])), float(rng.choice([.2, .5, .8])),
+                   -float(rng.choice([1, 2, 3]))) for r, c in rng.integers(0, 17, (50, 2)))
+    source = make_grid(size=17, resolution=.1, occupied_cells=cells)
+    config = SafeSAGEConfigurationSpaceConfig(footprint, yaw_slice_count=16)
+    legacy = build_safe_sage_configuration_space(source, config)
+    fast = build_safe_sage_configuration_space(source, replace(config, expansion_backend="vectorized"))
+    for old, new in zip(legacy.occupancy_grids, fast.occupancy_grids, strict=True):
+        for name in ("occupied_mask", "cell_track_ids", "cell_risks", "cell_boundary_fluxes"):
+            np.testing.assert_array_equal(getattr(old, name), getattr(new, name))
+        assert new.input_point_count == old.input_point_count
+        assert not new.occupied_mask.flags.writeable
+
+
 def test_default_yaw_order_matches_h_full() -> None:
     result = build_safe_sage_configuration_space(
         centered_obstacle_grid(),

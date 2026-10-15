@@ -21,6 +21,7 @@ from robot.perception.physical_attributes import (
 )
 from robot.risk.cra import PhysicalRiskProfile, RiskFactorEstimate
 from robot.perception.temporal_object_evidence import TEMPORAL_EVIDENCE_MARKER
+from robot.perception.persistent_object_evidence import PERSISTENT_PROPERTY_MARKER
 
 
 ADAPTER_SOURCE = "physical_evidence_cra_adapter"
@@ -57,9 +58,10 @@ class PhysicalFactorAdapterConfig:
     allow_visual_thermal_proxy: bool = False
     maximum_retained_mass_age_seconds: float | None = None
     maximum_retained_contact_age_seconds: float | None = None
+    maximum_persistent_property_age_seconds: float | None = None
 
     def __post_init__(self) -> None:
-        for name in ("maximum_retained_mass_age_seconds", "maximum_retained_contact_age_seconds"):
+        for name in ("maximum_retained_mass_age_seconds", "maximum_retained_contact_age_seconds", "maximum_persistent_property_age_seconds"):
             value = getattr(self, name)
             if value is not None:
                 value = _number(value, name)
@@ -146,7 +148,14 @@ def _effective_confidence(
 
 
 def _maximum_input_age(name, item, config):
-    """Extend only explicitly retained mass/contact, never dynamic inputs."""
+    """Extend opted-in property priors, never motion or route inputs."""
+    if (item.status is EstimateStatus.PRIOR
+            and PERSISTENT_PROPERTY_MARKER in item.evidence
+            and config.maximum_persistent_property_age_seconds is not None
+            and name in {"mass_kg", "fall_height_m", "harmful_fall_interaction",
+                         "visual_exposed_edge_proxy", "visual_silhouette_geometry_proxy",
+                         "heat_source_likelihood"}):
+        return config.maximum_persistent_property_age_seconds + 1e-9
     if item.status is EstimateStatus.PRIOR and TEMPORAL_EVIDENCE_MARKER in item.evidence:
         attribute = {
             "mass_kg": "maximum_retained_mass_age_seconds",

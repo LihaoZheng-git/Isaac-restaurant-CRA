@@ -83,4 +83,7 @@ def rectify_plume_observation(
         rgb=rgb,
         detections=replace(observation.detections, detections=tuple(detections)),
         valid_pixel_mask=valid,
+        native_source_mask_pixels=observation.native_source_mask_pixels
+        if observation.native_source_mask_pixels is not None
+        else int(observation.detection.mask.sum()) if observation.detection is not None else 0,
     )
