@@ -346,3 +346,10 @@
   trials separately from endpoint acceptance. Worker timing identified exhausted
   QP calls, but does not establish that all historical latency tails share that
   cause. Keep fixed lambda and factor priors unchanged in these runtime trials.
+- The live demo also exposes an optional nonlinear-rescue iteration budget
+  (legacy 300). A 1,000-QP-only diagnostic still exhausted 300 rescue iterations
+  and returned an unusably late rotation recovery. Report both solver budgets
+  and the overall simulation bound; lowering them changes numerical search,
+  never the objective or exact acceptance. Preserve the original 90 s failures
+  if a later separately bounded retry succeeds. Timing fixtures with differing
+  trajectories are not matched-input benchmarks.

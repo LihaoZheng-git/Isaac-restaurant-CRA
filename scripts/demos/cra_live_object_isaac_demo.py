@@ -46,6 +46,8 @@ parser.add_argument("--immediate-replan", action="store_true",
                     help="request a new solve without the periodic wait after rejected/invalidated plans; all execution gates remain")
 parser.add_argument("--qp-iteration-limit", type=int, default=4000,
                     help="explicit live OSQP iteration budget; failed solves still require exact-safe recovery or stopping")
+parser.add_argument("--nonlinear-rescue-iterations", type=int, default=300,
+                    help="explicit optional SLSQP rescue budget; exact verification and recovery remain mandatory")
 parser.add_argument("--plume-view-fov", type=float, default=140.0)
 parser.add_argument(
     "--evidence-gap-diagnostic",
@@ -93,6 +95,8 @@ if not 1 <= args.visual_reassessment_interval <= 10:
     parser.error("visual reassessment interval must lie within [1, 10] seconds")
 if not 100 <= args.qp_iteration_limit <= 4000:
     parser.error("live QP iteration budget must lie within [100, 4000]")
+if not 1 <= args.nonlinear_rescue_iterations <= 300:
+    parser.error("nonlinear rescue budget must lie within [1, 300]")
 if args.moving_actor and (not args.motion or args.kinetic_diagnostic or args.fixture_layout != "single" or not args.persistent_object_risk_map or args.static_occupancy_memory_prior or args.plume_control != "none"):
     parser.error("moving actor requires single/no-plume live motion, persistent map, and no static occupancy memory")
 if args.actor_shape != "sphere" and (args.fixture_layout != "single" or args.plume_control != "none" or not args.persistent_object_risk_map or args.kinetic_diagnostic or args.evidence_gap_diagnostic):
@@ -977,6 +981,7 @@ def main():
             enable_recovery_cost_pruning=True,
             enable_recovery_feasibility_pruning=True,
             maximum_solver_iterations=args.qp_iteration_limit,
+            maximum_nonlinear_rescue_iterations=args.nonlinear_rescue_iterations,
             progress_seed_linear_fraction=0.5,
             configuration_position_padding_m=0.025,
             configuration_yaw_padding_radians=0.21,
@@ -1473,6 +1478,7 @@ def main():
         "recovery_cost_pruning": mpc.config.enable_recovery_cost_pruning,
         "recovery_feasibility_pruning": mpc.config.enable_recovery_feasibility_pruning,
         "qp_iteration_limit": mpc.config.maximum_solver_iterations,
+        "nonlinear_rescue_iteration_limit": mpc.config.maximum_nonlinear_rescue_iterations,
         "immediate_replan_after_invalidations": args.immediate_replan,
         "verified_command_interval_seconds": mpc.config.time_step,
         "wall_seconds": time.perf_counter() - start_wall,

@@ -430,6 +430,28 @@ field/source clocks and exact-control checks remain. Other MPC callers retain
 their existing configuration. The comparison is not a change to lambda or
 factor scores, and matched future baselines must report the same solver budget.
 
+`capsule-timing-v2` at revision `3023181` used the 1,000 QP budget while retaining
+300 nonlinear-rescue iterations. It **did not pass navigation** (`duration_limit`
+at 15 s): 121 fields, .24523 m clearance, .239523 CBF margin, .003782 m stop drift.
+The 22-sample velocity audit passed (.02480/.02807 m/s median errors). Planner
+job-to-poll median/95th/max times were .359/2.284/34.384 s. The recorded 34.250 s
+compute ended in `guidance_rotation_feasibility_recovered`, three SQP steps and
+3,300 total solver iterations (three exhausted 1,000-iteration QPs plus 300
+nonlinear-rescue iterations). The lower QP budget alone is insufficient.
+
+The demo therefore also exposes `--nonlinear-rescue-iterations` (legacy 300,
+bounded 1--300). The next full retry uses 1,000 QP and 20 rescue iterations,
+with a separately reported 120 s overall bound. These budgets change numerical
+search and can increase exact-safe recovery or stopping; they do not change the
+objective, factor priors, lambda, candidate age, verified execution interval or
+exact constraints. The original 90 s failures remain failures. Synthetic rescue
+and forced-QP-failure regressions now exercise both 300 and 20 rescue iterations.
+The short timing runs follow the same fixture but different recorded trajectories;
+they are not matched-input timing benchmarks or endpoint acceptance.
+
+Regression after exposing both budgets: **1,721 unit tests passed**; Ruff and
+diff checks passed. No environment, model, weight or dataset changes were made.
+
 Mass calibration, physical sharpness/hardness, temperature, moving-view plume
 re-estimation, crowded identity crossings, hidden heat/support changes and causal
 CRA superiority remain outside these bounded component gates.

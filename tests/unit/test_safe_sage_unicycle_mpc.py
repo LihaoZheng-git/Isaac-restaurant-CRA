@@ -397,13 +397,14 @@ def test_thirty_step_sparse_mpc_solves_within_one_second() -> None:
     assert elapsed < 1.0
 
 
-def test_thirty_step_exact_nonlinear_rescue_is_safe_and_fast() -> None:
+@pytest.mark.parametrize("rescue_budget", [300, 20])
+def test_thirty_step_exact_nonlinear_rescue_is_safe_and_fast(rescue_budget) -> None:
     configuration_space, h_full, guidance_fields = make_fields(
         guidance=(-1.0, -1.0),
         gradient=(-1.0, -1.0, 0.0),
         safety_value=0.75,
     )
-    mpc = make_mpc(horizon_steps=30)
+    mpc = make_mpc(horizon_steps=30, maximum_nonlinear_rescue_iterations=rescue_budget)
     initial_state = np.zeros(3, dtype=np.float64)
     nominal_sequence = mpc._nominal_sequence(np.array([0.25, 0.0]))
     reference = mpc._evaluate_trajectory(
@@ -436,7 +437,8 @@ def test_thirty_step_exact_nonlinear_rescue_is_safe_and_fast() -> None:
     assert elapsed < 1.0
 
 
-def test_nonlinear_rescue_recovers_osqp_iteration_limit() -> None:
+@pytest.mark.parametrize("rescue_budget", [300, 20])
+def test_nonlinear_rescue_recovers_osqp_iteration_limit(rescue_budget) -> None:
     configuration_space, h_full, guidance_fields = make_fields(
         guidance=(-1.0, -1.0),
         gradient=(-1.0, -1.0, 0.0),
@@ -445,6 +447,7 @@ def test_nonlinear_rescue_recovers_osqp_iteration_limit() -> None:
     mpc = make_mpc(
         horizon_steps=30,
         maximum_solver_iterations=1,
+        maximum_nonlinear_rescue_iterations=rescue_budget,
     )
 
     result = mpc.plan(
