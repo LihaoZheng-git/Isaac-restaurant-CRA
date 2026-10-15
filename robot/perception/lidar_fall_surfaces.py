@@ -37,8 +37,11 @@ class LidarFallSurfaceConfig:
     direction_count: int = 16
     height_uncertainty_m: float = 0.04
     confidence: float = 0.55
+    allow_equal_height_multiple_landings: bool = False
 
     def __post_init__(self) -> None:
+        if not isinstance(self.allow_equal_height_multiple_landings, bool):
+            raise TypeError("multiple landing opt-in must be boolean")
         positive = (
             "support_xy_margin_m",
             "support_maximum_gap_m",
@@ -199,11 +202,14 @@ def estimate_lidar_fall_surfaces(
         if abs(item[2] - landing_level) <= settings.surface_band_tolerance_m
     )
     strongest = compatible[0]
-    if any(
+    if settings.allow_equal_height_multiple_landings and len(compatible) != len(direction_results):
+        return _unavailable("candidate landing heights disagree", support_point_count=support_count)
+    opposite = any(
         float(strongest[3] @ item[3]) < -0.90
         and item[0] >= 0.5 * strongest[0]
         for item in compatible[1:]
-    ):
+    )
+    if opposite and not settings.allow_equal_height_multiple_landings:
         return _unavailable(
             "lower landing directions are geometrically ambiguous",
             support_point_count=support_count,
@@ -211,6 +217,13 @@ def estimate_lidar_fall_surfaces(
     landing_count = sum(item[0] for item in compatible)
     mean_direction = np.sum([item[3] * item[0] for item in compatible], axis=0)
     direction_norm = float(np.linalg.norm(mean_direction))
+    if settings.allow_equal_height_multiple_landings and (opposite or direction_norm <= 1e-9):
+        evidence = _surface_evidence(
+            support_level, landing_level, timestamp=timestamp, settings=settings,
+            support_count=support_count, landing_count=landing_count,
+            detail="multiple observed lower landing directions agree in height; exact impact direction/site unavailable",
+        )
+        return LidarFallSurfaceResult(evidence, None, (), support_count, landing_count)
     if direction_norm <= 1e-9:
         return _unavailable(
             "lower landing directions are geometrically ambiguous",

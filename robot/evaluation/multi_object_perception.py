@@ -17,7 +17,7 @@ from robot.evaluation.perception_readiness import (
     evaluate_perception_readiness,
     runtime_factor_evidence_mode,
 )
-from robot.perception.camera_lidar_fusion import project_fisheye_polynomial_points
+from robot.perception.camera_lidar_fusion import project_fisheye_polynomial_points, depth_visible_projection
 from robot.perception.physical_attributes import PhysicalAttributes
 from robot.risk.object_risk_policy import evaluate_object_risk
 from robot.risk.physical_factor_adapter import adapt_physical_factors
@@ -59,6 +59,7 @@ def assess_all_objects(worker, packet):
         robot_position_world_xy=np.array(packet.robot_position_world_xy),
         robot_yaw=packet.robot_yaw,
         timestamp_seconds=packet.sensor_timestamp_seconds,
+        clustering_points_robot_xyz=packet.obstacle_xyz if worker.cluster_in_3d else None,
     )
     tracks = tracking.tracked_obstacles
     if not tracks:
@@ -68,6 +69,9 @@ def assess_all_objects(worker, packet):
         camera_from_source=packet.camera_from_scan_robot,
         calibration=worker.calibration,
     )
+    projected_count = len(projection.source_indices)
+    if worker.camera_visibility_radius_pixels:
+        projection = depth_visible_projection(projection, radius_pixels=worker.camera_visibility_radius_pixels)
     visible = {
         track.track_id
         for track in tracks
@@ -157,12 +161,14 @@ def assess_all_objects(worker, packet):
         policies[track.track_id] = policy
         selected = assessment["selected"]
         owned = tracking.point_track_ids == track.track_id
+        ownership_translation = np.zeros(2)
         if assessment["accepted"]:
             xyz = world[selected]
             ownership[track.track_id] = (
                 xyz.min(axis=0),
                 xyz.max(axis=0),
                 packet.camera_timestamp_seconds,
+                track.centroid_world_xy,
             )
             owned = selected
             selected_count += int(selected.sum())
@@ -173,10 +179,13 @@ def assess_all_objects(worker, packet):
             )
             and track.track_id in ownership
         ):
-            lo, hi, source_time = ownership[track.track_id]
+            lo, hi, source_time, source_centroid = ownership[track.track_id]
             # This is a bounded static, axis-aligned positive association prior,
             # not hidden geometry, moving-actor tracking or scene free space.
-            owned &= np.all((world >= lo - 0.05) & (world <= hi + 0.05), axis=1)
+            if memory.config.translate_instance_bounds_prior and track.matched_previous_track:
+                ownership_translation = np.asarray(track.centroid_world_xy) - source_centroid
+            shift = np.array([*ownership_translation, 0.0])
+            owned &= np.all((world >= lo + shift - 0.05) & (world <= hi + shift + 0.05), axis=1)
             if (
                 packet.camera_timestamp_seconds - source_time
                 > memory.config.maximum_property_age_seconds
@@ -226,11 +235,20 @@ def assess_all_objects(worker, packet):
         )
         detail = {
             "track_id": track.track_id,
+            "centroid_world_xy": track.centroid_world_xy,
+            "velocity_world_xy": track.velocity_world_xy,
+            "observation_count": track.observation_count,
+            "camera_occluded_return_count": projected_count - len(projection.source_indices),
+            "instance_centroid_world_xyz": world[selected].mean(axis=0).tolist()
+            if assessment["accepted"] else None,
             "camera_observable": track.track_id in visible,
             "visual_attempted": track.track_id in attempted,
             "accepted_instance": assessment["accepted"],
             "selected_return_count": int(selected.sum()),
             "policy_return_count": int(owned.sum()),
+            "instance_ownership_translation_xy": ownership_translation.tolist(),
+            "instance_ownership_basis": "fresh_mask" if assessment["accepted"] else
+                "tracked_translation_bounds_prior" if np.any(ownership_translation) else "static_bounds_or_geometric_prior",
             "factor_scores": factor_details,
             "property_evidence": assessment["persistence"],
             "geometry_evidence": assessment["geometry_diagnostics"],
@@ -368,6 +386,7 @@ def assess_all_objects(worker, packet):
             for key, value in policies.items()
         },
     )
+    pipeline_started = time.perf_counter()
     pipeline = build_safe_sage_field_pipeline(
         grid,
         guidance_policy=worker.guidance_policy,
@@ -383,6 +402,7 @@ def assess_all_objects(worker, packet):
             key: value.guidance_parameters for key, value in policies.items()
         },
     )
+    pipeline_seconds = time.perf_counter() - pipeline_started
     temporal = 0.0
     recovery = {"used": False}
     if worker.previous is not None:
@@ -455,6 +475,9 @@ def assess_all_objects(worker, packet):
     )
     primary, raw = objects[0], frames[0]
     diagnostics = {
+        "stage_wall_seconds": {"perception_ownership_occupancy": pipeline_started - started,
+                               "field_solve": pipeline_seconds},
+        "measured_robot_velocity_world_xy": packet.measured_robot_velocity_world_xy,
         "mode": "persistent_multi_object_factor_priors",
         "object_count": len(objects),
         "objects": [item.diagnostics for item in objects],

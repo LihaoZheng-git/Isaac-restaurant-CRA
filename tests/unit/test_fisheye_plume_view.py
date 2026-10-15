@@ -45,6 +45,7 @@ def test_rectified_source_keeps_identity_confidence_and_both_epochs():
     assert changed.track_timestamp_seconds == original.track_timestamp_seconds
     assert changed.association is original.association
     assert changed.detection.confidence == original.detection.confidence
+    assert changed.native_source_mask_pixels == int(original.detection.mask.sum())
     assert changed.detection.semantic_class == "unknown"
     assert changed.detection.mask.sum() > 200
     assert not (changed.detection.mask & ~changed.valid_pixel_mask).any()
@@ -59,3 +60,14 @@ def test_invalid_remap_pixels_cannot_support_background_registration_or_negative
     result = register_background_pair(old, current)
     assert result.homography is None
     assert "background features" in result.rejection_reasons[0]
+
+
+def test_remapped_pixel_count_cannot_launder_unresolved_native_source():
+    old = replace(observed(0), native_source_mask_pixels=50)
+    new = replace(observed(1), native_source_mask_pixels=50)
+    old = rectify_plume_observation(old, calibration(), horizontal_fov_degrees=100)
+    new = rectify_plume_observation(new, calibration(), horizontal_fov_degrees=100)
+    assert old.native_source_mask_pixels == new.native_source_mask_pixels == 50
+    result = register_background_pair(old, new)
+    assert result.homography is None
+    assert "source mask" in result.rejection_reasons[0]

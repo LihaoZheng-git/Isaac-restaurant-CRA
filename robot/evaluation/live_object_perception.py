@@ -214,6 +214,12 @@ class LiveObjectPerception:
         evidence_retention_config=None,
         persistent_property_config=None,
         object_factor_prior_config=None,
+        fall_surface_config=None,
+        fall_interaction_prior_scope=None,
+        cluster_in_3d=False,
+        camera_visibility_radius_pixels=0,
+        mask_foreground_depth_gap_m=None,
+        plume_view_fov_degrees=140.0,
     ):
         self.segmenter, self.mass_estimator, self.contact_detector = (
             segmenter,
@@ -221,6 +227,29 @@ class LiveObjectPerception:
             contact_detector,
         )
         self.calibration = calibration
+        from robot.perception.lidar_fall_surfaces import LidarFallSurfaceConfig
+
+        if fall_surface_config is not None and not isinstance(fall_surface_config, LidarFallSurfaceConfig):
+            raise TypeError("invalid fall surface configuration")
+        if fall_interaction_prior_scope is not None and (
+            not isinstance(fall_interaction_prior_scope, str)
+            or not fall_interaction_prior_scope.strip()
+        ):
+            raise ValueError("fall interaction prior requires an explicit scope")
+        self.fall_surface_config = fall_surface_config
+        self.fall_interaction_prior_scope = fall_interaction_prior_scope
+        if not isinstance(cluster_in_3d, bool):
+            raise TypeError("3D clustering opt-in must be boolean")
+        CameraLidarFusionConfig(
+            visibility_radius_pixels=camera_visibility_radius_pixels,
+            mask_foreground_depth_gap_m=mask_foreground_depth_gap_m,
+        )
+        self.cluster_in_3d = cluster_in_3d
+        self.camera_visibility_radius_pixels = camera_visibility_radius_pixels
+        self.mask_foreground_depth_gap_m = mask_foreground_depth_gap_m
+        if not math.isfinite(plume_view_fov_degrees) or not 30 <= plume_view_fov_degrees < 170:
+            raise ValueError("plume view FOV must lie within [30, 170) degrees")
+        self.plume_view_fov_degrees = float(plume_view_fov_degrees)
         self.evidence_memory = (
             TemporalObjectEvidence(evidence_retention_config)
             if evidence_retention_config is not None
@@ -276,7 +305,7 @@ class LiveObjectPerception:
         )
         self.tracker = ObstacleTracker(
             ObstacleTrackerConfig(
-                cluster_radius=0.20,
+                cluster_radius=0.12 if cluster_in_3d else 0.20,
                 minimum_cluster_points=4,
                 maximum_association_distance=0.50,
                 clustering_backend="kdtree",
@@ -310,6 +339,7 @@ class LiveObjectPerception:
             robot_position_world_xy=np.array(packet.robot_position_world_xy),
             robot_yaw=packet.robot_yaw,
             timestamp_seconds=packet.sensor_timestamp_seconds,
+            clustering_points_robot_xyz=packet.obstacle_xyz if self.cluster_in_3d else None,
         )
         if not tracking.tracked_obstacles:
             raise RuntimeError("no geometric track is available")
@@ -732,6 +762,8 @@ class LiveObjectPerception:
                         mask_dilation_radius_pixels=6,
                         projected_median_box_margin_pixels=12,
                         require_projected_median_in_box=False,
+                        visibility_radius_pixels=self.camera_visibility_radius_pixels,
+                        mask_foreground_depth_gap_m=self.mask_foreground_depth_gap_m,
                     )
                 ).fuse(
                     tracking_result=tracking,
@@ -826,18 +858,34 @@ class LiveObjectPerception:
                 packet.scene_xyz,
                 object_xyz,
                 timestamp_seconds=packet.sensor_timestamp_seconds,
+                config=self.fall_surface_config,
             )
             geometry_diagnostics["strict_fall_surfaces"] = asdict(surfaces)
-            geometry = replace(
-                geometry,
-                fall_height_m=estimate_fall_height(
-                    surfaces.evidence, timestamp_seconds=timestamp
-                ),
+            geometry_diagnostics["fall_surface_configuration"] = (
+                asdict(self.fall_surface_config) if self.fall_surface_config else None
             )
-            if self.ground_scope is not None:
+            sphere = None
+            support_consistent = None
+            if self.ground_scope is not None or self.fall_surface_config is not None:
                 sphere = estimate_spherical_geometry(
                     object_xyz, timestamp_seconds=packet.sensor_timestamp_seconds
                 )
+            if self.fall_surface_config is not None and surfaces.is_available:
+                support = surfaces.evidence.support_height_m
+                support_consistent = bool(
+                    sphere.radius_m.is_available
+                    and sphere.center_xyz is not None
+                    and support.lower_bound <= sphere.center_xyz[2] - sphere.radius_m.lower_bound
+                    and support.upper_bound >= sphere.center_xyz[2] - sphere.radius_m.upper_bound
+                )
+            geometry_diagnostics["support_bottom_consistency"] = support_consistent
+            geometry = replace(
+                geometry,
+                fall_height_m=estimate_fall_height(
+                    surfaces.evidence if support_consistent is not False else None, timestamp_seconds=timestamp
+                ),
+            )
+            if self.ground_scope is not None:
                 ground = estimate_spherical_ground_support(
                     packet.scene_xyz,
                     sphere,
@@ -859,8 +907,27 @@ class LiveObjectPerception:
                 geometry_diagnostics["sphere_fit"] = asdict(sphere)
                 geometry_diagnostics["ground_support"] = asdict(ground)
                 if ground.fall_height_m.is_available:
-                    geometry = replace(geometry, fall_height_m=ground.fall_height_m)
+                    if not geometry.fall_height_m.is_available:
+                        geometry = replace(geometry, fall_height_m=ground.fall_height_m)
+                    else:
+                        geometry_diagnostics["strict_vs_ground_drop_bounds_disagree"] = bool(
+                            geometry.fall_height_m.lower_bound > ground.fall_height_m.upper_bound
+                            or ground.fall_height_m.lower_bound > geometry.fall_height_m.upper_bound
+                        )
+                    # A valid ground check supplies its separate worst-case
+                    # interaction prior even when the strict drop is retained.
                     potential = ground.potential_interaction_likelihood
+            if (
+                geometry.fall_height_m.is_available
+                and not potential.is_available
+                and self.fall_interaction_prior_scope is not None
+            ):
+                potential = ScalarEstimate(
+                    1.0, 1.0, 1.0, 0.5, "1",
+                    "configured_worst_case_harmful_fall_interaction_prior",
+                    packet.sensor_timestamp_seconds, EstimateStatus.PRIOR,
+                    (self.fall_interaction_prior_scope,),
+                )
             links = SpecialistAssociationFrame(
                 frame.source_frame_id,
                 timestamp,
@@ -899,7 +966,7 @@ class LiveObjectPerception:
                     )
 
                     observation = rectify_plume_observation(
-                        observation, self.calibration
+                        observation, self.calibration, horizontal_fov_degrees=self.plume_view_fov_degrees
                     )
                 if packet.clean_reference_validated:
                     candidate_plume.set_reference(

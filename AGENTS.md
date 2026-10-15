@@ -263,3 +263,102 @@
   within the unchanged derivative limit, retaining both epochs and all field/
   command freshness and exact verification gates. Never substitute missing
   temporal evidence with zero during motion or renew source clocks.
+- The separated multi-object fixture opts into 3D connected clustering with
+  planar association/velocity, sparse projected-depth visibility and a separated
+  foreground mask depth-layer assumption. Keep original return IDs and all
+  physical occupancy; nearby foreign/ambiguous masks still fail unchanged SAM
+  quality/coverage/boundary gates. These are bounded association adaptations,
+  not complete 3D segmentation or directly measured camera visibility.
+- The opt-in equal-height landing mode may infer vertical support-to-landing
+  drop when all candidate lower landing bands agree, while impact direction/site
+  remains unknown. Keep the spherical bottom consistency gate, explicit 2.5 m
+  search scope and worst-case fall-interaction PRIOR separate; height is never
+  fall height. Preserve strict directional defaults and mismatched-band failures.
+  See docs/restaurant_readiness_gate.md; numeric completeness alone cannot pass
+  its independent fixture-evidence or combined navigation acceptance.
+- The moving-sphere opt-in may translate accepted instance bounds using current
+  observed centroid displacement only after persistence identity/competitor
+  checks. Preserve original epochs and the unchanged-shape planar-translation
+  PRIOR label, legacy static bounds, unmatched occupancy and moved-support
+  invalidation. Moving-actor diagnostics use .15 s positive-occupancy expiry;
+  never enable permanent static occupancy memory for them. Scripted .12/.24 m/s
+  motion is oracle evaluation truth only, never estimator input. Accumulated
+  scans/centroid filtering can underestimate speed; report transition exclusions
+  and errors, not exact dynamic velocity or crowded tracking acceptance.
+- The combined readiness experiments preserve failed tight mixed-risk layouts:
+  positive clearance and stopping do not establish arrival or global unicycle
+  convergence. A separately spaced fixture is a different bounded scenario,
+  never a retroactive pass. A no-progress watchdog can only reject a trial.
+- Vectorized configuration expansion preserves exact occupancy and legacy
+  risk/flux/known-ID/first-source metadata priority. Eight-connected equal-policy
+  regions and all nearest-distance ties retain the same numerical field (tested
+  through h_full/gradients), not paper equivalence or a new safety theorem.
+- Calibrated plume-view FOV is explicit (legacy 140 degrees; separated fixture
+  opt-in 120). Keep native source pixel counts through remapping: upsampling
+  cannot launder an unresolved native source. Preserve all confidence, source
+  epoch, clean-reference, background, coverage and ambiguity gates; no claim of
+  temperature or moving-view plume acceptance follows from this stationary view.
+- Large live diagnostic histories may use explicit append-only JSONL logging;
+  in that mode live-fields.json is only the latest-five checkpoint. Preserve
+  complete records and source times in the stream. The existing fair visual
+  attempt budget may be explicitly set to one for paced development, while all
+  tracks still receive current motion/geometry and numeric prior-aware policies.
+  Never report deferred vision or late rejected results as fresh perception.
+- The low moving-sphere trial passed relative-velocity error checks but failed
+  navigation after its geometry left the LiDAR near blind region and short
+  occupancy retention expired. Numeric factor priors do not repair missing
+  obstacle geometry. The moving-actor demo now stops on unresolved nearby
+  positive-track loss before publishing that field. Its .15 s/1.2 m watch,
+  2 m enrollment and unique .25 m new-ID association are explicit bounded
+  engineering assumptions, not a dynamic belief map or general occlusion
+  guarantee. The .333 m-clearance expected-stop regression is not arrival.
+- The upright capsule is a separate LiDAR-visible kinetic proxy. Its authored
+  height is rendering/monitoring metadata only; the sphere ground prior is
+  disabled. Its stationary kinetic-component gate permits explicit unknown
+  potential/thermal priors and must not be described as complete four-factor
+  perception, human mass calibration or physical contact/temperature estimation.
+  Preserve the high smooth-capsule silhouette score as a proxy limitation;
+  never lower it to improve navigation. See docs/restaurant_readiness_gate.md.
+- Euclidean waypoint distance can increase during a valid wide avoidance
+  detour. An optional progress-watchdog rejection is a failed trial, not proof
+  of global nonconvergence. Bounded retries may disable that optional watchdog
+  while retaining the overall time limit, actual-arrival requirement and every
+  freshness, continuity, exact MPC/DTCBF, analytical CBF and stopping gate.
+- The live caller leaves the optional world-grid lateral recovery hint unset:
+  a constant negative-y final-progress constraint can prevent a return toward
+  the goal after passing below an obstacle. Keep per-obstacle Safe-SAGE guidance,
+  the obstacle-unaware nominal and observed passing-side diagnostics. The live
+  MPC may opt into exact command-cost pruning of its recovery pool; unchanged
+  ties retain the first feasible candidate and every winner still passes the
+  same exact checks. Legacy callers retain exhaustive recovery by default.
+  Neither change establishes convergence, paper equivalence or real time.
+- A separate opt-in may reject recovery candidates with already failing exact
+  DTCBF margins before dense geometry work; every feasible candidate still gets
+  all geometry checks. Keep infeasible main-solver references for restoration.
+  Both recovery optimizations are disabled for legacy callers. Worker-compute
+  diagnostics retain original source epochs and never make late results usable.
+  Preserve the failed 90 s capsule retries separately from velocity acceptance;
+  positive clearance, CBF margins and stopping alone do not establish arrival.
+- The demo's live QP iteration budget is explicit (legacy 4,000; opt-in bounded
+  lower budgets). A lower limit changes numerical search and may use exact-safe
+  recovery more often; it never relaxes constraints, freshness or stopping.
+  Report the budget in matched comparisons and preserve failed/short diagnostic
+  trials separately from endpoint acceptance. Worker timing identified exhausted
+  QP calls, but does not establish that all historical latency tails share that
+  cause. Keep fixed lambda and factor priors unchanged in these runtime trials.
+- The live demo also exposes an optional nonlinear-rescue iteration budget
+  (legacy 300). A 1,000-QP-only diagnostic still exhausted 300 rescue iterations
+  and returned an unusably late rotation recovery. Report both solver budgets
+  and the overall simulation bound; lowering them changes numerical search,
+  never the objective or exact acceptance. Preserve the original 90 s failures
+  if a later separately bounded retry succeeds. Timing fixtures with differing
+  trajectories are not matched-input benchmarks.
+- The bounded readiness gate now has accepted final-budget upright-actor and
+  three-object waypoint arrivals, plus stationary factor and kinetic gates.
+  The actor retained one positively owned track across 547 fields; mass/contact
+  stayed labeled property priors, motion remained current, and potential/thermal
+  used configured priors. This permits selected restaurant scene construction,
+  with stationary validation of each new asset before matched navigation tests.
+  It is separate from PR #117's unmet fresh moving-view perception gate and
+  establishes neither real time nor calibrated human mass/sharpness/temperature.
+  See docs/restaurant_readiness_gate.md for exact budgets, scope and failed trials.
