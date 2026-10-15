@@ -112,8 +112,15 @@ class TrackedRgbObjectFrame:
     association: TrackSemanticAssociation
     track_timestamp_seconds: float
     valid_pixel_mask: np.ndarray | None = None
+    native_source_mask_pixels: int | None = None
 
     def __post_init__(self):
+        if self.native_source_mask_pixels is not None and (
+            isinstance(self.native_source_mask_pixels, bool)
+            or not isinstance(self.native_source_mask_pixels, int)
+            or self.native_source_mask_pixels < 0
+        ):
+            raise ValueError("native source pixel count must be a nonnegative integer")
         frame = self.detections
         image = np.array(self.rgb, copy=True)
         if image.dtype != np.uint8 or image.shape != (
@@ -219,6 +226,7 @@ def register_background_pair(previous, current, *, config=None):
             return reject("source track is stale or future for the RGB frame")
         if (
             detection.confidence < settings.minimum_source_confidence
+            or (item.native_source_mask_pixels is not None and item.native_source_mask_pixels < settings.minimum_source_pixels)
             or mask.sum() < settings.minimum_source_pixels
             or mask[:2].any()
             or mask[-2:].any()

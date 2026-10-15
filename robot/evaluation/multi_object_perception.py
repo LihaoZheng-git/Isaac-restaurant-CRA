@@ -161,12 +161,14 @@ def assess_all_objects(worker, packet):
         policies[track.track_id] = policy
         selected = assessment["selected"]
         owned = tracking.point_track_ids == track.track_id
+        ownership_translation = np.zeros(2)
         if assessment["accepted"]:
             xyz = world[selected]
             ownership[track.track_id] = (
                 xyz.min(axis=0),
                 xyz.max(axis=0),
                 packet.camera_timestamp_seconds,
+                track.centroid_world_xy,
             )
             owned = selected
             selected_count += int(selected.sum())
@@ -177,10 +179,13 @@ def assess_all_objects(worker, packet):
             )
             and track.track_id in ownership
         ):
-            lo, hi, source_time = ownership[track.track_id]
+            lo, hi, source_time, source_centroid = ownership[track.track_id]
             # This is a bounded static, axis-aligned positive association prior,
             # not hidden geometry, moving-actor tracking or scene free space.
-            owned &= np.all((world >= lo - 0.05) & (world <= hi + 0.05), axis=1)
+            if memory.config.translate_instance_bounds_prior and track.matched_previous_track:
+                ownership_translation = np.asarray(track.centroid_world_xy) - source_centroid
+            shift = np.array([*ownership_translation, 0.0])
+            owned &= np.all((world >= lo + shift - 0.05) & (world <= hi + shift + 0.05), axis=1)
             if (
                 packet.camera_timestamp_seconds - source_time
                 > memory.config.maximum_property_age_seconds
@@ -241,6 +246,9 @@ def assess_all_objects(worker, packet):
             "accepted_instance": assessment["accepted"],
             "selected_return_count": int(selected.sum()),
             "policy_return_count": int(owned.sum()),
+            "instance_ownership_translation_xy": ownership_translation.tolist(),
+            "instance_ownership_basis": "fresh_mask" if assessment["accepted"] else
+                "tracked_translation_bounds_prior" if np.any(ownership_translation) else "static_bounds_or_geometric_prior",
             "factor_scores": factor_details,
             "property_evidence": assessment["persistence"],
             "geometry_evidence": assessment["geometry_diagnostics"],
@@ -378,6 +386,7 @@ def assess_all_objects(worker, packet):
             for key, value in policies.items()
         },
     )
+    pipeline_started = time.perf_counter()
     pipeline = build_safe_sage_field_pipeline(
         grid,
         guidance_policy=worker.guidance_policy,
@@ -393,6 +402,7 @@ def assess_all_objects(worker, packet):
             key: value.guidance_parameters for key, value in policies.items()
         },
     )
+    pipeline_seconds = time.perf_counter() - pipeline_started
     temporal = 0.0
     recovery = {"used": False}
     if worker.previous is not None:
@@ -465,6 +475,9 @@ def assess_all_objects(worker, packet):
     )
     primary, raw = objects[0], frames[0]
     diagnostics = {
+        "stage_wall_seconds": {"perception_ownership_occupancy": pipeline_started - started,
+                               "field_solve": pipeline_seconds},
+        "measured_robot_velocity_world_xy": packet.measured_robot_velocity_world_xy,
         "mode": "persistent_multi_object_factor_priors",
         "object_count": len(objects),
         "objects": [item.diagnostics for item in objects],

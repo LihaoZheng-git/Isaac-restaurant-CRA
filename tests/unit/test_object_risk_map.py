@@ -335,6 +335,45 @@ def multi_packet(frame=1, t=1, x=0):
     return replace(value, obstacle_xyz=points, scene_xyz=points)
 
 
+def test_moving_returns_expire_without_static_memory_or_source_time_renewal():
+    runtime = mapped_worker()
+    runtime.occupancy_retention_seconds = 0.15
+    for index in range(5):
+        value = packet(index + 1, 1 + 0.1 * index)
+        points = value.obstacle_xyz + [0, 0.04 * index, 0]
+        latest = runtime(replace(value, obstacle_xyz=points, scene_xyz=points))
+    retained = latest.diagnostics["retained_occupancy_epochs"]
+    assert len(retained) == 1
+    assert retained[0]["timestamp"] == pytest.approx(1.3)
+    assert retained[0]["sensor_frame_id"] == 4
+    assert not runtime.static_points
+    assert latest.objects[0].attributes.motion.velocity_y_mps.value == pytest.approx(0.4)
+    assert latest.objects[0].attributes.motion.relative_speed_mps.timestamp_seconds == pytest.approx(1.4)
+
+
+@pytest.mark.parametrize("translated", [False, True])
+def test_bounded_translated_ownership_uses_observed_track_displacement_and_original_age(translated):
+    runtime = mapped_worker()
+    runtime.persistent_properties.config = replace(runtime.persistent_properties.config,
+                                                   translate_instance_bounds_prior=translated)
+    first = packet()
+    result = runtime(first)
+    track = result.field.tracking_result.tracked_obstacles[0]
+    resolve(runtime.persistent_properties, track, observed(1.1), 1.1)
+    runtime.persistent_properties.freeze_properties()
+    runtime.object_ownership_bounds = {track.track_id: (
+        first.obstacle_xyz.min(0), first.obstacle_xyz.max(0), 1.1, track.centroid_world_xy)}
+    second = packet(2, 1.1)
+    points = second.obstacle_xyz + [0, 0.16, 0]
+    result = runtime(replace(second, obstacle_xyz=points, scene_xyz=points))
+    diagnostic = result.objects[0].diagnostics
+    assert diagnostic["policy_return_count"] == (4 if translated else 0)
+    assert diagnostic["property_evidence"]["mass"]["source_timestamp"] == 1.1
+    if translated:
+        assert diagnostic["instance_ownership_basis"] == "tracked_translation_bounds_prior"
+        assert diagnostic["instance_ownership_translation_xy"] == pytest.approx([0, 0.16])
+
+
 def test_all_tracks_and_unclustered_occupancy_receive_numeric_field_policies():
     runtime = mapped_worker()
     result = runtime(multi_packet())

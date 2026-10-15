@@ -27,8 +27,11 @@ class PersistentObjectEvidenceConfig:
     maximum_visible_height_change_m: float = 0.10
     minimum_visual_reassessment_interval_seconds: float = 1.0
     maximum_visual_tracks_per_update: int = 2
+    translate_instance_bounds_prior: bool = False
 
     def __post_init__(self):
+        if not isinstance(self.translate_instance_bounds_prior, bool):
+            raise TypeError("translated bounds opt-in must be boolean")
         if not isinstance(self.scope, str) or not self.scope.strip():
             raise ValueError("property persistence requires an explicit scene scope")
         if isinstance(self.maximum_visual_tracks_per_update, bool) or not isinstance(
@@ -38,7 +41,7 @@ class PersistentObjectEvidenceConfig:
                 "maximum_visual_tracks_per_update must be a positive integer"
             )
         for name, value in vars(self).items():
-            if name == "scope":
+            if name in {"scope", "translate_instance_bounds_prior"}:
                 continue
             if (
                 isinstance(value, bool)
