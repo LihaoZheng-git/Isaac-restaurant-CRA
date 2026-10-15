@@ -89,3 +89,74 @@ def summarize_fixture_assessments(records, fixtures, maximum_distance_m=0.40):
         "scope": "oracle fixture-center matching for evaluation only; unchanged recorded factor estimates; prior sensitivity is offline without wheel motion",
         "fixtures": rows,
     }
+
+
+def bounded_fixture_checks(report):
+    checks = {}
+    for name, row in report["fixtures"].items():
+        latest = row["latest"]
+        accepted_statuses = {"measured", "inferred", "prior"}
+        checks[name + "_mass_contact"] = bool(
+            latest
+            and row["accepted_visual_updates"] >= 3
+            and latest["attributes"]["mass"]["mass_kg"]["value"] is not None
+            and latest["attributes"]["mass"]["mass_kg"]["status"] in accepted_statuses
+            and latest["diagnostics"]["factor_scores"]["contact"]["mode"]
+            == "evidence_supported"
+        )
+        if latest and name in {"ground", "raised", "plume"}:
+            drop = latest["attributes"]["geometry"]["fall_height_m"]["value"]
+            checks[name + "_fall"] = (
+                latest["diagnostics"]["factor_scores"]["potential"]["mode"]
+                == "evidence_supported"
+                and (
+                    latest["attributes"]["geometry"]["fall_height_m"]["status"]
+                    in accepted_statuses
+                )
+                and drop is not None
+                and (drop > 0.1 if name == "raised" else drop <= 0.05)
+            )
+        if name == "plume":
+            cue = (
+                latest["attributes"]["thermal"]["heat_source_likelihood"]["value"]
+                if latest
+                else None
+            )
+            checks["positive_plume_cue"] = (
+                cue is not None
+                and cue > 0.2
+                and latest["attributes"]["thermal"]["heat_source_likelihood"]["status"]
+                in accepted_statuses
+            )
+    return checks
+
+
+def kinetic_actor_fixture_checks(report):
+    """Separate kinetic-component gate; unsupported potential stays a prior.
+
+    This does not weaken or replace the four-factor sphere/support/plume gate.
+    The taller fixture is not a calibrated human mass or contact model.
+    """
+    row = report["fixtures"].get("ground", {})
+    latest = row.get("latest")
+    if latest is None:
+        return {"kinetic_actor_observed": False}
+    diagnostic = latest["diagnostics"]
+    factors = diagnostic["factor_scores"]
+    mass = latest["attributes"]["mass"]["mass_kg"]
+    speed = latest["attributes"]["motion"]["relative_speed_mps"]
+    return {
+        "fresh_mass_and_owned_instance": row["accepted_visual_updates"] >= 3
+        and diagnostic["accepted_instance"]
+        and diagnostic["policy_return_count"] > 0
+        and mass["value"] is not None
+        and mass["status"] in {"measured", "inferred"},
+        "visual_contact_proxy": factors["contact"]["mode"] == "evidence_supported"
+        and factors["contact"]["basis"]
+        in {"visual_silhouette_geometry_proxy", "visual_exposed_edge_proxy"},
+        "confirmed_sensor_kinetic": speed["value"] is not None
+        and speed["status"] in {"measured", "inferred"}
+        and factors["kinetic"]["mode"] == "evidence_supported",
+        "unsupported_potential_explicit_prior": factors["potential"]["mode"]
+        == "configured_prior",
+    }

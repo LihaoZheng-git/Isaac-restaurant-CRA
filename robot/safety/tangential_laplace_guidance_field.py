@@ -168,6 +168,7 @@ def solve_tangential_laplace_guidance_field(
         semantic_by_track_id=semantic_by_track_id,
         guidance_by_track_id=guidance_by_track_id,
         merge_equal_policy_regions=solver_config.merge_equal_policy_regions,
+        component_backend=solver_config.interface_backend,
     )
 
     (
@@ -270,10 +271,12 @@ def _obstacle_components(
     semantic_by_track_id: dict[int, SemanticObstacle],
     guidance_by_track_id: dict[int, SafeSAGEGuidanceParameters],
     merge_equal_policy_regions: bool = False,
+    component_backend: str = "loop",
 ) -> tuple[np.ndarray, tuple[_ObstacleComponent, ...]]:
     """Group occupied cells by track and connected unknown regions."""
 
     labels = np.full(occupancy_grid.shape, -1, dtype=np.int64)
+    row_count, column_count = occupancy_grid.shape
     components: list[_ObstacleComponent] = []
 
     occupied_track_ids = occupancy_grid.cell_track_ids[occupancy_grid.occupied_mask]
@@ -323,8 +326,8 @@ def _obstacle_components(
                 neighbor_row = row_index + row_offset
                 neighbor_column = column_index + column_offset
                 if not (
-                    0 <= neighbor_row < occupancy_grid.shape[0]
-                    and 0 <= neighbor_column < occupancy_grid.shape[1]
+                    0 <= neighbor_row < row_count
+                    and 0 <= neighbor_column < column_count
                 ):
                     continue
                 if (
@@ -372,6 +375,16 @@ def _obstacle_components(
         labels.fill(-1)
         for key in sorted(groups):
             mask, parameters = groups[key]
+            if component_backend == "vectorized":
+                from scipy.ndimage import label as connected_labels
+
+                regions, count = connected_labels(mask, structure=np.ones((3, 3), bool))
+                for region in range(1, count + 1):
+                    indices = np.argwhere(regions == region)
+                    label = len(components)
+                    labels[indices[:, 0], indices[:, 1]] = label
+                    components.append(_ObstacleComponent(label, indices, parameters))
+                continue
             visited = np.zeros(labels.shape, dtype=bool)
             for row, column in np.argwhere(mask):
                 if visited[row, column]:
@@ -385,8 +398,8 @@ def _obstacle_components(
                     for dr, dc in _NEIGHBOR_OFFSETS:
                         nr, nc = r + dr, c + dc
                         if (
-                            0 <= nr < mask.shape[0]
-                            and 0 <= nc < mask.shape[1]
+                            0 <= nr < row_count
+                            and 0 <= nc < column_count
                             and mask[nr, nc]
                             and not visited[nr, nc]
                         ):
@@ -750,10 +763,13 @@ def _distance_and_normal_sums_tree(
         second_squared = np.einsum("ij,ij->i", second_offsets, second_offsets)
         ties = np.flatnonzero(second_squared == squared)
         neighbors = tree.query_ball_point(queries[ties], np.sqrt(squared[ties]) + 1e-10)
-        for index, candidates in zip(ties, neighbors):
-            deltas = occupied_indices[candidates] - queries[index]
-            equal = np.einsum("ij,ij->i", deltas, deltas) == squared[index]
-            sums[index] = deltas[equal, ::-1].sum(axis=0)
+        if len(ties):
+            repeated = np.repeat(ties, [len(items) for items in neighbors])
+            candidates = np.concatenate(neighbors).astype(np.int64)
+            deltas = occupied_indices[candidates] - queries[repeated]
+            equal = np.einsum("ij,ij->i", deltas, deltas) == squared[repeated]
+            sums[ties] = 0
+            np.add.at(sums, repeated[equal], deltas[equal, ::-1])
     return resolution * np.sqrt(squared).reshape(row_grid.shape), sums.reshape(
         (*row_grid.shape, 2)
     )

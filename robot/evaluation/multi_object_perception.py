@@ -386,6 +386,7 @@ def assess_all_objects(worker, packet):
             for key, value in policies.items()
         },
     )
+    pipeline_started = time.perf_counter()
     pipeline = build_safe_sage_field_pipeline(
         grid,
         guidance_policy=worker.guidance_policy,
@@ -401,6 +402,7 @@ def assess_all_objects(worker, packet):
             key: value.guidance_parameters for key, value in policies.items()
         },
     )
+    pipeline_seconds = time.perf_counter() - pipeline_started
     temporal = 0.0
     recovery = {"used": False}
     if worker.previous is not None:
@@ -473,6 +475,9 @@ def assess_all_objects(worker, packet):
     )
     primary, raw = objects[0], frames[0]
     diagnostics = {
+        "stage_wall_seconds": {"perception_ownership_occupancy": pipeline_started - started,
+                               "field_solve": pipeline_seconds},
+        "measured_robot_velocity_world_xy": packet.measured_robot_velocity_world_xy,
         "mode": "persistent_multi_object_factor_priors",
         "object_count": len(objects),
         "objects": [item.diagnostics for item in objects],
