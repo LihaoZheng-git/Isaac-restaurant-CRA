@@ -44,7 +44,8 @@ def main():
                 Rectangle(np.array(xy) - 0.35, 0.7, 0.7, fill=False, edgecolor="grey")
             )
         axis.annotate(
-            fixture["name"], np.array(xy) + [0, 0.25], ha="center", fontsize=9
+            "actor at start" if report.get("moving_actor") else fixture["name"],
+            np.array(xy) + [0, 0.25], ha="center", fontsize=9
         )
     goal_xy = report.get(
         "goal_local_xy", [3.5 if report["fixture_layout"] == "three" else 2.5, 0]
@@ -84,6 +85,10 @@ def main():
             color="#de8041",
             label="Authored actor path (evaluation only)",
         )
+        axis.add_patch(Circle(actor_xy[-1], fixtures[0]["radius_m"],
+                              color="#de8041", alpha=.25))
+        axis.annotate("actor at final sample", actor_xy[-1] + [.23, 0],
+                      ha="left", va="center", fontsize=9)
     axis.scatter(
         [0, goal], [0, goal_xy[1]], color=["black", "#237742"], marker="x", s=60
     )

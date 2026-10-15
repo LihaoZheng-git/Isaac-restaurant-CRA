@@ -11,7 +11,15 @@ Restaurant assets are not saved or enriched by these session-only fixtures.
 | --- | --- | --- |
 | Per-object factors and phi | Passed, three stationary fixtures | Selected sensor inputs plus explicit support/interaction and missing-factor priors |
 | Moving-object kinetic | Passed stationary-robot ordering and bounded simultaneous slow-motion error audit | Scripted separated actors; no crowded tracking or calibrated human mass |
-| Combined live navigation | One three-object arrival passed; repetition and upright-actor completion still pending | Low moving ball fails navigation and now triggers a validated continuity stop |
+| Combined live navigation | Final-budget three-object and upright-actor arrivals passed; historical three-object arrival also retained | Prior-assisted selected fixtures; low moving ball has an accepted loss-stop regression, not arrival |
+
+These gates support proceeding to the selected restaurant scene build. Each new
+asset still needs stationary assessment before motion, followed by matched
+navigation comparisons. The accepted scope uses retained visual-property and
+missing-factor priors; fresh moving-view plume estimation, calibrated human mass,
+physical sharpness/temperature, general occlusion handling and real-time control
+remain unvalidated. The older moving-view perception gate on PR #117 remains
+distinct from this prior-assisted readiness result.
 
 ## Separated multi-object evidence
 
@@ -451,6 +459,81 @@ they are not matched-input timing benchmarks or endpoint acceptance.
 
 Regression after exposing both budgets: **1,721 unit tests passed**; Ruff and
 diff checks passed. No environment, model, weight or dataset changes were made.
+
+### Accepted upright-actor endpoint
+
+`capsule-live-v4`, with the explicit 1,000/20 budgets, **passed actual waypoint
+completion and stopping** at about 58.1 simulation seconds (120 s configured
+bound). It recorded 547 fresh fields/434 translating updates, .21264 m minimum
+fixture clearance, .124553 minimum analytical CBF margin and .002068 m stop drift.
+Final chassis state was (2.40426, -.01287, .00321), inside the .1 m waypoint
+tolerance. Wall duration was 1,268 s at .05 pacing. The scene file remained
+unchanged and the continuity guard stayed clear. The observed pass was above
+the actor after an initial downward approach; configured passing side remains
+soft guidance.
+
+Its live velocity audit passed 22 simultaneous steady observations (19 slow,
+three fast), with .02484/.02806 m/s median relative/world errors. The actor was
+stopped after 10 s; this is not a continuously crossing-human pass-by. An offline
+record audit found the same uniquely matched, positively owned actor track (ID 0)
+in **all 547 fields**, with contact and kinetic adapter inputs throughout.
+Mass/visible contact persisted as labeled unchanged-property priors with original
+source epochs; current motion stayed inferred from current sensor tracking.
+Potential and thermal used configured .25 priors throughout. No full four-factor
+sensor-only assessment is claimed, and the mass is not calibrated human mass.
+
+All 30,127 object assessments had four finite numeric scores and fixed lambda
+1.25. Accepted source-to-commit ages were .13333--.33333 s. The 118,164 configured
+factor-prior uses include the many unassessed room tracks; 2,307 retained-property
+uses are separate. `stream-audit.json` records this consistency check and uses
+authored actor centers only for offline evaluation, never factor/control input.
+`navigation-validation.png` and `kinetic-validation.png` retain prior/gap labels.
+This bounded result does not prove convergence or isolate a causal budget effect;
+the earlier failed trials remain unchanged.
+
+### Accepted final-budget three-object replay
+
+`separated-live-v4` **passed** all seven stationary fixture-evidence checks and
+actual waypoint completion/stopping. It reached the waypoint in about 38.9
+simulation seconds (100 s bound), with 379 fresh fields/362 translating updates,
+.17224 m minimum fixture clearance, .141871 minimum analytical CBF margin and
+.002270 m stop drift. Final state was (3.70359, .00909, -.02560); wall duration
+was 855 s at .05 pacing. The scene file remained unchanged. The selected ground,
+raised/support and positive-plume fixtures retain measured/inferred evidence and
+explicit support, interaction, property-persistence and missing-factor priors.
+
+The stream audit checked all 24,489 object assessments: four finite numeric
+factor scores, bounded phi (.52335--.77541), fixed lambda 1.25, strictly increasing
+source frames/times and .13333--.35000 s source-to-commit ages. Configured factor
+priors were used 95,474 times, with 2,905 retained-property uses and 449 complete
+prior-mode perception assessments. These repeated per-track counts include
+unassessed room geometry and are not counts of distinct fully perceived objects.
+
+This is another successful execution of the separated layout, after runtime
+changes. The earlier v3 result used different solver/direction/replan settings;
+the pair is not an identical-configuration statistical repeat or evidence of a
+causal CRA clearance advantage. Fixed lambda and conservative geometry checks
+remain. No oracle factor profile was supplied to either accepted controller.
+
+Both final-budget runs used the following explicit shared options (fresh output
+directory and the already audited local Isaac/Python/model environment):
+
+```text
+--persistent-object-risk-map --motion --stationary-frames 18
+--simulation-rate .05 --planner-result-max-age .5 --save-sensor-snapshots
+--visual-reassessment-interval 5 --live-visual-tracks 1
+--vectorized-fields --stream-live-records --immediate-replan
+--qp-iteration-limit 1000 --nonlinear-rescue-iterations 20
+```
+
+The capsule additionally used `--actor-shape upright_capsule --moving-actor
+--maximum-seconds 120`. The three-object run used `--fixture-layout three
+--fixture-spacing separated --plume-control persistent --plume-view-fov 120
+--static-occupancy-memory-prior --maximum-seconds 100`. The optional goal-distance
+watchdog was disabled in both. Static occupancy memory was enabled only for the
+static three-object scene; the moving actor retained short occupancy expiry and
+the nearby-track loss guard. The shared live-demo defaults remain legacy budgets,
+so these validated budgets must be selected explicitly.
 
 Mass calibration, physical sharpness/hardness, temperature, moving-view plume
 re-estimation, crowded identity crossings, hidden heat/support changes and causal

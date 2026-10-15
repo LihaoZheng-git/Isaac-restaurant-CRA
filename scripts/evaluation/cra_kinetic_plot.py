@@ -97,7 +97,7 @@ def main():
             axis.axvline(boundary, color="grey", alpha=0.3)
     fig.suptitle(
         (
-            "Moving robot and sphere: relative kinetic evidence"
+            "Moving robot and actor: relative kinetic evidence"
             if args.live
             else "Stationary robot, moving sphere: continuous kinetic evidence"
         )

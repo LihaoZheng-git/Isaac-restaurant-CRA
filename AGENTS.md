@@ -353,3 +353,12 @@
   never the objective or exact acceptance. Preserve the original 90 s failures
   if a later separately bounded retry succeeds. Timing fixtures with differing
   trajectories are not matched-input benchmarks.
+- The bounded readiness gate now has accepted final-budget upright-actor and
+  three-object waypoint arrivals, plus stationary factor and kinetic gates.
+  The actor retained one positively owned track across 547 fields; mass/contact
+  stayed labeled property priors, motion remained current, and potential/thermal
+  used configured priors. This permits selected restaurant scene construction,
+  with stationary validation of each new asset before matched navigation tests.
+  It is separate from PR #117's unmet fresh moving-view perception gate and
+  establishes neither real time nor calibrated human mass/sharpness/temperature.
+  See docs/restaurant_readiness_gate.md for exact budgets, scope and failed trials.
