@@ -129,3 +129,34 @@ def bounded_fixture_checks(report):
                 in accepted_statuses
             )
     return checks
+
+
+def kinetic_actor_fixture_checks(report):
+    """Separate kinetic-component gate; unsupported potential stays a prior.
+
+    This does not weaken or replace the four-factor sphere/support/plume gate.
+    The taller fixture is not a calibrated human mass or contact model.
+    """
+    row = report["fixtures"].get("ground", {})
+    latest = row.get("latest")
+    if latest is None:
+        return {"kinetic_actor_observed": False}
+    diagnostic = latest["diagnostics"]
+    factors = diagnostic["factor_scores"]
+    mass = latest["attributes"]["mass"]["mass_kg"]
+    speed = latest["attributes"]["motion"]["relative_speed_mps"]
+    return {
+        "fresh_mass_and_owned_instance": row["accepted_visual_updates"] >= 3
+        and diagnostic["accepted_instance"]
+        and diagnostic["policy_return_count"] > 0
+        and mass["value"] is not None
+        and mass["status"] in {"measured", "inferred"},
+        "visual_contact_proxy": factors["contact"]["mode"] == "evidence_supported"
+        and factors["contact"]["basis"]
+        in {"visual_silhouette_geometry_proxy", "visual_exposed_edge_proxy"},
+        "confirmed_sensor_kinetic": speed["value"] is not None
+        and speed["status"] in {"measured", "inferred"}
+        and factors["kinetic"]["mode"] == "evidence_supported",
+        "unsupported_potential_explicit_prior": factors["potential"]["mode"]
+        == "configured_prior",
+    }

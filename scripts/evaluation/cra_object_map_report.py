@@ -11,6 +11,7 @@ sys.path.insert(0, str(ROOT))
 from robot.evaluation.object_map_validation import (
     summarize_fixture_assessments,
     bounded_fixture_checks,
+    kinetic_actor_fixture_checks,
 )
 
 
@@ -18,6 +19,8 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--source", type=Path, required=True)
     parser.add_argument("--require-fixture-evidence", action="store_true")
+    parser.add_argument("--kinetic-actor", action="store_true",
+                        help="separate upright-capsule kinetic-component gate; unsupported potential stays prior")
     args = parser.parse_args()
     records = json.loads((args.source / "stationary-fields.json").read_text())
     monitor = json.loads((args.source / "fixture-monitor.json").read_text())
@@ -29,7 +32,10 @@ def main():
     report = summarize_fixture_assessments(
         records, monitor["fixtures"], maximum_distance_m=0.25
     )
-    checks = bounded_fixture_checks(report)
+    if args.kinetic_actor and (len(monitor["fixtures"]) != 1 or monitor["fixtures"][0].get("actor_shape") != "upright_capsule"):
+        parser.error("kinetic actor report requires the explicit upright-capsule fixture")
+    checks = kinetic_actor_fixture_checks(report) if args.kinetic_actor else bounded_fixture_checks(report)
+    report["gate_scope"] = "kinetic_component_with_explicit_potential_prior" if args.kinetic_actor else "sphere_support_plume_evidence"
     report["bounded_fixture_checks"] = checks
     report["passed"] = bool(checks) and all(checks.values())
     (args.source / "object-validation.json").write_text(

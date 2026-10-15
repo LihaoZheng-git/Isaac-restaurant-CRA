@@ -7,6 +7,12 @@ their diagnostics and receive explicitly configured numeric factor priors.
 These experiments retain fixed lambda 1.25 and obstacle-unaware waypoint nominal.
 Restaurant assets are not saved or enriched by these session-only fixtures.
 
+| Gate | Current result | Acceptance boundary |
+| --- | --- | --- |
+| Per-object factors and phi | Passed, three stationary fixtures | Selected sensor inputs plus explicit support/interaction and missing-factor priors |
+| Moving-object kinetic | Passed stationary-robot ordering and bounded simultaneous slow-motion error audit | Scripted separated actors; no crowded tracking or calibrated human mass |
+| Combined live navigation | One three-object arrival passed; repetition and upright-actor completion still pending | Low moving ball fails navigation and now triggers a validated continuity stop |
+
 ## Separated multi-object evidence
 
 `cra_live_object_isaac_demo.py --fixture-layout three
@@ -84,7 +90,7 @@ per-factor provenance, association failures and the offline sweeps. Reproduce
 with 18 stationary frames and `--save-sensor-snapshots`, then run the report's
 `--require-fixture-evidence`. No wheel motion occurred in this gate.
 
-## Remaining gates
+## Moving-object and combined navigation gates
 
 The moving-object test must keep velocity current, distinguish sensor estimates
 from independently authored motion truth, invalidate moved support priors, and
@@ -213,6 +219,132 @@ retains every original source epoch and factor/provenance record, and changes
 neither scores nor control verification. This avoids repeated full-history
 serialization hitches; simulation pacing and any remaining latency are still
 reported, with no real-time claim.
+
+`separated-live-v2` **failed** its progress watchdog at local x=3.0025 m before
+the (3.8, 0) waypoint: 568 fresh fields, 434 translating updates, .13594 m
+minimum independent clearance, .17397 minimum analytical CBF margin, .000713 m
+stop drift, 2,404 wall seconds at the .075 simulation-rate limit. Its 36,838
+object assessments included 37 current visual acceptances and 675 perception-
+ready assessments; the rest are not promoted to complete visual estimates.
+The .1 s LiDAR acquisition interval remained explicit; late results were rejected
+and the robot stopped. This is not successful navigation or proof that numeric
+factor completeness establishes fresh live perception.
+
+The next retry (`separated-live-v3`) explicitly uses .05 pacing, the already
+implemented fair one-track visual budget (legacy two), and streamed diagnostics.
+All geometric tracks still receive current geometry/motion/numeric policies;
+postponed visual attempts remain unknown or labeled property priors. Freshness,
+factor priors/scales, nominal, lambda, exact MPC/DTCBF and analytical CBF checks
+are unchanged. These simultaneous throughput settings are not an isolated causal
+performance comparison; only the resulting bounded acceptance is evaluated.
+
+`separated-live-v3` **passed** actual arrival and stopping: final local state
+(3.70319, .00881, -.02200), .14417 m minimum independent fixture clearance,
+.12222 minimum analytical CBF margin, .002215 m stop drift. It committed 724
+fresh fields, 513 while translating, in 1,633 wall seconds after stationarity
+under .05 pacing. The root scene and authored file stayed unchanged. Its route
+plot is `outputs/cra_readiness/separated-live-v3/navigation-validation.png`.
+
+The complete JSONL audit passed: all 724 records were present, source IDs/times
+strictly increased, accepted field source ages were .1333--.3500 s, lambda stayed
+1.25, and all 45,768 object assessments had four finite numeric factor scores.
+Only 5,051 factor scores were evidence-supported versus 178,021 configured-prior
+uses (mostly room/background occupancy and lost observations). There were 44
+current visual acceptances and 873 perception-ready object assessments. These
+counts must not be described as complete fresh four-factor vision on every
+obstacle. If identity disappears, old positive occupancy remains but its policy
+can revert to priors; current code does not establish general cross-ID semantic
+map persistence. Original property ages/expiry remain enforced.
+
+The demo's separate opt-in `--immediate-replan` removes an avoidable periodic
+wait after a rejected plan or an invalidated plan when no job is pending. The
+single-worker bound, current state/field revalidation, candidate source-age cap,
+.2 s verified interval and per-step analytical checks remain unchanged. Legacy
+periodic scheduling is the default. This scheduling variant is validated
+separately; it is not retroactively part of the successful v3 run.
+
+### Dynamic coverage failures and continuity stop
+
+`moving-live-v1` (.075 pacing) passed the independent simultaneous-motion
+velocity audit: 22 steady usable updates, median relative-speed error .02879 m/s,
+world-velocity error .04188 m/s. Navigation **failed** on repeated late inference:
+105 fields/90 translating updates, .20152 m minimum fixture clearance, .0000273 m
+stop drift. Current code must not reinterpret that velocity result as arrival.
+
+`moving-live-v2` (.05 pacing) also passed velocity (21 usable updates, .03917/
+.06163 m/s median relative/world errors) but **failed** the independent clearance
+guard at .01744 m, below the .02 m threshold; 169 fields/123 translating updates,
+.003994 m stop drift. The low ball disappeared from current LiDAR clusters in
+the near sensor blind region; short positive-occupancy retention then expired.
+Nearest current clusters in the final five fields were over 2.5 m from it.
+Numeric factor priors cannot protect a hazard whose geometry has left the field.
+
+The moving-actor demo now enables `NearbyTrackLossGuard` before publishing a
+candidate field. It enrolls real positive geometric tracks within 2 m, remembers
+original last-seen source epochs, and stops for unresolved loss over .15 s within
+1.2 m of the current robot. A unique one-to-one new-ID match within .25 m may
+resolve positive geometry continuity; ambiguous merges/crossings cannot. No
+mass/contact/plume/support evidence is transferred or refreshed by this guard.
+The engineering radii bound this separated-actor diagnostic, not hidden geometry
+or arbitrary actor motion. There is no inferred free space, cached measured
+kinetic input, dynamic belief-map guarantee or claim of paper equivalence.
+
+Its offline real-track replay stopped earlier; `moving-loss-guard-v3` then
+**passed the expected-stop regression** in Isaac: reason `nearby_track_lost`,
+.33322 m minimum fixture clearance, .000916 m stop drift, 84 fields/70 translating.
+The candidate exposing the loss was saved as unpublished. The source-only guard
+fired without authored target position; the authored monitor independently
+measured clearance. Velocity also passed (19 usable updates, .04534/.06757 m/s
+median errors). **Navigation remains failed**: this is safe stopping under loss,
+not a successful low-moving-object pass-by.
+
+### Separate upright kinetic proxy
+
+The explicit `--actor-shape upright_capsule` fixture is 1.4 m tall with .18 m
+horizontal radius, authored only for rendering and independent monitoring.
+It is a different, LiDAR-visible person-height geometry proxy, not an articulated
+human, calibrated human mass model or retroactive pass for the low ball. The
+sphere ground-continuity prior is disabled. No authored height enters estimation
+or supplies fall height. RGB/LiDAR association uses the same separated 3D/depth
+adaptations and unchanged mask-quality/boundary/foreign-return gates.
+
+`capsule-stationary-v1` passed its separate **kinetic-component** zero-wheel gate
+over 18 accepted visual updates: fresh category-free mass, owned silhouette
+proxy and confirmed current motion inputs. The generic four-factor perception
+readiness remained false. Potential stayed unavailable and used .25; thermal
+also used .25 because above-source independent background coverage failed.
+The rough network output was .512 kg with .001--5.055 kg engineering bounds,
+not human truth. Its elongated silhouette produced a high .81086 contact-proxy
+score on an apparently smooth object; this is a proxy-calibration limitation,
+not physical sharpness/hardness. Computed stationary phi was .91347--.92023.
+Motion recomputes the policy from actual inputs and priors without manual score
+overrides; current motion/route context and uncertainty can change phi.
+
+The report requires explicit `--kinetic-actor` to use this narrower component
+gate; the original sphere/support/plume evidence gate is unchanged. The proxy's
+moving trial keeps every numeric factor, fixed lambda, exact checks and the
+new continuity stop. It does not establish moving-human or four-factor sensor
+acceptance. Inference deadline comparison now uses the same 1 ns floating-point
+tolerance as future-epoch checks; an actually late result by 1 microsecond still
+fails. Original clocks and the .35 s policy limit are unchanged.
+
+`capsule-live-v1` kept positive LiDAR tracking and passed the live velocity audit
+(20 usable simultaneous **slow-phase** updates, .02428/.02610 m/s median relative/
+world errors). There were no qualifying simultaneous fast-phase samples; fast
+actor ordering remains the separate stationary-robot diagnostic. The navigation
+trial **failed** the optional 20 s goal-distance progress watchdog while taking
+a wide detour: final (.79934, -1.03948, -.57300), .23273 m clearance, .232997
+analytical CBF margin, .000312 m stop drift, 308 fields/246 translating, 738 wall
+seconds. Continuous positive tracking alone is not arrival. Euclidean goal
+distance need not decrease during obstacle avoidance, so this watchdog rejection
+does not establish global nonconvergence. The separate `capsule-live-v2` retry
+disables only that optional watchdog under the same 90 s overall bound; actual
+arrival, source freshness, continuity, exact MPC/DTCBF, analytical CBF, clearance
+and stopping checks remain mandatory.
+
+Final software regression before this retry: **1,712 unit tests passed**; Ruff
+and diff checks passed. No new models, packages, datasets or global environment
+settings were installed or upgraded.
 
 Mass calibration, physical sharpness/hardness, temperature, moving-view plume
 re-estimation, crowded identity crossings, hidden heat/support changes and causal

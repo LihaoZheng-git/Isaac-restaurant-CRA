@@ -27,6 +27,7 @@ def test_live_relative_motion_requires_velocity_difference_and_owned_evidence():
         "sensor_timestamp": 3.0,
         "actor_monitor": {
             "elapsed_seconds": 3.0,
+            "phase": "slow",
             "velocity_world_xy": [0, 0.12],
             "center_world_xy": [1, 0],
         },
@@ -56,7 +57,15 @@ def test_live_relative_motion_requires_velocity_difference_and_owned_evidence():
         return records
 
     assert summarize_live_relative_motion(fresh_records(record))["passed"]
+    assert summarize_live_relative_motion(fresh_records(record))[
+        "usable_updates_by_phase"
+    ] == {"slow": 5}
     assert summarize_live_relative_motion([record] * 5)["usable_updates"] == 1
+    for key in ("sensor_frame_id", "sensor_timestamp"):
+        reused = fresh_records(record)
+        for item in reused:
+            item[key] = record[key]
+        assert summarize_live_relative_motion(reused)["usable_updates"] == 1
     wrong = deepcopy(record)
     wrong["objects"][0]["attributes"]["motion"]["relative_speed_mps"]["value"] = 0.04
     assert not summarize_live_relative_motion(fresh_records(wrong))["passed"]

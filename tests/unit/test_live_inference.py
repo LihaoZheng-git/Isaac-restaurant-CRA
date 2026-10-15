@@ -68,6 +68,24 @@ def test_failed_inference_is_not_an_empty_safe_result():
         runner.close()
 
 
+@pytest.mark.parametrize(
+    "now, accepted", [(1.35, True), (1.3500000001, True), (1.350001, False)]
+)
+def test_deadline_roundoff_does_not_retime_or_relax_meaningfully_late_results(
+    now, accepted
+):
+    runner = LiveInferenceRunner(lambda packet: packet)
+    try:
+        runner.submit(frame_id=1, sensor_timestamp_seconds=1.0, packet="field")
+        completed(runner)
+        result = runner.poll(current_sensor_time_seconds=now)
+        assert result.accepted is accepted
+        assert result.sensor_timestamp_seconds == 1.0
+        assert (result.value == "field") is accepted
+    finally:
+        runner.close()
+
+
 @pytest.mark.parametrize("frame,time", [(0, -0.1), (True, 0.0), (1, float("nan"))])
 def test_invalid_epochs_are_rejected(frame, time):
     runner = LiveInferenceRunner(lambda packet: packet)

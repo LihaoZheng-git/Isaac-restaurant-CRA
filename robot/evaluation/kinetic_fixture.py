@@ -93,12 +93,14 @@ def summarize_kinetic_records(records):
 def summarize_live_relative_motion(records):
     """Audit simultaneous motion without supplying truth to the estimator."""
     errors = []
-    seen_sources = set()
+    phases = {}
+    seen_frames, seen_times = set(), set()
     for record in records:
-        source = (record["sensor_frame_id"], record["sensor_timestamp"])
-        if source in seen_sources:
+        frame, source_time = record["sensor_frame_id"], record["sensor_timestamp"]
+        if frame in seen_frames or source_time in seen_times:
             continue
-        seen_sources.add(source)
+        seen_frames.add(frame)
+        seen_times.add(source_time)
         truth = record["actor_monitor"]
         elapsed = truth["elapsed_seconds"]
         if any(abs(elapsed - boundary) < 0.4 for boundary in (0, 2, 5, 7, 10)):
@@ -134,6 +136,7 @@ def summarize_live_relative_motion(records):
         ):
             continue
         expected = float(np.linalg.norm(actor_velocity - robot_velocity))
+        phases[truth["phase"]] = phases.get(truth["phase"], 0) + 1
         errors.append(
             (
                 abs(speed["value"] - expected),
@@ -158,6 +161,7 @@ def summarize_live_relative_motion(records):
         "passed": all(checks.values()),
         "checks": checks,
         "usable_updates": len(errors),
+        "usable_updates_by_phase": phases,
         "median_relative_speed_error_mps": relative_error,
         "median_world_velocity_error_mps": velocity_error,
         "scope": "actual simultaneous robot/actor sensor updates; actor truth is independent evaluation metadata; ego velocity uses declared oracle-pose references; .4 s transitions excluded; not crowded or real-time acceptance",

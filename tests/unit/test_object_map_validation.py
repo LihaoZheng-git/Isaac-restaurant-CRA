@@ -6,6 +6,7 @@ from robot.evaluation.object_map_validation import (
     prior_sensitivity,
     summarize_fixture_assessments,
     bounded_fixture_checks,
+    kinetic_actor_fixture_checks,
 )
 from robot.risk.cra import PhysicalRiskProfile, RiskFactorEstimate
 from robot.safety.cra_safe_sage_policy import CRASafeSAGEPolicy
@@ -92,3 +93,36 @@ def test_fixture_evidence_gate_does_not_promote_oracle_or_fallback_mass(
     }
     report = {"fixtures": {"ground": {"latest": row, "accepted_visual_updates": 3}}}
     assert bounded_fixture_checks(report)["ground_mass_contact"] is accepted
+
+
+@pytest.mark.parametrize(
+    "status, accepted",
+    [("inferred", True), ("prior", False), ("oracle", False), ("unavailable", False)],
+)
+def test_kinetic_actor_gate_requires_fresh_visual_inputs_and_labels_missing_potential(
+    status, accepted
+):
+    row = object_row()
+    row["attributes"] = {
+        "mass": {"mass_kg": {"value": 1, "status": status}},
+        "motion": {"relative_speed_mps": {"value": 0.01, "status": "inferred"}},
+    }
+    row["diagnostics"].update(
+        policy_return_count=10,
+        factor_scores={
+            "contact": {
+                "mode": "evidence_supported",
+                "basis": "visual_silhouette_geometry_proxy",
+            },
+            "kinetic": {"mode": "evidence_supported"},
+            "potential": {"mode": "configured_prior"},
+        },
+    )
+    report = {"fixtures": {"ground": {"latest": row, "accepted_visual_updates": 3}}}
+    assert all(kinetic_actor_fixture_checks(report).values()) is accepted
+    row["diagnostics"]["factor_scores"]["potential"]["mode"] = "evidence_supported"
+    assert not kinetic_actor_fixture_checks(report)[
+        "unsupported_potential_explicit_prior"
+    ]
+    row["diagnostics"]["factor_scores"]["contact"]["basis"] = "physical"
+    assert not kinetic_actor_fixture_checks(report)["visual_contact_proxy"]

@@ -33,7 +33,9 @@ def main():
         if "anchor_world_xy_yaw" in monitor:
             x, y, yaw = monitor["anchor_world_xy_yaw"]
             c, s = np.cos(yaw), np.sin(yaw)
-            xy = (np.array(fixture["center_world_xy"]) - [x, y]) @ np.array([[c, -s], [s, c]])
+            xy = (np.array(fixture["center_world_xy"]) - [x, y]) @ np.array(
+                [[c, -s], [s, c]]
+            )
         axis.add_patch(
             Circle(xy, fixture["radius_m"], color=colors[fixture["name"]], alpha=0.8)
         )
@@ -44,9 +46,47 @@ def main():
         axis.annotate(
             fixture["name"], np.array(xy) + [0, 0.25], ha="center", fontsize=9
         )
-    goal_xy = report.get("goal_local_xy", [3.5 if report["fixture_layout"] == "three" else 2.5, 0])
+    goal_xy = report.get(
+        "goal_local_xy", [3.5 if report["fixture_layout"] == "three" else 2.5, 0]
+    )
     goal = goal_xy[0]
-    axis.scatter([0, goal], [0, goal_xy[1]], color=["black", "#237742"], marker="x", s=60)
+    axis.plot(
+        [0, goal],
+        [0, goal_xy[1]],
+        ":",
+        color="grey",
+        linewidth=1,
+        label="Obstacle-unaware waypoint segment",
+    )
+    if report.get("moving_actor"):
+        if (args.source / "live-fields.jsonl").exists():
+            with (args.source / "live-fields.jsonl").open(encoding="utf-8") as stream:
+                actor_xy = np.array(
+                    [
+                        json.loads(line)["actor_monitor"]["center_world_xy"]
+                        for line in stream
+                    ]
+                )
+        else:
+            actor_xy = np.array(
+                [
+                    r["actor_monitor"]["center_world_xy"]
+                    for r in json.loads((args.source / "live-fields.json").read_text())
+                ]
+            )
+        if "anchor_world_xy_yaw" not in monitor:
+            raise ValueError("moving-actor plot requires the recorded anchor")
+        actor_xy = (actor_xy - [x, y]) @ np.array([[c, -s], [s, c]])
+        axis.plot(
+            actor_xy[:, 0],
+            actor_xy[:, 1],
+            "--",
+            color="#de8041",
+            label="Authored actor path (evaluation only)",
+        )
+    axis.scatter(
+        [0, goal], [0, goal_xy[1]], color=["black", "#237742"], marker="x", s=60
+    )
     axis.annotate("start", (0, 0), xytext=(-10, 12), textcoords="offset points")
     axis.annotate("waypoint", (goal, 0), xytext=(0, 12), textcoords="offset points")
     axis.set_aspect("equal")
@@ -59,7 +99,7 @@ def main():
         fontsize=11,
     )
     fig.supxlabel(
-        "Fixture geometry is oracle evaluation metadata; retained properties and unavailable factors use labeled priors.",
+        "Fixture geometry is oracle evaluation metadata; retained properties and missing factors use labeled priors.\nRoom occupancy participates in control but is omitted from this plot.",
         fontsize=8,
     )
     fig.savefig(args.source / "navigation-validation.png", dpi=150)

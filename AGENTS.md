@@ -298,3 +298,29 @@
   cannot launder an unresolved native source. Preserve all confidence, source
   epoch, clean-reference, background, coverage and ambiguity gates; no claim of
   temperature or moving-view plume acceptance follows from this stationary view.
+- Large live diagnostic histories may use explicit append-only JSONL logging;
+  in that mode live-fields.json is only the latest-five checkpoint. Preserve
+  complete records and source times in the stream. The existing fair visual
+  attempt budget may be explicitly set to one for paced development, while all
+  tracks still receive current motion/geometry and numeric prior-aware policies.
+  Never report deferred vision or late rejected results as fresh perception.
+- The low moving-sphere trial passed relative-velocity error checks but failed
+  navigation after its geometry left the LiDAR near blind region and short
+  occupancy retention expired. Numeric factor priors do not repair missing
+  obstacle geometry. The moving-actor demo now stops on unresolved nearby
+  positive-track loss before publishing that field. Its .15 s/1.2 m watch,
+  2 m enrollment and unique .25 m new-ID association are explicit bounded
+  engineering assumptions, not a dynamic belief map or general occlusion
+  guarantee. The .333 m-clearance expected-stop regression is not arrival.
+- The upright capsule is a separate LiDAR-visible kinetic proxy. Its authored
+  height is rendering/monitoring metadata only; the sphere ground prior is
+  disabled. Its stationary kinetic-component gate permits explicit unknown
+  potential/thermal priors and must not be described as complete four-factor
+  perception, human mass calibration or physical contact/temperature estimation.
+  Preserve the high smooth-capsule silhouette score as a proxy limitation;
+  never lower it to improve navigation. See docs/restaurant_readiness_gate.md.
+- Euclidean waypoint distance can increase during a valid wide avoidance
+  detour. An optional progress-watchdog rejection is a failed trial, not proof
+  of global nonconvergence. Bounded retries may disable that optional watchdog
+  while retaining the overall time limit, actual-arrival requirement and every
+  freshness, continuity, exact MPC/DTCBF, analytical CBF and stopping gate.
