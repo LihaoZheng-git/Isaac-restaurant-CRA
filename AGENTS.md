@@ -362,3 +362,18 @@
   It is separate from PR #117's unmet fresh moving-view perception gate and
   establishes neither real time nor calibrated human mass/sharpness/temperature.
   See docs/restaurant_readiness_gate.md for exact budgets, scope and failed trials.
+- The first restaurant service build uses audited CC0 Kenney meshes in a
+  separate additions layer; preserve original restaurant/robot files. Authored
+  placement, asset names and bounds are rendering/evaluation metadata, never
+  mass, fall-height, heat, contact or desired-phi inputs. No humans/payload or
+  emitted plume are included yet. Its opt-in 640x400 acquisition matches the
+  camera's native aspect; legacy acquisition/projection and SAM gates remain.
+- The new FoodBowl stationary component gate and 2.2 m restaurant waypoint
+  trial passed with labeled potential/thermal priors and fixed lambda. Only one
+  fresh visual instance was accepted during motion; keep identity fragmentation
+  and prior reversion explicit. The independent authored raster is abort/
+  evaluation information only. This wide-aisle result is neither full fresh
+  four-factor perception, the proposed 30.88 m route, human/payload validation,
+  real time nor causal CRA superiority. Do not extend source clocks to cover
+  the long route. See docs/restaurant_service_build.md. PR #117's main-merge
+  hold remains separate and unchanged.
