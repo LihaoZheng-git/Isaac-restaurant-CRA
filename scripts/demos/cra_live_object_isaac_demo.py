@@ -22,6 +22,10 @@ sys.path.insert(0, str(ROOT))
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument("--output", type=Path, required=True)
 parser.add_argument("--motion", action="store_true")
+parser.add_argument("--restaurant-scene", type=Path,
+                    help="separate dressed restaurant scene; bounded 2.2 m real-bowl component route")
+parser.add_argument("--restaurant-layout-survey", type=Path,
+                    help="fingerprinted authored layout raster, independent clearance monitor only")
 parser.add_argument(
     "--persistent-object-risk-map",
     action="store_true",
@@ -85,6 +89,15 @@ parser.add_argument(
     help="optimizer candidate age cap; every executed horizon still needs fresh exact validation",
 )
 args = parser.parse_args()
+if args.restaurant_scene and (
+    not args.persistent_object_risk_map or not args.static_occupancy_memory_prior
+    or args.fixture_layout != "single" or args.actor_shape != "sphere"
+    or args.plume_control != "none" or args.moving_actor or args.kinetic_diagnostic
+    or args.evidence_gap_diagnostic or args.restaurant_layout_survey is None
+):
+    parser.error("restaurant component requires static persistent mapping, single/default selectors, no emitted plume/actors, and an independent authored layout survey")
+if args.restaurant_layout_survey and not args.restaurant_scene:
+    parser.error("restaurant layout survey requires the explicit restaurant scene")
 if not 30 <= args.plume_view_fov < 170:
     parser.error("plume view FOV must lie within [30, 170) degrees")
 if args.progress_timeout_seconds != 0 and not 10 <= args.progress_timeout_seconds <= 30:
@@ -162,6 +175,9 @@ from robot.evaluation.factor_specific_cra import diagnose_factor_specific_cra
 from robot.evaluation.kinetic_fixture import actor_offset_velocity, summarize_kinetic_records, summarize_live_relative_motion
 from robot.evaluation.nearby_track_loss_guard import NearbyTrackLossGuard
 from robot.evaluation.object_map_validation import summarize_fixture_assessments, bounded_fixture_checks, kinetic_actor_fixture_checks
+from robot.evaluation.restaurant_service_validation import (
+    authored_raster_clearance, load_authored_layout_monitor, restaurant_asset_checks,
+)
 from robot.evaluation.simple_object_test import disk_footprint_clearance
 from robot.navigation.waypoint_controller import (
     RobotPose2D,
@@ -196,6 +212,10 @@ from robot.safety.safe_sage_unicycle_mpc import SafeSAGEUnicycleMPC
 from robot.scene.camera_calibration import read_fisheye_polynomial_calibration
 from robot.scene.loader import load_robot_scene
 from robot.scene.transforms import compute_relative_prim_transform
+from robot.scene.controlled_semantic_obstacle import read_world_bounds
+from robot.scene.restaurant_service_build import (
+    SERVICE_ROOT, SHORT_GOAL_LOCAL_XY, SHORT_START_WORLD_XYZ, SHORT_START_YAW, service_props,
+)
 from robot.sensor.camera import NovaCarterCamera
 from robot.sensor.lidar import NovaCarterLidar
 from robot.sensor.lidar_geometry import filter_valid_points, transform_points
@@ -206,6 +226,11 @@ RADIUS = 0.18
 ACTOR_HEIGHT = 1.4 if args.actor_shape == "upright_capsule" else 2 * RADIUS
 ACTOR_CENTER_Z = ACTOR_HEIGHT / 2
 GOAL = (3.8 if args.fixture_spacing == "separated" else 3.5 if args.fixture_layout == "three" else 2.5, 0.0)
+SCENE_PATH = args.restaurant_scene.resolve() if args.restaurant_scene else Path(stationary.ROBOT_SCENE_PATH)
+if args.restaurant_scene:
+    stationary.ROBOT_START_POSITION_WORLD = SHORT_START_WORLD_XYZ
+    stationary.ROBOT_START_YAW_RADIANS = SHORT_START_YAW
+    GOAL = SHORT_GOAL_LOCAL_XY
 GROUND_SCOPE = "bounded separated ground sphere; observed flat plane with assumed unseen local support/landing continuity"
 PLUME_SCOPE = "bounded rendered matte sphere and opaque bright puffs; validated initial clean reference; registered object-associated visible-plume proxy only"
 if args.actor_shape == "upright_capsule":
@@ -301,7 +326,7 @@ def main():
     device = os.environ.get("YOLO_DEVICE", "0")
     segmenter = SamInstanceSegmenter(
         SamInstanceConfig(Path(weights["sam"]["path"]), device=device,
-                          foreground_depth_gap_m=0.5 if args.fixture_layout == "three" else None)
+                          foreground_depth_gap_m=0.5 if args.fixture_layout == "three" or args.restaurant_scene else None)
     )
     mass = VisualMassRuntimeEstimator(
         VisualMassRuntimeConfig(
@@ -321,10 +346,10 @@ def main():
     contact.initialize()
     print("Local models ready; loading the unchanged scene...", flush=True)
     original_hash = hashlib.sha256(
-        Path(stationary.ROBOT_SCENE_PATH).read_bytes()
+        SCENE_PATH.read_bytes()
     ).hexdigest()
     loaded = load_robot_scene(
-        scene_path=stationary.ROBOT_SCENE_PATH,
+        scene_path=SCENE_PATH,
         simulation_app=app,
         robot_prim_path=stationary.ROBOT_PRIM_PATH,
         expected_meters_per_unit=1.0,
@@ -335,6 +360,8 @@ def main():
         {"name": "ground", "offset_xy": (1.3, 0.3 if args.fixture_layout == "three" else 0.0), "drop_m": 0.0,
          "color": (0.15, 0.45, 0.95), "plume": args.fixture_layout == "single" and args.actor_shape == "sphere"},
     ]
+    if args.restaurant_scene:
+        fixture_specs = []  # Real dressed meshes remain in their saved additions layer.
     if args.fixture_layout == "three":
         fixture_specs.extend([
             {"name": "raised", "offset_xy": (2.6, 1.5), "drop_m": 0.30,
@@ -398,6 +425,22 @@ def main():
                 puff.CreateDisplayColorAttr([Gf.Vec3f(0.8)])
                 puff.MakeInvisible()
                 puffs.append(puff)
+    restaurant_props = []
+    layout_monitor = None
+    if args.restaurant_scene:
+        for spec in service_props():
+            path = f"{SERVICE_ROOT}/{spec.name}"
+            bounds = read_world_bounds(stage, path)
+            restaurant_props.append({"name":spec.name,"prim_path":path,
+                "bounds_minimum":bounds.minimum,"bounds_maximum":bounds.maximum})
+            if spec.name == "FoodBowl":
+                fixtures.append({"name":spec.name,"center_world_xy":bounds.center[:2],
+                    "center_world_xyz":bounds.center,"monitor_radius_m":math.hypot(*bounds.size[:2])/2,
+                    "actor_shape":"audited_CC0_bowl_mesh","plume":False,"drop_m":None})
+        layout_monitor = load_authored_layout_monitor(args.restaurant_layout_survey, restaurant_props)
+        save_json("restaurant-placement-monitor.json", {"props":restaurant_props,
+            "basis":"authored actual-mesh bounds for independent evaluation/abort only; no factor inputs",
+            "humans_added":False,"payload_added":False})
     save_json("fixture-monitor.json", {"fixtures": fixtures, "scope": "authored geometry for rendering and independent validation only; never estimator inputs"})
     root_unchanged_by_fixture = stage.GetRootLayer().ExportToString() == root_before
     controller = NovaCarterController(robot_prim_path=stationary.ROBOT_PRIM_PATH)
@@ -419,11 +462,16 @@ def main():
     calibration = read_fisheye_polynomial_calibration(
         stage,
         camera_prim_path=NovaCarterCamera().camera_prim_path,
-        output_resolution=(480, 640),
+        output_resolution=(400, 640) if args.restaurant_scene else (480, 640),
     )
+    if args.restaurant_scene and (
+        calibration.output_width * calibration.nominal_height
+        != calibration.output_height * calibration.nominal_width
+    ):
+        raise RuntimeError("restaurant RGB acquisition must match the authored calibration aspect ratio")
     save_json("camera-calibration.json", asdict(calibration))
     camera, lidar = (
-        NovaCarterCamera(),
+        NovaCarterCamera(resolution=(400,640) if args.restaurant_scene else (480,640)),
         NovaCarterLidar(lidar_prim_path=stationary.PANDAR_XT32_LIDAR_PRIM_PATH),
     )
     camera.initialize()
@@ -476,18 +524,20 @@ def main():
         field_config=field_config,
         anchor_position_world_xy=(anchor.x, anchor.y),
         anchor_yaw=anchor.yaw,
-        ground_prior_scope=GROUND_SCOPE if args.actor_shape == "sphere" else None,
-        negative_plume_scope=PLUME_SCOPE,
+        ground_prior_scope=GROUND_SCOPE if args.actor_shape == "sphere" and not args.restaurant_scene else None,
+        negative_plume_scope=None if args.restaurant_scene else PLUME_SCOPE,
         rectify_plume=True,
         occupancy_retention_seconds=0.15 if args.kinetic_diagnostic or args.moving_actor else 0.5,
-        static_occupancy_memory_prior_scope="bounded static sphere/environment; positive occupancy remains until experiment end; no dynamic-actor or free-space-clearing claim"
+        static_occupancy_memory_prior_scope=("bounded static dressed restaurant; positive observed occupancy retained; no humans, moving assets or free-space clearing"
+            if args.restaurant_scene else "bounded static sphere/environment; positive occupancy remains until experiment end; no dynamic-actor or free-space-clearing claim")
         if args.static_occupancy_memory_prior
         else None,
         evidence_retention_config=None
         if args.disable_evidence_retention or args.persistent_object_risk_map
         else TemporalObjectEvidenceConfig(),
         persistent_property_config=PersistentObjectEvidenceConfig(
-            "bounded separated fixture: mass/visible contact/plume assumed unchanged; support invalidates on displacement; current motion/route; moving actor uses short occupancy expiry",
+            "bounded static restaurant: acquired intrinsic properties persist with original expiry; potential/thermal unsupported inputs retain configured priors"
+            if args.restaurant_scene else "bounded separated fixture: mass/visible contact/plume assumed unchanged; support invalidates on displacement; current motion/route; moving actor uses short occupancy expiry",
             translate_instance_bounds_prior=args.kinetic_diagnostic or args.moving_actor,
             minimum_visual_reassessment_interval_seconds=args.visual_reassessment_interval,
             maximum_visual_tracks_per_update=args.live_visual_tracks,
@@ -511,9 +561,9 @@ def main():
         ) if args.fixture_layout == "three" else None,
         fall_interaction_prior_scope="bounded multi-object support test; worst-case harmful fall interaction, not measured fall probability"
         if args.fixture_layout == "three" else None,
-        cluster_in_3d=args.fixture_layout == "three" or args.actor_shape == "upright_capsule",
-        camera_visibility_radius_pixels=4 if args.fixture_layout == "three" or args.actor_shape == "upright_capsule" else 0,
-        mask_foreground_depth_gap_m=0.5 if args.fixture_layout == "three" or args.actor_shape == "upright_capsule" else None,
+        cluster_in_3d=args.fixture_layout == "three" or args.actor_shape == "upright_capsule" or bool(args.restaurant_scene),
+        camera_visibility_radius_pixels=4 if args.fixture_layout == "three" or args.actor_shape == "upright_capsule" or args.restaurant_scene else 0,
+        mask_foreground_depth_gap_m=0.5 if args.fixture_layout == "three" or args.actor_shape == "upright_capsule" or args.restaurant_scene else None,
         plume_view_fov_degrees=args.plume_view_fov,
     )
     history = EgoPoseHistory()
@@ -669,9 +719,9 @@ def main():
                 else np.stack([pose])
             )
             @ body_from_gravity,
-            "bounded static sphere/environment; legacy conservative scan-interval union, not per-return deskew"
+            "bounded static scene; legacy conservative scan-interval union, not per-return deskew"
             if args.disable_lidar_deskew
-            else "bounded static sphere/environment; per-return ego-motion deskew to retained scan-header pose; no independently moving object correction",
+            else "bounded static scene; per-return ego-motion deskew to retained scan-header pose; no independently moving object correction",
         )
         last_sensor_id = info.sensor_frame_id
         captures.append(
@@ -788,7 +838,7 @@ def main():
         "plume_control": args.plume_control,
         "fixture_layout": args.fixture_layout,
         "fixture_spacing": args.fixture_spacing,
-        "actor_shape": args.actor_shape,
+        "actor_shape": "real_restaurant_meshes" if args.restaurant_scene else args.actor_shape,
         "plume_view_fov_degrees": args.plume_view_fov,
         "rejections": sorted(set(rejections)),
         "weights": weights,
@@ -809,7 +859,13 @@ def main():
         if args.persistent_object_risk_map
         else "live fresh stationary RGB/LiDAR; category-free rough mass, explicit local ground/fall interaction priors, visual contact/plume proxies",
     }
-    if args.fixture_layout == "three" or args.moving_actor or args.actor_shape == "upright_capsule":
+    if args.restaurant_scene:
+        object_summary = summarize_fixture_assessments(records, fixtures, maximum_distance_m=0.20)
+        gate["restaurant_component_checks"] = restaurant_asset_checks(object_summary)
+        gate["fixture_gate_scope"] = "real FoodBowl mesh: owned RGB/LiDAR mass, contact proxy and motion; potential/thermal may use labeled priors; not full four-factor sensor acceptance"
+        gate["passed"] = stationary_ready = bool(stationary_ready and all(gate["restaurant_component_checks"].values()))
+        save_json("stationary-object-validation.json", object_summary)
+    elif args.fixture_layout == "three" or args.moving_actor or args.actor_shape == "upright_capsule":
         object_summary = summarize_fixture_assessments(records, fixtures, maximum_distance_m=0.25)
         gate["bounded_fixture_checks"] = (kinetic_actor_fixture_checks(object_summary)
             if args.actor_shape == "upright_capsule" else bounded_fixture_checks(object_summary))
@@ -821,7 +877,8 @@ def main():
     print(json.dumps(gate), flush=True)
     if not stationary_ready:
         controller.stop()
-        raise RuntimeError("stationary four-factor gate failed; wheels are blocked")
+        raise RuntimeError("stationary restaurant component gate failed; wheels are blocked"
+                           if args.restaurant_scene else "stationary four-factor gate failed; wheels are blocked")
     if args.persistent_object_risk_map:
         perception.persistent_properties.freeze_properties()
     if args.kinetic_diagnostic:
@@ -1099,6 +1156,10 @@ def main():
                 clearances.append(disk_footprint_clearance(current, center_xy=local,
                     radius_m=fixture["monitor_radius_m"], footprint=footprint))
             clearance = min(clearances)
+            if layout_monitor is not None:
+                pose = stationary.read_robot_pose(stage)
+                clearance = min(clearance, authored_raster_clearance(
+                    layout_monitor[0], (pose.x,pose.y,pose.yaw), footprint, layout_monitor[1]))
             minimum_clearance = min(minimum_clearance, clearance)
             if clearance <= 0.02:
                 reason = "clearance_guard"
@@ -1379,7 +1440,7 @@ def main():
         completed = completed and simultaneous_kinetic_updates >= 5 and live_kinetic_validation["passed"]
     scene_unchanged = (
         original_hash
-        == hashlib.sha256(Path(stationary.ROBOT_SCENE_PATH).read_bytes()).hexdigest()
+        == hashlib.sha256(SCENE_PATH.read_bytes()).hexdigest()
     )
     save_json("live-fields.json", live_fields[-5:] if args.stream_live_records else live_fields)
     save_json("captures.json", captures)
@@ -1484,14 +1545,19 @@ def main():
         "wall_seconds": time.perf_counter() - start_wall,
         "fixed_lambda": 1.25,
         "plume_control": args.plume_control,
+        "restaurant_scene": str(SCENE_PATH) if args.restaurant_scene else None,
+        "restaurant_component_gate": gate.get("restaurant_component_checks"),
+        "independent_authored_layout_monitor": bool(layout_monitor is not None),
+        "rgb_output_resolution_height_width": [calibration.output_height, calibration.output_width],
         "fixture_layout": args.fixture_layout,
         "moving_actor": args.moving_actor,
-        "actor_shape": args.actor_shape,
+        "actor_shape": "real_restaurant_meshes" if args.restaurant_scene else args.actor_shape,
         "plume_view_fov_degrees": args.plume_view_fov,
         "goal_local_xy": GOAL,
         "fixture_spacing": args.fixture_spacing,
         "progress_timeout_seconds": args.progress_timeout_seconds,
-        "clearance_monitor_scope": "independent authored sphere disks and circumscribed support disk; never control/factor input",
+        "clearance_monitor_scope": "independent authored original mesh raster plus conservative new-prop XY boxes and selected bowl disk; base footprint only; no payload; never control/factor input"
+        if args.restaurant_scene else "independent authored sphere disks and circumscribed support disk; never control/factor input",
         "scheduled_observation_pauses": 0,
         "lidar_ego_motion_correction": "legacy_scan_start_transform"
         if args.disable_lidar_deskew
@@ -1511,8 +1577,10 @@ def main():
             else "short-lived retained mass/contact are persistence priors with original timestamps; no cached motion/plume/fall-height evidence",
             "renderer internal history warning remains unresolved despite the requested setting",
             "SAM-associated category-free rough heaviness, visual contact silhouette and registered visible-plume proxies",
-            "rendered puffs are opaque visual fixtures, not steam physics/temperature; all live LiDAR occupancy retained",
-            "bounded separated sources with validated initial clean-reference registration and retained cues; no moving-view plume/human/crowd generalization",
+            "new restaurant assets have no emitted plume or validated negative-plume scope; thermal remains a labeled factor prior; all live LiDAR occupancy retained"
+            if args.restaurant_scene else "rendered puffs are opaque visual fixtures, not steam physics/temperature; all live LiDAR occupancy retained",
+            "real-mesh restaurant component gate; potential/support and thermal may remain configured priors; not full four-factor sensor acceptance, moving-view plume or human validation"
+            if args.restaurant_scene else "bounded separated sources with validated initial clean-reference registration and retained cues; no moving-view plume/human/crowd generalization",
         ],
     }
     save_json("report.json", report)
