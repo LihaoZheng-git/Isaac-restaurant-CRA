@@ -36,8 +36,14 @@ class SamInstanceConfig:
     ambiguity_quality_gap: float = 0.05
     confidence_cap: float = 0.75
     foreground_depth_gap_m: float | None = None
+    observed_context_box_retry: bool = False
+    context_box_padding_fraction: float = 1.0
 
     def __post_init__(self):
+        if not isinstance(self.observed_context_box_retry, bool):
+            raise TypeError("observed context-box opt-in must be boolean")
+        if not math.isfinite(self.context_box_padding_fraction) or not 0 <= self.context_box_padding_fraction <= 1:
+            raise ValueError("observed context-box padding must lie in [0, 1]")
         if self.foreground_depth_gap_m is not None and (
             not math.isfinite(self.foreground_depth_gap_m) or not 0.3 <= self.foreground_depth_gap_m <= 1.0
         ):
@@ -76,6 +82,7 @@ class SamInstanceResult:
     image_encoder_wall_seconds: float = 0.0
     source: str = SAM_INSTANCE_SOURCE
     candidate_diagnostics: tuple[dict, ...] = ()
+    observed_context_box_xyxy: tuple[int, int, int, int] | None = None
 
 
 class _UltralyticsBackend:
@@ -118,9 +125,11 @@ class _UltralyticsBackend:
         with torch.inference_mode():
             self.predictor.set_image(self.image_bgr)
 
-    def predict(self, prompt_xy):
+    def predict(self, prompt_xy, *, context_box_xyxy=None):
+        box_args = {} if context_box_xyxy is None else {"bboxes": [context_box_xyxy]}
         result = self.predictor(
-            self.image_bgr, points=[[prompt_xy]], labels=[[1]], multimask_output=True
+            self.image_bgr, points=[[prompt_xy]], labels=[[1]], multimask_output=True,
+            **box_args,
         )[0]
         if result.masks is None:
             return np.empty((0, *self.image_bgr.shape[:2]), bool), np.empty(0)
@@ -159,9 +168,14 @@ class SamInstanceSegmenter:
         *,
         track_id,
         prompt_source_index=None,
+        use_observed_context_box=False,
     ):
         if self.image_shape is None:
             raise RuntimeError("set_image is required for each camera frame")
+        if not isinstance(use_observed_context_box, bool) or (
+            use_observed_context_box and not self.config.observed_context_box_retry
+        ):
+            raise ValueError("observed context box requires explicit configuration opt-in")
         ids = np.asarray(point_track_ids)
         indices = projection.source_indices
         xy = projection.pixel_indices_xy
@@ -201,8 +215,22 @@ class SamInstanceSegmenter:
             if len(matches) != 1:
                 raise ValueError("explicit prompt must name an observed owned return")
             prompt = tuple(int(value) for value in xy[matches[0]])
+        context_box = None
+        if use_observed_context_box:
+            # A sparse scan may cover only the lower body. Symmetric context is
+            # an image proposal, not a claim about the object's physical extent.
+            # Only this track's actually projected returns determine the box.
+            low, high = points.min(axis=0), points.max(axis=0) + 1
+            padding = (high - low) * self.config.context_box_padding_fraction
+            context_box = tuple(int(v) for v in np.r_[
+                np.maximum(0, np.floor(low - padding)),
+                np.minimum([width, height], np.ceil(high + padding)),
+            ])
         start = time.perf_counter()
-        masks, qualities = self.backend.predict(prompt)
+        if context_box is None:
+            masks, qualities = self.backend.predict(prompt)
+        else:
+            masks, qualities = self.backend.predict(prompt, context_box_xyxy=context_box)
         elapsed = time.perf_counter() - start
         masks, qualities = np.asarray(masks), np.asarray(qualities)
         if masks.dtype != np.bool_ or masks.shape != (len(qualities), height, width):
@@ -267,6 +295,7 @@ class SamInstanceSegmenter:
             inference_wall_seconds=elapsed,
             image_encoder_wall_seconds=self.image_encoder_wall_seconds,
             candidate_diagnostics=tuple(candidate_diagnostics),
+            observed_context_box_xyxy=context_box,
         )
         if not candidates:
             return SamInstanceResult(

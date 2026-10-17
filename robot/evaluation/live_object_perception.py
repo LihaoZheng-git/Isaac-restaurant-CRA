@@ -746,6 +746,24 @@ class LiveObjectPerception:
                             ),
                         }
                     )
+            if (
+                proposal.detection is None
+                and proposal.rejection_reasons == (
+                    "no mask passes quality, boundary and LiDAR association gates",
+                )
+                and getattr(getattr(self.segmenter, "config", None), "observed_context_box_retry", False)
+            ):
+                proposal = self.segmenter.propose(
+                    tracking.point_track_ids, projection, track_id=target.track_id,
+                    use_observed_context_box=True,
+                )
+                prompt_basis = "observed_track_context_box_retry"
+                sam_candidates.append({
+                    "prompt_basis": prompt_basis,
+                    "prompt_xy": proposal.prompt_xy,
+                    "observed_context_box_xyxy": proposal.observed_context_box_xyxy,
+                    "candidates": proposal.candidate_diagnostics,
+                })
             reasons.extend(proposal.rejection_reasons)
             sam_quality = proposal.model_quality
             if proposal.detection is not None:

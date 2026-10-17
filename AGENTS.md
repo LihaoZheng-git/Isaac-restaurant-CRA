@@ -400,3 +400,19 @@
   or commands wheels. Its factor-specific phi also uses labeled unit-interaction
   and .25 other-factor priors. Keep the first five positive-window misses and
   no-temperature/no-moving-camera limits. See docs/restaurant_visible_plume.md.
+- The restaurant server is one audited CC0 Kenney idle-pose static mesh with
+  project apron geometry, in a separate scene layer. Authored height/role/pose
+  never supply factor inputs. Source/UV/collision and zero-wheel previews pass;
+  its stationary perception gate remains failed (profile-view final ambiguity,
+  frontal silhouette interior boundaries). No server wheel/crossing acceptance
+  follows. Its approximately 1.59 kg catalog-network output is not credible
+  calibrated human mass or validated human heaviness ordering. Keep unknown
+  contact/potential/thermal priors and the exact failed records. Static memory
+  cannot support a moving server. See docs/restaurant_server.md.
+- The explicit observed-LiDAR SAM context-box retry uses only the current
+  track's projected owned pixels and configurable symmetric image padding.
+  Keep unknown class, confidence cap, mask quality/coverage/foreign/boundary/
+  ambiguity gates, original source epochs and unmatched occupancy unchanged.
+  Do not retry an ambiguous result or treat box padding as physical geometry.
+  Restaurant robot setups require the independent authored footprint-clearance
+  guard; that oracle abort/evaluation information never enters CRA or control.

@@ -22,13 +22,22 @@ import omni.replicator.core as rep
 import omni.timeline
 import omni.usd
 from PIL import Image
-from pxr import Usd
+from pxr import Sdf, Usd
 from robot.scene.controlled_semantic_obstacle import read_world_bounds
 from robot.scene.restaurant_service_build import SERVICE_ROOT, service_props
+from robot.scene.restaurant_server import SERVER_PRIM_PATH
 
 
 def main():
-    sources = [ROOT / "scenes/generated/restaurant_base.usda", ROOT / "scenes/generated/restaurant_robot.usda", args.scene.resolve(), args.scene.resolve().with_name(args.scene.stem + "_additions.usda")]
+    sources = {ROOT/"scenes/generated/restaurant_base.usda", ROOT/"scenes/generated/restaurant_robot.usda"}
+    pending = [args.scene.resolve()]
+    while pending:
+        path = pending.pop()
+        if path in sources:
+            continue
+        sources.add(path)
+        layer = Sdf.Layer.FindOrOpen(str(path))
+        pending.extend(Path(Sdf.ComputeAssetPathRelativeToLayer(layer,p)).resolve() for p in layer.subLayerPaths)
     hashes = {str(p):hashlib.sha256(p.read_bytes()).hexdigest() for p in sources}
     if not omni.usd.get_context().open_stage(str(args.scene.resolve())):
         raise RuntimeError("scene did not open")
@@ -39,6 +48,9 @@ def main():
     stage = omni.usd.get_context().get_stage()
     root_before = stage.GetRootLayer().ExportToString()
     bounds_before = {p.name:read_world_bounds(stage, f"{SERVICE_ROOT}/{p.name}") for p in service_props()}
+    has_server = stage.GetPrimAtPath(SERVER_PRIM_PATH).IsValid()
+    if has_server:
+        bounds_before["Server"] = read_world_bounds(stage,SERVER_PRIM_PATH)
     views = (
         ("overview", (37, 1, 16), (26, 9, 0), 24),
         ("food-table", (29.8, 5.5, 1.75), (31.25, 7.4, .86), 38),
@@ -46,6 +58,9 @@ def main():
         ("second-table", (29.3, 10.4, 1.7), (31.2, 12.25, .9), 38),
         ("front-table", (14.4, 3.6, 1.8), (13.5, 2.55, .8), 38),
     )
+    if has_server:
+        views += (("server",(26.3,7.3,1.6),(29.8,8.9,.9),26),
+                  ("server-aisle",(25.5,5.8,2.2),(29.4,8.9,.8),24))
     with Usd.EditContext(stage, stage.GetSessionLayer()):
         for name,eye,target,focal in views:
             camera = rep.create.camera(position=eye, look_at=target, focal_length=focal, name=f"Service_{name.replace('-', '_')}")
@@ -72,10 +87,11 @@ def main():
                 product.destroy()
     report = {"source_files_unchanged":all(hashlib.sha256(p.read_bytes()).hexdigest()==hashes[str(p)] for p in sources),
               "source_sha256":hashes,"root_layer_unchanged":stage.GetRootLayer().ExportToString()==root_before,
-              "prop_bounds_unchanged":all(read_world_bounds(stage,f"{SERVICE_ROOT}/{p.name}")==bounds_before[p.name] for p in service_props()),
+              "prop_bounds_unchanged":all(read_world_bounds(stage,f"{SERVICE_ROOT}/{p.name}")==bounds_before[p.name] for p in service_props())
+                  and (not has_server or read_world_bounds(stage,SERVER_PRIM_PATH)==bounds_before["Server"]),
               "in_memory_renderer_edits_allowed":True,
               "timeline_seconds":timeline.get_current_time(),"wheel_commands":0,
-              "humans_added":False,"scope":"actual Isaac RGB preview; no CRA or navigation acceptance"}
+              "humans_added":int(has_server),"actor_motion_enabled":False,"scope":"actual Isaac RGB preview; no CRA or navigation acceptance"}
     report["passed"] = report["source_files_unchanged"] and report["prop_bounds_unchanged"] and report["timeline_seconds"] == 0
     (args.output/"preview-report.json").write_text(json.dumps(report,indent=2)+"\n",encoding="utf-8")
     if not report["root_layer_unchanged"]:

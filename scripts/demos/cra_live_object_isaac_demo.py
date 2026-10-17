@@ -26,9 +26,12 @@ parser.add_argument("--restaurant-scene", type=Path,
                     help="separate dressed restaurant scene; bounded 2.2 m real-bowl component route")
 parser.add_argument("--restaurant-layout-survey", type=Path,
                     help="fingerprinted authored layout raster, independent clearance monitor only")
-parser.add_argument("--restaurant-view", choices=("bowl", "pot", "counter", "front"), default="bowl",
+parser.add_argument("--restaurant-view", choices=("bowl", "pot", "counter", "front", "server"), default="bowl",
                     help="explicit stationary robot view; target names are evaluation metadata only")
 parser.add_argument("--restaurant-route", choices=("short", "service"), default="short")
+parser.add_argument("--restaurant-server", action="store_true", help="explicit static-server scene opt-in; stationary actor gate required before wheels")
+parser.add_argument("--sam-observed-context-box", action="store_true",
+                    help="explicit generic observed-LiDAR context-box retry; unchanged SAM quality/ownership gates")
 parser.add_argument("--restaurant-plume-diagnostic", action="store_true",
                     help="zero-wheel clean-reference / no-plume / visible-puff continuous cue evaluation")
 parser.add_argument(
@@ -112,6 +115,10 @@ if args.restaurant_plume_diagnostic and (
     or not 12 <= args.stationary_frames <= 20
 ):
     parser.error("restaurant plume diagnostic requires zero wheels, bowl view and 12..20 frames per phase")
+if args.restaurant_server and (not args.restaurant_scene or args.restaurant_plume_diagnostic):
+    parser.error("static restaurant server requires a separate restaurant/no-plume diagnostic")
+if args.restaurant_view == "server" and not args.restaurant_server:
+    parser.error("server observation requires the explicit static-server scene opt-in")
 if not 30 <= args.plume_view_fov < 170:
     parser.error("plume view FOV must lie within [30, 170) degrees")
 if args.progress_timeout_seconds != 0 and not 10 <= args.progress_timeout_seconds <= 30:
@@ -230,6 +237,7 @@ from robot.scene.controlled_semantic_obstacle import read_world_bounds
 from robot.scene.restaurant_service_build import (
     RESTAURANT_OBSERVATIONS, SERVICE_ROOT, restaurant_route_local_xy, service_props,
 )
+from robot.scene.restaurant_server import SERVER_OBSERVATION, SERVER_PRIM_PATH
 from robot.sensor.camera import NovaCarterCamera
 from robot.sensor.lidar import NovaCarterLidar
 from robot.sensor.lidar_geometry import filter_valid_points, transform_points
@@ -242,7 +250,8 @@ ACTOR_CENTER_Z = ACTOR_HEIGHT / 2
 GOAL = (3.8 if args.fixture_spacing == "separated" else 3.5 if args.fixture_layout == "three" else 2.5, 0.0)
 SCENE_PATH = args.restaurant_scene.resolve() if args.restaurant_scene else Path(stationary.ROBOT_SCENE_PATH)
 if args.restaurant_scene:
-    restaurant_target, restaurant_start, restaurant_yaw = RESTAURANT_OBSERVATIONS[args.restaurant_view]
+    restaurant_target, restaurant_start, restaurant_yaw = (SERVER_OBSERVATION
+        if args.restaurant_view == "server" else RESTAURANT_OBSERVATIONS[args.restaurant_view])
     stationary.ROBOT_START_POSITION_WORLD = restaurant_start
     stationary.ROBOT_START_YAW_RADIANS = restaurant_yaw
     GOAL = restaurant_route_local_xy(args.restaurant_route)[-1]
@@ -342,6 +351,7 @@ def main():
     device = os.environ.get("YOLO_DEVICE", "0")
     segmenter = SamInstanceSegmenter(
         SamInstanceConfig(Path(weights["sam"]["path"]), device=device,
+                          observed_context_box_retry=args.sam_observed_context_box,
                           foreground_depth_gap_m=0.5 if args.fixture_layout == "three" or args.restaurant_scene else None)
     )
     mass = VisualMassRuntimeEstimator(
@@ -377,6 +387,9 @@ def main():
          "color": (0.15, 0.45, 0.95), "plume": args.fixture_layout == "single" and args.actor_shape == "sphere"},
     ]
     if args.restaurant_scene:
+        has_server = stage.GetPrimAtPath(SERVER_PRIM_PATH).IsValid()
+        if has_server != args.restaurant_server:
+            raise RuntimeError("server presence must match explicit --restaurant-server opt-in")
         fixture_specs = []  # Real dressed meshes remain in their saved additions layer.
     if args.fixture_layout == "three":
         fixture_specs.extend([
@@ -464,10 +477,27 @@ def main():
                             puff.CreateDisplayColorAttr([Gf.Vec3f(.9)])
                             puff.MakeInvisible()
                             puffs.append(puff)
+        if has_server:
+            bounds = read_world_bounds(stage,SERVER_PRIM_PATH)
+            restaurant_props.append({"name":"Server","prim_path":SERVER_PRIM_PATH,
+                "bounds_minimum":bounds.minimum,"bounds_maximum":bounds.maximum})
+            fixtures.append({"name":"Server","center_world_xy":bounds.center[:2],
+                "monitor_radius_m":math.hypot(*bounds.size[:2])/2,"actor_shape":"static_CC0_staff_avatar",
+                "plume":False,"drop_m":None,"matching_scope":"independent planar match; full authored height is not observed geometry"})
         layout_monitor = load_authored_layout_monitor(args.restaurant_layout_survey, restaurant_props)
         save_json("restaurant-placement-monitor.json", {"props":restaurant_props,
             "basis":"authored actual-mesh bounds for independent evaluation/abort only; no factor inputs",
-            "humans_added":False,"payload_added":False})
+            "humans_added":int(has_server),"actor_motion_enabled":False,"payload_added":False})
+        setup_footprint = RectangularRobotFootprint(stationary.ROBOT_FRONT_EXTENT,
+            stationary.ROBOT_REAR_EXTENT,stationary.ROBOT_LEFT_EXTENT,
+            stationary.ROBOT_RIGHT_EXTENT,stationary.ROBOT_SAFETY_MARGIN)
+        setup_pose = (*stationary.ROBOT_START_POSITION_WORLD[:2],stationary.ROBOT_START_YAW_RADIANS)
+        setup_clearance = authored_raster_clearance(layout_monitor[0],setup_pose,setup_footprint,layout_monitor[1])
+        save_json("restaurant-setup-validation.json",{"passed":setup_clearance>.02,
+            "configured_pose_world_xy_yaw":setup_pose,"independent_clearance_m":setup_clearance,
+            "scope":"independent authored setup/abort guard; never perception, nominal or safety-filter input"})
+        if setup_clearance <= .02:
+            raise RuntimeError("restaurant robot setup overlaps/approaches authored occupancy; no perception or wheel trial accepted")
     save_json("fixture-monitor.json", {"fixtures": fixtures, "scope": "authored geometry for rendering and independent validation only; never estimator inputs"})
     root_unchanged_by_fixture = stage.GetRootLayer().ExportToString() == root_before
     controller = NovaCarterController(robot_prim_path=stationary.ROBOT_PRIM_PATH)
@@ -483,6 +513,11 @@ def main():
         controller.stop()
         app.update()
     anchor = stationary.read_robot_pose(stage)
+    if layout_monitor is not None:
+        settled_clearance = authored_raster_clearance(layout_monitor[0],(anchor.x,anchor.y,anchor.yaw),setup_footprint,layout_monitor[1])
+        if settled_clearance <= .02:
+            controller.stop()
+            raise RuntimeError("settled restaurant setup fails independent clearance guard")
     active_waypoint_local = ROUTE[0]
     save_json("fixture-monitor.json", {"fixtures": fixtures,
         "anchor_world_xy_yaw": [anchor.x, anchor.y, anchor.yaw],
@@ -557,7 +592,7 @@ def main():
             if args.restaurant_plume_diagnostic else None) if args.restaurant_scene else PLUME_SCOPE,
         rectify_plume=True,
         occupancy_retention_seconds=0.15 if args.kinetic_diagnostic or args.moving_actor else 0.5,
-        static_occupancy_memory_prior_scope=("bounded static dressed restaurant; positive observed occupancy retained; no humans, moving assets or free-space clearing"
+        static_occupancy_memory_prior_scope=("bounded static dressed restaurant and stationary staff avatar; positive observed occupancy retained; no moving people/assets or free-space clearing"
             if args.restaurant_scene else "bounded static sphere/environment; positive occupancy remains until experiment end; no dynamic-actor or free-space-clearing claim")
         if args.static_occupancy_memory_prior
         else None,
@@ -905,10 +940,17 @@ def main():
     }
     if args.restaurant_scene:
         object_summary = summarize_fixture_assessments(records, fixtures, maximum_distance_m=0.20)
+        if args.restaurant_server:
+            server_summary = summarize_fixture_assessments(records,[f for f in fixtures if f["name"]=="Server"],maximum_distance_m=.40)
+            object_summary["fixtures"]["Server"] = server_summary["fixtures"]["Server"]
+            object_summary["server_matching_scope"] = "independent planar .40 m partial-body match; unchanged mask/ownership gates; not calibrated whole-human geometry"
         gate["restaurant_component_checks"] = restaurant_asset_checks(object_summary, restaurant_target)
         gate["restaurant_observation"] = args.restaurant_view
         gate["fixture_gate_scope"] = f"real {restaurant_target} mesh: owned RGB/LiDAR mass, contact proxy and motion; potential/thermal may use labeled priors; not full four-factor sensor acceptance"
         gate["passed"] = stationary_ready = bool(stationary_ready and all(gate["restaurant_component_checks"].values()))
+        if args.restaurant_server:
+            gate["server_component_checks"] = restaurant_asset_checks(object_summary,"Server")
+            gate["passed"] = stationary_ready = bool(stationary_ready and all(gate["server_component_checks"].values()))
         save_json("stationary-object-validation.json", object_summary)
         if args.restaurant_plume_diagnostic:
             plume_validation = restaurant_plume_checks(records, fixtures)
@@ -1609,6 +1651,9 @@ def main():
         "fixed_lambda": 1.25,
         "plume_control": args.plume_control,
         "restaurant_scene": str(SCENE_PATH) if args.restaurant_scene else None,
+        "static_restaurant_server": args.restaurant_server,
+        "sam_observed_context_box_retry": args.sam_observed_context_box,
+        "server_component_gate": gate.get("server_component_checks"),
         "restaurant_component_gate": gate.get("restaurant_component_checks"),
         "independent_authored_layout_monitor": bool(layout_monitor is not None),
         "rgb_output_resolution_height_width": [calibration.output_height, calibration.output_width],

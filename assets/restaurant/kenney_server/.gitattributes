@@ -1,0 +1,5 @@
+# Preserve original licensed source bytes and intake hashes.
+source/** -text
+License.txt -text
+# Preserve the conversion fingerprint across platform checkout conventions.
+usd/server.usda -text

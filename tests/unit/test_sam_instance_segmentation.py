@@ -19,12 +19,14 @@ class Backend:
     def __init__(self, masks, scores):
         self.masks, self.scores = masks, scores
         self.prompts = []
+        self.boxes = []
 
     def set_image(self, image):
         self.image = image.copy()
 
-    def predict(self, point):
+    def predict(self, point, *, context_box_xyxy=None):
         self.prompts.append(point)
+        self.boxes.append(context_box_xyxy)
         return self.masks, self.scores
 
 
@@ -150,3 +152,54 @@ def test_rejected_mask_diagnostics_preserve_quality_and_association_metrics(tmp_
     # A useful diagnostic must not convert a rejected mask into evidence.
     assert result.model_quality is None
     assert result.mask_track_hits == 0
+
+
+def test_context_box_requires_opt_in_and_uses_only_owned_projected_pixels(tmp_path):
+    segmenter, backend, projection, ids = fixture(tmp_path)
+    with pytest.raises(ValueError, match="opt-in"):
+        segmenter.propose(ids, projection, track_id=7, use_observed_context_box=True)
+    segmenter.config = replace(segmenter.config, observed_context_box_retry=True)
+    ids[-8:] = 8
+    pixels = projection.pixel_indices_xy.copy()
+    pixels[-8:] = [90, 90]
+    projection = replace(projection, pixel_indices_xy=pixels)
+    result = segmenter.propose(ids, projection, track_id=7, use_observed_context_box=True)
+    assert result.detection is not None
+    assert result.observed_context_box_xyxy == (22, 23, 46, 44)
+    assert backend.boxes == [result.observed_context_box_xyxy]
+    assert result.detection.semantic_class == "unknown"
+    assert result.detection.confidence == .75
+    # Ordinary point proposals retain their original backend contract.
+    segmenter.propose(ids, projection, track_id=7)
+    assert backend.boxes[-1] is None
+
+
+@pytest.mark.parametrize("failure", ["quality", "foreign", "boundary", "ambiguous"])
+def test_context_box_cannot_bypass_mask_acceptance(tmp_path, failure):
+    segmenter, backend, projection, ids = fixture(tmp_path)
+    segmenter.config = replace(segmenter.config, observed_context_box_retry=True)
+    if failure == "quality":
+        backend.scores[:] = .84
+    elif failure == "foreign":
+        ids[:20] = 8
+    elif failure == "boundary":
+        backend.masks[0, 0:40, 20:70] = True
+    else:
+        backend.masks = np.concatenate([backend.masks, backend.masks.copy()])
+        backend.masks[1, :, 50:] = False
+        backend.scores = np.array([.98, .97])
+    result = segmenter.propose(ids, projection, track_id=7, use_observed_context_box=True)
+    assert result.detection is None and result.rejection_reasons
+    assert result.observed_context_box_xyxy is not None
+
+
+def test_observed_context_box_clamps_to_image_without_inventing_ownership(tmp_path):
+    segmenter, backend, projection, ids = fixture(tmp_path)
+    segmenter.config = replace(segmenter.config, observed_context_box_retry=True)
+    pixels = projection.pixel_indices_xy.copy()
+    pixels[:32] = [1, 1]
+    pixels[32:] = [98, 98]
+    projection = replace(projection, pixel_indices_xy=pixels)
+    result = segmenter.propose(ids, projection, track_id=7, use_observed_context_box=True)
+    assert backend.boxes == [(0, 0, 100, 100)]
+    assert result.detection is None  # The supplied mask contains neither return.
