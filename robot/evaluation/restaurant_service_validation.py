@@ -11,6 +11,51 @@ from PIL import Image, ImageDraw
 from robot.config import PROJECT_ROOT
 
 
+def restaurant_plume_checks(records, fixtures):
+    """Evaluate continuous cue ordering from fresh matched sensor assessments.
+
+    Authored fixture matching is evaluation only. Numeric priors and unknown
+    heat never establish a low/no-plume observation.
+    """
+    from robot.evaluation.object_map_validation import summarize_fixture_assessments
+    scores = {"no_plume": [], "visible_plume": []}
+    rejected = {name: 0 for name in scores}
+    previous_epoch = (-1, -1.)
+    for record in records:
+        phase = record.get("restaurant_plume_phase")
+        if phase not in scores:
+            continue
+        epoch = (record["sensor_frame_id"], record["sensor_timestamp"])
+        if epoch[0] <= previous_epoch[0] or epoch[1] <= previous_epoch[1]:
+            rejected[phase] += 1
+            continue
+        previous_epoch = epoch
+        summary = summarize_fixture_assessments([record], fixtures, maximum_distance_m=.20)
+        row = summary["fixtures"].get("FoodBowl", {}).get("latest")
+        if row is not None:
+            heat = row["attributes"]["thermal"]["heat_source_likelihood"]
+            diagnostic = row["diagnostics"]
+            age = row["attributes"]["timestamp_seconds"] - heat["timestamp_seconds"]
+            if (diagnostic["accepted_instance"] and diagnostic["policy_return_count"] > 0
+                and heat["value"] is not None and math.isfinite(heat["value"]) and 0 <= heat["value"] <= 1
+                and heat["status"] in {"measured", "inferred"}
+                and 0 <= age <= .15 + 1e-9
+                and diagnostic["factor_scores"]["thermal"]["mode"] == "evidence_supported"
+                and diagnostic["factor_scores"]["thermal"]["basis"] == "visual_object_plume_proxy"):
+                scores[phase].append(heat["value"])
+                continue
+        rejected[phase] += 1
+    medians = {key: float(np.median(values)) if values else None for key, values in scores.items()}
+    low, high = medians["no_plume"], medians["visible_plume"]
+    checks = {"fresh_low_cue": len(scores["no_plume"]) >= 3 and low <= .1,
+              "fresh_positive_cue": len(scores["visible_plume"]) >= 3 and high > .2,
+              "continuous_cue_ordering": low is not None and high is not None and high-low > .1}
+    return {"passed": all(checks.values()), "checks": checks,
+            "fresh_cue_scores": scores, "median_cue_scores": medians,
+            "rejected_or_unavailable_updates": rejected,
+            "scope": "stationary RGB visible-plume proxy on real bowl; no temperature, soup classification or moving-view acceptance"}
+
+
 def restaurant_asset_checks(summary, target_name="FoodBowl"):
     """Bounded real-mesh component gate; numeric priors are not fresh inputs."""
     row = summary["fixtures"].get(target_name, {})

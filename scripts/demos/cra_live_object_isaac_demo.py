@@ -29,6 +29,8 @@ parser.add_argument("--restaurant-layout-survey", type=Path,
 parser.add_argument("--restaurant-view", choices=("bowl", "pot", "counter", "front"), default="bowl",
                     help="explicit stationary robot view; target names are evaluation metadata only")
 parser.add_argument("--restaurant-route", choices=("short", "service"), default="short")
+parser.add_argument("--restaurant-plume-diagnostic", action="store_true",
+                    help="zero-wheel clean-reference / no-plume / visible-puff continuous cue evaluation")
 parser.add_argument(
     "--persistent-object-risk-map",
     action="store_true",
@@ -105,6 +107,11 @@ if args.restaurant_view != "bowl" and (not args.restaurant_scene or args.motion)
     parser.error("additional restaurant views are stationary-only component diagnostics")
 if args.restaurant_route != "short" and (not args.restaurant_scene or args.restaurant_view != "bowl"):
     parser.error("restaurant service route requires the validated bowl start view")
+if args.restaurant_plume_diagnostic and (
+    not args.restaurant_scene or args.restaurant_view != "bowl" or args.motion
+    or not 12 <= args.stationary_frames <= 20
+):
+    parser.error("restaurant plume diagnostic requires zero wheels, bowl view and 12..20 frames per phase")
 if not 30 <= args.plume_view_fov < 170:
     parser.error("plume view FOV must lie within [30, 170) degrees")
 if args.progress_timeout_seconds != 0 and not 10 <= args.progress_timeout_seconds <= 30:
@@ -183,7 +190,7 @@ from robot.evaluation.kinetic_fixture import actor_offset_velocity, summarize_ki
 from robot.evaluation.nearby_track_loss_guard import NearbyTrackLossGuard
 from robot.evaluation.object_map_validation import summarize_fixture_assessments, bounded_fixture_checks, kinetic_actor_fixture_checks
 from robot.evaluation.restaurant_service_validation import (
-    authored_raster_clearance, load_authored_layout_monitor, restaurant_asset_checks,
+    authored_raster_clearance, load_authored_layout_monitor, restaurant_asset_checks, restaurant_plume_checks,
 )
 from robot.evaluation.simple_object_test import disk_footprint_clearance
 from robot.navigation.waypoint_controller import (
@@ -446,6 +453,17 @@ def main():
                 fixtures.append({"name":spec.name,"center_world_xy":bounds.center[:2],
                     "center_world_xyz":bounds.center,"monitor_radius_m":math.hypot(*bounds.size[:2])/2,
                     "actor_shape":"audited_CC0_restaurant_mesh","plume":False,"drop_m":None})
+                if args.restaurant_plume_diagnostic:
+                    with Usd.EditContext(stage, stage.GetSessionLayer()):
+                        for index in range(4):
+                            puff = UsdGeom.Sphere.Define(stage, f"/World/CRARestaurantVisiblePlume/Puff{index}")
+                            puff.CreateRadiusAttr(.045 + .01*index)
+                            puff.AddTranslateOp().Set(Gf.Vec3d(bounds.center[0], bounds.center[1]+.012*(-1)**index,
+                                bounds.maximum[2]+.18+.09*index))
+                            puff.AddScaleOp().Set(Gf.Vec3f(1,1,1.4))
+                            puff.CreateDisplayColorAttr([Gf.Vec3f(.9)])
+                            puff.MakeInvisible()
+                            puffs.append(puff)
         layout_monitor = load_authored_layout_monitor(args.restaurant_layout_survey, restaurant_props)
         save_json("restaurant-placement-monitor.json", {"props":restaurant_props,
             "basis":"authored actual-mesh bounds for independent evaluation/abort only; no factor inputs",
@@ -535,7 +553,8 @@ def main():
         anchor_position_world_xy=(anchor.x, anchor.y),
         anchor_yaw=anchor.yaw,
         ground_prior_scope=GROUND_SCOPE if args.actor_shape == "sphere" and not args.restaurant_scene else None,
-        negative_plume_scope=None if args.restaurant_scene else PLUME_SCOPE,
+        negative_plume_scope=("bounded stationary native-aspect real-bowl view: explicitly clean reference phase; object-associated visible cue only, not absence of heat"
+            if args.restaurant_plume_diagnostic else None) if args.restaurant_scene else PLUME_SCOPE,
         rectify_plume=True,
         occupancy_retention_seconds=0.15 if args.kinetic_diagnostic or args.moving_actor else 0.5,
         static_occupancy_memory_prior_scope=("bounded static dressed restaurant; positive observed occupancy retained; no humans, moving assets or free-space clearing"
@@ -776,10 +795,12 @@ def main():
     for _ in range(60):
         step()
     latest = None
-    for _ in range(400):
+    observation_frames = args.stationary_frames * (3 if args.restaurant_plume_diagnostic else 1)
+    for _ in range(1000 if args.restaurant_plume_diagnostic else 400):
         now = step()
         try:
-            packet = capture(clean=not records)
+            packet = capture(clean=(len(records) < args.stationary_frames
+                if args.restaurant_plume_diagnostic else not records))
         except (RuntimeError, ValueError) as error:
             rejections.append(str(error))
             continue
@@ -802,6 +823,19 @@ def main():
             flush=True,
         )
         records.append(field_record(latest, now))
+        if args.restaurant_plume_diagnostic:
+            phase = (len(records)-1)//args.stationary_frames
+            records[-1]["restaurant_plume_phase"] = ("clean_reference_validation", "no_plume", "visible_plume")[phase]
+            records[-1]["stationary_rgb_pose"] = state().tolist()
+            records[-1]["camera_frame_id"] = packet.camera_frame_id
+            directory = args.output/"plume-rgb"
+            directory.mkdir(exist_ok=True)
+            cv2.imwrite(str(directory/f"{len(records):03d}.png"), packet.rgb[:,:,::-1])
+            if len(records) == 2*args.stationary_frames:
+                cv2.imwrite(str(args.output/"no-plume-current.png"), packet.rgb[:,:,::-1])
+                with Usd.EditContext(stage, stage.GetSessionLayer()):
+                    for puff in puffs:
+                        puff.MakeVisible()
         save_instance_snapshot(latest)
         if len(records) == 1:
             cv2.imwrite(
@@ -818,7 +852,7 @@ def main():
                 if args.plume_control == "persistent":
                     for puff in puffs:
                         puff.MakeVisible()
-        if len(records) >= args.stationary_frames:
+        if len(records) >= observation_frames:
             cv2.imwrite(
                 str(args.output / "stationary-current.png"), packet.rgb[:, :, ::-1]
             )
@@ -876,6 +910,11 @@ def main():
         gate["fixture_gate_scope"] = f"real {restaurant_target} mesh: owned RGB/LiDAR mass, contact proxy and motion; potential/thermal may use labeled priors; not full four-factor sensor acceptance"
         gate["passed"] = stationary_ready = bool(stationary_ready and all(gate["restaurant_component_checks"].values()))
         save_json("stationary-object-validation.json", object_summary)
+        if args.restaurant_plume_diagnostic:
+            plume_validation = restaurant_plume_checks(records, fixtures)
+            save_json("restaurant-plume-validation.json", plume_validation)
+            gate["restaurant_plume_checks"] = plume_validation["checks"]
+            gate["passed"] = stationary_ready = bool(stationary_ready and plume_validation["passed"])
     elif args.fixture_layout == "three" or args.moving_actor or args.actor_shape == "upright_capsule":
         object_summary = summarize_fixture_assessments(records, fixtures, maximum_distance_m=0.25)
         gate["bounded_fixture_checks"] = (kinetic_actor_fixture_checks(object_summary)

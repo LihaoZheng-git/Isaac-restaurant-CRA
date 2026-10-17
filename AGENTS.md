@@ -392,3 +392,11 @@
   is not the proposed 30.88 m route, rolling coverage or real-time acceptance.
   Only two fresh visual instances occurred during motion; keep missing-factor
   and retained-property priors explicit. See docs/restaurant_service_route.md.
+- The actual restaurant bowl's registered plume gate failed because fragmented
+  instance IDs lacked clean references. Preserve this failure and runtime
+  thermal priors. A separate explicit fixed-camera replay passed continuous RGB
+  cue ordering using a retained observed source box as a source-region/identity
+  PRIOR. Its source timestamp remains recorded; it never repairs live identity
+  or commands wheels. Its factor-specific phi also uses labeled unit-interaction
+  and .25 other-factor priors. Keep the first five positive-window misses and
+  no-temperature/no-moving-camera limits. See docs/restaurant_visible_plume.md.

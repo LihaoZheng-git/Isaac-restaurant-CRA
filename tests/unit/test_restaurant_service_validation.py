@@ -132,3 +132,60 @@ def test_restaurant_views_are_finite_robot_setup_only_and_reference_real_props()
         assert target in names
         assert len(position)==3 and all(math.isfinite(v) for v in (*position,yaw))
         assert position[2] == pytest.approx(.07382)
+
+
+def _plume_record(phase, value, status="inferred", accepted=True, epoch=1):
+    from test_object_map_validation import object_row
+    row=object_row()
+    row["attributes"]={"timestamp_seconds":epoch*.1,
+        "thermal":{"heat_source_likelihood":{"value":value,"status":status,"timestamp_seconds":epoch*.1}}}
+    row["diagnostics"].update(accepted_instance=accepted, policy_return_count=12,
+        factor_scores={"thermal":{"mode":"evidence_supported","basis":"visual_object_plume_proxy"}})
+    return {"objects":[row],"restaurant_plume_phase":phase,"sensor_frame_id":epoch,"sensor_timestamp":epoch*.1}
+
+
+def test_restaurant_plume_gate_requires_supported_continuous_ordering():
+    from robot.evaluation.restaurant_service_validation import restaurant_plume_checks
+    fixture=[{"name":"FoodBowl","center_world_xy":[1,0]}]
+    records=[_plume_record("no_plume",v,epoch=i) for i,v in enumerate([.01,.02,.03],1)]
+    records += [_plume_record("visible_plume",v,epoch=i) for i,v in enumerate([.45,.55,.65],4)]
+    result=restaurant_plume_checks(records,fixture)
+    assert result["passed"]
+    assert result["median_cue_scores"]==pytest.approx({"no_plume":.02,"visible_plume":.55})
+    for record in records:
+        record["objects"][0]["attributes"]["thermal"]["heat_source_likelihood"]["status"]="prior"
+    assert not restaurant_plume_checks(records,fixture)["passed"]
+
+
+@pytest.mark.parametrize("problem",["unavailable","unowned","ambiguous","wrong_basis","no_ordering","too_few","stale","duplicate_epoch","nonfinite"])
+def test_restaurant_plume_gate_never_promotes_missing_or_wrong_proxy_evidence(problem):
+    from robot.evaluation.restaurant_service_validation import restaurant_plume_checks
+    records=[_plume_record(phase,value,epoch=i) for i,(phase,value) in enumerate([("no_plume",.01)]*3+[("visible_plume",.6)]*3,1)]
+    for record in records:
+        row=record["objects"][0]
+        if problem=="unavailable":
+            row["attributes"]["thermal"]["heat_source_likelihood"]["value"]=None
+        elif problem=="unowned":
+            row["diagnostics"]["accepted_instance"]=False
+        elif problem=="ambiguous":
+            record["objects"].append(copy.deepcopy(row))
+        elif problem=="wrong_basis":
+            row["diagnostics"]["factor_scores"]["thermal"]["basis"]="physical"
+        elif problem=="no_ordering":
+            row["attributes"]["thermal"]["heat_source_likelihood"]["value"]=.01
+        elif problem=="stale":
+            row["attributes"]["thermal"]["heat_source_likelihood"]["timestamp_seconds"]=-1
+        elif problem=="duplicate_epoch":
+            record["sensor_frame_id"]=1
+        elif problem=="nonfinite":
+            row["attributes"]["thermal"]["heat_source_likelihood"]["value"]=math.nan
+    if problem=="too_few":
+        records.pop()
+    assert not restaurant_plume_checks(records,[{"name":"FoodBowl","center_world_xy":[1,0]}])["passed"]
+
+
+@pytest.mark.parametrize("changed",[(.02,0,0),(0,0,.02),(0,0,math.nan)])
+def test_fixed_source_replay_rejects_motion_or_invalid_camera_pose(changed):
+    from scripts.evaluation.restaurant_stationary_plume_replay import validate_stationary
+    with pytest.raises(ValueError):
+        validate_stationary([{"stationary_rgb_pose":[0,0,0]},{"stationary_rgb_pose":changed}])
