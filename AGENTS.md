@@ -385,3 +385,10 @@
   window, but the final owned-instance/mass/contact/motion gate remains mandatory.
   See docs/restaurant_prop_validation.md; no experimental plane-cut method was
   integrated or used to remove physical occupancy.
+- The opt-in restaurant `service` route reached three waypoints over 3.9466 m
+  with 204 live fields and verified stopping. Active-waypoint CRA context and
+  obsolete-goal planner-result rejection preserve original source clocks and
+  safety checks. It stays inside the unchanged fixed field/expiry limits; it
+  is not the proposed 30.88 m route, rolling coverage or real-time acceptance.
+  Only two fresh visual instances occurred during motion; keep missing-factor
+  and retained-property priors explicit. See docs/restaurant_service_route.md.

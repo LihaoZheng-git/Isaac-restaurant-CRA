@@ -29,15 +29,17 @@ def main():
     )
     colors = {"ground": "#399ddd", "raised": "#de8041", "plume": "#60b465"}
     for fixture in fixtures:
-        xy = np.array(fixture["offset_xy"])
         if "anchor_world_xy_yaw" in monitor:
             x, y, yaw = monitor["anchor_world_xy_yaw"]
             c, s = np.cos(yaw), np.sin(yaw)
             xy = (np.array(fixture["center_world_xy"]) - [x, y]) @ np.array(
                 [[c, -s], [s, c]]
             )
+        else:
+            xy = np.array(fixture["offset_xy"])
+        radius = fixture.get("monitor_radius_m", fixture.get("radius_m"))
         axis.add_patch(
-            Circle(xy, fixture["radius_m"], color=colors[fixture["name"]], alpha=0.8)
+            Circle(xy, radius, color=colors.get(fixture["name"], "#de8041"), alpha=0.8)
         )
         if fixture["drop_m"]:
             axis.add_patch(
@@ -51,14 +53,16 @@ def main():
         "goal_local_xy", [3.5 if report["fixture_layout"] == "three" else 2.5, 0]
     )
     goal = goal_xy[0]
+    route = np.array([(0, 0), *report.get("nominal_route_local_xy", [goal_xy])])
     axis.plot(
-        [0, goal],
-        [0, goal_xy[1]],
+        route[:, 0],
+        route[:, 1],
         ":",
         color="grey",
         linewidth=1,
-        label="Obstacle-unaware waypoint segment",
+        label="Obstacle-unaware waypoint route",
     )
+    axis.scatter(route[1:, 0], route[1:, 1], marker="x", color="#237742", s=40)
     if report.get("moving_actor"):
         if (args.source / "live-fields.jsonl").exists():
             with (args.source / "live-fields.jsonl").open(encoding="utf-8") as stream:
@@ -93,7 +97,7 @@ def main():
         [0, goal], [0, goal_xy[1]], color=["black", "#237742"], marker="x", s=60
     )
     axis.annotate("start", (0, 0), xytext=(-10, 12), textcoords="offset points")
-    axis.annotate("waypoint", (goal, 0), xytext=(0, 12), textcoords="offset points")
+    axis.annotate("final waypoint", (goal, goal_xy[1]), xytext=(-5, -18), ha="right", textcoords="offset points")
     axis.set_aspect("equal")
     axis.grid(alpha=0.2)
     axis.set_xlabel("Anchored local x (m)")
