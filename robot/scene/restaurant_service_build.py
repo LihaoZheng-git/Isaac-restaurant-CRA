@@ -39,6 +39,22 @@ RESTAURANT_OBSERVATIONS = {
 }
 
 
+def restaurant_route_local_xy(name="short"):
+    """Obstacle-unaware nominal waypoints in the original bowl start frame.
+
+    The 3.95 m service segment stays in the existing bounded field; it is not
+    the 30.88 m final route and does not extend evidence timestamps.
+    """
+    if name == "short":
+        return (SHORT_GOAL_LOCAL_XY,)
+    if name != "service":
+        raise ValueError("unknown restaurant route")
+    start = np.asarray(SHORT_START_WORLD_XYZ[:2])
+    c, s = math.cos(SHORT_START_YAW), math.sin(SHORT_START_YAW)
+    world = np.array([(28.8, 7.8), (29.0, 8.7), (28.8, 9.5)])
+    return tuple(map(tuple, (world - start) @ np.array([[c, -s], [s, c]])))
+
+
 @dataclass(frozen=True)
 class ServiceProp:
     name: str

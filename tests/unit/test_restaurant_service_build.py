@@ -104,3 +104,16 @@ def test_left_start_route_remains_a_proposal_and_exceeds_thirty_metres():
     route = np.array(LONG_ROUTE_WORLD_XY)
     assert route[0, 0] < 8
     assert np.linalg.norm(np.diff(route, axis=0), axis=1).sum() > 30
+
+
+def test_service_route_extends_short_route_inside_existing_field_with_room_for_base():
+    from robot.scene.restaurant_service_build import restaurant_route_local_xy
+    short=restaurant_route_local_xy()
+    service=np.array(restaurant_route_local_xy("service"))
+    assert len(short)==1 and len(service)==3
+    assert service[0]==pytest.approx(short[0])
+    assert np.linalg.norm(np.diff(np.vstack([[0,0],service]),axis=0),axis=1).sum()==pytest.approx(3.94657557085)
+    assert np.all((service[:,0]>.7)&(service[:,0]<4.2))
+    assert np.all(abs(service[:,1])<2.2)
+    with pytest.raises(ValueError):
+        restaurant_route_local_xy("unbounded")

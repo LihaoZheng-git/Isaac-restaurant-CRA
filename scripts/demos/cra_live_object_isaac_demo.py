@@ -28,6 +28,7 @@ parser.add_argument("--restaurant-layout-survey", type=Path,
                     help="fingerprinted authored layout raster, independent clearance monitor only")
 parser.add_argument("--restaurant-view", choices=("bowl", "pot", "counter", "front"), default="bowl",
                     help="explicit stationary robot view; target names are evaluation metadata only")
+parser.add_argument("--restaurant-route", choices=("short", "service"), default="short")
 parser.add_argument(
     "--persistent-object-risk-map",
     action="store_true",
@@ -102,6 +103,8 @@ if args.restaurant_layout_survey and not args.restaurant_scene:
     parser.error("restaurant layout survey requires the explicit restaurant scene")
 if args.restaurant_view != "bowl" and (not args.restaurant_scene or args.motion):
     parser.error("additional restaurant views are stationary-only component diagnostics")
+if args.restaurant_route != "short" and (not args.restaurant_scene or args.restaurant_view != "bowl"):
+    parser.error("restaurant service route requires the validated bowl start view")
 if not 30 <= args.plume_view_fov < 170:
     parser.error("plume view FOV must lie within [30, 170) degrees")
 if args.progress_timeout_seconds != 0 and not 10 <= args.progress_timeout_seconds <= 30:
@@ -218,7 +221,7 @@ from robot.scene.loader import load_robot_scene
 from robot.scene.transforms import compute_relative_prim_transform
 from robot.scene.controlled_semantic_obstacle import read_world_bounds
 from robot.scene.restaurant_service_build import (
-    RESTAURANT_OBSERVATIONS, SERVICE_ROOT, SHORT_GOAL_LOCAL_XY, service_props,
+    RESTAURANT_OBSERVATIONS, SERVICE_ROOT, restaurant_route_local_xy, service_props,
 )
 from robot.sensor.camera import NovaCarterCamera
 from robot.sensor.lidar import NovaCarterLidar
@@ -235,7 +238,8 @@ if args.restaurant_scene:
     restaurant_target, restaurant_start, restaurant_yaw = RESTAURANT_OBSERVATIONS[args.restaurant_view]
     stationary.ROBOT_START_POSITION_WORLD = restaurant_start
     stationary.ROBOT_START_YAW_RADIANS = restaurant_yaw
-    GOAL = SHORT_GOAL_LOCAL_XY
+    GOAL = restaurant_route_local_xy(args.restaurant_route)[-1]
+ROUTE = restaurant_route_local_xy(args.restaurant_route) if args.restaurant_scene else (GOAL,)
 GROUND_SCOPE = "bounded separated ground sphere; observed flat plane with assumed unseen local support/landing continuity"
 PLUME_SCOPE = "bounded rendered matte sphere and opaque bright puffs; validated initial clean reference; registered object-associated visible-plume proxy only"
 if args.actor_shape == "upright_capsule":
@@ -461,6 +465,7 @@ def main():
         controller.stop()
         app.update()
     anchor = stationary.read_robot_pose(stage)
+    active_waypoint_local = ROUTE[0]
     save_json("fixture-monitor.json", {"fixtures": fixtures,
         "anchor_world_xy_yaw": [anchor.x, anchor.y, anchor.yaw],
         "scope": "authored fixture and oracle anchor for independent evaluation/rendering only; never factor input"})
@@ -689,8 +694,8 @@ def main():
         )
         c, s = math.cos(anchor.yaw), math.sin(anchor.yaw)
         goal_world = (
-            anchor.x + c * GOAL[0] - s * GOAL[1],
-            anchor.y + s * GOAL[0] + c * GOAL[1],
+            anchor.x + c * active_waypoint_local[0] - s * active_waypoint_local[1],
+            anchor.y + s * active_waypoint_local[0] + c * active_waypoint_local[1],
         )
         packet = LiveObjectPacket(
             info.sensor_frame_id,
@@ -1053,7 +1058,7 @@ def main():
     )
     control = SafeSAGEControlRuntime(mpc=mpc, backup_filter=backup)
     waypoint = WaypointController(
-        [Waypoint(*GOAL)],
+        [Waypoint(*point) for point in ROUTE],
         config=WaypointControllerConfig(
             maximum_linear_velocity=0.2,
             maximum_angular_velocity=0.6,
@@ -1128,6 +1133,8 @@ def main():
         actor_start_time = start_sim
     start_wall = time.perf_counter()
     plan_id = 0
+    plan_waypoints = {}
+    waypoint_events = []
     next_plan_due = float(timeline.get_current_time())
     active_plan = None
     active_plan_lease = None
@@ -1174,6 +1181,12 @@ def main():
             if nominal.route_complete:
                 arrived, reason = True, "goal_reached"
                 break
+            active_waypoint_local = (nominal.target_waypoint.x, nominal.target_waypoint.y)
+            if nominal.waypoint_advanced:
+                waypoint_events.append({"time": now-start_sim,
+                    "next_waypoint_index": nominal.target_waypoint_index, "state": current.tolist()})
+                active_plan, active_plan_lease, warm = None, None, None
+                next_plan_due = now
             outcome = inference.poll(current_sensor_time_seconds=now)
             if outcome is not None:
                 if outcome.value is not None:
@@ -1263,6 +1276,7 @@ def main():
                 result = plan_outcome.value
                 accepted = (
                     result is not None
+                    and plan_waypoints.get(plan_outcome.frame_id) == waypoint.current_waypoint_index
                     and result.success
                     and not result.fallback_active
                     and result.minimum_dtcbf_margin >= -mpc.config.constraint_tolerance
@@ -1273,6 +1287,7 @@ def main():
                     {
                         "time": now - start_sim,
                         "accepted": bool(accepted),
+                        "request_waypoint_index": plan_waypoints.pop(plan_outcome.frame_id, None),
                         "wall_seconds": plan_outcome.wall_seconds,
                         "reason": plan_outcome.rejection_reason
                         if result is None
@@ -1328,6 +1343,7 @@ def main():
                     sensor_timestamp_seconds=now,
                     packet=(current.copy(), sequence, latest.field, warm),
                 )
+                plan_waypoints[plan_id] = waypoint.current_waypoint_index
                 plan_id += 1
             stop_reason = None
             command = np.zeros(2)
@@ -1394,6 +1410,7 @@ def main():
                     "omega": float(command[1]),
                     "field_age": status.field_age_seconds,
                     "generation": buffer.generation,
+                    "target_waypoint_index": waypoint.current_waypoint_index,
                     "stop_reason": stop_reason,
                     "optimizer_candidate_source_age": None
                     if active_plan_lease is None
@@ -1452,6 +1469,7 @@ def main():
     save_json("captures.json", captures)
     save_json("commands.json", commands)
     save_json("trajectory.json", trajectory)
+    save_json("waypoint-events.json", waypoint_events)
     report = {
         "acceptance_scope": "bounded_navigation_with_explicit_factor_and_property_priors; all-track numeric scores are separate from physical perception readiness"
         if args.persistent_object_risk_map
@@ -1560,6 +1578,9 @@ def main():
         "actor_shape": "real_restaurant_meshes" if args.restaurant_scene else args.actor_shape,
         "plume_view_fov_degrees": args.plume_view_fov,
         "goal_local_xy": GOAL,
+        "nominal_route_local_xy": ROUTE,
+        "restaurant_route": args.restaurant_route if args.restaurant_scene else None,
+        "waypoints_reached": len(ROUTE) if arrived else waypoint.current_waypoint_index,
         "fixture_spacing": args.fixture_spacing,
         "progress_timeout_seconds": args.progress_timeout_seconds,
         "clearance_monitor_scope": "independent authored original mesh raster plus conservative new-prop XY boxes and selected bowl disk; base footprint only; no payload; never control/factor input"
