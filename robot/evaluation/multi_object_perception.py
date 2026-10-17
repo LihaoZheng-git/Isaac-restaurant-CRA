@@ -241,6 +241,13 @@ def assess_all_objects(worker, packet):
             "camera_occluded_return_count": projected_count - len(projection.source_indices),
             "instance_centroid_world_xyz": world[selected].mean(axis=0).tolist()
             if assessment["accepted"] else None,
+            "instance_box_xyxy": tuple(getattr(assessment["frame"].detections[0].bounding_box, name)
+                for name in ("x_min", "y_min", "x_max", "y_max"))
+            if assessment["accepted"] else None,
+            "instance_mask_pixels": assessment["frame"].detections[0].mask_pixel_count
+            if assessment["accepted"] else None,
+            "instance_confidence": assessment["frame"].detections[0].confidence
+            if assessment["accepted"] else None,
             "camera_observable": track.track_id in visible,
             "visual_attempted": track.track_id in attempted,
             "accepted_instance": assessment["accepted"],
