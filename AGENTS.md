@@ -377,3 +377,11 @@
   real time nor causal CRA superiority. Do not extend source clocks to cover
   the long route. See docs/restaurant_service_build.md. PR #117's main-merge
   hold remains separate and unchanged.
+- Additional `--restaurant-view` pot/counter/front observations failed their
+  stationary component gates (occlusion, merged support and ambiguous ownership).
+  Preserve these failures and their factor priors; no asset-name/placement input
+  or score override repairs them. These extra views remain zero-wheel only.
+  A missing first-frame instance may be logged through the restaurant observation
+  window, but the final owned-instance/mass/contact/motion gate remains mandatory.
+  See docs/restaurant_prop_validation.md; no experimental plane-cut method was
+  integrated or used to remove physical occupancy.

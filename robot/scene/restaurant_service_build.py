@@ -29,6 +29,15 @@ SHORT_START_WORLD_XYZ = (28.8, 5.6, 0.07382)
 SHORT_START_YAW = math.pi / 3
 SHORT_GOAL_LOCAL_XY = (2.2 * math.sin(SHORT_START_YAW), 2.2 * math.cos(SHORT_START_YAW))
 
+# These poses select an experiment view, never an estimator target or score.
+# Only the original bowl view has a motion gate at this stage.
+RESTAURANT_OBSERVATIONS = {
+    "bowl": ("FoodBowl", SHORT_START_WORLD_XYZ, SHORT_START_YAW),
+    "pot": ("SecondPot", (30.4, 14.6, .07382), math.radians(-70)),
+    "counter": ("CounterKnifeBlock", (26.6, 4.6, .07382), math.radians(145)),
+    "front": ("FrontCup", (14.9, 4.1, .07382), math.radians(-135)),
+}
+
 
 @dataclass(frozen=True)
 class ServiceProp:
