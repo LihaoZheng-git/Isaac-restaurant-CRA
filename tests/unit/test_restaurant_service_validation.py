@@ -116,3 +116,19 @@ def test_reproducible_survey_clips_floor_and_ceiling_and_checks_fingerprints(tmp
     scene.write_text(scene.read_text()+"\n# changed source\n")
     with pytest.raises(ValueError,match="source changed"):
         monitor.load_authored_layout_monitor(metadata,[])
+
+
+def test_named_asset_gate_never_substitutes_a_different_observed_object():
+    summary=_summary()
+    assert not all(restaurant_asset_checks(summary,"SecondPot").values())
+    summary["fixtures"]["SecondPot"]=summary["fixtures"].pop("FoodBowl")
+    assert all(restaurant_asset_checks(summary,"SecondPot").values())
+
+
+def test_restaurant_views_are_finite_robot_setup_only_and_reference_real_props():
+    from robot.scene.restaurant_service_build import RESTAURANT_OBSERVATIONS, service_props
+    names={prop.name for prop in service_props()}
+    for target,position,yaw in RESTAURANT_OBSERVATIONS.values():
+        assert target in names
+        assert len(position)==3 and all(math.isfinite(v) for v in (*position,yaw))
+        assert position[2] == pytest.approx(.07382)

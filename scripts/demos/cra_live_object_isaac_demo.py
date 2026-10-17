@@ -26,6 +26,8 @@ parser.add_argument("--restaurant-scene", type=Path,
                     help="separate dressed restaurant scene; bounded 2.2 m real-bowl component route")
 parser.add_argument("--restaurant-layout-survey", type=Path,
                     help="fingerprinted authored layout raster, independent clearance monitor only")
+parser.add_argument("--restaurant-view", choices=("bowl", "pot", "counter", "front"), default="bowl",
+                    help="explicit stationary robot view; target names are evaluation metadata only")
 parser.add_argument(
     "--persistent-object-risk-map",
     action="store_true",
@@ -98,6 +100,8 @@ if args.restaurant_scene and (
     parser.error("restaurant component requires static persistent mapping, single/default selectors, no emitted plume/actors, and an independent authored layout survey")
 if args.restaurant_layout_survey and not args.restaurant_scene:
     parser.error("restaurant layout survey requires the explicit restaurant scene")
+if args.restaurant_view != "bowl" and (not args.restaurant_scene or args.motion):
+    parser.error("additional restaurant views are stationary-only component diagnostics")
 if not 30 <= args.plume_view_fov < 170:
     parser.error("plume view FOV must lie within [30, 170) degrees")
 if args.progress_timeout_seconds != 0 and not 10 <= args.progress_timeout_seconds <= 30:
@@ -214,7 +218,7 @@ from robot.scene.loader import load_robot_scene
 from robot.scene.transforms import compute_relative_prim_transform
 from robot.scene.controlled_semantic_obstacle import read_world_bounds
 from robot.scene.restaurant_service_build import (
-    SERVICE_ROOT, SHORT_GOAL_LOCAL_XY, SHORT_START_WORLD_XYZ, SHORT_START_YAW, service_props,
+    RESTAURANT_OBSERVATIONS, SERVICE_ROOT, SHORT_GOAL_LOCAL_XY, service_props,
 )
 from robot.sensor.camera import NovaCarterCamera
 from robot.sensor.lidar import NovaCarterLidar
@@ -228,8 +232,9 @@ ACTOR_CENTER_Z = ACTOR_HEIGHT / 2
 GOAL = (3.8 if args.fixture_spacing == "separated" else 3.5 if args.fixture_layout == "three" else 2.5, 0.0)
 SCENE_PATH = args.restaurant_scene.resolve() if args.restaurant_scene else Path(stationary.ROBOT_SCENE_PATH)
 if args.restaurant_scene:
-    stationary.ROBOT_START_POSITION_WORLD = SHORT_START_WORLD_XYZ
-    stationary.ROBOT_START_YAW_RADIANS = SHORT_START_YAW
+    restaurant_target, restaurant_start, restaurant_yaw = RESTAURANT_OBSERVATIONS[args.restaurant_view]
+    stationary.ROBOT_START_POSITION_WORLD = restaurant_start
+    stationary.ROBOT_START_YAW_RADIANS = restaurant_yaw
     GOAL = SHORT_GOAL_LOCAL_XY
 GROUND_SCOPE = "bounded separated ground sphere; observed flat plane with assumed unseen local support/landing continuity"
 PLUME_SCOPE = "bounded rendered matte sphere and opaque bright puffs; validated initial clean reference; registered object-associated visible-plume proxy only"
@@ -433,10 +438,10 @@ def main():
             bounds = read_world_bounds(stage, path)
             restaurant_props.append({"name":spec.name,"prim_path":path,
                 "bounds_minimum":bounds.minimum,"bounds_maximum":bounds.maximum})
-            if spec.name == "FoodBowl":
+            if spec.name == restaurant_target:
                 fixtures.append({"name":spec.name,"center_world_xy":bounds.center[:2],
                     "center_world_xyz":bounds.center,"monitor_radius_m":math.hypot(*bounds.size[:2])/2,
-                    "actor_shape":"audited_CC0_bowl_mesh","plume":False,"drop_m":None})
+                    "actor_shape":"audited_CC0_restaurant_mesh","plume":False,"drop_m":None})
         layout_monitor = load_authored_layout_monitor(args.restaurant_layout_survey, restaurant_props)
         save_json("restaurant-placement-monitor.json", {"props":restaurant_props,
             "basis":"authored actual-mesh bounds for independent evaluation/abort only; no factor inputs",
@@ -797,7 +802,7 @@ def main():
             cv2.imwrite(
                 str(args.output / "clean-reference.png"), packet.rgb[:, :, ::-1]
             )
-            if not (
+            if not args.restaurant_scene and not (
                 latest.diagnostics.get("accepted_instance")
                 or latest.diagnostics.get("accepted_instance_count", 0)
             ):
@@ -861,8 +866,9 @@ def main():
     }
     if args.restaurant_scene:
         object_summary = summarize_fixture_assessments(records, fixtures, maximum_distance_m=0.20)
-        gate["restaurant_component_checks"] = restaurant_asset_checks(object_summary)
-        gate["fixture_gate_scope"] = "real FoodBowl mesh: owned RGB/LiDAR mass, contact proxy and motion; potential/thermal may use labeled priors; not full four-factor sensor acceptance"
+        gate["restaurant_component_checks"] = restaurant_asset_checks(object_summary, restaurant_target)
+        gate["restaurant_observation"] = args.restaurant_view
+        gate["fixture_gate_scope"] = f"real {restaurant_target} mesh: owned RGB/LiDAR mass, contact proxy and motion; potential/thermal may use labeled priors; not full four-factor sensor acceptance"
         gate["passed"] = stationary_ready = bool(stationary_ready and all(gate["restaurant_component_checks"].values()))
         save_json("stationary-object-validation.json", object_summary)
     elif args.fixture_layout == "three" or args.moving_actor or args.actor_shape == "upright_capsule":

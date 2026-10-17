@@ -11,23 +11,23 @@ from PIL import Image, ImageDraw
 from robot.config import PROJECT_ROOT
 
 
-def restaurant_asset_checks(summary):
+def restaurant_asset_checks(summary, target_name="FoodBowl"):
     """Bounded real-mesh component gate; numeric priors are not fresh inputs."""
-    row = summary["fixtures"].get("FoodBowl", {})
+    row = summary["fixtures"].get(target_name, {})
     latest = row.get("latest")
     if latest is None:
-        return {"food_bowl_uniquely_observed":False}
+        return {"target_uniquely_observed":False}
     mass = latest["attributes"]["mass"]["mass_kg"]
     speed = latest["attributes"]["motion"]["relative_speed_mps"]
     diagnostic = latest["diagnostics"]
     factors = diagnostic["factor_scores"]
     return {
-        "food_bowl_owned_visual_instance":row["accepted_visual_updates"] >= 3
+        "target_owned_visual_instance":row["accepted_visual_updates"] >= 3
         and diagnostic["accepted_instance"] and diagnostic["policy_return_count"] > 0,
-        "food_bowl_sensor_mass":mass["value"] is not None and mass["status"] in {"measured","inferred"},
-        "food_bowl_visual_contact":factors["contact"]["mode"] == "evidence_supported"
+        "target_sensor_mass":mass["value"] is not None and mass["status"] in {"measured","inferred"},
+        "target_visual_contact":factors["contact"]["mode"] == "evidence_supported"
         and factors["contact"]["basis"] in {"visual_silhouette_geometry_proxy","visual_exposed_edge_proxy"},
-        "food_bowl_current_motion":speed["value"] is not None and speed["status"] in {"measured","inferred"},
+        "target_current_motion":speed["value"] is not None and speed["status"] in {"measured","inferred"},
         "four_numeric_policy_scores":len(factors) == 4 and all(math.isfinite(item["score"]) and 0 <= item["score"] <= 1 for item in factors.values()),
     }
 
