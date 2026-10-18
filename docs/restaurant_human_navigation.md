@@ -102,12 +102,12 @@ simultaneously moving robot/human observation), bounded
 steady world-velocity error, and actual native crossing completion. Navigation
 requires all waypoints, positive independent clearance, fresh committed fields
 and safe stopping. Stopping conservatively without arrival is a failed
-navigation result. Precise trial results will be added after execution.
+navigation result. Executed trial results are listed below.
 Runtime safety stops are permitted while the human crosses; hazard observations
 must continue during those stops. The gate does not require the robot to keep
 moving toward the crossing human.
 
-The full unit suite passed **1,846 tests** and repository Ruff passed. The
+The first code checkpoint passed **1,846 unit tests** and repository Ruff. The
 first regression invocation hit sandbox temporary-directory setup errors;
 rerunning with a dedicated workspace `--basetemp` passed. No dependency or
 environment upgrade was made.
@@ -221,6 +221,65 @@ farther crossing uses trigger 7.0, camera pitch +15 and stock camera height;
 robot control, physical evidence, factor priors, full-instance gates and route
 remain unchanged. This scenario cannot establish recovery of the original
 close crossing, nor is it a stress test of the near-body continuity guard.
+
+### Executed farther slow crossing
+
+`human-crossing-far-slow-v1` passed coupled navigation with the explicitly
+selected .5 m/s actor, y=7.0 trigger, +15 degree RGB pitch and stock camera
+height. Both actor and robot reached their endpoints; the robot stopped with
+.002332 m drift. It committed 222 fields (216 while translating), retained
+.291549 m minimum independent monitor clearance and .605078 minimum analytical
+CBF margin. The actual video decoded 279 distinct frames. Source scene bytes
+stayed unchanged. Robot stops during crossing were safety interventions, not
+scheduled observation pauses.
+
+The independent audit matched 201 current motion rows. Nine supported
+moving-human kinetic rows had positive current policy ownership; seven also
+had a moving robot. Every one used the configured 70 kg adult mass PRIOR,
+not the known unsuitable catalog-network human estimates. Median steady
+world-velocity error was .178059 m/s and median relative-speed error .012898 m/s.
+The maximum relative-speed error was .729982 m/s: these are median acceptance
+gates, not a uniform error bound. A stricter offline audit now rejects a
+catalog/inferred mass masquerading as a supported human kinetic demonstration;
+it passes the unchanged saved crossing records. Original reports are retained.
+
+Across matched rows, there were 103 computed supported kinetic and 14 contact
+rows, but zero supported potential or thermal rows. Computed support alone is
+distinct from positive current field ownership. Human phi ranged
+.599075--.683594. Nine continuity merges used current returns at the old
+centroid; none exercised the velocity-shifted branch in this wheel trial.
+That branch retains its separate focused real-scan replay and unit results.
+
+The factor-specific offline audit retains an uncertainty-policy finding:
+among supported, currently owned observations, median relative energy with
+the 70 kg prior rose from 1.40 J in standing-idle to 8.36 J in steady crossing;
+median nominal kinetic risk rose .00874 to .02977. The confidence-adjusted
+policy kinetic medians instead were .17396 and .15414, with confidence medians
+.31620 and .45586. These observations differ in confidence/viewpoint/route
+interaction and are not a matched causal comparison. The .25 uncertainty prior
+can dominate low nominal risks. Do not claim monotonic speed-to-phi/clearance,
+lower unknown priors, or silently recalibrate scales to improve this result.
+Primary study calibration and uncertainty sensitivity need explicit treatment.
+
+`human-standing-camera-v2` then passed the same-mount standing repeat: 234
+fields (228 translating), actual robot arrival/stopping, .222086 m minimum
+independent clearance, .227376 minimum analytical CBF margin and .002281 m
+stop drift. Its current stricter audit passed across 228 matched motion rows;
+median relative-speed error was .008866 m/s. It computed 97 supported kinetic
+and 16 contact rows, zero supported potential/thermal rows, and phi
+.596019--.683594. Four old-centroid positive-return merges occurred. All 299
+decoded frames were distinct, and source scene files remained unchanged.
+A .4 s stale inference and failed/late optimizer candidates were rejected
+during the run; arrival did not require weakening their expiry checks.
+
+These are completed bounded development gates, not replicated baseline study
+results. The scenario-control checkpoint passed 1,867 unit tests and repository
+Ruff; the later stricter human-mass audit adds a separate regression case. The
+final regression passed **1,868 unit tests**; repository Ruff and whitespace
+checks passed. No environment, model weights or dependencies changed. Actual
+trajectory and factor-trace plots are generated from saved records by
+`scripts/evaluation/cra_navigation_plot.py` and label all evaluation references
+and missing-factor priors explicitly.
 
 Carried bowls are a subsequent component gate: the bowl must follow an actual
 hand transform, retain physical occupancy, and acquire a separately associated

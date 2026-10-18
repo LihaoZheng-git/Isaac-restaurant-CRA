@@ -16,7 +16,7 @@ CRA advantage. Four numeric factors can include explicitly configured priors.
 | Case | Purpose and inputs | Gate and intended comparison |
 | --- | --- | --- |
 | Standing native server | Natural standing-idle sway; RGB person/SAM association, live LiDAR geometry/motion, visually associated adult mass prior | All waypoints and stopping; independent human/layout clearance; fresh factor/provenance counts; no claim of rigid zero velocity |
-| Crossing native server | Same scene/robot route; selected slow transverse native walk at requested .5 m/s, earlier actor trigger and audited +15 degree RGB pitch | Parked-view component passed separately; coupled crossing remains pending. Require current supported kinetic observations while both agents move, actual human and robot arrivals; safe stops permitted. Faster .7 m/s and close-view failures remain separate |
+| Crossing native server | Same scene/robot route; selected slow transverse native walk at requested .5 m/s, earlier actor trigger and audited +15 degree RGB pitch | Parked-view component and coupled crossing passed separately, including nine owned moving-kinetic/seven simultaneous observations. Same-mount standing arrival/stopping also passed. Faster .7 m/s and close-view failures remain separate; replicated baseline comparisons are pending |
 | Table-side mixed props | Existing bowl/pot, utensils and ordinary restaurant furniture; detected cues determine scores | Stationary per-object ownership and factor reports first. Positive support/landing drop and contact/plume observations must be demonstrated in this actual view; otherwise preserve priors and report the case as prior-assisted |
 | Carried bowl | Audited existing bowl mesh attached through the native hand system, with retained occupancy and separate RGB association | Zero-wheel attachment/ownership gate before carrying motion. Pose/asset name never supplies fall height or heat. Plume remains a separate unresolved moving-view component |
 | Longer service mission | Left-side pickup to destination through validated local regions | Implement and validate field-region transitions and source-clock continuity first; do not concatenate short-run successes into long-route acceptance |
@@ -38,6 +38,13 @@ results. Keep lambda **1.25**, identical nominal waypoints, occupancy, tracker,
 sensor streams, mass assumptions, source-age limits, solver budgets, speed limits,
 exact geometry verification and stopping gates. The policy adapter is the
 intentional change. A risk-dependent lambda is a separate ablation.
+
+Freeze factor scales, priors and confidence handling before primary collection.
+The current human diagnostic shows rising relative energy/nominal kinetic risk,
+but the .25 uncertainty prior and changing confidence can reverse the final
+policy-score ordering. Report that sensitivity explicitly. Changing those
+calibration assumptions is a research decision; no such change was made to
+obtain the standing/crossing arrivals.
 
 Use three prespecified, independently placement-checked actor configurations
 (nominal and two small lateral shifts), each with five repeated runs per method.

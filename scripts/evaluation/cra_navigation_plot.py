@@ -9,6 +9,40 @@ from matplotlib.patches import Circle, Rectangle
 import numpy as np
 
 
+def plot_human_factors(source, report):
+    """Show recorded scores and their actual modes, including prior-only gaps."""
+    audit = report.get("human_navigation_validation") or {}
+    rows = audit.get("rows", [])
+    if not rows:
+        return
+    t = np.array([r["time"] for r in rows])
+    t -= t[0]
+    fig, axes = plt.subplots(3, 1, figsize=(10, 8), sharex=True, constrained_layout=True)
+    axes[0].plot(t, [r["relative_speed_mps"] for r in rows], label="LiDAR inferred relative speed")
+    axes[0].plot(t, [r["relative_speed_error_mps"] for r in rows], "--", label="Absolute error vs native-root/ego reference (evaluation only)")
+    axes[0].set_ylabel("Relative speed / error (m/s)")
+    for name, color in (("potential", "#c77d32"), ("kinetic", "#1769aa"),
+                        ("contact", "#a04e79"), ("thermal", "#47956b")):
+        values = [r["factor_scores"][name]["score"] for r in rows]
+        axes[1].plot(t, values, color=color, label=name, linestyle=":" if name == "thermal" else "-")
+        prior = np.array([r["factor_scores"][name]["mode"] != "evidence_supported" for r in rows])
+        axes[1].scatter(t[prior], np.array(values)[prior], marker="x", s=12, color=color)
+    axes[1].set_ylabel("Factor risk score")
+    axes[1].set_ylim(-.03, 1.03)
+    axes[1].set_title("Crosses: missing-factor policy priors. Supported scores can still contain physical-input priors.\nLines connect recorded rows; they do not imply continuous visual acceptance.", fontsize=9)
+    axes[2].plot(t, [r["phi"] for r in rows], color="#333333", label="Computed human phi")
+    axes[2].set_ylim(-.03, 1.03)
+    axes[2].set_ylabel("Phi")
+    axes[2].set_xlabel("Seconds since first independently matched live human observation")
+    for axis in axes:
+        axis.grid(alpha=.2)
+        axis.legend(loc="upper left", fontsize=8)
+    fig.suptitle("Recorded live human CRA: prior-assisted, fixed lambda 1.25")
+    fig.supxlabel("Adult mass is a configured visually associated prior; contact is a visible-geometry proxy.\nPotential/thermal remain priors where unsupported. No temperature or injury calibration.", fontsize=8)
+    fig.savefig(source / "human-factor-traces.png", dpi=150)
+    plt.close(fig)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--source", type=Path, required=True)
@@ -126,6 +160,7 @@ def main():
     )
     fig.savefig(args.source / "navigation-validation.png", dpi=150)
     plt.close(fig)
+    plot_human_factors(args.source, report)
 
 
 if __name__ == "__main__":

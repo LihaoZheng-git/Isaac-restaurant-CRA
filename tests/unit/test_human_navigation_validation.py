@@ -120,6 +120,7 @@ def test_independent_current_human_motion_and_numeric_policy_checks(mode):
         "future_mass",
         "changed_lambda",
         "wrong_relative_speed",
+        "catalog_human_mass",
         "no_arrival",
         "nan",
     ],
@@ -128,6 +129,12 @@ def test_incomplete_or_unsafe_crossing_records_fail(failure):
     records, truth = episode()
     for r in records:
         o = r["objects"][0]
+        if failure == "catalog_human_mass":
+            o["attributes"]["mass"]["mass_kg"].update(
+                source="catalog_network_outside_human_domain",
+                status="inferred",
+                value=1.5,
+            )
         if failure == "late":
             r["commit_simulation_time"] += 0.3
         elif failure == "future":

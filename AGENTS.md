@@ -513,3 +513,23 @@
   actor trigger/speed options change the authored scenario only, never runtime
   evidence or control. A farther/slow crossing cannot establish close-range,
   faster, crowded, complete four-factor or main-merge acceptance.
+- The farther .5 m/s coupled crossing (robot-y trigger 7.0, stock-height RGB
+  pitch +15) passed robot/human arrivals, stopping and the live audit: nine
+  supported moving-human kinetic rows with positive current ownership, seven
+  simultaneous rows, all using the configured adult mass prior. Potential and
+  thermal stayed priors; a later validator rejects catalog human mass. Preserve
+  the median-vs-maximum velocity error distinction and the nine old-centroid
+  geometry merges (no velocity-query merge was exercised in that wheel run).
+- Keep the factor-specific uncertainty finding: observed relative energy and
+  nominal kinetic risk increased during crossing, while confidence-adjusted
+  policy scores need not increase because the .25 uncertainty prior/confidence
+  changed. This is not a causal comparison or monotonic phi/clearance result.
+  Do not silently alter confidence, priors or energy scales to improve the
+  figure. Treat calibration/sensitivity explicitly in the final study. See
+  docs/restaurant_human_navigation.md for actual counts and failed attempts.
+- The same-mount standing repeat also passed (234 fields, .222086 m minimum
+  independent clearance, .002281 m stopping drift); its stricter mass-source
+  audit passed. Both bounded examples retain potential/thermal priors, transient
+  velocity errors and rejected stale/failed optimizer results. Their arrivals
+  are not replicated baseline results, full fresh physical estimation or the
+  PR #117/main acceptance gate.

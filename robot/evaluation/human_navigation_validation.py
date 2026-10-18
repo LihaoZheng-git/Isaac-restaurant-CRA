@@ -137,6 +137,15 @@ def summarize_human_navigation(records, truth, *, mode):
     )
     checks = {
         "current_human_motion_rows": len(rows) >= 5,
+        "supported_human_kinetic_uses_adult_mass_prior": all(
+            r["mass"]["source"] == HUMAN_MASS_PRIOR_SOURCE
+            and r["mass"]["status"] == "prior"
+            and r["mass"]["value"] is not None
+            and np.isfinite(r["mass"]["value"])
+            and r["mass"]["value"] > 0
+            for r in rows
+            if r["factor_scores"]["kinetic"]["mode"] == "evidence_supported"
+        ),
         "bounded_relative_speed_error": bool(rows)
         and float(np.median([r["relative_speed_error_mps"] for r in rows])) <= 0.25,
         "only_mass_may_persist": all(
