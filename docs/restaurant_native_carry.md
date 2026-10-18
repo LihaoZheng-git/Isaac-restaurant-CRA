@@ -239,3 +239,32 @@ original parked case. The subsequent `carried-server-cluster18-live-v1` retry
 uses the original 3.9 m route, aligned startup, 60-frame stationary window,
 fixed lambda 1.25 and identical control/continuity constraints, plus bounded
 copied-sensor snapshots. Its arrival gate is separate from this component pass.
+
+The .18 m live retry still failed on a second disappearing fragment (389),
+after 168 fields/167 translating fields and one waypoint. Minimum independent
+clearance was .956920 m, minimum CBF margin .730792 and stopping drift .003747 m.
+It had 21 supported moving-human/21 simultaneous kinetic rows, with .048243
+m/s median world-velocity error and .020048 m/s median relative-speed error.
+Attachment and all perception checks passed; arrival did not. Offline copied
+scans at t=20.2/22.2 showed identical nearby human grouping at .18 and .20 m,
+so they did not justify another radius-only retry. Planar grouping on those
+same snapshots also left the nearby groups unchanged; it was not integrated.
+
+The guard's coexistence check compared the parent's continually updated last
+timestamp with the missing fragment's original timestamp. At t=21.9 the
+parent was within .242 m of the old fragment centroid and its velocity was
+stable, but its latest epoch was .2 s beyond the fragment epoch, exceeding
+the .15 s coexistence comparison despite actual co-observation at t=21.6.
+This shrank the declared .35 s recovery window according to scan cadence.
+The copied snapshots do not contain the exact t=21.9 geometry, so this is
+timing eligibility evidence, not proof that its positive-return gate would pass.
+
+The correction retains actual simultaneous-observation times for enrolled
+track pairs, with their original .35 s expiry. Parent-only updates never renew
+that evidence. Recovery still requires the existing stable/current parent
+velocity gates, unambiguous current positive returns, .10/.25 m geometry and
+one-to-one merge checks. It supplies no body shape, physical factors or free
+space. Seven new unit cases cover recovery at .3 s, missing/ambiguous support,
+unstable velocity, absent original coexistence and unchanged expiry. Successful
+retained-pair events save their exact current positive geometry for an
+independent audit. A fresh live retry must pass before merging this branch.

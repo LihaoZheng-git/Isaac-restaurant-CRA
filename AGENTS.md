@@ -552,3 +552,12 @@
 - The installed Isaac python.bat may return zero after script RuntimeError.
   Simulation acceptance requires saved validation flags, actual arrival/stop
   and error-log inspection; a launcher exit code alone is insufficient.
+- The native-human guard may retain actual simultaneous-observation epochs for
+  enrolled geometric track pairs inside the existing .35 s merge window.
+  Parent-only updates never renew a missing fragment's original evidence.
+  This corrects a continually advancing parent timestamp truncating recovery;
+  it does not retain body shape, factor values or inferred free space. Require
+  fresh stable current-parent velocity, existing .10/.25 m/three-positive-return
+  and ambiguity gates, and save exact positive geometry for retained-pair
+  events. Preserve the .12/.18 m carried-server failed arrivals and their safe
+  track-loss stops until a fresh corrected trial actually completes navigation.

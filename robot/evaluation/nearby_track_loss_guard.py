@@ -58,6 +58,7 @@ class NearbyTrackLossGuard:
         self.observed = {}
         self.last_source_time = None
         self.velocities = {}
+        self.coobserved = {}
 
     def observe(
         self,
@@ -137,6 +138,11 @@ class NearbyTrackLossGuard:
                 )
             geometry = (xyz, ids)
         pending = dict(self.observed)
+        coobserved = {
+            pair: t
+            for pair, t in self.coobserved.items()
+            if source_time - t <= self.config.maximum_merge_age_seconds + 1e-9
+        }
         missing = {key: value for key, value in pending.items() if key not in current}
         candidates = {
             key: [
@@ -181,13 +187,11 @@ class NearbyTrackLossGuard:
         if self.config.allow_observed_fragment_merges and geometry is not None:
             xyz, ids = geometry
 
-            def match_query(old_point, old_time, new):
-                queries = [(old_point, "old_centroid_positive_returns", np.zeros(2))]
+            def stable_current_velocity(old_time, new):
                 dt = source_time - old_time
-                v = velocities[new]
                 previous_v = self.velocities.get(new)
-                translation = dt * v
-                if (
+                v = velocities[new]
+                return (
                     self.config.use_observed_merge_velocity
                     and previous_v is not None
                     and observations[new] >= 3
@@ -198,9 +202,16 @@ class NearbyTrackLossGuard:
                     and np.linalg.norm(v) <= self.config.maximum_merge_speed_mps
                     and np.linalg.norm(v - previous_v[0])
                     <= self.config.maximum_merge_velocity_change_mps
-                    and np.linalg.norm(translation)
+                    and np.linalg.norm(dt * v)
                     <= self.config.maximum_merge_translation_m
-                ):
+                )
+
+            def match_query(old_point, old_time, new):
+                queries = [(old_point, "old_centroid_positive_returns", np.zeros(2))]
+                dt = source_time - old_time
+                v = velocities[new]
+                translation = dt * v
+                if stable_current_velocity(old_time, new):
                     queries.append(
                         (
                             old_point + translation,
@@ -230,21 +241,39 @@ class NearbyTrackLossGuard:
 
             proposals = {}
             matches = {}
+            coexistence = {}
             for key, (old_point, old_time) in missing.items():
                 if key not in pending:
                     continue
                 choices = []
                 for new in current:
+                    pair_time = coobserved.get(tuple(sorted((key, new))))
+                    recent_parent = (
+                        new in pending
+                        and abs(pending[new][1] - old_time)
+                        <= self.config.maximum_missing_seconds + 1e-9
+                    )
+                    retained_pair = (
+                        pair_time is not None
+                        and abs(pair_time - old_time)
+                        <= self.config.maximum_missing_seconds + 1e-9
+                        and stable_current_velocity(old_time, new)
+                    )
                     if (
                         new in pending
                         and new != key
-                        and abs(pending[new][1] - old_time)
-                        <= self.config.maximum_missing_seconds + 1e-9
+                        and (recent_parent or retained_pair)
                     ):
                         found = match_query(old_point, old_time, new)
                         if found is not None:
                             choices.append(new)
                             matches[key, new] = found
+                            coexistence[key, new] = (
+                                pair_time,
+                                "recent_parent_epoch"
+                                if recent_parent
+                                else "retained_original_coobservation",
+                            )
                 proposals[key] = choices
             for key, choices in proposals.items():
                 if (
@@ -271,6 +300,12 @@ class NearbyTrackLossGuard:
                             "current_cluster_velocity_world_xy": velocities[
                                 new
                             ].tolist(),
+                            "current_centroid_world_xy": current[new].tolist(),
+                            "previous_cluster_velocity_world_xy": self.velocities[new][0].tolist()
+                            if new in self.velocities else None,
+                            "coobservation_source_time": coexistence[key, new][0],
+                            "coexistence_basis": coexistence[key, new][1],
+                            "original_fragment_age_seconds": source_time - old_time,
                             "positive_returns_near_query": int(
                                 np.count_nonzero(
                                     (ids == new)
@@ -313,6 +348,17 @@ class NearbyTrackLossGuard:
             else self.velocities[key]
             for key in pending
             if key in current or key in self.velocities
+        }
+        # Only simultaneous positive observations renew a pair, never borrowing
+        # or continued observation of its parent alone. This is identity history,
+        # not a body box, factor value, inferred free space or a new source epoch.
+        if self.config.use_observed_merge_velocity:
+            visible = sorted(set(current) & set(pending))
+            for i, a in enumerate(visible):
+                for b in visible[i + 1 :]:
+                    coobserved[a, b] = float(source_time)
+        self.coobserved = {
+            pair: t for pair, t in coobserved.items() if all(k in pending for k in pair)
         }
         return {
             "blocked": bool(blocking),

@@ -1498,6 +1498,12 @@ def main():
                             robot_world_xy=(anchor.x+c*current[0]-s*current[1], anchor.y+s*current[0]+c*current[1]),
                             **coverage_geometry(outcome.value, submitted_packet))
                         if coverage_result["observed_fragment_merges"] or coverage_result["blocked"]:
+                            if any(e.get("coexistence_basis") == "retained_original_coobservation"
+                                   for e in coverage_result["observed_fragment_merges"]):
+                                audit_name = f"coverage-merge-{outcome.value.field.sensor_frame_id}.npz"
+                                np.savez_compressed(args.output / audit_name,
+                                    **coverage_geometry(outcome.value, submitted_packet))
+                                coverage_result["current_positive_geometry_audit_file"] = audit_name
                             coverage_events.append(coverage_result)
                         if coverage_result["blocked"]:
                             reason = "nearby_track_lost"

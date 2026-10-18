@@ -210,3 +210,83 @@ def test_motion_hypothesis_never_replaces_actual_positive_evidence(problem):
     assert guard.observe(tracks, source_time=t, robot_world_xy=(0, 0), **kwargs)[
         "blocked"
     ]
+
+
+def original_coobservation_guard(coexisted=True):
+    guard = NearbyTrackLossGuard(
+        NearbyTrackLossConfig(
+            allow_observed_fragment_merges=True, use_observed_merge_velocity=True
+        )
+    )
+    parent = replace(track(2, 0.6), velocity_world_xy=(0.5, 0), point_count=12)
+    guard.observe(
+        (track(1, 1.0), parent) if coexisted else (track(1, 1.0),),
+        source_time=1.0,
+        robot_world_xy=(-0.5, 0),
+    )
+    if not coexisted:
+        guard.observe((parent,), source_time=1.05, robot_world_xy=(-0.5, 0))
+    for t, x in [(1.1, 0.65), (1.2, 0.70)]:
+        observe_coobserved_parent(guard, t, x)
+    return guard
+
+
+def observe_coobserved_parent(guard, t, x, problem=None):
+    parent = replace(
+        track(2, x), velocity_world_xy=(0.5, 0), observation_count=10, point_count=12
+    )
+    low = [
+        v + 1.5 * (x - 0.65) for v in [0.85, 0.73, 0.61, 0.49, 0.37, 0.25, 0.37, 0.25]
+    ]
+    points = [[0.97, y] for y in [-0.02, -0.01, 0.01, 0.02]] + [[v, 0] for v in low]
+    tracks, ids = (parent,), [2] * 12
+    if problem == "unstable":
+        tracks = (replace(parent, velocity_world_xy=(-0.5, 0)),)
+    if problem == "unsupported":
+        points = [[x, 0]] * 12
+    if problem == "ambiguous":
+        tracks += (replace(track(3, 1.0), point_count=4),)
+        points += [[1.0, y] for y in [-0.02, -0.01, 0.01, 0.02]]
+        ids += [3] * 4
+    kwargs = (
+        {}
+        if problem == "missing"
+        else dict(
+            current_points_world_xy=points,
+            current_point_track_ids=ids,
+            current_points_source_time=t,
+        )
+    )
+    return guard.observe(
+        tracks, source_time=t, robot_world_xy=(-0.5, 0) if t < 1.3 else (0, 0), **kwargs
+    )
+
+
+def test_original_coobservation_survives_parent_updates_without_renewing_its_epoch():
+    guard = original_coobservation_guard()
+    assert guard.coobserved[1, 2] == 1.0
+    result = observe_coobserved_parent(guard, 1.3, 0.76)
+    assert not result["blocked"] and set(guard.observed) == {2}
+    event = result["observed_fragment_merges"][0]
+    assert event["coexistence_basis"] == "retained_original_coobservation"
+    assert event["coobservation_source_time"] == 1.0
+    assert event["original_last_seen_time"] == 1.0
+    assert event["original_fragment_age_seconds"] == pytest.approx(0.3)
+    assert event["basis"] == "old_centroid_positive_returns"
+    assert event["positive_returns_near_query"] >= 3
+
+
+@pytest.mark.parametrize(
+    "problem",
+    ["never_coexisted", "expired", "unstable", "unsupported", "missing", "ambiguous"],
+)
+def test_retained_coobservation_never_substitutes_for_fresh_positive_support(problem):
+    guard = original_coobservation_guard(problem != "never_coexisted")
+    t, x = 1.3, 0.76
+    if problem == "expired":
+        observe_coobserved_parent(guard, 1.3, 0.76, "unsupported")
+        assert guard.coobserved[1, 2] == 1.0
+        t, x = 1.4, 0.81
+    result = observe_coobserved_parent(guard, t, x, problem)
+    assert result["blocked"] and not result["observed_fragment_merges"]
+    assert result["blocking_tracks"][0]["original_last_seen_time"] == 1.0
