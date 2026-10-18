@@ -157,6 +157,39 @@ def test_numeric_priors_do_not_claim_measured_low_factors_or_saturate_unknown_ph
     assert policy.tangential_strength == 1.25
 
 
+def test_ground_support_context_labels_baseline_without_inventing_a_drop():
+    from robot.perception.object_height import estimate_object_height
+
+    obj = np.array([(x,y,z) for x in (-.08,0,.08) for y in (-.08,0,.08)
+        for z in (.02,.18,.34)])
+    patch = np.array([(x,y,0.) for x in np.linspace(-.4,.4,31)
+        for y in np.linspace(-.4,.4,31)])
+    height = estimate_object_height(np.vstack((patch,obj)),obj,
+        timestamp_seconds=1.1,scene_timestamp_seconds=1.,floor_reference_m=0.,
+        reference_scope="synthetic grounded test; support visible, farther landing unknown")
+    assert height.support_state == "ground_supported"
+    assert not height.fall_height_m.is_available
+    adapted = adapt_physical_factors(unknown(), timestamp_seconds=1.1)
+    policy, details = evaluate_object_risk(adapted,ObjectRiskPriorConfig(),height_evidence=height)
+    detail = details["potential"]
+    assert detail["score"] == .25
+    assert detail["height_context"]["score_basis"] == "ground_supported_baseline_prior"
+    assert detail["input_rejections"]
+    assert policy.risk == pytest.approx(1-.75**4)
+    assert not adapted.potential.energy_j.is_available
+    assert policy.tangential_strength == 1.25
+
+
+def test_unknown_support_remains_explicit_uncertainty_prior():
+    from robot.perception.object_height import estimate_object_height
+
+    height = estimate_object_height(np.empty((0,3)),np.empty((0,3)),
+        timestamp_seconds=1.1,scene_timestamp_seconds=1.,floor_reference_m=0.,reference_scope="unit")
+    _, details = evaluate_object_risk(adapt_physical_factors(unknown(),timestamp_seconds=1.1),
+        ObjectRiskPriorConfig(),height_evidence=height)
+    assert details["potential"]["height_context"]["score_basis"] == "uncertainty_prior"
+
+
 def test_thermal_acquisition_is_not_frozen_by_the_first_low_observation():
     track = worker()(packet()).field.tracking_result.tracked_obstacles[0]
     memory = PersistentObjectEvidence(

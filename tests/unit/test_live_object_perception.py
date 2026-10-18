@@ -282,3 +282,58 @@ def test_failed_field_transaction_does_not_advance_retained_evidence_identity():
     latest = runtime(packet(3, 1.1))
     assert latest.attributes.mass.mass_kg.is_available
     assert latest.diagnostics["temporal_object_evidence"]["mass"]["mode"] == "retained"
+
+
+def test_opt_in_height_never_promotes_unresolved_cluster_to_owned_object():
+    from robot.perception.object_height import ObjectHeightConfig
+
+    result = worker(object_height_config=ObjectHeightConfig())(packet())
+    evidence = result.diagnostics["geometry_evidence"]
+    assert evidence["height_ownership_basis"].startswith("unresolved_lidar_cluster")
+    assert "object_height" not in evidence
+    assert not result.attributes.geometry.fall_height_m.is_available
+    assert not result.attributes.stability.support_state.is_available
+    assert result.field.all_obstacle_point_count == 4
+    assert result.policy.risk == 1.
+
+
+def test_general_height_cannot_silently_override_legacy_sphere_support_mode():
+    from robot.perception.object_height import ObjectHeightConfig
+
+    with pytest.raises(ValueError, match="selected separately"):
+        worker(object_height_config=ObjectHeightConfig(),ground_prior_scope="legacy sphere fixture")
+
+
+def test_accepted_category_free_instance_uses_general_support_without_sphere_fit():
+    from robot.perception.object_height import ObjectHeightConfig
+    from robot.perception.physical_attributes import MassAttributes, ScalarEstimate
+    from robot.perception.semantic_detection import PixelBoundingBox, SemanticDetection
+
+    obj = np.array([(1+x,y,z) for x in (-.08,0,.08)
+        for y in (-.08,0,.08) for z in (.02,.18,.34)])
+    floor = np.array([(x,y,0.) for x in np.linspace(-.2,2.2,41)
+        for y in np.linspace(-1.2,1.2,41)])
+    transform = np.eye(4)
+    transform[:3,:3] = [[0,-1,0],[0,0,1],[-1,0,0]]
+    value = replace(packet(), scene_xyz=np.vstack((floor,obj)), obstacle_xyz=obj,
+        camera_from_scan_robot=transform)
+    mask = np.zeros((100,100),bool)
+    mask[10:90,10:90] = True
+    detection = SemanticDetection(0,"unknown",.5,PixelBoundingBox(10,10,90,90),mask)
+    runtime = worker(object_height_config=ObjectHeightConfig(),
+        fall_interaction_prior_scope="unit test explicitly unmeasured interaction")
+    runtime.segmenter = SimpleNamespace(set_image=lambda rgb: None,
+        propose=lambda *a,**kw: SimpleNamespace(detection=detection, model_quality=.95,
+            rejection_reasons=(), candidate_diagnostics=(), prompt_xy=(50,40),
+            inference_wall_seconds=0., image_encoder_wall_seconds=0.))
+    runtime.mass_estimator = SimpleNamespace(estimate_instance=lambda *a,**kw:
+        MassAttributes(ScalarEstimate(2.,1.,3.,.5,"kg","controlled_test_mass",1.,EstimateStatus.INFERRED)))
+    result = runtime(value)
+    assert result.diagnostics["accepted_instance"]
+    assert result.attributes.stability.support_state.value == "ground_supported"
+    assert result.attributes.geometry.fall_height_m.value == 0.
+    assert result.attributes.geometry.center_height_m.value > .1
+    assert not result.adapted.potential.rejection_reasons
+    assert result.adapted.potential.energy_j.value == 0.
+    assert result.diagnostics["geometry_evidence"]["height_ownership_basis"] == "fresh_accepted_instance"
+    assert result.field.all_obstacle_point_count == len(obj)

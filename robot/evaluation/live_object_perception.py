@@ -31,12 +31,14 @@ from robot.perception.ground_support import estimate_spherical_ground_support
 from robot.perception.instance_lidar_geometry import masked_track_return_selection
 from robot.perception.lidar_fall_surfaces import estimate_lidar_fall_surfaces
 from robot.perception.motion_attributes import RouteMotionContext, estimate_track_motion
+from robot.perception.object_height import ObjectHeightConfig, estimate_object_height
 from robot.perception.moving_camera_plume import (
     MovingCameraObjectPlumeEstimator,
     MovingCameraPlumeConfig,
     TrackedRgbObjectFrame,
 )
 from robot.perception.physical_attributes import (
+    CategoricalEstimate,
     EstimateStatus,
     PhysicalAttributes,
     ScalarEstimate,
@@ -223,6 +225,7 @@ class LiveObjectPerception:
         plume_view_fov_degrees=140.0,
         person_detector=None,
         human_mass_prior_config=None,
+        object_height_config=None,
     ):
         self.segmenter, self.mass_estimator, self.contact_detector = (
             segmenter,
@@ -256,6 +259,11 @@ class LiveObjectPerception:
             raise ValueError("fall interaction prior requires an explicit scope")
         self.fall_surface_config = fall_surface_config
         self.fall_interaction_prior_scope = fall_interaction_prior_scope
+        if object_height_config is not None and not isinstance(object_height_config, ObjectHeightConfig):
+            raise TypeError("object_height_config must be ObjectHeightConfig")
+        if object_height_config is not None and (ground_prior_scope is not None or fall_surface_config is not None):
+            raise ValueError("general object height and legacy spherical support modes must be selected separately")
+        self.object_height_config = object_height_config
         if not isinstance(cluster_in_3d, bool):
             raise TypeError("3D clustering opt-in must be boolean")
         CameraLidarFusionConfig(
@@ -896,6 +904,23 @@ class LiveObjectPerception:
         )
         thermal_interaction = None
         geometry_diagnostics = {"accepted_instance": accepted}
+        height_evidence = None
+        if self.object_height_config is not None and accepted:
+            height_evidence = estimate_object_height(
+                packet.scene_xyz,
+                packet.obstacle_xyz[selected],
+                timestamp_seconds=timestamp,
+                scene_timestamp_seconds=packet.sensor_timestamp_seconds,
+                floor_reference_m=packet.floor_height_robot_m,
+                reference_scope=(f"gravity-aligned packet; pose={packet.pose_source}; status={packet.pose_status.value}; "
+                    "floor-band selection uses declared packet ground reference; fitted height uses LiDAR returns"),
+                config=self.object_height_config,
+            )
+            geometry_diagnostics["object_height"] = asdict(height_evidence)
+            geometry_diagnostics["object_height_configuration"] = asdict(self.object_height_config)
+            geometry_diagnostics["height_ownership_basis"] = "fresh_accepted_instance"
+        elif self.object_height_config is not None:
+            geometry_diagnostics["height_ownership_basis"] = "unresolved_lidar_cluster; fresh instance required for object height"
         if accepted:
             geometry = estimate_track_geometry(
                 packet.obstacle_xyz,
@@ -935,40 +960,54 @@ class LiveObjectPerception:
                     )
                     mass = MassAttributes(prior)
             object_xyz = packet.obstacle_xyz[selected]
-            surfaces = estimate_lidar_fall_surfaces(
-                packet.scene_xyz,
-                object_xyz,
-                timestamp_seconds=packet.sensor_timestamp_seconds,
-                config=self.fall_surface_config,
-            )
-            geometry_diagnostics["strict_fall_surfaces"] = asdict(surfaces)
-            geometry_diagnostics["fall_surface_configuration"] = (
-                asdict(self.fall_surface_config) if self.fall_surface_config else None
-            )
             sphere = None
-            support_consistent = None
-            if self.ground_scope is not None or self.fall_surface_config is not None:
-                sphere = estimate_spherical_geometry(
-                    object_xyz, timestamp_seconds=packet.sensor_timestamp_seconds
+            if height_evidence is None:
+                surfaces = estimate_lidar_fall_surfaces(
+                    packet.scene_xyz, object_xyz,
+                    timestamp_seconds=packet.sensor_timestamp_seconds,
+                    config=self.fall_surface_config,
                 )
-            if self.fall_surface_config is not None and surfaces.is_available:
-                support = surfaces.evidence.support_height_m
-                support_consistent = bool(
-                    sphere.radius_m.is_available
-                    and sphere.center_xyz is not None
-                    and support.lower_bound
-                    <= sphere.center_xyz[2] - sphere.radius_m.lower_bound
-                    and support.upper_bound
-                    >= sphere.center_xyz[2] - sphere.radius_m.upper_bound
+                geometry_diagnostics["strict_fall_surfaces"] = asdict(surfaces)
+                geometry_diagnostics["fall_surface_configuration"] = (
+                    asdict(self.fall_surface_config) if self.fall_surface_config else None
                 )
-            geometry_diagnostics["support_bottom_consistency"] = support_consistent
-            geometry = replace(
-                geometry,
-                fall_height_m=estimate_fall_height(
-                    surfaces.evidence if support_consistent is not False else None,
-                    timestamp_seconds=timestamp,
-                ),
-            )
+                support_consistent = None
+                if self.ground_scope is not None or self.fall_surface_config is not None:
+                    sphere = estimate_spherical_geometry(
+                        object_xyz, timestamp_seconds=packet.sensor_timestamp_seconds
+                    )
+                if self.fall_surface_config is not None and surfaces.is_available:
+                    support = surfaces.evidence.support_height_m
+                    support_consistent = bool(
+                        sphere.radius_m.is_available
+                        and sphere.center_xyz is not None
+                        and support.lower_bound
+                        <= sphere.center_xyz[2] - sphere.radius_m.lower_bound
+                        and support.upper_bound
+                        >= sphere.center_xyz[2] - sphere.radius_m.upper_bound
+                    )
+                geometry_diagnostics["support_bottom_consistency"] = support_consistent
+                geometry = replace(
+                    geometry,
+                    fall_height_m=estimate_fall_height(
+                        surfaces.evidence if support_consistent is not False else None,
+                        timestamp_seconds=timestamp,
+                    ),
+                )
+            if height_evidence is not None:
+                # General adjacent planar support is independent of spherical
+                # fitting. Only the explicit opt-in can use this path; legacy
+                # sphere bottom and ground-continuity gates remain unchanged.
+                if height_evidence.visible_center_height_m.is_available:
+                    geometry = replace(geometry, center_height_m=height_evidence.visible_center_height_m)
+                geometry = replace(geometry, fall_height_m=height_evidence.fall_height_m)
+                if height_evidence.support_state in {"ground_supported", "elevated_supported"}:
+                    attributes = replace(attributes, stability=replace(attributes.stability,
+                        support_state=CategoricalEstimate(height_evidence.support_state,
+                            height_evidence.support_height_above_ground_m.confidence,
+                            "lidar_adjacent_support_state", packet.sensor_timestamp_seconds,
+                            EstimateStatus.INFERRED,
+                            height_evidence.support_height_above_ground_m.evidence)))
             if self.ground_scope is not None:
                 ground = estimate_spherical_ground_support(
                     packet.scene_xyz,
@@ -1157,6 +1196,7 @@ class LiveObjectPerception:
             "physical_done": physical_done,
             "retention_diagnostics": retention_diagnostics,
             "geometry_diagnostics": geometry_diagnostics,
+            "height_evidence": height_evidence if accepted else None,
             "sam_quality": sam_quality,
             "prompt_basis": prompt_basis,
             "sam_candidates": sam_candidates,

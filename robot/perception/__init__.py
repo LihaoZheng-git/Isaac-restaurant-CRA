@@ -5,6 +5,11 @@ from robot.perception.fall_height import (
     FallSurfaceEvidence as FallSurfaceEvidence,
     estimate_fall_height as estimate_fall_height,
 )
+from robot.perception.object_height import (
+    ObjectHeightConfig,
+    ObjectHeightEvidence,
+    estimate_object_height,
+)
 from robot.perception.fall_height_diagnostic import (
     FallHeightDiagnosticReport as FallHeightDiagnosticReport,
     evaluate_fall_height_diagnostic as evaluate_fall_height_diagnostic,
@@ -158,6 +163,9 @@ from robot.perception.yolo_detector import (
 
 
 __all__ = [
+    "ObjectHeightConfig",
+    "ObjectHeightEvidence",
+    "estimate_object_height",
     "MASS_FUSION_SOURCE",
     "MASS_PRIOR_SCHEMA_VERSION",
     "MASS_PRIOR_SOURCE",
