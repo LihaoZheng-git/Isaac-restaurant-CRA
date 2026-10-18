@@ -431,3 +431,16 @@
   The 1.921 kg catalog-network result is not credible human mass or validated
   human heaviness ordering. This gate establishes bounded dataflow only; strict
   fresh four-factor readiness is false and no wheel/walking trial was run.
+- Native behavior retargeting now passed separate parked-robot idle/walk/stop
+  and faster-locomotion component gates in the restaurant. Observed medians
+  were .692865 and 1.691414 m/s with actual arrival, articulated feet, grounding,
+  PhysX collider readback, independent clearance and decoded RGB video. The
+  source rig/animation and requested motion remain oracle scene/evaluation
+  information, never CRA inputs. The faster trial does not identify a selected
+  sprint clip. In this installed Kit build the animation extension must load at
+  application startup for RGB capture; late activation failed an isolated
+  two-camera probe. Preserve renderer-history warnings and failed early
+  recordings. No moving-human perception, human mass prior, kinetic validation
+  or robot crossing was implemented by this actor-motion branch; no static
+  memory or unchanged-shape bounds prior may be assumed for articulating
+  humans. See docs/restaurant_human_locomotion.md. PR #117's main hold remains.
