@@ -482,7 +482,7 @@ def main():
             restaurant_props.append({"name":"Server","prim_path":SERVER_PRIM_PATH,
                 "bounds_minimum":bounds.minimum,"bounds_maximum":bounds.maximum})
             fixtures.append({"name":"Server","center_world_xy":bounds.center[:2],
-                "monitor_radius_m":math.hypot(*bounds.size[:2])/2,"actor_shape":"static_CC0_staff_avatar",
+                "monitor_radius_m":math.hypot(*bounds.size[:2])/2,"actor_shape":"static_staff_avatar",
                 "plume":False,"drop_m":None,"matching_scope":"independent planar match; full authored height is not observed geometry"})
         layout_monitor = load_authored_layout_monitor(args.restaurant_layout_survey, restaurant_props)
         save_json("restaurant-placement-monitor.json", {"props":restaurant_props,
