@@ -23,8 +23,10 @@ individually pinned by this top-level USD fingerprint.
 - The project authors a static arms-down pose in the rig's own rest coordinates,
   using the observed source topology to lower each upper arm. Geometry,
   materials, textures and original asset files are unchanged. This is not a
-  retargeted idle or walking animation. The checked standing clip has an
-  incompatible skeleton (zero matching joint names) and was not integrated.
+  retargeted idle or walking animation in the saved static scene. The direct
+  standing-clip audit found zero matching joint names and did not integrate
+  that clip. The later opt-in native behavior retargeter supports this rig;
+  see [native locomotion validation](restaurant_human_locomotion.md).
 - CPU skinning computes the posed bounds for grounding, render extents and a
   separate static guide-purpose collision capsule (radius .30033 m). That
   capsule is a conservative scene collision proxy, not human anatomy, a mass
