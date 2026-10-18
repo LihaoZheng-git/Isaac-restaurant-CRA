@@ -50,7 +50,7 @@ def author_native_carry_bowl(stage):
     }
 
 
-def summarize_carry_records(records):
+def summarize_carry_records(records, *, continuous=False):
     """A visual/physical attachment gate; intentionally no perception acceptance."""
     active = [r for r in records if r["phase"] != "pickup"]
     idle = [r for r in active if r["phase"] == "idle_before"]
@@ -79,8 +79,11 @@ def summarize_carry_records(records):
     checks = {
         "distinct_ordered_observations": ordered,
         "stationary_native_attachment": len(idle) >= 30,
-        "held_through_walk_and_endpoint_observation": bool(active)
-        and all(r["held"] for r in active),
+        (
+            "held_through_continuous_walk"
+            if continuous
+            else "held_through_walk_and_endpoint_observation"
+        ): bool(active) and all(r["held"] for r in active),
         "rigid_hand_relative_position": finite
         and max(r["relative_position_error_m"] for r in active) <= 0.03,
         "rigid_hand_relative_orientation": finite
@@ -92,8 +95,18 @@ def summarize_carry_records(records):
         and min(r["bottom_world_z"] for r in active) >= 0.55,
         "independent_layout_clearance": finite
         and min(r["layout_clearance_m"] for r in active) > 0.02,
-        "actual_bowl_motion": finite and len(moving) >= 10
-        and np.linalg.norm(np.array(moving[-1]["bowl_xyz"]) - moving[0]["bowl_xyz"])
+        "actual_bowl_motion": finite
+        and len(moving) >= 10
+        and (
+            max(
+                np.linalg.norm(np.array(r["bowl_xyz"]) - moving[0]["bowl_xyz"])
+                for r in moving
+            )
+            if continuous
+            else np.linalg.norm(
+                np.array(moving[-1]["bowl_xyz"]) - moving[0]["bowl_xyz"]
+            )
+        )
         >= 0.5,
     }
     return {
@@ -107,6 +120,7 @@ def summarize_carry_records(records):
             (r["layout_clearance_m"] for r in active), default=None
         ),
         "separate_bowl_perception_validated": False,
+        "continuous_actor_mode": continuous,
         "scope": "native held-prop/zero-wheel component only; oracle joint/physics readbacks for evaluation; not grasp planning, mass, fall height, heat, four-factor perception or carrying navigation acceptance",
     }
 
@@ -195,6 +209,8 @@ class NativeBowlCarry:
             "held": True,
             "hand": side,
             "bowl_xyz": xyz.tolist(),
+            "bowl_center_xyz": center.tolist(),
+            "world_half_extents": half.tolist(),
             "hand_distance_m": float(np.linalg.norm(center - np.array(list(p)))),
             "relative_position_error_m": position_error,
             "relative_angle_error_degrees": angle_error,

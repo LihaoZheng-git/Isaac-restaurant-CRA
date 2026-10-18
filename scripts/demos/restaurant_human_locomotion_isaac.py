@@ -22,8 +22,14 @@ parser.add_argument("--goal-x", type=float, default=29.8)
 parser.add_argument("--sensor-diagnostic", action="store_true")
 parser.add_argument("--carry-bowl", action="store_true",
                     help="native hand attachment / zero-wheel component; separate bowl perception remains unvalidated")
+parser.add_argument("--continuous-crossing", action="store_true",
+                    help="explicit carried-server circuit, no actor endpoint-stop claim; robot remains parked")
+parser.add_argument("--carry-facing-crossing", action="store_true",
+                    help="explicit initial actor heading along its first crossing leg (-world X), not a sensor input")
 parser.add_argument("--sensor-simulation-rate", type=float, default=0.1)
-parser.add_argument("--robot-view", choices=("approach", "close", "crossing-approach"), default="approach")
+parser.add_argument("--human-cluster-radius", type=float, default=.12,
+                    help="explicit 3D connected-cluster radius .12...20 m; all sensor occupancy retained")
+parser.add_argument("--robot-view", choices=("approach", "approach-forward", "close", "crossing-approach"), default="approach")
 parser.add_argument("--camera-upward-degrees", type=float, default=0.)
 parser.add_argument("--camera-raise-metres", type=float, default=0.)
 parser.add_argument(
@@ -34,7 +40,14 @@ parser.add_argument(
     metavar=("KG", "LOWER", "UPPER"),
 )
 args = parser.parse_args()
-if args.carry_bowl and (args.goal_x != 29.8 or args.goal_y != 10.8 or args.speed != .5):
+if not .12 <= args.human_cluster_radius <= .20 or (args.human_cluster_radius != .12 and not args.sensor_diagnostic):
+    parser.error("3D radius .12...20 requires the native human sensor diagnostic")
+if args.carry_facing_crossing and not args.continuous_crossing:
+    parser.error("initial crossing heading requires the continuous carrying scenario")
+if args.continuous_crossing and (not args.carry_bowl or args.speed != .5
+                               or args.goal_x != 29.8 or args.goal_y != 12.5):
+    parser.error("continuous carry requires .5 m/s and default goal selectors; uses its separate actor circuit")
+if args.carry_bowl and not args.continuous_crossing and (args.goal_x != 29.8 or args.goal_y != 10.8 or args.speed != .5):
     parser.error("first native carry component requires goal (29.8,10.8), speed .5")
 if not 0.5 <= args.speed <= 2:
     parser.error("bounded native human speed is .5..2 m/s")
@@ -123,11 +136,15 @@ def main():
         key: str(value) if isinstance(value, Path) else value
         for key, value in vars(args).items()
     })
-    goal = (args.goal_x, args.goal_y, 0.0)
+    from robot.scene.restaurant_continuous_server import ContinuousServerRoute
+    circuit = ContinuousServerRoute() if args.continuous_crossing else None
+    goal = circuit.goal if circuit else (args.goal_x, args.goal_y, 0.0)
     robot_start = (28.8, 7.9, SHORT_START_WORLD_XYZ[2]) if args.robot_view == "close" else SHORT_START_WORLD_XYZ
     robot_yaw = math.pi / 2 if args.robot_view == "close" else SHORT_START_YAW
     if args.robot_view == "crossing-approach":
         robot_start, robot_yaw = (28.8, 7.4, SHORT_START_WORLD_XYZ[2]), math.pi / 2
+    if args.robot_view == "approach-forward":
+        robot_yaw = math.pi / 2
     sources = {
         ROOT / "scenes/generated/restaurant_base.usda",
         ROOT / "scenes/generated/restaurant_robot.usda",
@@ -276,7 +293,7 @@ def main():
             raise RuntimeError("native stationary bowl attachment did not settle within 3 seconds")
         save("native-carry-actions.json", {"available_custom_actions": agent.get_custom_action_names(),
             "pickup_task_status": str(agent.get_task_status(carry.task))})
-        agent.idle(facing=agent.get_facing_direction())
+        agent.idle(facing=carb.Float3(-1, 0, 0) if args.carry_facing_crossing else agent.get_facing_direction())
     sensor = None
     if args.sensor_diagnostic:
         from robot.config import FRONT_HAWK_LEFT_CAMERA_PRIM_PATH
@@ -297,6 +314,7 @@ def main():
             args.output,
             get_prim_planar_pose(stage, ROBOT_BASE_PRIM_PATH),
             mass_interval=args.human_mass_prior,
+            cluster_radius_m=args.human_cluster_radius,
         )
     phase = "idle_before"
     phase_start = timeline.get_current_time()
@@ -344,7 +362,7 @@ def main():
                 and (sensor is None or sensor.stationary_ready)
             ):
                 agent.set_speed(args.speed / UsdGeom.GetStageMetersPerUnit(stage))
-                task = agent.move_to(goal, auto_brake=True)
+                task = agent.move_to(goal, auto_brake=circuit is None)
                 if task == bh.BEHAVIOR_TASK_ID_INVALID:
                     raise RuntimeError("native move task rejected")
                 phase = "move"
@@ -353,7 +371,14 @@ def main():
                 status = agent.get_task_status(task)
                 if status == bh.BehaviorTaskStatus.FAILED:
                     raise RuntimeError("native move task failed")
-                if status == bh.BehaviorTaskStatus.SUCCEEDED:
+                if circuit is not None:
+                    if circuit.advance(xyz, now):
+                        task = agent.move_to(circuit.goal, auto_brake=False)
+                        if task == bh.BEHAVIOR_TASK_ID_INVALID:
+                            raise RuntimeError("continuous native next-leg task rejected")
+                    elif status == bh.BehaviorTaskStatus.SUCCEEDED:
+                        raise RuntimeError("native task success without actual circuit progress")
+                elif status == bh.BehaviorTaskStatus.SUCCEEDED:
                     task_succeeded = True
                     if carry is not None:
                         # Retain MoveTo's terminal state for this diagnostic.
@@ -438,6 +463,8 @@ def main():
                 raise RuntimeError("no RTX RGB frames during the initial idle window")
             if phase == "stopped_after" and now - phase_start >= (3. if carry is not None else 1.5):
                 break
+            if circuit is not None and phase == "move" and now - phase_start >= 14.:
+                break
             if sensor is not None:
                 time.sleep(
                     max(
@@ -468,6 +495,10 @@ def main():
         requested_speed_mps=args.speed,
         task_succeeded=task_succeeded,
     )
+    if circuit is not None:
+        from robot.evaluation.continuous_server_validation import summarize_continuous_server
+        report = summarize_continuous_server(records, requested_speed_mps=args.speed, parked_robot=True)
+        report["actor_circuit_events"] = circuit.events
     report.update(
         {
             "requested_speed_mps": args.speed,
@@ -499,7 +530,7 @@ def main():
         report["passed"] &= sensor_report["passed"]
     if carry is not None:
         from robot.scene.restaurant_human_carry import summarize_carry_records
-        carry_report = summarize_carry_records(carry.records)
+        carry_report = summarize_carry_records(carry.records, continuous=circuit is not None)
         carry_report["source_asset_unchanged"] = hashlib.sha256(Path(carry_setup["source"]).read_bytes()).hexdigest() == carry_setup["source_sha256"]
         carry_report["passed"] &= carry_report["source_asset_unchanged"]
         report["carry_attachment_gate"] = carry_report

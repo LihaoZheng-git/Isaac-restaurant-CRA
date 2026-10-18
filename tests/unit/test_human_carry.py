@@ -34,6 +34,16 @@ def test_native_carry_contract_accepts_bounded_attachment_without_perception_cla
     assert result["passed"] and not result["separate_bowl_perception_validated"]
 
 
+def test_continuous_carry_audits_excursion_when_a_circuit_returns_to_start():
+    rows = records()
+    moving = [r for r in rows if r["phase"] == "move"]
+    for index, r in enumerate(moving):
+        r["bowl_xyz"] = [np.sin(np.pi * index / (len(moving) - 1)), 0, 1.0]
+    assert not summarize_carry_records(rows)["checks"]["actual_bowl_motion"]
+    report = summarize_carry_records(rows, continuous=True)
+    assert report["passed"] and report["continuous_actor_mode"]
+
+
 @pytest.mark.parametrize(
     "failure",
     [

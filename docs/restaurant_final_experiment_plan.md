@@ -18,7 +18,7 @@ CRA advantage. Four numeric factors can include explicitly configured priors.
 | Standing native server | Natural standing-idle sway; RGB person/SAM association, live LiDAR geometry/motion, visually associated adult mass prior | All waypoints and stopping; independent human/layout clearance; fresh factor/provenance counts; no claim of rigid zero velocity |
 | Crossing native server | Same scene/robot route; selected slow transverse native walk at requested .5 m/s, earlier actor trigger and audited +15 degree RGB pitch | Parked-view component and coupled crossing passed separately, including nine owned moving-kinetic/seven simultaneous observations. Same-mount standing arrival/stopping also passed. Faster .7 m/s and close-view failures remain separate; replicated baseline comparisons are pending |
 | Table-side mixed props | Existing bowl/pot, utensils and ordinary restaurant furniture; detected cues determine scores | Stationary per-object ownership and factor reports first. Positive support/landing drop and contact/plume observations must be demonstrated in this actual view; otherwise preserve priors and report the case as prior-assisted |
-| Carried bowl | Audited existing bowl mesh attached through the native hand system, with retained occupancy and separate RGB association | Zero-wheel attachment/ownership gate before carrying motion. Pose/asset name never supplies fall height or heat. Plume remains a separate unresolved moving-view component |
+| Carried server pilot / later bowl-factor study | Audited existing bowl mesh attached through the native hand system; selected continuous server circuit | The pilot requires parked human perception, actual hand/prop attachment, retained observed occupancy and independent body/bowl clearance, then robot arrival/stopping. It does not establish separate bowl assessment. A bowl-factor comparison additionally requires its own RGB/LiDAR ownership and justified fall/plume evidence; pose/asset name never supplies fall height or heat |
 | Longer service mission | Left-side pickup to destination through validated local regions | Implement and validate field-region transitions and source-clock continuity first; do not concatenate short-run successes into long-route acceptance |
 
 Use the accepted 3.9 m `human-service` route for the first matched human study.
@@ -71,7 +71,8 @@ stationary gate.
    retained failures and current scope are in `restaurant_human_navigation.md`.
 2. Native bowl attachment/walking and parked-robot human perception now have
    actual RTX images/video; strict carrying stop and separate bowl ownership
-   remain unresolved. Select the final carrier trajectory and retain the
+   remain unresolved. The user selected continuous crossing rather than a
+   stopped carrier; validate its separate circuit and retain the
    distinction between attachment, human perception and bowl assessment.
 3. Wire and test the matched baseline adapters; run a small bounded pilot before
    the prespecified repeated study. Diagnose phi saturation by factor and prior

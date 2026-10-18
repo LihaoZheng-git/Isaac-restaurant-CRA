@@ -85,7 +85,7 @@ def _json(value):
 
 class RestaurantHumanSensorDiagnostic:
     def __init__(
-        self, stage, root, output, anchor, *, mass_interval=(70.0, 45.0, 100.0)
+        self, stage, root, output, anchor, *, mass_interval=(70.0, 45.0, 100.0), cluster_radius_m=.12
     ):
         self.stage, self.output = stage, output
         self.camera = NovaCarterCamera(resolution=(400, 640))
@@ -216,6 +216,7 @@ class RestaurantHumanSensorDiagnostic:
             anchor_yaw=anchor[2],
             occupancy_retention_seconds=0.15,
             cluster_in_3d=True,
+            cluster_radius_m=cluster_radius_m,
             camera_visibility_radius_pixels=4,
             mask_foreground_depth_gap_m=0.5,
             rectify_plume=True,

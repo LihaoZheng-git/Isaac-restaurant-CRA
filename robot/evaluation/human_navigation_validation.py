@@ -37,7 +37,7 @@ def human_stationary_checks(records):
 
 
 def summarize_human_navigation(records, truth, *, mode):
-    if mode not in {"standing", "crossing"}:
+    if mode not in {"standing", "crossing", "continuous-crossing"}:
         raise ValueError("unknown human navigation mode")
     rows = []
     if len(truth) >= 3:
@@ -188,7 +188,7 @@ def summarize_human_navigation(records, truth, *, mode):
             for o in r["objects"]
         ),
     }
-    if mode == "crossing":
+    if mode in {"crossing", "continuous-crossing"}:
         checks.update(
             supported_moving_kinetic_rows=len(supported_moving) >= 5,
             simultaneous_motion_observed=len(simultaneous) >= 1,
@@ -197,6 +197,11 @@ def summarize_human_navigation(records, truth, *, mode):
             and truth[-1]["actor_xyz"][0] <= 28.05
             and truth[-1]["phase"] == "stopped_after",
         )
+        if mode == "continuous-crossing":
+            from robot.evaluation.continuous_server_validation import summarize_continuous_server
+            checks.pop("actual_crossing")
+            checks["actual_continuous_crossing"] = summarize_continuous_server(
+                truth, requested_speed_mps=.5, parked_robot=False)["passed"]
     else:
         checks["stationary_world_velocity_error"] = (
             bool(rows)

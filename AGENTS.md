@@ -541,8 +541,13 @@
   and zero reported velocity did not mean a stationary root/collider. Keep
   failed reports and the unchanged .03 m stop gate; do not freeze/teleport or
   relabel attachment success as navigation acceptance. The sensor component's
-  .416667 s maximum completion age is not the .35 s live-control gate. Keep
-  this branch unmerged until its intended endpoint/trajectory scope is resolved.
+  .416667 s maximum completion age is not the .35 s live-control gate. Preserve
+  those failed reports. The user subsequently selected
+  continuous server crossing; its separate acceptance must verify actual
+  crossing, sustained motion, articulation and independent body/bowl geometry,
+  without claiming human endpoint stopping. Robot waypoint arrival and safe
+  stopping remain mandatory. Keep the branch unmerged until that bounded
+  stationary/perception and coupled navigation validation is sound.
   See docs/restaurant_native_carry.md; main remains unchanged.
 - The installed Isaac python.bat may return zero after script RuntimeError.
   Simulation acceptance requires saved validation flags, actual arrival/stop

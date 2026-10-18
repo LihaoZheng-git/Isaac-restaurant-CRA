@@ -27,9 +27,9 @@ are evaluation only, never CRA estimation inputs. Source scene and asset bytes
 are checked independently. The camera is a diagnostic view, not a new robot
 sensor or evidence source.
 
-`--carry-bowl` is limited to the .5 m/s actor path from the existing native
+The original `--carry-bowl` component is limited to the .5 m/s actor path from the existing native
 start to `(29.8,10.8,0)`. It is intentionally absent from the wheel-navigation
-runner. A carried bowl has **no validated separate sensor ownership** yet.
+runner in that original endpoint mode. A carried bowl has **no validated separate sensor ownership** yet.
 An attached bowl, its asset name or its authored elevation never supplies
 thermal, potential or mass evidence.
 
@@ -86,3 +86,156 @@ Potential needs justified support/landing evidence; a hand height is not fall
 height. Visible plume is a separate cue method, not soup identity/temperature.
 The moving-view plume gap, factor-confidence/scale study and matched navigation
 baselines remain separate work in `restaurant_final_experiment_plan.md`.
+
+## Selected continuous-server scenario
+
+The user selected continuous crossing on 2026-10-18. The original five failed
+endpoint-stop reports stay failed. The new explicit `--continuous-crossing`
+parked diagnostic and `--restaurant-human continuous-crossing --human-carry-bowl`
+live selector use a separate .5 m/s native actor circuit through
+`(28.0,8.9)`, `(28.0,11.4)`, `(29.8,11.4)`, `(29.8,8.9)`.
+These are authored actor-scene waypoints, never robot nominal/control inputs.
+Native MoveTo uses `auto_brake=False`; actual root proximity within .25 m
+requests the next leg. SDK success without actual progress is rejected.
+
+The new independent actor gate requires actual traversal from the right side
+to x<=28.3 near y=8.9, articulated feet, bounded observed speed, grounded root,
+aligned PhysX collider, positive layout clearance and actual motion over the
+last observed second. The .4 m body envelope then clears the x=28.8 robot
+centerline. The circuit's turn differs from the old stopped endpoint; it does
+not pass or replace that old .03 m stopping test. The bowl retains the same
+actual hand/PhysX attachment, posture and geometry checks, using excursion
+rather than endpoint displacement for a returning circuit. Robot experiments
+still require all actual waypoint arrivals, safe stopping, current inference/
+field freshness, positive geometry and unchanged exact MPC/CBF checks.
+
+The independent robot monitor additionally includes a conservative circle
+around the actual bowl's rotated world bounds, through the robot's final
+stopping observation. These oracle guard/readback values never supply CRA
+geometry or factor scores. All observed LiDAR occupancy retains its original
+runtime treatment. Human mass remains a visually selected adult prior, and
+unsupported bowl/body factors keep labeled priors. Separate bowl ownership,
+hand-to-landing fall evidence and moving-view thermal estimation remain open.
+
+The actual `native-carry-continuous-sensor-v1` parked test passed the separate
+continuous actor, attachment and human sensor gates: observed median native
+speed .493773 m/s, .444205 m displacement in its final second, .436268 m
+minimum actor/layout clearance, .398641 m minimum bowl/layout clearance and
+.000765 m maximum hand-relative position error. It had eight stationary and
+24 steady-moving fresh visually associated adult-prior assessments, with
+.037322 m/s median moving velocity error. All 171 recorded video frames
+decoded and were distinct; all six scene sources and the bowl source stayed
+unchanged. Its .4 s maximum result-completion age is still beyond the live
+runner's .35 s cap and does not establish control freshness.
+
+`continuous-validation-current.json` re-audits the unchanged raw actor and
+attachment records with explicit continuous-mode names and retains hashes of
+the original reports. The original attachment report's old endpoint-observation
+check name is not human stopping acceptance. None of the original failed
+stopping trials has been rewritten. The full unit regression passed 1,894
+tests; Ruff and whitespace checks passed before the coupled wheel trial.
+
+`carried-server-live-v1` was blocked before wheel motion: all three selected
+human stationary checks failed over 36 source frames. Small prop-sized SAM
+masks were accepted near the server, but full-body proposals failed unchanged
+quality/foreign-return gates, so no fresh adult mass prior was selected. One
+context-box body proposal had quality .81075 and .3431 foreign-hit fraction;
+it was correctly rejected rather than accepted as a full person. The closer
+parked-view component pass does not erase this farther-view failure.
+
+A separate explicit initial heading option makes the native carrier face its
+first crossing leg (-world X) before acquisition. This changes scene posture
+only, preserves the original robot start/3.9 m route/camera and leaves model
+quality, ownership, mass and control gates unchanged. It requires another
+parked RGB/LiDAR gate before a coupled retry; it is not a general solution to
+held-object segmentation or a change to the original failed run.
+
+The farther `native-carry-facing-sensor-v1` observation passed human perception
+(eight stationary/18 moving fresh adult priors, .028143 m/s median moving
+velocity error) and attachment. Its complete actor test still failed: actual
+robot drift was .021443 m over the full observation, beyond the unchanged
+.02 m parked limit, with all wheel commands zero. This is a failed parked
+trial, not permission to skip that check. Its .45 s maximum completion age
+also is not live-control freshness acceptance.
+
+The next separately declared setup uses robot yaw 90 degrees and the same
+world start and three world waypoints. `approach-forward` in the parked test
+and `--human-start-view approach-forward` in the live runner identify it explicitly. Only
+the fixed coordinate transform changes; a unit check reconstructs the same
+world waypoint coordinates. All perception, parked drift, navigation and
+robot stopping thresholds remain unchanged. Later matched methods must use
+this exact heading and actor posture if it passes its own gates.
+
+`native-carry-forward-sensor-v1` did not pass: only one stationary fresh adult
+association occurred before the unchanged eight-second stationary timeout;
+actor walking and wheel motion remained blocked. The actual closer-view
+`native-carry-continuous-sensor-v1` remains the complete passing component.
+The next coupled pilot therefore uses that validated robot view (28.8,7.4,
+yaw 90 degrees), +15 degree camera pitch and the original carrier posture,
+explicitly selected by `--human-start-view crossing-approach`. The three fixed
+world waypoints remain unchanged but the robot route is now 2.1 m. This is a
+different bounded case, not a retroactive pass or a 3.9 m carrying validation.
+
+That closer `carried-server-near-live-v1` attempt also failed its stationary
+human gate with zero wheel motion. Comparing native startup revealed a real
+component/runtime mismatch: the live helper started pickup immediately after
+idle initialization, whereas the parked diagnostic first let native idle
+settle. The live root settled near (29.78,8.94); the passing parked carrying
+pose was near (29.55,9.01). The camera change alone did not fix the missing
+full-body associations. The live caller now explicitly begins pickup only
+after its existing idle/robot settling interval, then checks actual hand/prop
+settling before perception. The original 3.9 m route is retried separately as
+`carried-server-settled-live-v1`; no old report is overwritten.
+
+The first idle-before-pickup retry still failed the stationary gate (contact
+observed, insufficient fresh human mass/current-motion rows); wheels stayed
+zero. Its root was near (29.62,9.02). The next `carried-server-aligned-live-v1`
+uses the complete parked startup chronology: robot settling, diagnostic camera
+settling, native idle settling, then pickup/actual attachment settling. Native
+initialization is delayed to the same phase rather than starting pickup during
+the initial idle transition. Fixed stepping is explicit, startup metadata is
+saved, and the new acquisition window is 60 frames (the existing allowed
+maximum). This is a new trial; SAM quality .85 and all other gates stay fixed.
+
+The aligned startup's saved stationary gate passed all three human checks
+before any wheel command: fresh visual adult priors, current supported motion
+and the observed contact proxy. Pickup was SUCCEEDED and ready at simulation
+time 3.416667 s. The subsequent live navigation result remains separate from
+this stationary result; it must also pass moving-human assessments, all robot
+waypoints, independent body/bowl geometry and actual robot stopping.
+
+The aligned trial **failed navigation**, stopping after its first waypoint
+on an unresolved nearby positive track (546). It retained .948958 m minimum
+independent clearance, .867332 minimum analytical CBF margin and .004715 m
+robot stopping drift across 133 fields (129 translating). Five supported
+moving-human kinetic rows and four simultaneous rows passed their independent
+perception checks; median world/relative speed errors were .094344/.029862 m/s.
+Attachment passed. This is a safe rejected trial, not arrival acceptance.
+The continuous-actor final gate also failed because the aborted robot trial
+explicitly canceled the actor. No actor stopping result follows.
+
+The lost fragment lay near the human's rear body, not the bowl center. Its
+last centroid (29.0883,9.0094) at t=18.9 was .291 m from the next current body
+cluster centroid; subsequent velocity queries did not meet the unchanged
+.25 m parent-association gate. The watcher correctly retained it and stopped
+when the robot came within 1.2 m. No old occupancy was silently declared free.
+
+The next opt-in perception diagnostic increases 3D connected clustering from
+.12 to .18 m (`--human-cluster-radius .18`) for this separated articulated
+actor. It changes geometric grouping, not sensor returns, mass/score inputs or
+safety thresholds. Unit tests preserve every return and the old .12/.20 m
+3D/planar defaults. Larger grouping can merge nearby physical objects; masks
+and unmatched occupancy retain their existing treatment. Keep all SAM .85,
+positive-return, .10/.25 m merge, freshness and exact control checks fixed.
+Stationary validation precedes any new wheel trial; no successful wider-radius
+navigation or crowd/occlusion claim follows from implementing this option.
+
+The wider-radius `native-carry-cluster18-sensor-v1` component passed every
+actor, parked-robot, attachment and sensor check. It recorded five stationary
+and 30 steady-moving fresh human priors, .021417 m/s median velocity error,
+.35 s maximum completion age, 171 distinct decoded video frames and unchanged
+sources. Its physical attachment/geometry trajectory was unchanged from the
+original parked case. The subsequent `carried-server-cluster18-live-v1` retry
+uses the original 3.9 m route, aligned startup, 60-frame stationary window,
+fixed lambda 1.25 and identical control/continuity constraints, plus bounded
+copied-sensor snapshots. Its arrival gate is separate from this component pass.

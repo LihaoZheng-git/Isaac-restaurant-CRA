@@ -39,18 +39,25 @@ RESTAURANT_OBSERVATIONS = {
 }
 
 
-def restaurant_route_local_xy(name="short"):
+def restaurant_route_local_xy(name="short", *, human_start_view="original"):
     """Obstacle-unaware nominal waypoints in the original bowl start frame.
 
     The 3.95 m service segment stays in the existing bounded field; it is not
     the 30.88 m final route and does not extend evidence timestamps.
     """
+    if human_start_view not in {"original", "approach-forward", "crossing-approach"}:
+        raise ValueError("unknown human start view")
+    if human_start_view != "original" and name != "human-service":
+        raise ValueError("experimental start is bounded to the human-service route")
     if name == "short":
         return (SHORT_GOAL_LOCAL_XY,)
     if name not in {"service", "human-service"}:
         raise ValueError("unknown restaurant route")
     start = np.asarray(SHORT_START_WORLD_XYZ[:2])
-    c, s = math.cos(SHORT_START_YAW), math.sin(SHORT_START_YAW)
+    if human_start_view == "crossing-approach":
+        start = np.array([28.8, 7.4])
+    yaw = math.pi / 2 if human_start_view != "original" else SHORT_START_YAW
+    c, s = math.cos(yaw), math.sin(yaw)
     world = np.array([(28.8, 7.8), (28.8 if name == "human-service" else 29.0, 8.7), (28.8, 9.5)])
     return tuple(map(tuple, (world - start) @ np.array([[c, -s], [s, c]])))
 

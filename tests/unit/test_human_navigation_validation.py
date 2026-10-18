@@ -186,3 +186,38 @@ def test_standing_reference_rejects_translating_actor_and_wrong_world_velocity()
     for r in records:
         r["objects"][0]["attributes"]["motion"]["velocity_x_mps"]["value"] = 0.4
     assert not summarize_human_navigation(records, truth, mode="standing")["passed"]
+
+
+def test_continuous_crossing_keeps_perception_checks_without_claiming_actor_stop():
+    records, _ = episode()
+    truth = []
+    for t in np.arange(0, 8, 0.02):
+        e = max(0, t - 1.0)
+        xy = (29.8 - 0.5 * e, 8.9) if e <= 3.6 else (28.0, 8.9 + 0.5 * (e - 3.6))
+        truth.append(
+            dict(
+                time=float(t),
+                actor_xyz=[*xy, 0],
+                phase="idle_before" if t < 1 else "move",
+                left_foot_xyz=[0.15 * np.sin(8 * t), 0, 0],
+                right_foot_xyz=[0, 0, 0],
+                robot_xy=[28.8, 5.6],
+                actor_layout_clearance_m=0.2,
+                collider_alignment_error_m=0.002,
+            )
+        )
+    for r in records:
+        o = r["objects"][0]
+        t = r["sensor_timestamp"]
+        o["diagnostics"]["centroid_world_xy"] = [29.8 - 0.5 * (t - 1), 8.9]
+        o["attributes"]["motion"]["velocity_x_mps"]["value"] = -0.5
+        o["attributes"]["motion"]["relative_speed_mps"]["value"] = np.hypot(0.5, 0.2)
+    assert summarize_human_navigation(records, truth, mode="continuous-crossing")[
+        "passed"
+    ]
+    assert not summarize_human_navigation(records, truth, mode="crossing")["passed"]
+    for r in records:
+        r["commit_simulation_time"] += 1.0
+    assert not summarize_human_navigation(records, truth, mode="continuous-crossing")[
+        "passed"
+    ]
