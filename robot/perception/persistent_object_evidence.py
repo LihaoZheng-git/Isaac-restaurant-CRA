@@ -28,9 +28,12 @@ class PersistentObjectEvidenceConfig:
     minimum_visual_reassessment_interval_seconds: float = 1.0
     maximum_visual_tracks_per_update: int = 2
     translate_instance_bounds_prior: bool = False
+    retain_observed_properties: bool = True
 
     def __post_init__(self):
-        if not isinstance(self.translate_instance_bounds_prior, bool):
+        if not isinstance(self.translate_instance_bounds_prior, bool) or not isinstance(
+            self.retain_observed_properties, bool
+        ):
             raise TypeError("translated bounds opt-in must be boolean")
         if not isinstance(self.scope, str) or not self.scope.strip():
             raise ValueError("property persistence requires an explicit scene scope")
@@ -41,7 +44,11 @@ class PersistentObjectEvidenceConfig:
                 "maximum_visual_tracks_per_update must be a positive integer"
             )
         for name, value in vars(self).items():
-            if name in {"scope", "translate_instance_bounds_prior"}:
+            if name in {
+                "scope",
+                "translate_instance_bounds_prior",
+                "retain_observed_properties",
+            }:
                 continue
             if (
                 isinstance(value, bool)
@@ -208,7 +215,7 @@ class PersistentObjectEvidence:
                     "source_timestamp": item.timestamp_seconds,
                     "source_frame_id": camera_frame_id,
                 }
-                if not competing:
+                if not competing and self.config.retain_observed_properties:
                     self.properties[key] = _Property(
                         item, camera_frame_id, track.centroid_world_xy
                     )

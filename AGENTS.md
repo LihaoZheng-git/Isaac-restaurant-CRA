@@ -444,3 +444,22 @@
   or robot crossing was implemented by this actor-motion branch; no static
   memory or unchanged-shape bounds prior may be assumed for articulating
   humans. See docs/restaurant_human_locomotion.md. PR #117's main hold remains.
+- The separate native-human parked-robot sensor gate passed with 55 fields,
+  27 fresh visually associated human mass PRIORS, one human track, 10 matched
+  stationary and 8 steady moving rows; median velocity error was .084934 m/s.
+  The audited COCO YOLO11n-seg person cue selects configurable 70 [45,100] kg
+  adult-demo mass only after fresh unambiguous SAM mask association. It is not
+  a learned/measured human mass or an authored-role input; retain the original
+  catalog output separately. This fresh-only articulation mode disables all
+  property/bounds borrowing and static occupancy memory; .15 s positive
+  occupancy remains bounded. Potential/thermal remain .25 priors, contact is
+  a sometimes-high visible geometry proxy, and first-frame contact nominal 1
+  with zero combined confidence still saturated phi under the unchanged
+  conservative policy. Preserve that factor-specific finding and failures.
+  A copied scan may wait at most .05 simulation seconds for its declared return
+  poses, without extrapolating or changing acquisition epochs. Retry rejected
+  acquisitions each physics tick; never relax freshness to fix scan-cycle
+  phase locking. The maximum completed field age was .416667 s; this is not
+  navigation/control freshness acceptance, real time or robot/human crossing.
+  Keep next wheel experiments behind their own current-field/track-loss gates.
+  See docs/restaurant_human_perception.md; PR #117's main hold is unchanged.
