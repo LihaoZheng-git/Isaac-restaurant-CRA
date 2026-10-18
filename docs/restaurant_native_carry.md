@@ -47,6 +47,9 @@ In v4, maximum hand-relative position error was .000677 m, maximum bowl tilt
 native API reported zero linear velocity and zero preferred speed while actual
 root/collider/prop poses still moved. Task success or that API velocity is not
 physical stopping acceptance. The original failed reports remain unchanged.
+This installed Isaac launcher returned exit code zero even after a script
+RuntimeError. Read the saved validation flags and error log; launcher exit
+status alone is not a passing simulation result.
 No teleport, animation freeze, looser stopping threshold or environment upgrade
 was used to manufacture a pass.
 

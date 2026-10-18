@@ -544,3 +544,6 @@
   .416667 s maximum completion age is not the .35 s live-control gate. Keep
   this branch unmerged until its intended endpoint/trajectory scope is resolved.
   See docs/restaurant_native_carry.md; main remains unchanged.
+- The installed Isaac python.bat may return zero after script RuntimeError.
+  Simulation acceptance requires saved validation flags, actual arrival/stop
+  and error-log inspection; a launcher exit code alone is insufficient.
