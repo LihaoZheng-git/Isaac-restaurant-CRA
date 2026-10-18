@@ -44,6 +44,8 @@ parser.add_argument("--human-cluster-radius", type=float, default=.12,
                     help="explicit human 3D connectivity radius .12...20 m; original occupancy and safety gates retained")
 parser.add_argument("--human-carry-bowl", action="store_true",
                     help="native held bowl in explicit continuous-crossing mode; separate bowl perception remains unvalidated")
+parser.add_argument("--human-upper-continuation", action="store_true",
+                    help="cross once then continue in upper aisle; authored actor route only, no factor/control input")
 parser.add_argument("--human-carry-facing-crossing", action="store_true",
                     help="explicit initial native actor heading along the first crossing leg; never evidence input")
 parser.add_argument("--human-start-view", choices=("original", "approach-forward", "crossing-approach"), default="original",
@@ -131,6 +133,8 @@ if args.restaurant_human == "continuous-crossing" and args.human_walking_speed !
     parser.error("bounded continuous crossing currently requires .5 m/s")
 if args.human_carry_bowl and args.restaurant_human != "continuous-crossing":
     parser.error("native carrying requires explicit continuous crossing")
+if args.human_upper_continuation and not args.human_carry_bowl:
+    parser.error("upper continuation requires the explicit carried-server scenario")
 if args.human_carry_facing_crossing and not args.human_carry_bowl:
     parser.error("initial carrying heading requires the carried bowl")
 if args.human_start_view != "original" and (not args.human_carry_bowl or args.restaurant_route != "human-service"):
@@ -461,7 +465,8 @@ def main():
         human = RestaurantHumanEpisode(stage, mode=args.restaurant_human, output=args.output,
                                        trigger_robot_y=args.human_crossing_trigger_y, speed_mps=args.human_walking_speed,
                                        carry_bowl=args.human_carry_bowl,
-                                       carry_facing_crossing=args.human_carry_facing_crossing)
+                                       carry_facing_crossing=args.human_carry_facing_crossing,
+                                       upper_continuation=args.human_upper_continuation)
         ACTIVE_HUMAN = human
         save_json("human-native-setup.json", human.setup)
         for _ in range(20):
@@ -1770,7 +1775,7 @@ def main():
     if human is not None:
         from robot.evaluation.human_navigation_validation import summarize_human_navigation
         human_validation = summarize_human_navigation(live_fields, human.records,
-            mode=args.restaurant_human)
+            mode=args.restaurant_human, upper_continuation=args.human_upper_continuation)
         completed = completed and human_validation["passed"]
         save_json("human-navigation-validation.json", human_validation)
         save_json("human-truth-evaluation-only.json", human.records)
@@ -1816,6 +1821,7 @@ def main():
         "native_human_mode": args.restaurant_human,
         "human_lidar_cluster_radius_m": args.human_cluster_radius,
         "native_carried_bowl": args.human_carry_bowl,
+        "native_human_upper_continuation": args.human_upper_continuation,
         "human_crossing_trigger_robot_world_y": args.human_crossing_trigger_y,
         "human_requested_walking_speed_mps": args.human_walking_speed,
         "experimental_camera_mount": {

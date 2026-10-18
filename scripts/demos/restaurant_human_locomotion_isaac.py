@@ -24,6 +24,8 @@ parser.add_argument("--carry-bowl", action="store_true",
                     help="native hand attachment / zero-wheel component; separate bowl perception remains unvalidated")
 parser.add_argument("--continuous-crossing", action="store_true",
                     help="explicit carried-server circuit, no actor endpoint-stop claim; robot remains parked")
+parser.add_argument("--continuous-upper-continuation", action="store_true",
+                    help="cross once then continue in the upper aisle; preserve original lower-return circuit separately")
 parser.add_argument("--carry-facing-crossing", action="store_true",
                     help="explicit initial actor heading along its first crossing leg (-world X), not a sensor input")
 parser.add_argument("--sensor-simulation-rate", type=float, default=0.1)
@@ -44,6 +46,8 @@ if not .12 <= args.human_cluster_radius <= .20 or (args.human_cluster_radius != 
     parser.error("3D radius .12...20 requires the native human sensor diagnostic")
 if args.carry_facing_crossing and not args.continuous_crossing:
     parser.error("initial crossing heading requires the continuous carrying scenario")
+if args.continuous_upper_continuation and not args.continuous_crossing:
+    parser.error("upper continuation requires the continuous carrying scenario")
 if args.continuous_crossing and (not args.carry_bowl or args.speed != .5
                                or args.goal_x != 29.8 or args.goal_y != 12.5):
     parser.error("continuous carry requires .5 m/s and default goal selectors; uses its separate actor circuit")
@@ -137,7 +141,7 @@ def main():
         for key, value in vars(args).items()
     })
     from robot.scene.restaurant_continuous_server import ContinuousServerRoute
-    circuit = ContinuousServerRoute() if args.continuous_crossing else None
+    circuit = ContinuousServerRoute(upper_continuation=args.continuous_upper_continuation) if args.continuous_crossing else None
     goal = circuit.goal if circuit else (args.goal_x, args.goal_y, 0.0)
     robot_start = (28.8, 7.9, SHORT_START_WORLD_XYZ[2]) if args.robot_view == "close" else SHORT_START_WORLD_XYZ
     robot_yaw = math.pi / 2 if args.robot_view == "close" else SHORT_START_YAW
@@ -497,7 +501,8 @@ def main():
     )
     if circuit is not None:
         from robot.evaluation.continuous_server_validation import summarize_continuous_server
-        report = summarize_continuous_server(records, requested_speed_mps=args.speed, parked_robot=True)
+        report = summarize_continuous_server(records, requested_speed_mps=args.speed, parked_robot=True,
+                                            upper_continuation=args.continuous_upper_continuation)
         report["actor_circuit_events"] = circuit.events
     report.update(
         {

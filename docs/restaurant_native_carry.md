@@ -268,3 +268,37 @@ space. Seven new unit cases cover recovery at .3 s, missing/ambiguous support,
 unstable velocity, absent original coexistence and unchanged expiry. Successful
 retained-pair events save their exact current positive geometry for an
 independent audit. A fresh live retry must pass before merging this branch.
+
+`carried-server-coobserved-live-v1` verified that correction but still failed
+overall arrival. Its saved-input independent audit recomputed a .3 s recovery
+with 27 unique current supporting returns and .238946 m parent/query distance;
+all original source-age, coexistence and velocity/geometry gates passed. The
+raw report remains failed: after 214 fields/212 translating fields and two
+waypoints, the lower-return circuit brought the server back beside the robot,
+and a new nearby fragment triggered the unchanged .15 s loss stop. Minimum
+independent clearance was .248459 m, minimum CBF margin .364190 and stopping
+drift .004294 m. Thirty supported moving-human/28 simultaneous rows passed
+with .069687/.027966 m/s median world/relative errors. This is not completed
+navigation or robust repeated-encounter tracking.
+
+The intended next scene is one crossing followed by continued service walking
+farther up the aisle, rather than an immediate return to the robot near its
+destination. Explicit `--human-upper-continuation` (live) /
+`--continuous-upper-continuation` (parked) preserves the original lower-return
+variant separately. After `(28,8.9)` it uses `(28,11.4)`, `(29.8,11.4)`,
+`(29.8,12.6)`, `(28,12.6)` and repeats those four upper waypoints. The first
+crossing is never revisited. An independent authored-layout precheck retained
+.102145 m minimum clearance for a conservative .6 m half-extent envelope;
+actual stationary body/bowl checks are still required. The actor region is
+explicitly extended to y<=13.3 for this variant only. Robot waypoints, factor
+policies and every robot safety/arrival/stop constraint stay unchanged. This
+new scene cannot retroactively pass the repeated-return trial.
+
+The `native-carry-upper-sensor-v1` parked gate passed actor, attachment,
+geometry and human perception checks: three stationary/29 moving fresh adult
+priors, .021592 m/s median velocity error, .35 s maximum completion age,
+.000696 m maximum hand-relative position error and .387889 m minimum
+bowl/layout clearance. All 171 video frames decoded and were distinct, and
+source scenes/assets stayed unchanged. The full 1,908-test unit regression
+and Ruff passed. The separate `carried-server-upper-live-v1` wheel trial must
+still pass all actual robot waypoints/stopping and current perception gates.

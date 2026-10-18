@@ -3,7 +3,9 @@
 import numpy as np
 
 
-def summarize_continuous_server(records, *, requested_speed_mps, parked_robot):
+def summarize_continuous_server(
+    records, *, requested_speed_mps, parked_robot, upper_continuation=False
+):
     if len(records) < 30:
         return {"passed": False, "checks": {"enough_actual_samples": False}}
     t = np.asarray([r["time"] for r in records])
@@ -51,7 +53,7 @@ def summarize_continuous_server(records, *, requested_speed_mps, parked_robot):
                 (xyz[:, 0] >= 27.5)
                 & (xyz[:, 0] <= 30.4)
                 & (xyz[:, 1] >= 8.2)
-                & (xyz[:, 1] <= 12.1)
+                & (xyz[:, 1] <= (13.3 if upper_continuation else 12.1))
             ).all()
         ),
         "grounded_actor": np.max(np.abs(xyz[:, 2])) <= 0.05,
@@ -69,6 +71,7 @@ def summarize_continuous_server(records, *, requested_speed_mps, parked_robot):
         "passed": bool(all(checks.values())),
         "checks": {k: bool(v) for k, v in checks.items()},
         "median_moving_speed_mps": median,
+        "upper_continuation": upper_continuation,
         "terminal_one_second_displacement_m": float(np.linalg.norm(tail[-1] - tail[0])),
         "minimum_actor_layout_clearance_m": float(geometry[:, 0].min()),
         "scope": "explicit continuous native server circuit; actual crossing/articulation/collider geometry; no human endpoint stopping, robot arrival, perception or real-time claim",

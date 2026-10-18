@@ -5,12 +5,15 @@ import pytest
 
 from robot.evaluation.continuous_server_validation import summarize_continuous_server
 from robot.scene.restaurant_continuous_server import ContinuousServerRoute
-from robot.scene.restaurant_service_build import SHORT_START_WORLD_XYZ, restaurant_route_local_xy
+from robot.scene.restaurant_service_build import (
+    SHORT_START_WORLD_XYZ,
+    restaurant_route_local_xy,
+)
 
 
-def actual_records():
+def actual_records(duration=8):
     rows = []
-    for t in np.arange(0, 8, 0.02):
+    for t in np.arange(0, duration, 0.02):
         elapsed = max(0, t - 1)
         xy = (
             (29.8 - 0.5 * elapsed, 8.9)
@@ -54,11 +57,40 @@ def test_continuous_actor_accepts_actual_crossing_without_endpoint_stop_claim():
     assert report["terminal_one_second_displacement_m"] >= 0.45
 
 
-@pytest.mark.parametrize("view,start", [("approach-forward", SHORT_START_WORLD_XYZ[:2]), ("crossing-approach", (28.8,7.4))])
+def test_upper_continuation_crosses_once_then_stays_in_upper_aisle():
+    route = ContinuousServerRoute(upper_continuation=True)
+    targets = []
+    for i in range(18):
+        targets.append(route.goal)
+        assert route.advance(route.goal, float(i + 1))
+    assert targets[0] == (28.0, 8.9, 0.0)
+    assert all(g[1] >= 11.4 for g in targets[1:])
+    assert len(set(targets[1:])) == 4
+
+
+def test_upper_route_has_explicit_expanded_actor_region_only():
+    rows = actual_records(duration=12)
+    assert not summarize_continuous_server(
+        rows, requested_speed_mps=0.5, parked_robot=True
+    )["passed"]
+    assert summarize_continuous_server(
+        rows, requested_speed_mps=0.5, parked_robot=True, upper_continuation=True
+    )["passed"]
+
+
+@pytest.mark.parametrize(
+    "view,start",
+    [
+        ("approach-forward", SHORT_START_WORLD_XYZ[:2]),
+        ("crossing-approach", (28.8, 7.4)),
+    ],
+)
 def test_forward_robot_start_preserves_same_fixed_world_service_waypoints(view, start):
     local = np.array(restaurant_route_local_xy("human-service", human_start_view=view))
-    world = local @ np.array([[0,1],[-1,0]]) + start
-    np.testing.assert_allclose(world, [(28.8,7.8),(28.8,8.7),(28.8,9.5)], atol=1e-10)
+    world = local @ np.array([[0, 1], [-1, 0]]) + start
+    np.testing.assert_allclose(
+        world, [(28.8, 7.8), (28.8, 8.7), (28.8, 9.5)], atol=1e-10
+    )
     with pytest.raises(ValueError):
         restaurant_route_local_xy("short", human_start_view=view)
 

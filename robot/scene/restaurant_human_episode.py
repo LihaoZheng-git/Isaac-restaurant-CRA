@@ -24,11 +24,14 @@ class RestaurantHumanEpisode:
         speed_mps=0.7,
         carry_bowl=False,
         carry_facing_crossing=False,
+        upper_continuation=False,
     ):
         if mode not in {"standing", "crossing", "continuous-crossing"}:
             raise ValueError("unknown human episode")
         if carry_bowl and mode != "continuous-crossing":
             raise ValueError("carried server requires explicit continuous crossing")
+        if upper_continuation and mode != "continuous-crossing":
+            raise ValueError("upper continuation requires continuous crossing")
         if carry_facing_crossing and not carry_bowl:
             raise ValueError("initial carrying heading requires a carried bowl")
         self.carry_facing_crossing = carry_facing_crossing
@@ -54,7 +57,9 @@ class RestaurantHumanEpisode:
         from robot.scene.restaurant_continuous_server import ContinuousServerRoute
 
         self.circuit = (
-            ContinuousServerRoute() if mode == "continuous-crossing" else None
+            ContinuousServerRoute(upper_continuation=upper_continuation)
+            if mode == "continuous-crossing"
+            else None
         )
         self.carry = None
         self.carry_setup = None
@@ -100,8 +105,14 @@ class RestaurantHumanEpisode:
 
     def begin_carry(self):
         """Call only after the native idle/robot startup has settled."""
-        if self.carry is None or self.carry.task is not None or self.phase != "idle_before":
-            raise RuntimeError("native carry start requires a settled idle and no previous pickup")
+        if (
+            self.carry is None
+            or self.carry.task is not None
+            or self.phase != "idle_before"
+        ):
+            raise RuntimeError(
+                "native carry start requires a settled idle and no previous pickup"
+            )
         self.carry.start()
         self.phase = "pickup"
 
