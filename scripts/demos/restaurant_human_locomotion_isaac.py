@@ -2,6 +2,7 @@
 
 import argparse
 import hashlib
+import importlib
 import json
 import math
 from pathlib import Path
@@ -16,9 +17,21 @@ parser.add_argument("--scene", type=Path, required=True)
 parser.add_argument("--output", type=Path, required=True)
 parser.add_argument("--layout-survey", type=Path, required=True)
 parser.add_argument("--speed", type=float, default=0.7)
+parser.add_argument("--goal-y", type=float, default=12.5)
+parser.add_argument("--sensor-diagnostic", action="store_true")
+parser.add_argument("--sensor-simulation-rate", type=float, default=0.1)
+parser.add_argument(
+    "--human-mass-prior",
+    nargs=3,
+    type=float,
+    default=(70.0, 45.0, 100.0),
+    metavar=("KG", "LOWER", "UPPER"),
+)
 args = parser.parse_args()
 if not 0.5 <= args.speed <= 2:
     parser.error("bounded native human speed is .5..2 m/s")
+if not 9.8 <= args.goal_y <= 12.5 or not 0.05 <= args.sensor_simulation_rate <= 1:
+    parser.error("goal y must be 9.8..12.5; sensor simulation pacing .05..1")
 args.scene, args.output, args.layout_survey = (
     args.scene.resolve(),
     args.output.resolve(),
@@ -27,6 +40,10 @@ args.scene, args.output, args.layout_survey = (
 if args.output.exists():
     parser.error("use a fresh output directory")
 args.output.mkdir(parents=True)
+if args.sensor_diagnostic:
+    # Resolve the existing vision torch/torchvision pair before Kit adds paths.
+    importlib.import_module("robot.perception.visual_mass_runtime")
+
 from isaacsim import SimulationApp
 
 # Late extension activation breaks RGB capture in this installed Kit build.
@@ -70,7 +87,6 @@ from robot.evaluation.restaurant_service_validation import (
 from robot.safety.safe_sage_configuration_space import RectangularRobotFootprint
 from robot.scene.controlled_semantic_obstacle import read_world_bounds
 from robot.scene.restaurant_human_motion import (
-    HUMAN_WALK_GOAL,
     prepare_native_restaurant_human,
 )
 from robot.scene.restaurant_service_build import (
@@ -89,6 +105,7 @@ def save(name, data):
 
 
 def main():
+    goal = (29.8, args.goal_y, 0.0)
     sources = {
         ROOT / "scenes/generated/restaurant_base.usda",
         ROOT / "scenes/generated/restaurant_robot.usda",
@@ -214,6 +231,19 @@ def main():
     for _ in range(60):
         controller.stop()
         app.update()
+    sensor = None
+    if args.sensor_diagnostic:
+        from robot.evaluation.restaurant_human_sensor import (
+            RestaurantHumanSensorDiagnostic,
+        )
+
+        sensor = RestaurantHumanSensorDiagnostic(
+            stage,
+            ROOT,
+            args.output,
+            get_prim_planar_pose(stage, ROBOT_BASE_PRIM_PATH),
+            mass_interval=args.human_mass_prior,
+        )
     phase = "idle_before"
     phase_start = timeline.get_current_time()
     task = None
@@ -233,6 +263,7 @@ def main():
     wall_start = time.perf_counter()
     try:
         for index in range(1800):
+            step_started = time.perf_counter()
             wheel = controller.stop()
             if np.any(np.asarray(wheel) != 0):
                 raise RuntimeError("nonzero wheel command in actor-only test")
@@ -240,9 +271,24 @@ def main():
             now = timeline.get_current_time()
             xyz = agent.get_world_translation()
             xyz = [xyz.x, xyz.y, xyz.z]
-            if phase == "idle_before" and now - phase_start >= 1:
+            if sensor is not None:
+                sensor.tick(now, xyz, phase)
+            if (
+                phase == "idle_before"
+                and sensor is not None
+                and not sensor.stationary_ready
+                and now - phase_start > 8
+            ):
+                raise RuntimeError(
+                    "stationary fresh human-person/mass prior gate failed before actor movement"
+                )
+            if (
+                phase == "idle_before"
+                and now - phase_start >= (3 if sensor else 1)
+                and (sensor is None or sensor.stationary_ready)
+            ):
                 agent.set_speed(args.speed / UsdGeom.GetStageMetersPerUnit(stage))
-                task = agent.move_to(HUMAN_WALK_GOAL, auto_brake=True)
+                task = agent.move_to(goal, auto_brake=True)
                 if task == bh.BEHAVIOR_TASK_ID_INVALID:
                     raise RuntimeError("native move task rejected")
                 phase = "move"
@@ -330,12 +376,23 @@ def main():
                 raise RuntimeError("no RTX RGB frames during the initial idle window")
             if phase == "stopped_after" and now - phase_start >= 1.5:
                 break
+            if sensor is not None:
+                time.sleep(
+                    max(
+                        0,
+                        PHYSICS_DT / args.sensor_simulation_rate
+                        - (time.perf_counter() - step_started),
+                    )
+                )
     finally:
         controller.stop()
         writer.release()
         camera_sensor.detach_annotators("rgb")
         save("actor-records.json", records)
         save("video-frame-epochs.json", frame_epochs)
+        sensor_report = (
+            sensor.close(timeline.get_current_time()) if sensor is not None else None
+        )
     video = cv2.VideoCapture(str(args.output / "human-motion.mp4"))
     decoded_frames = 0
     while video.read()[0]:
@@ -343,13 +400,15 @@ def main():
     video.release()
     report = summarize_human_locomotion(
         records,
-        goal_world_xyz=HUMAN_WALK_GOAL,
+        goal_world_xyz=goal,
         requested_speed_mps=args.speed,
         task_succeeded=task_succeeded,
     )
     report.update(
         {
             "requested_speed_mps": args.speed,
+            "goal_world_xyz": goal,
+            "human_sensor_gate": sensor_report,
             "source_files_unchanged": all(
                 hashlib.sha256(p.read_bytes()).hexdigest() == hashes[str(p)]
                 for p in sources
@@ -372,6 +431,8 @@ def main():
     report["passed"] &= (
         report["source_files_unchanged"] and report["checks"]["nonempty_video"]
     )
+    if sensor_report is not None:
+        report["passed"] &= sensor_report["passed"]
     save("validation.json", report)
     print(json.dumps(report), flush=True)
     if not report["passed"]:

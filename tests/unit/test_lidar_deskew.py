@@ -124,6 +124,35 @@ def test_missing_pose_for_an_in_scope_scan_cannot_be_extrapolated():
         )
 
 
+def test_copied_scan_can_use_later_recorded_pose_without_shifting_its_epochs():
+    history, metadata, mount, world, raw = fixture()
+    retained = history.samples[:4]
+    original_points = raw.copy()
+    original_offsets = metadata.point_time_offsets_nanoseconds.copy()
+    original_header = metadata.sensor_timestamp_nanoseconds
+    history.samples = retained.copy()
+    with pytest.raises(ValueError, match="no extrapolation"):
+        deskew_uncompensated_lidar(
+            raw,
+            metadata,
+            history,
+            robot_from_sensor=mount,
+            reference_timestamp_seconds=1.0,
+        )
+    history.append(EgoPoseSample(1.1, pose(1.1), EstimateStatus.ORACLE, "fixture_pose"))
+    corrected, _ = deskew_uncompensated_lidar(
+        raw, metadata, history, robot_from_sensor=mount, reference_timestamp_seconds=1.0
+    )
+    np.testing.assert_allclose(
+        corrected @ pose(1)[:3, :3].T + pose(1)[:3, 3], world, atol=2e-7
+    )
+    np.testing.assert_array_equal(raw, original_points)
+    np.testing.assert_array_equal(
+        metadata.point_time_offsets_nanoseconds, original_offsets
+    )
+    assert metadata.sensor_timestamp_nanoseconds == original_header
+
+
 def test_history_gap_rejected():
     history, metadata, mount, _, raw = fixture()
     history.samples.pop(2)

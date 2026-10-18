@@ -17,7 +17,10 @@ from robot.evaluation.perception_readiness import (
     evaluate_perception_readiness,
     runtime_factor_evidence_mode,
 )
-from robot.perception.camera_lidar_fusion import project_fisheye_polynomial_points, depth_visible_projection
+from robot.perception.camera_lidar_fusion import (
+    project_fisheye_polynomial_points,
+    depth_visible_projection,
+)
 from robot.perception.physical_attributes import PhysicalAttributes
 from robot.risk.object_risk_policy import evaluate_object_risk
 from robot.risk.physical_factor_adapter import adapt_physical_factors
@@ -59,7 +62,9 @@ def assess_all_objects(worker, packet):
         robot_position_world_xy=np.array(packet.robot_position_world_xy),
         robot_yaw=packet.robot_yaw,
         timestamp_seconds=packet.sensor_timestamp_seconds,
-        clustering_points_robot_xyz=packet.obstacle_xyz if worker.cluster_in_3d else None,
+        clustering_points_robot_xyz=packet.obstacle_xyz
+        if worker.cluster_in_3d
+        else None,
     )
     tracks = tracking.tracked_obstacles
     if not tracks:
@@ -71,7 +76,9 @@ def assess_all_objects(worker, packet):
     )
     projected_count = len(projection.source_indices)
     if worker.camera_visibility_radius_pixels:
-        projection = depth_visible_projection(projection, radius_pixels=worker.camera_visibility_radius_pixels)
+        projection = depth_visible_projection(
+            projection, radius_pixels=worker.camera_visibility_radius_pixels
+        )
     visible = {
         track.track_id
         for track in tracks
@@ -88,6 +95,7 @@ def assess_all_objects(worker, packet):
         - memory.last_visual_attempt.get(track_id, -math.inf)
         >= memory.config.minimum_visual_reassessment_interval_seconds
     }
+    eligible_attempts = set(attempted)
     if memory.frozen:
         # Fair oldest-attempt scheduling bounds expensive vision while every
         # track still gets fresh motion and a numeric policy for this scan.
@@ -97,6 +105,47 @@ def assess_all_objects(worker, packet):
                 key=lambda key: (memory.last_visual_attempt.get(key, -math.inf), key),
             )[: memory.config.maximum_visual_tracks_per_update]
         )
+        # The bounded person opt-in reserves one visual slot from a fresh RGB
+        # cue, leaving another for fair coverage. This is attention only; SAM,
+        # foreign-return and final mask-ownership gates remain unchanged.
+        person_frame = worker.visual_person_frame(packet)
+        if (
+            person_frame is not None
+            and memory.config.maximum_visual_tracks_per_update >= 2
+        ):
+            person_hits = np.zeros(len(projection.source_indices), dtype=bool)
+            for person in person_frame.detections:
+                if person.semantic_class == "person" and person.confidence >= 0.5:
+                    person_hits |= person.mask[
+                        projection.pixel_indices_xy[:, 1],
+                        projection.pixel_indices_xy[:, 0],
+                    ]
+            ids = tracking.point_track_ids[projection.source_indices]
+            priority = [
+                key
+                for key in eligible_attempts
+                if np.count_nonzero(person_hits & (ids == key)) >= 8
+                and np.mean(person_hits[ids == key]) >= 0.5
+            ]
+            if priority:
+                chosen = min(
+                    priority,
+                    key=lambda key: (
+                        memory.last_visual_attempt.get(key, -math.inf),
+                        key,
+                    ),
+                )
+                fair = sorted(
+                    eligible_attempts - {chosen},
+                    key=lambda key: (
+                        memory.last_visual_attempt.get(key, -math.inf),
+                        key,
+                    ),
+                )
+                attempted = {
+                    chosen,
+                    *fair[: memory.config.maximum_visual_tracks_per_update - 1],
+                }
     if attempted:
         worker.segmenter.set_image(packet.rgb)
     world = packet.obstacle_xyz.copy()
@@ -182,10 +231,17 @@ def assess_all_objects(worker, packet):
             lo, hi, source_time, source_centroid = ownership[track.track_id]
             # This is a bounded static, axis-aligned positive association prior,
             # not hidden geometry, moving-actor tracking or scene free space.
-            if memory.config.translate_instance_bounds_prior and track.matched_previous_track:
-                ownership_translation = np.asarray(track.centroid_world_xy) - source_centroid
+            if (
+                memory.config.translate_instance_bounds_prior
+                and track.matched_previous_track
+            ):
+                ownership_translation = (
+                    np.asarray(track.centroid_world_xy) - source_centroid
+                )
             shift = np.array([*ownership_translation, 0.0])
-            owned &= np.all((world >= lo + shift - 0.05) & (world <= hi + shift + 0.05), axis=1)
+            owned &= np.all(
+                (world >= lo + shift - 0.05) & (world <= hi + shift + 0.05), axis=1
+            )
             if (
                 packet.camera_timestamp_seconds - source_time
                 > memory.config.maximum_property_age_seconds
@@ -238,24 +294,34 @@ def assess_all_objects(worker, packet):
             "centroid_world_xy": track.centroid_world_xy,
             "velocity_world_xy": track.velocity_world_xy,
             "observation_count": track.observation_count,
-            "camera_occluded_return_count": projected_count - len(projection.source_indices),
+            "camera_occluded_return_count": projected_count
+            - len(projection.source_indices),
             "instance_centroid_world_xyz": world[selected].mean(axis=0).tolist()
-            if assessment["accepted"] else None,
-            "instance_box_xyxy": tuple(getattr(assessment["frame"].detections[0].bounding_box, name)
-                for name in ("x_min", "y_min", "x_max", "y_max"))
-            if assessment["accepted"] else None,
+            if assessment["accepted"]
+            else None,
+            "instance_box_xyxy": tuple(
+                getattr(assessment["frame"].detections[0].bounding_box, name)
+                for name in ("x_min", "y_min", "x_max", "y_max")
+            )
+            if assessment["accepted"]
+            else None,
             "instance_mask_pixels": assessment["frame"].detections[0].mask_pixel_count
-            if assessment["accepted"] else None,
+            if assessment["accepted"]
+            else None,
             "instance_confidence": assessment["frame"].detections[0].confidence
-            if assessment["accepted"] else None,
+            if assessment["accepted"]
+            else None,
             "camera_observable": track.track_id in visible,
             "visual_attempted": track.track_id in attempted,
             "accepted_instance": assessment["accepted"],
             "selected_return_count": int(selected.sum()),
             "policy_return_count": int(owned.sum()),
             "instance_ownership_translation_xy": ownership_translation.tolist(),
-            "instance_ownership_basis": "fresh_mask" if assessment["accepted"] else
-                "tracked_translation_bounds_prior" if np.any(ownership_translation) else "static_bounds_or_geometric_prior",
+            "instance_ownership_basis": "fresh_mask"
+            if assessment["accepted"]
+            else "tracked_translation_bounds_prior"
+            if np.any(ownership_translation)
+            else "static_bounds_or_geometric_prior",
             "factor_scores": factor_details,
             "property_evidence": assessment["persistence"],
             "geometry_evidence": assessment["geometry_diagnostics"],
@@ -482,8 +548,10 @@ def assess_all_objects(worker, packet):
     )
     primary, raw = objects[0], frames[0]
     diagnostics = {
-        "stage_wall_seconds": {"perception_ownership_occupancy": pipeline_started - started,
-                               "field_solve": pipeline_seconds},
+        "stage_wall_seconds": {
+            "perception_ownership_occupancy": pipeline_started - started,
+            "field_solve": pipeline_seconds,
+        },
         "measured_robot_velocity_world_xy": packet.measured_robot_velocity_world_xy,
         "mode": "persistent_multi_object_factor_priors",
         "object_count": len(objects),

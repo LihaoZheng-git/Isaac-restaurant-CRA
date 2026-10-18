@@ -220,6 +220,8 @@ class LiveObjectPerception:
         camera_visibility_radius_pixels=0,
         mask_foreground_depth_gap_m=None,
         plume_view_fov_degrees=140.0,
+        person_detector=None,
+        human_mass_prior_config=None,
     ):
         self.segmenter, self.mass_estimator, self.contact_detector = (
             segmenter,
@@ -227,9 +229,24 @@ class LiveObjectPerception:
             contact_detector,
         )
         self.calibration = calibration
+        from robot.perception.human_mass_prior import HumanMassPriorConfig
+
+        if (person_detector is None) != (human_mass_prior_config is None):
+            raise ValueError(
+                "human mass prior and visual person detector must be supplied together"
+            )
+        if human_mass_prior_config is not None and not isinstance(
+            human_mass_prior_config, HumanMassPriorConfig
+        ):
+            raise TypeError("invalid human mass prior configuration")
+        self.person_detector = person_detector
+        self.human_mass_prior_config = human_mass_prior_config
+        self._person_packet = self._person_frame = None
         from robot.perception.lidar_fall_surfaces import LidarFallSurfaceConfig
 
-        if fall_surface_config is not None and not isinstance(fall_surface_config, LidarFallSurfaceConfig):
+        if fall_surface_config is not None and not isinstance(
+            fall_surface_config, LidarFallSurfaceConfig
+        ):
             raise TypeError("invalid fall surface configuration")
         if fall_interaction_prior_scope is not None and (
             not isinstance(fall_interaction_prior_scope, str)
@@ -247,7 +264,10 @@ class LiveObjectPerception:
         self.cluster_in_3d = cluster_in_3d
         self.camera_visibility_radius_pixels = camera_visibility_radius_pixels
         self.mask_foreground_depth_gap_m = mask_foreground_depth_gap_m
-        if not math.isfinite(plume_view_fov_degrees) or not 30 <= plume_view_fov_degrees < 170:
+        if (
+            not math.isfinite(plume_view_fov_degrees)
+            or not 30 <= plume_view_fov_degrees < 170
+        ):
             raise ValueError("plume view FOV must lie within [30, 170) degrees")
         self.plume_view_fov_degrees = float(plume_view_fov_degrees)
         self.evidence_memory = (
@@ -320,6 +340,19 @@ class LiveObjectPerception:
         self.previous = None
         self.temporal = SafeSAGETemporalDerivativeEstimator()
 
+    def visual_person_frame(self, packet):
+        """Optional same-packet visual cue, shared across current track attempts."""
+        if self.person_detector is None:
+            return None
+        if self._person_packet is not packet:
+            self._person_frame = self.person_detector.detect(
+                packet.rgb,
+                source_frame_id=packet.camera_frame_id,
+                source_timestamp_seconds=packet.camera_timestamp_seconds,
+            )
+            self._person_packet = packet
+        return self._person_frame
+
     def __call__(self, packet: LiveObjectPacket):
         if self.persistent_properties is not None:
             from robot.evaluation.multi_object_perception import assess_all_objects
@@ -339,7 +372,9 @@ class LiveObjectPerception:
             robot_position_world_xy=np.array(packet.robot_position_world_xy),
             robot_yaw=packet.robot_yaw,
             timestamp_seconds=packet.sensor_timestamp_seconds,
-            clustering_points_robot_xyz=packet.obstacle_xyz if self.cluster_in_3d else None,
+            clustering_points_robot_xyz=packet.obstacle_xyz
+            if self.cluster_in_3d
+            else None,
         )
         if not tracking.tracked_obstacles:
             raise RuntimeError("no geometric track is available")
@@ -748,22 +783,29 @@ class LiveObjectPerception:
                     )
             if (
                 proposal.detection is None
-                and proposal.rejection_reasons == (
-                    "no mask passes quality, boundary and LiDAR association gates",
+                and proposal.rejection_reasons
+                == ("no mask passes quality, boundary and LiDAR association gates",)
+                and getattr(
+                    getattr(self.segmenter, "config", None),
+                    "observed_context_box_retry",
+                    False,
                 )
-                and getattr(getattr(self.segmenter, "config", None), "observed_context_box_retry", False)
             ):
                 proposal = self.segmenter.propose(
-                    tracking.point_track_ids, projection, track_id=target.track_id,
+                    tracking.point_track_ids,
+                    projection,
+                    track_id=target.track_id,
                     use_observed_context_box=True,
                 )
                 prompt_basis = "observed_track_context_box_retry"
-                sam_candidates.append({
-                    "prompt_basis": prompt_basis,
-                    "prompt_xy": proposal.prompt_xy,
-                    "observed_context_box_xyxy": proposal.observed_context_box_xyxy,
-                    "candidates": proposal.candidate_diagnostics,
-                })
+                sam_candidates.append(
+                    {
+                        "prompt_basis": prompt_basis,
+                        "prompt_xy": proposal.prompt_xy,
+                        "observed_context_box_xyxy": proposal.observed_context_box_xyxy,
+                        "candidates": proposal.candidate_diagnostics,
+                    }
+                )
             reasons.extend(proposal.rejection_reasons)
             sam_quality = proposal.model_quality
             if proposal.detection is not None:
@@ -871,6 +913,26 @@ class LiveObjectPerception:
                 track_id=target.track_id,
                 timestamp_seconds=timestamp,
             )
+            if self.person_detector is not None:
+                from robot.perception.human_mass_prior import (
+                    estimate_visual_human_mass_prior,
+                )
+                from robot.perception.physical_attributes import MassAttributes
+
+                prior = estimate_visual_human_mass_prior(
+                    frame,
+                    association,
+                    self.visual_person_frame(packet),
+                    track_id=target.track_id,
+                    timestamp_seconds=timestamp,
+                    config=self.human_mass_prior_config,
+                )
+                geometry_diagnostics["human_mass_prior"] = asdict(prior)
+                if prior.is_available:
+                    geometry_diagnostics["catalog_mass_before_human_prior"] = asdict(
+                        mass.mass_kg
+                    )
+                    mass = MassAttributes(prior)
             object_xyz = packet.obstacle_xyz[selected]
             surfaces = estimate_lidar_fall_surfaces(
                 packet.scene_xyz,
@@ -893,14 +955,17 @@ class LiveObjectPerception:
                 support_consistent = bool(
                     sphere.radius_m.is_available
                     and sphere.center_xyz is not None
-                    and support.lower_bound <= sphere.center_xyz[2] - sphere.radius_m.lower_bound
-                    and support.upper_bound >= sphere.center_xyz[2] - sphere.radius_m.upper_bound
+                    and support.lower_bound
+                    <= sphere.center_xyz[2] - sphere.radius_m.lower_bound
+                    and support.upper_bound
+                    >= sphere.center_xyz[2] - sphere.radius_m.upper_bound
                 )
             geometry_diagnostics["support_bottom_consistency"] = support_consistent
             geometry = replace(
                 geometry,
                 fall_height_m=estimate_fall_height(
-                    surfaces.evidence if support_consistent is not False else None, timestamp_seconds=timestamp
+                    surfaces.evidence if support_consistent is not False else None,
+                    timestamp_seconds=timestamp,
                 ),
             )
             if self.ground_scope is not None:
@@ -928,9 +993,13 @@ class LiveObjectPerception:
                     if not geometry.fall_height_m.is_available:
                         geometry = replace(geometry, fall_height_m=ground.fall_height_m)
                     else:
-                        geometry_diagnostics["strict_vs_ground_drop_bounds_disagree"] = bool(
-                            geometry.fall_height_m.lower_bound > ground.fall_height_m.upper_bound
-                            or ground.fall_height_m.lower_bound > geometry.fall_height_m.upper_bound
+                        geometry_diagnostics[
+                            "strict_vs_ground_drop_bounds_disagree"
+                        ] = bool(
+                            geometry.fall_height_m.lower_bound
+                            > ground.fall_height_m.upper_bound
+                            or ground.fall_height_m.lower_bound
+                            > geometry.fall_height_m.upper_bound
                         )
                     # A valid ground check supplies its separate worst-case
                     # interaction prior even when the strict drop is retained.
@@ -941,9 +1010,14 @@ class LiveObjectPerception:
                 and self.fall_interaction_prior_scope is not None
             ):
                 potential = ScalarEstimate(
-                    1.0, 1.0, 1.0, 0.5, "1",
+                    1.0,
+                    1.0,
+                    1.0,
+                    0.5,
+                    "1",
                     "configured_worst_case_harmful_fall_interaction_prior",
-                    packet.sensor_timestamp_seconds, EstimateStatus.PRIOR,
+                    packet.sensor_timestamp_seconds,
+                    EstimateStatus.PRIOR,
                     (self.fall_interaction_prior_scope,),
                 )
             links = SpecialistAssociationFrame(
@@ -984,7 +1058,9 @@ class LiveObjectPerception:
                     )
 
                     observation = rectify_plume_observation(
-                        observation, self.calibration, horizontal_fov_degrees=self.plume_view_fov_degrees
+                        observation,
+                        self.calibration,
+                        horizontal_fov_degrees=self.plume_view_fov_degrees,
                     )
                 if packet.clean_reference_validated:
                     candidate_plume.set_reference(

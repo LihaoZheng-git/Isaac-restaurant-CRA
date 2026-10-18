@@ -109,8 +109,10 @@ C:/isaacsim/python.bat -u scripts/demos/restaurant_human_locomotion_isaac.py
 The separately tested faster request is `--speed 1.6`. The configured .5..2 m/s
 range is an engineering guard, not acceptance of every speed in that interval.
 The previous stationary human's 1.921 kg catalog-network result remains
-unvalidated. The approved configurable human-mass PRIOR still needs an explicit
-domain/association path; it is not implemented by this actor-motion branch.
+unvalidated. At this actor-motion checkpoint, the approved configurable
+human-mass PRIOR still needed a domain/association path; the later
+[human perception component](restaurant_human_perception.md) implements and
+tests that separate opt-in.
 Next: parked-robot RGB/LiDAR tracking and current relative-velocity/kinetic
 checks on this articulated actor, with no permanent static occupancy memory
 or unchanged-shape bounds borrowing for the moving human. Only after that gate
