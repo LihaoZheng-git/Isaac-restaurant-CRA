@@ -1,5 +1,9 @@
 # Stationary restaurant server asset
 
+Historical Kenney experiment: the user subsequently chose the official Isaac
+human for the primary scene. See [the replacement](restaurant_isaac_human.md).
+The records below remain unchanged and do not describe the new asset's results.
+
 One stationary, stylized server is added in a separate layer over the existing
 restaurant. Asset conversion, collision/UV integrity, source preservation and
 zero-wheel Isaac rendering pass. **The server's full stationary perception

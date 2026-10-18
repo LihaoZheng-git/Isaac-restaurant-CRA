@@ -400,7 +400,7 @@
   or commands wheels. Its factor-specific phi also uses labeled unit-interaction
   and .25 other-factor priors. Keep the first five positive-window misses and
   no-temperature/no-moving-camera limits. See docs/restaurant_visible_plume.md.
-- The restaurant server is one audited CC0 Kenney idle-pose static mesh with
+- The historical Kenney restaurant server is an audited CC0 idle-pose mesh with
   project apron geometry, in a separate scene layer. Authored height/role/pose
   never supply factor inputs. Source/UV/collision and zero-wheel previews pass;
   its stationary perception gate remains failed (profile-view final ambiguity,
@@ -416,3 +416,18 @@
   Do not retry an ambiguous result or treat box padding as physical geometry.
   Restaurant robot setups require the independent authored footprint-clearance
   guard; that oracle abort/evaluation information never enters CRA or control.
+- The user now prefers the official Isaac Sim human. The primary replacement
+  references the audited People/F_Business_02 asset; NVIDIA geometry/textures
+  are external, not vendored. Preserve native scale, project-authored static
+  arms-down pose, separate grounding transform and guide-purpose collision
+  capsule. Authored pose/bounds/collision never enter CRA. The checked idle
+  clip has a mismatched skeleton and is not integrated. Asset/render acceptance
+  does not establish perception, calibrated human mass or walking/crossing
+  acceptance. Retain the old Kenney diagnostics separately. See
+  docs/restaurant_isaac_human.md; PR #117's main hold remains unchanged.
+- The official Isaac human's stationary component gate passed with 18/18
+  accepted instances, fresh relative motion and a visual silhouette proxy.
+  Potential/thermal stayed .25 configured priors; final phi was .622961.
+  The 1.921 kg catalog-network result is not credible human mass or validated
+  human heaviness ordering. This gate establishes bounded dataflow only; strict
+  fresh four-factor readiness is false and no wheel/walking trial was run.
