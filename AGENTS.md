@@ -505,3 +505,11 @@
   and establishes neither free space nor general occlusion safety. A focused
   copied-scan replay is not a successful navigation trial. See
   docs/restaurant_human_navigation.md and the prospective final experiment plan.
+- Close full-human RGB coverage is a documented limitation: tilt-only and raised
+  camera attempts failed their moving/stationary perception gates. A separate
+  parked crossing-approach view at y=7.4 with stock camera height/+15 degree pitch
+  passed a .5 m/s native walk (10 stationary/nine moving fresh human priors).
+  The .7 m/s version had only three moving rows and remains failed. Explicit
+  actor trigger/speed options change the authored scenario only, never runtime
+  evidence or control. A farther/slow crossing cannot establish close-range,
+  faster, crowded, complete four-factor or main-merge acceptance.

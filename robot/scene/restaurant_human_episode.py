@@ -14,14 +14,19 @@ from robot.scene.restaurant_human_motion import prepare_native_restaurant_human
 
 
 class RestaurantHumanEpisode:
-    def __init__(self, stage, *, mode, output):
+    def __init__(self, stage, *, mode, output, trigger_robot_y=7.8, speed_mps=0.7):
         if mode not in {"standing", "crossing"}:
             raise ValueError("unknown human episode")
+        if not math.isfinite(trigger_robot_y) or not 6.8 <= trigger_robot_y <= 7.8:
+            raise ValueError("bounded native crossing trigger must be y=6.8..7.8")
+        self.trigger_robot_y = trigger_robot_y
+        if not math.isfinite(speed_mps) or not 0.5 <= speed_mps <= 1.0:
+            raise ValueError("bounded coupled native walking speed must be .5..1 m/s")
         self.stage, self.mode, self.output = stage, mode, output
         with Usd.EditContext(stage, stage.GetSessionLayer()):
             self.setup = prepare_native_restaurant_human(stage)
         self.goal = (27.8, 8.9, 0.0)
-        self.speed = 0.7
+        self.speed = speed_mps
         self.phase = "idle_before"
         self.task = None
         self.task_succeeded = False
@@ -105,7 +110,7 @@ class RestaurantHumanEpisode:
             navigation
             and self.mode == "crossing"
             and self.task is None
-            and robot_xy[1] >= 7.8
+            and robot_xy[1] >= self.trigger_robot_y
         ):
             self.agent.set_speed(self.speed)
             self.task = self.agent.move_to(self.goal, auto_brake=True)

@@ -21,7 +21,7 @@ parser.add_argument("--goal-y", type=float, default=12.5)
 parser.add_argument("--goal-x", type=float, default=29.8)
 parser.add_argument("--sensor-diagnostic", action="store_true")
 parser.add_argument("--sensor-simulation-rate", type=float, default=0.1)
-parser.add_argument("--robot-view", choices=("approach", "close"), default="approach")
+parser.add_argument("--robot-view", choices=("approach", "close", "crossing-approach"), default="approach")
 parser.add_argument("--camera-upward-degrees", type=float, default=0.)
 parser.add_argument("--camera-raise-metres", type=float, default=0.)
 parser.add_argument(
@@ -122,6 +122,8 @@ def main():
     goal = (args.goal_x, args.goal_y, 0.0)
     robot_start = (28.8, 7.9, SHORT_START_WORLD_XYZ[2]) if args.robot_view == "close" else SHORT_START_WORLD_XYZ
     robot_yaw = math.pi / 2 if args.robot_view == "close" else SHORT_START_YAW
+    if args.robot_view == "crossing-approach":
+        robot_start, robot_yaw = (28.8, 7.4, SHORT_START_WORLD_XYZ[2]), math.pi / 2
     sources = {
         ROOT / "scenes/generated/restaurant_base.usda",
         ROOT / "scenes/generated/restaurant_robot.usda",

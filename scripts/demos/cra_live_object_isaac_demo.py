@@ -36,6 +36,10 @@ parser.add_argument("--human-camera-upward-degrees", type=float, default=0.,
                     help="explicit experimental left RGB mount pitch, 0..25 degrees; actual extrinsics re-read")
 parser.add_argument("--human-camera-raise-metres", type=float, default=0.,
                     help="explicit experimental RGB mount height increase, 0...6 m")
+parser.add_argument("--human-crossing-trigger-y", type=float, default=7.8,
+                    help="explicit native actor-only trigger, world robot y 6.8..7.8; not a control/evidence input")
+parser.add_argument("--human-walking-speed", type=float, default=.7,
+                    help="explicit native actor speed .5..1 m/s; never estimator input")
 parser.add_argument("--human-mass-prior", nargs=3, type=float, default=(70.,45.,100.),
                     metavar=("KG", "LOWER", "UPPER"), help="configured adult demonstration mass interval; not measured weight")
 parser.add_argument("--sam-observed-context-box", action="store_true",
@@ -105,6 +109,14 @@ parser.add_argument(
     help="optimizer candidate age cap; every executed horizon still needs fresh exact validation",
 )
 args = parser.parse_args()
+if not .5 <= args.human_walking_speed <= 1. or (
+    args.human_walking_speed != .7 and args.restaurant_human != "crossing"
+):
+    parser.error("coupled walking-speed override requires crossing mode, .5..1 m/s")
+if not 6.8 <= args.human_crossing_trigger_y <= 7.8 or (
+    args.human_crossing_trigger_y != 7.8 and args.restaurant_human != "crossing"
+):
+    parser.error("crossing trigger override requires crossing mode, world y=6.8..7.8")
 if not 0 <= args.human_camera_upward_degrees <= 25 or not 0 <= args.human_camera_raise_metres <= .6 or (
     (args.human_camera_upward_degrees or args.human_camera_raise_metres) and not args.restaurant_human
 ):
@@ -424,7 +436,8 @@ def main():
     human = None
     if args.restaurant_human:
         from robot.scene.restaurant_human_episode import RestaurantHumanEpisode
-        human = RestaurantHumanEpisode(stage, mode=args.restaurant_human, output=args.output)
+        human = RestaurantHumanEpisode(stage, mode=args.restaurant_human, output=args.output,
+                                       trigger_robot_y=args.human_crossing_trigger_y, speed_mps=args.human_walking_speed)
         ACTIVE_HUMAN = human
         save_json("human-native-setup.json", human.setup)
         for _ in range(20):
@@ -1701,6 +1714,8 @@ def main():
         "passed": completed and scene_unchanged and root_unchanged_by_fixture,
         "human_navigation_validation": human_validation,
         "native_human_mode": args.restaurant_human,
+        "human_crossing_trigger_robot_world_y": args.human_crossing_trigger_y,
+        "human_requested_walking_speed_mps": args.human_walking_speed,
         "experimental_camera_mount": {
             "upward_degrees": args.human_camera_upward_degrees,
             "raise_metres": args.human_camera_raise_metres,

@@ -180,6 +180,48 @@ separates cue perception, live integration and matched navigation comparisons.
 Its baseline identities exist in the experiment contract; all three still need
 verified live-runner integration before comparative results can be collected.
 
+### Camera coverage development
+
+The zero-wheel `human-close-camera-v1` uses the explicit parked pose
+`(28.8,7.9)`, yaw 90 degrees and a +15 degree left-camera pitch. It completed
+native actor motion, but failed perception with three stationary and zero
+steady-moving fresh human assessments. `human-close-camera-v2` raised the RGB
+origin by .45 m and pitched +10 degrees: the feet left the image, no fresh
+human prior passed and the stationary gate stopped before actor movement.
+Neither run permits a coupled close-range retry or establishes a useful mount.
+
+An offline lens-envelope design diagnostic uses the recorded stock .3459 m
+camera/base height and existing calibrated polynomial lens. Across the tested
+pitch/height grid, an authored full-human envelope along the crossing did not
+fit when the robot was at y=7.9. At y=7.4, stock height and +15 degrees had
+29.4 pixels minimum envelope margin. This is an approximate *authored camera
+design hypothesis*, not sensor evidence, visibility reconstruction or a safety
+guarantee. Actual rendered mask gates decide acceptance.
+
+The separate `crossing-approach` parked pose is `(28.8,7.4)`, yaw 90 degrees.
+Its .7 m/s `human-crossing-approach-camera-v1` passed actor motion and stationary
+perception (10 fresh rows), but had only three supported moving rows versus
+the required five. Median moving velocity error was .189419 m/s; the whole
+benchmark stays failed. These are development attempts, not selected successful
+paper repetitions.
+
+`human-crossing-approach-slow-v1` then passed the separate .5 m/s zero-wheel
+benchmark: 10 stationary and nine steady-moving fresh visually associated
+human mass priors, .103442 m/s median moving velocity error, .501495 m/s
+observed native speed, .298639 m independent actor/layout clearance and
+.002444 m actor stop drift. All 85 video frames decoded and were distinct;
+source scene files stayed unchanged. Maximum result completion age was .35 s.
+This validates only the selected parked-view component, not coupled wheels,
+all-factor sensing, the faster .7 m/s case, or the failed close view.
+
+The coupled runner preserves its original actor defaults (.7 m/s, robot-y
+trigger 7.8). Explicit `--human-crossing-trigger-y` (6.8..7.8) and
+`--human-walking-speed` (.5..1) configure only native actor motion. The planned
+farther crossing uses trigger 7.0, camera pitch +15 and stock camera height;
+robot control, physical evidence, factor priors, full-instance gates and route
+remain unchanged. This scenario cannot establish recovery of the original
+close crossing, nor is it a stress test of the near-body continuity guard.
+
 Carried bowls are a subsequent component gate: the bowl must follow an actual
 hand transform, retain physical occupancy, and acquire a separately associated
 visual assessment. An authored bowl height, role or emitted puff never supplies
