@@ -67,14 +67,22 @@ stationary gate.
 
 ## Deliverables and order
 
-1. Finish native-human coupled control validation, retaining failed attempts.
-2. Validate native carried-bowl attachment/ownership with zero robot wheels and
-   produce actual RTX images/video. Treat unresolved perception as a result.
+1. Native-human standing and farther/slow crossing control gates passed;
+   retained failures and current scope are in `restaurant_human_navigation.md`.
+2. Native bowl attachment/walking and parked-robot human perception now have
+   actual RTX images/video; strict carrying stop and separate bowl ownership
+   remain unresolved. Select the final carrier trajectory and retain the
+   distinction between attachment, human perception and bowl assessment.
 3. Wire and test the matched baseline adapters; run a small bounded pilot before
    the prespecified repeated study. Diagnose phi saturation by factor and prior
    sensitivity offline, without lowering unknown scores for navigation.
 4. Expand the mission only after region-transition validation. Record a final
    service video with score/phi/provenance traces and safety interventions.
+
+Before comparative collection, extend the result contract to retain signed
+clearance for collision/abort outcomes: its current nonnegative-clearance
+validation cannot represent such negative measurements. Preserve those failed
+trials and their raw diagnostics rather than omitting them from summaries.
 
 This study supports the selected simulation restaurant scenes. It does not
 establish calibrated kilograms, physical sharpness, temperature, crowded tracking,

@@ -20,6 +20,8 @@ parser.add_argument("--speed", type=float, default=0.7)
 parser.add_argument("--goal-y", type=float, default=12.5)
 parser.add_argument("--goal-x", type=float, default=29.8)
 parser.add_argument("--sensor-diagnostic", action="store_true")
+parser.add_argument("--carry-bowl", action="store_true",
+                    help="native hand attachment / zero-wheel component; separate bowl perception remains unvalidated")
 parser.add_argument("--sensor-simulation-rate", type=float, default=0.1)
 parser.add_argument("--robot-view", choices=("approach", "close", "crossing-approach"), default="approach")
 parser.add_argument("--camera-upward-degrees", type=float, default=0.)
@@ -32,6 +34,8 @@ parser.add_argument(
     metavar=("KG", "LOWER", "UPPER"),
 )
 args = parser.parse_args()
+if args.carry_bowl and (args.goal_x != 29.8 or args.goal_y != 10.8 or args.speed != .5):
+    parser.error("first native carry component requires goal (29.8,10.8), speed .5")
 if not 0.5 <= args.speed <= 2:
     parser.error("bounded native human speed is .5..2 m/s")
 if not 0 <= args.camera_upward_degrees <= 25 or not 0 <= args.camera_raise_metres <= .6 or (
@@ -164,6 +168,11 @@ def main():
         raise RuntimeError("configured parked robot overlaps authored occupancy")
     with Usd.EditContext(stage, stage.GetSessionLayer()):
         setup = prepare_native_restaurant_human(stage)
+    carry_setup = None
+    if args.carry_bowl:
+        from robot.scene.restaurant_human_carry import author_native_carry_bowl
+        carry_setup = author_native_carry_bowl(stage)
+        save("native-carry-setup.json", carry_setup)
     save("native-setup.json", setup)
     for _ in range(20):
         app.update()
@@ -211,8 +220,8 @@ def main():
         camera.MakeMatrixXform().Set(
             Gf.Matrix4d()
             .SetLookAt(
-                Gf.Vec3d(25.9, 6.7, 3.2) if crossing_goal else Gf.Vec3d(27.7, 10.6, 2.0),
-                Gf.Vec3d(29.0, 8.9, .8) if crossing_goal else Gf.Vec3d(29.8, 10.7, 0.9),
+                Gf.Vec3d(27.7, 9.6, 2.0) if args.carry_bowl else Gf.Vec3d(25.9, 6.7, 3.2) if crossing_goal else Gf.Vec3d(27.7, 10.6, 2.0),
+                Gf.Vec3d(29.8, 9.8, .95) if args.carry_bowl else Gf.Vec3d(29.0, 8.9, .8) if crossing_goal else Gf.Vec3d(29.8, 10.7, 0.9),
                 Gf.Vec3d(0, 0, 1),
             )
             .GetInverse()
@@ -249,6 +258,25 @@ def main():
     for _ in range(60):
         controller.stop()
         app.update()
+    carry = None
+    if carry_setup is not None:
+        from robot.scene.restaurant_human_carry import NativeBowlCarry
+        carry = NativeBowlCarry(agent, carry_setup, names)
+        carry.start()
+        try:
+            for _ in range(180):
+                controller.stop()
+                app.update()
+                carry.tick(timeline.get_current_time(), "pickup", (points,pixel_allowance))
+                if carry.ready:
+                    break
+        finally:
+            save("carry-records.json", carry.records)
+        if not carry.ready:
+            raise RuntimeError("native stationary bowl attachment did not settle within 3 seconds")
+        save("native-carry-actions.json", {"available_custom_actions": agent.get_custom_action_names(),
+            "pickup_task_status": str(agent.get_task_status(carry.task))})
+        agent.idle(facing=agent.get_facing_direction())
     sensor = None
     if args.sensor_diagnostic:
         from robot.config import FRONT_HAWK_LEFT_CAMERA_PRIM_PATH
@@ -297,6 +325,8 @@ def main():
             now = timeline.get_current_time()
             xyz = agent.get_world_translation()
             xyz = [xyz.x, xyz.y, xyz.z]
+            if carry is not None:
+                carry.tick(now, phase, (points,pixel_allowance))
             if sensor is not None:
                 sensor.tick(now, xyz, phase)
             if (
@@ -325,7 +355,13 @@ def main():
                     raise RuntimeError("native move task failed")
                 if status == bh.BehaviorTaskStatus.SUCCEEDED:
                     task_succeeded = True
-                    agent.idle()
+                    if carry is not None:
+                        # Retain MoveTo's terminal state for this diagnostic.
+                        # Earlier Idle/zero-speed alternatives also drifted;
+                        # measured pose, not API status, decides acceptance.
+                        agent.set_speed(0.)
+                    else:
+                        agent.idle()
                     phase = "stopped_after"
                     phase_start = now
                 elif now - phase_start > 20:
@@ -400,7 +436,7 @@ def main():
                 )
             if index >= 60 and not frame_epochs:
                 raise RuntimeError("no RTX RGB frames during the initial idle window")
-            if phase == "stopped_after" and now - phase_start >= 1.5:
+            if phase == "stopped_after" and now - phase_start >= (3. if carry is not None else 1.5):
                 break
             if sensor is not None:
                 time.sleep(
@@ -416,6 +452,8 @@ def main():
         camera_sensor.detach_annotators("rgb")
         save("actor-records.json", records)
         save("video-frame-epochs.json", frame_epochs)
+        if carry is not None:
+            save("carry-records.json", carry.records)
         sensor_report = (
             sensor.close(timeline.get_current_time()) if sensor is not None else None
         )
@@ -459,6 +497,14 @@ def main():
     )
     if sensor_report is not None:
         report["passed"] &= sensor_report["passed"]
+    if carry is not None:
+        from robot.scene.restaurant_human_carry import summarize_carry_records
+        carry_report = summarize_carry_records(carry.records)
+        carry_report["source_asset_unchanged"] = hashlib.sha256(Path(carry_setup["source"]).read_bytes()).hexdigest() == carry_setup["source_sha256"]
+        carry_report["passed"] &= carry_report["source_asset_unchanged"]
+        report["carry_attachment_gate"] = carry_report
+        report["passed"] &= carry_report["passed"]
+        save("carry-validation.json", carry_report)
     save("validation.json", report)
     print(json.dumps(report), flush=True)
     if not report["passed"]:
