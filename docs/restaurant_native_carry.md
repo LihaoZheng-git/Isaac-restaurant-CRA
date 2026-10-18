@@ -302,3 +302,56 @@ bowl/layout clearance. All 171 video frames decoded and were distinct, and
 source scenes/assets stayed unchanged. The full 1,908-test unit regression
 and Ruff passed. The separate `carried-server-upper-live-v1` wheel trial must
 still pass all actual robot waypoints/stopping and current perception gates.
+
+## Accepted single-crossing live pilot
+
+`carried-server-upper-live-v1` passed the original 3.9 m robot mission with
+the native carrier continuously walking after its one crossing. This is a
+different actor trajectory from the failed lower-return circuits.
+
+| Actual gate | Result |
+| --- | --- |
+| Robot waypoints and stopping | All three reached; .002247 m stopping drift |
+| Independent body/bowl/room clearance | Minimum .999485 m |
+| Analytical CBF margin | Minimum .494319 |
+| Live fields / fields while translating | 225 / 219; maximum committed source age .166667 s |
+| Human matched / moving supported / simultaneous rows | 194 / 31 / 30 |
+| Median world / relative velocity error | .044209 / .023145 m/s |
+| Supported kinetic / visual contact rows | 174 / 37; potential/thermal supported rows both zero |
+| Computed human phi | .590074 to .68359375, unchanged prior-aware policy |
+| Native attachment | Passed; max relative position error .000697 m, max tilt 11.3374 degrees |
+| Independent bowl/layout clearance | Minimum .387847 m; source unchanged |
+
+Human mass uses the visually selected 70 [45,100] kg adult PRIOR. Potential
+and thermal remain explicit factor priors; contact is a visible geometry
+proxy. Separate bowl physical ownership, justified hand-to-landing fall
+evidence, temperature and moving plume are unvalidated. The generic original
+report's carried-load limitation refers to those physical-assessment gaps;
+the separate native attachment/geometry gate passed. Future report wording
+now distinguishes those scopes explicitly, without rewriting the raw report.
+
+Median velocity acceptance is not a uniform error bound: observed world and
+relative error maxima were 1.639586 and 1.586481 m/s. No confidence/energy scale
+or factor prior was changed to obtain arrival. The run uses fixed lambda 1.25,
+oracle ego/extrinsic references, the approximate RGB read clock and paced
+simulation (.05 simulation s/wall s); it establishes neither real time,
+calibrated injury nor a causal CRA advantage. The renderer history warning
+remains. Repeated-return/occluded articulated tracking failures remain failed.
+
+The independent saved-input `continuity-recovery-audit.json` passed. One
+retained-coobservation recovery used a current-parent **velocity-advected**
+query, original age .3 s, exactly three unique current supporting returns and
+.244295 m parent/query distance. It recomputes source/geometry/velocity gates
+from the saved live records and exact current-point NPZ. This is distinct from
+the earlier lower-return trial's independently checked 27-return unadvected
+recovery. Neither audit changes the original trial's completion flag.
+
+All 313 full-video frames decoded and were distinct. `carried-server-motion.mp4`
+is a 236-frame, 23.6 s navigation clip at the original 10 Hz simulation-time
+speed, with startup trimmed. `navigation-frame-08s.png` and adjacent extracted
+frames are unchanged decoded Isaac frames. `video-audit.json` records source
+hashes and frame indices. `navigation-validation.png` and
+`human-factor-traces.png` show recorded trajectories/scores with priors labeled.
+The full 1,908-unit regression, Ruff and whitespace checks passed. Source
+scenes/assets and model weights were preserved. Main's separate fresh
+moving-view four-factor hold remains unchanged.

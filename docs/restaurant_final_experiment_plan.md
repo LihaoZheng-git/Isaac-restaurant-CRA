@@ -72,8 +72,10 @@ stationary gate.
 2. Native bowl attachment/walking and parked-robot human perception now have
    actual RTX images/video; strict carrying stop and separate bowl ownership
    remain unresolved. The user selected continuous crossing rather than a
-   stopped carrier; validate its separate circuit and retain the
-   distinction between attachment, human perception and bowl assessment.
+   stopped carrier. Its single-crossing upper continuation now passed the
+   3.9 m robot mission and stopping, separately from failed repeated returns.
+   Retain the distinction between attachment, human perception and bowl
+   assessment; potential/thermal remain priors and velocity transients remain.
 3. Wire and test the matched baseline adapters; run a small bounded pilot before
    the prespecified repeated study. Diagnose phi saturation by factor and prior
    sensitivity offline, without lowering unknown scores for navigation.

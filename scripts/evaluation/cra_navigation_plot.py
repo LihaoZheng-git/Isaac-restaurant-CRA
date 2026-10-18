@@ -156,7 +156,11 @@ def main():
     axis.grid(alpha=0.2)
     axis.set_xlabel("Anchored local x (m)")
     axis.set_ylabel("Anchored local y (m)")
-    axis.legend(loc="lower left", fontsize=8)
+    if report.get("native_carried_bowl"):
+        fig.set_size_inches(13, 7.5)
+        axis.legend(loc="upper left", bbox_to_anchor=(1.02, 1), fontsize=8)
+    else:
+        axis.legend(loc="lower left", fontsize=8)
     axis.set_title(
         f"Live CRA/Safe-SAGE: {report['reason']}\n{report['live_field_count']} fields; lambda=1.25; pacing={report['simulation_rate_limit']} simulation s/wall s",
         fontsize=11,

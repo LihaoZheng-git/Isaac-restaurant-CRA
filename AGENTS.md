@@ -533,7 +533,7 @@
   velocity errors and rejected stale/failed optimizer results. Their arrivals
   are not replicated baseline results, full fresh physical estimation or the
   PR #117/main acceptance gate.
-- Native carried-bowl work is a separate zero-wheel draft component. The
+- Initial native carried-bowl work was a separate zero-wheel draft component. The
   official hand attachment/actual PhysX prop motion passed, and one parked
   carrying-human perception benchmark passed (three stationary/six moving
   adult-prior rows). Separate bowl ownership is not validated. Four visual
@@ -546,8 +546,9 @@
   continuous server crossing; its separate acceptance must verify actual
   crossing, sustained motion, articulation and independent body/bowl geometry,
   without claiming human endpoint stopping. Robot waypoint arrival and safe
-  stopping remain mandatory. Keep the branch unmerged until that bounded
-  stationary/perception and coupled navigation validation is sound.
+  stopping remain mandatory. Only the later explicitly validated single-crossing
+  upper-continuation case is accepted below; repeated lower-return cases remain
+  failed and must not be reported as successful navigation.
   See docs/restaurant_native_carry.md; main remains unchanged.
 - The installed Isaac python.bat may return zero after script RuntimeError.
   Simulation acceptance requires saved validation flags, actual arrival/stop
@@ -560,4 +561,18 @@
   fresh stable current-parent velocity, existing .10/.25 m/three-positive-return
   and ambiguity gates, and save exact positive geometry for retained-pair
   events. Preserve the .12/.18 m carried-server failed arrivals and their safe
-  track-loss stops until a fresh corrected trial actually completes navigation.
+  track-loss stops alongside the later separately configured accepted case.
+- The single-crossing carried server with upper-aisle continuation passed the
+  original 3.9 m robot route: three waypoints, .999485 m minimum independent
+  clearance, .494319 minimum CBF margin, .002247 m stopping drift, 225 live fields
+  (219 translating), 31 supported moving-human/30 simultaneous kinetic rows.
+  Use its explicit upper-continuation/.18 m grouping/+15 degree camera/60-frame
+  stationary setup, fixed lambda 1.25 and unchanged safety gates; see
+  docs/restaurant_native_carry.md. The independent retained-pair audit verified
+  one .3 s current-parent velocity query with three actual returns and .244295 m
+  centroid distance. This is bounded geometric recovery, not occlusion safety.
+  Human mass and potential/thermal remain priors; contact is a visible proxy;
+  separate bowl perception/fall/plume evidence remains unvalidated. Median live
+  velocity checks passed but world/relative error maxima reached 1.640/1.586 m/s.
+  Preserve those transients, failed repeated-return cases, oracle ego references,
+  read-time RGB clock approximation, renderer warning and main's existing hold.
