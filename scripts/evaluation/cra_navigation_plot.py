@@ -93,6 +93,19 @@ def main():
                               color="#de8041", alpha=.25))
         axis.annotate("actor at final sample", actor_xy[-1] + [.23, 0],
                       ha="left", va="center", fontsize=9)
+    if report.get("native_human_mode"):
+        if "anchor_world_xy_yaw" not in monitor:
+            raise ValueError("native-human plot requires the recorded anchor")
+        x, y, yaw = monitor["anchor_world_xy_yaw"]
+        c, s = np.cos(yaw), np.sin(yaw)
+        truth = json.loads((args.source / "human-truth-evaluation-only.json").read_text())
+        human_xy = np.array([r["actor_xyz"][:2] for r in truth])
+        human_xy = (human_xy - [x, y]) @ np.array([[c, -s], [s, c]])
+        axis.plot(human_xy[:, 0], human_xy[:, 1], "--", color="#a04e79",
+                  label="Recorded native human root (oracle evaluation only)")
+        for label, point in (("human start", human_xy[0]), ("human last", human_xy[-1])):
+            axis.add_patch(Circle(point, .4, color="#a04e79", alpha=.12))
+            axis.annotate(label, point + [.1, .15], fontsize=8)
     axis.scatter(
         [0, goal], [0, goal_xy[1]], color=["black", "#237742"], marker="x", s=60
     )

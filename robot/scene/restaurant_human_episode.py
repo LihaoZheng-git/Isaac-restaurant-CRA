@@ -112,7 +112,11 @@ class RestaurantHumanEpisode:
             if self.task == bh.BEHAVIOR_TASK_ID_INVALID:
                 raise RuntimeError("native crossing task rejected")
             self.phase = "move"
-        if self.task is not None and not self.task_succeeded:
+        if (
+            self.task is not None
+            and not self.task_succeeded
+            and self.phase != "aborted"
+        ):
             status = self.agent.get_task_status(self.task)
             if status == bh.BehaviorTaskStatus.SUCCEEDED:
                 self.task_succeeded = True
@@ -176,6 +180,11 @@ class RestaurantHumanEpisode:
             self.writer = None
 
     def abort(self):
-        if hasattr(self, "agent") and self.task is not None and not self.task_succeeded:
+        if (
+            hasattr(self, "agent")
+            and self.task is not None
+            and not self.task_succeeded
+            and self.phase != "aborted"
+        ):
             self.agent.idle()
             self.phase = "aborted"

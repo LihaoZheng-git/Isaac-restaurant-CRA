@@ -81,7 +81,7 @@ def test_current_positive_points_resolve_one_fragment_rejoining_existing_body():
     assert len(result["observed_fragment_merges"]) == 1
     assert result["observed_fragment_merges"][0]["lost_track_id"] == 1
     assert set(guard.observed) == {2}
-    assert guard.observe((), source_time=1.4, robot_world_xy=(.2, 0))["blocked"]
+    assert guard.observe((), source_time=1.4, robot_world_xy=(0.2, 0))["blocked"]
 
 
 @pytest.mark.parametrize(
@@ -128,3 +128,85 @@ def test_misaligned_geometry_never_commits_guard_state():
             current_points_source_time=1.0,
         )
     assert guard.last_source_time == 1
+
+
+def moving_fragment_guard():
+    guard = NearbyTrackLossGuard(
+        NearbyTrackLossConfig(
+            allow_observed_fragment_merges=True, use_observed_merge_velocity=True
+        )
+    )
+    # A swinging fragment's velocity can differ from its stable moving parent.
+    lost = replace(track(1, 1.1), velocity_world_xy=(0.5, -0.7))
+    parent = replace(track(2, 1.0), velocity_world_xy=(-0.7, 0))
+    guard.observe((lost, parent), source_time=1, robot_world_xy=(0, 0))
+    parent = replace(parent, centroid_world_xy=(0.93, 0), observation_count=6)
+    guard.observe((parent,), source_time=1.1, robot_world_xy=(0, 0))
+    return guard, replace(
+        parent, centroid_world_xy=(0.86, 0), observation_count=7, point_count=4
+    )
+
+
+def test_moving_parent_hypothesis_requires_current_geometry_and_stable_sensor_velocity():
+    guard, parent = moving_fragment_guard()
+    result = guard.observe(
+        (parent,),
+        source_time=1.2,
+        robot_world_xy=(0, 0),
+        current_points_world_xy=[[0.96, 0], [0.96, 0.01], [0.96, -0.01], [0.56, 0]],
+        current_point_track_ids=[2] * 4,
+        current_points_source_time=1.2,
+    )
+    assert not result["blocked"]
+    event = result["observed_fragment_merges"][0]
+    assert event["basis"] == "inferred_current_cluster_velocity_positive_returns"
+    assert event["translation_world_xy"] == pytest.approx([-0.14, 0])
+    assert event["old_centroid_world_xy"] == [1.1, 0]
+    assert event["positive_returns_near_query"] == 3
+    assert set(guard.observed) == {2}
+
+
+@pytest.mark.parametrize(
+    "problem",
+    [
+        "no_points",
+        "unstable_velocity",
+        "too_fast",
+        "too_far",
+        "too_old",
+        "insufficient_observations",
+        "ambiguous",
+    ],
+)
+def test_motion_hypothesis_never_replaces_actual_positive_evidence(problem):
+    guard, parent = moving_fragment_guard()
+    xyz = [[0.96, 0], [0.96, 0.01], [0.96, -0.01], [0.56, 0]]
+    ids = [2] * 4
+    tracks = (parent,)
+    t = 1.2
+    if problem == "unstable_velocity":
+        tracks = (replace(parent, velocity_world_xy=(0.7, 0)),)
+    if problem == "too_fast":
+        tracks = (replace(parent, velocity_world_xy=(-3, 0)),)
+    if problem == "too_far":
+        xyz = [[0.3, 0]] * 4
+    if problem == "too_old":
+        t = 1.5
+    if problem == "insufficient_observations":
+        tracks = (replace(parent, observation_count=2),)
+    if problem == "ambiguous":
+        xyz += [[0.96, 0.02]] * 4
+        ids += [3] * 4
+        tracks += (replace(track(3, 0.96), point_count=4),)
+    kwargs = (
+        {}
+        if problem == "no_points"
+        else dict(
+            current_points_world_xy=xyz,
+            current_point_track_ids=ids,
+            current_points_source_time=t,
+        )
+    )
+    assert guard.observe(tracks, source_time=t, robot_world_xy=(0, 0), **kwargs)[
+        "blocked"
+    ]

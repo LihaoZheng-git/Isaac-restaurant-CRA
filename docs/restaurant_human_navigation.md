@@ -132,6 +132,54 @@ stationary gate; crossing selects `--restaurant-human crossing`. The complete
 per-object audit is append-only `live-fields.jsonl`, while the JSON checkpoint
 contains only the latest five fields. Native actor truth is stored separately.
 
+## Executed centerline trials and next diagnostic
+
+`human-standing-centerline-v1` passed all robot waypoints and stopping with
+222 live fields (216 translating), .254076 m minimum independent clearance
+and .002292 m stop drift. The independent motion audit matched 214 current
+human observations; median relative-speed error was .007912 m/s. There were
+96 human mass-prior/supported-kinetic rows and 12 supported contact rows, but
+zero supported potential or thermal rows. Phi ranged .595922--.683594.
+The video decoded 284 distinct frames, and source scene files were unchanged.
+This is a prior-assisted standing-idle integration result, not a baseline
+comparison or complete sensor-derived four-factor assessment.
+
+`human-crossing-centerline-v1` failed after 131 committed live fields. At
+source epoch 19.5, an old fragment at (28.736346,8.829163), last seen at 19.3,
+had no current returns within the unchanged .10 m query radius; the current
+body cluster was already moving left. The guard stopped correctly under its
+then-static query policy. Final abort handling also attempted to poll a canceled
+native task; abort is now idempotent and no longer treats that cancellation as
+a new move failure. Partial records, blocked source geometry and video remain.
+
+A separate focused replay of that copied scan tests an opt-in bounded moving
+fragment hypothesis. It translates the old query by the *current parent
+cluster's inferred velocity*, never the authored actor velocity or the lost
+swinging fragment's velocity. The parent's previous velocity must be at most
+.15 s old, stable within .3 m/s, supported by at least three observations and
+at most 2 m/s; query age is at most .35 s and translation at most .25 m.
+Unique current positive returns, .10 m query and .25 m center gates still
+apply. Exactly three actual current returns supported the shifted query in
+the focused replay. This is a kinematic association hypothesis, not observed
+free space, transferred semantic identity, or a repaired navigation result.
+Insufficient, ambiguous, stale, unstable or absent geometry still stops.
+
+The failed crossing also had **zero supported moving-human kinetic rows**.
+World velocity was observed, but the close front-camera view cropped the human's
+head and rejected fresh full-instance mass associations. Fixing the continuity
+guard alone cannot pass that perception gate. New opt-in camera mount controls
+keep the stock defaults, preserve lens calibration and SAM boundary/quality
+checks, author only the session layer and re-read actual extrinsics. The
+close-view parked-robot benchmark must pass before another wheel crossing.
+Pitch/height changes are experimental sensor configurations, not stock Nova
+Carter camera validation. A new successful run would not retroactively accept
+the failed crossing.
+
+The prospective [final experiment plan](restaurant_final_experiment_plan.md)
+separates cue perception, live integration and matched navigation comparisons.
+Its baseline identities exist in the experiment contract; all three still need
+verified live-runner integration before comparative results can be collected.
+
 Carried bowls are a subsequent component gate: the bowl must follow an actual
 hand transform, retain physical occupancy, and acquire a separately associated
 visual assessment. An authored bowl height, role or emitted puff never supplies

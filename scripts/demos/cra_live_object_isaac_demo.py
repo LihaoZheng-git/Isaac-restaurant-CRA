@@ -32,6 +32,10 @@ parser.add_argument("--restaurant-route", choices=("short", "service", "human-se
 parser.add_argument("--restaurant-server", action="store_true", help="explicit static-server scene opt-in; stationary actor gate required before wheels")
 parser.add_argument("--restaurant-human", choices=("standing", "crossing"),
                     help="native adult-human control integration; no static occupancy or shape persistence")
+parser.add_argument("--human-camera-upward-degrees", type=float, default=0.,
+                    help="explicit experimental left RGB mount pitch, 0..25 degrees; actual extrinsics re-read")
+parser.add_argument("--human-camera-raise-metres", type=float, default=0.,
+                    help="explicit experimental RGB mount height increase, 0...6 m")
 parser.add_argument("--human-mass-prior", nargs=3, type=float, default=(70.,45.,100.),
                     metavar=("KG", "LOWER", "UPPER"), help="configured adult demonstration mass interval; not measured weight")
 parser.add_argument("--sam-observed-context-box", action="store_true",
@@ -101,6 +105,10 @@ parser.add_argument(
     help="optimizer candidate age cap; every executed horizon still needs fresh exact validation",
 )
 args = parser.parse_args()
+if not 0 <= args.human_camera_upward_degrees <= 25 or not 0 <= args.human_camera_raise_metres <= .6 or (
+    (args.human_camera_upward_degrees or args.human_camera_raise_metres) and not args.restaurant_human
+):
+    parser.error("experimental RGB pitch 0..25 requires the native human mode")
 if args.restaurant_scene and (
     not args.persistent_object_risk_map
     or (args.static_occupancy_memory_prior == bool(args.restaurant_human))
@@ -341,6 +349,10 @@ def save_instance_snapshot(result):
 
 
 def main():
+    save_json("run-configuration.json", {
+        key: str(value) if isinstance(value, Path) else value
+        for key, value in vars(args).items()
+    })
     global ACTIVE_HUMAN
     print("Auditing/loading existing local models...", flush=True)
     weights = {}
@@ -562,6 +574,12 @@ def main():
     save_json("fixture-monitor.json", {"fixtures": fixtures,
         "anchor_world_xy_yaw": [anchor.x, anchor.y, anchor.yaw],
         "scope": "authored fixture and oracle anchor for independent evaluation/rendering only; never factor input"})
+    from robot.scene.camera_mount import apply_experimental_camera_pitch
+    save_json("camera-mount-audit.json", apply_experimental_camera_pitch(
+        stage, NovaCarterCamera().camera_prim_path,
+        args.human_camera_upward_degrees, stationary.ROBOT_BASE_PRIM_PATH,
+        raise_metres=args.human_camera_raise_metres,
+    ))
     calibration = read_fisheye_polynomial_calibration(
         stage,
         camera_prim_path=NovaCarterCamera().camera_prim_path,
@@ -1250,7 +1268,8 @@ def main():
 
     commit(latest, float(timeline.get_current_time()))
     coverage_guard = NearbyTrackLossGuard(NearbyTrackLossConfig(
-        allow_observed_fragment_merges=human is not None)) if args.moving_actor or human is not None else None
+        allow_observed_fragment_merges=human is not None,
+        use_observed_merge_velocity=human is not None)) if args.moving_actor or human is not None else None
     coverage_result = None
     coverage_events = []
     submitted_packet = None
@@ -1682,6 +1701,10 @@ def main():
         "passed": completed and scene_unchanged and root_unchanged_by_fixture,
         "human_navigation_validation": human_validation,
         "native_human_mode": args.restaurant_human,
+        "experimental_camera_mount": {
+            "upward_degrees": args.human_camera_upward_degrees,
+            "raise_metres": args.human_camera_raise_metres,
+        },
         "human_mass_prior_config": asdict(perception.human_mass_prior_config) if human is not None else None,
         "scene_source_sha256": source_hashes,
         "completed": arrived,

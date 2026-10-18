@@ -395,6 +395,12 @@ class RestaurantHumanSensorDiagnostic:
                     ],
                 }
             )
+            with (self.output / "human-sensor-records.jsonl").open(
+                "a", encoding="utf-8"
+            ) as stream:
+                stream.write(
+                    json.dumps(self.records[-1], default=_json, allow_nan=False) + "\n"
+                )
             print(
                 "Human sensor field:",
                 len(self.records),
@@ -416,7 +422,7 @@ class RestaurantHumanSensorDiagnostic:
                     "reason": str(e),
                 }
             )
-        self.save("human-sensor-records.json", self.records)
+        self.save("human-sensor-current.json", self.records[-5:])
 
     @property
     def stationary_ready(self):
@@ -438,6 +444,7 @@ class RestaurantHumanSensorDiagnostic:
     def close(self, now):
         self._poll(now, wait=True)
         self.executor.shutdown(wait=True)
+        self.save("human-sensor-records.json", self.records)
         self.save("human-sensor-truth-evaluation-only.json", self.truth)
         self.save("human-sensor-rejections.json", self.rejections)
         report = summarize_human_sensor(self.records, self.truth)

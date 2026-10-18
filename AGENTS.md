@@ -490,3 +490,18 @@
   changing online nominal/safety logic. Its independent layout precheck is not
   motion acceptance; both standing-idle and crossing must complete this same
   route with unchanged constraints and their actual measured/inferred motion.
+- The centerline standing trial passed separately; the first coupled crossing
+  failed and had zero supported moving-human kinetic rows because close RGB
+  truncation rejected fresh full-instance mass associations. Preserve both
+  findings. Do not relax SAM boundary/quality gates or infer mass from cropped
+  bodies. Explicit camera mount experiments retain stock defaults, unchanged
+  lens calibration, session-only changes and re-read actual extrinsics; require
+  a zero-wheel close-view perception gate before new crossing wheels.
+- Human-only moving-fragment continuity may explicitly use a bounded stable
+  current-parent velocity hypothesis (not oracle actor or lost-limb velocity),
+  at most .35 s query age/.25 m translation/2 m/s speed, .15 s previous velocity
+  age and .3 m/s change. Unique actual current returns and existing .10/.25 m
+  geometric gates remain mandatory. It transfers no factors or semantic identity
+  and establishes neither free space nor general occlusion safety. A focused
+  copied-scan replay is not a successful navigation trial. See
+  docs/restaurant_human_navigation.md and the prospective final experiment plan.

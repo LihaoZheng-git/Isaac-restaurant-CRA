@@ -20,12 +20,22 @@ class NearbyTrackLossConfig:
     allow_observed_fragment_merges: bool = False
     positive_merge_distance_m: float = 0.10
     minimum_positive_merge_returns: int = 3
+    use_observed_merge_velocity: bool = False
+    maximum_merge_speed_mps: float = 2.0
+    maximum_merge_translation_m: float = 0.25
+    maximum_merge_velocity_change_mps: float = 0.3
+    maximum_merge_age_seconds: float = 0.35
 
     def __post_init__(self):
-        if not isinstance(self.allow_observed_fragment_merges, bool):
+        if not isinstance(self.allow_observed_fragment_merges, bool) or not isinstance(
+            self.use_observed_merge_velocity, bool
+        ):
             raise TypeError("fragment merge opt-in must be boolean")
         for name, value in vars(self).items():
-            if name == "allow_observed_fragment_merges":
+            if name in {
+                "allow_observed_fragment_merges",
+                "use_observed_merge_velocity",
+            }:
                 continue
             if isinstance(value, bool) or not math.isfinite(value) or value <= 0:
                 raise ValueError("track-loss guard limits must be finite and positive")
@@ -33,6 +43,7 @@ class NearbyTrackLossConfig:
             raise ValueError("enroll observations before they enter the stop region")
         if (
             self.positive_merge_distance_m > self.reassociation_distance_m
+            or self.maximum_merge_translation_m > self.reassociation_distance_m
             or isinstance(self.minimum_positive_merge_returns, bool)
             or not isinstance(self.minimum_positive_merge_returns, int)
         ):
@@ -46,6 +57,7 @@ class NearbyTrackLossGuard:
             raise TypeError("expected NearbyTrackLossConfig")
         self.observed = {}
         self.last_source_time = None
+        self.velocities = {}
 
     def observe(
         self,
@@ -86,6 +98,14 @@ class NearbyTrackLossGuard:
             raise ValueError(
                 "current geometric tracks must have unique IDs and finite centers"
             )
+        velocities = {
+            t.track_id: np.asarray(t.velocity_world_xy, dtype=float) for t in tracks
+        }
+        if any(
+            v.shape != (2,) or not np.isfinite(v).all() for v in velocities.values()
+        ):
+            raise ValueError("finite planar track velocities required")
+        observations = {t.track_id: t.observation_count for t in tracks}
         geometry = None
         if any(
             v is not None
@@ -154,36 +174,77 @@ class NearbyTrackLossGuard:
                 reassociated.add(matches[0])
         # An articulated body can split then rejoin a still-observed cluster.
         # Resolve this only with a unique current cluster and multiple actually
-        # observed returns at the lost fragment's old location. No free-space,
-        # old body box, factor, semantic identity or actor truth is inferred.
+        # observed returns near its old or velocity-advected location. The
+        # latter is an explicit bounded kinematic association hypothesis.
+        # No free-space, old body box, factor or semantic identity transfers.
         merged = []
         if self.config.allow_observed_fragment_merges and geometry is not None:
             xyz, ids = geometry
+
+            def match_query(old_point, old_time, new):
+                queries = [(old_point, "old_centroid_positive_returns", np.zeros(2))]
+                dt = source_time - old_time
+                v = velocities[new]
+                previous_v = self.velocities.get(new)
+                translation = dt * v
+                if (
+                    self.config.use_observed_merge_velocity
+                    and previous_v is not None
+                    and observations[new] >= 3
+                    and 0
+                    < source_time - previous_v[1]
+                    <= self.config.maximum_missing_seconds + 1e-9
+                    and 0 < dt <= self.config.maximum_merge_age_seconds + 1e-9
+                    and np.linalg.norm(v) <= self.config.maximum_merge_speed_mps
+                    and np.linalg.norm(v - previous_v[0])
+                    <= self.config.maximum_merge_velocity_change_mps
+                    and np.linalg.norm(translation)
+                    <= self.config.maximum_merge_translation_m
+                ):
+                    queries.append(
+                        (
+                            old_point + translation,
+                            "inferred_current_cluster_velocity_positive_returns",
+                            translation,
+                        )
+                    )
+                for q, basis, shift in queries:
+                    if (
+                        np.linalg.norm(current[new] - q)
+                        > self.config.reassociation_distance_m
+                    ):
+                        continue
+                    near = ids[
+                        np.linalg.norm(xyz - q, axis=1)
+                        <= self.config.positive_merge_distance_m
+                    ]
+                    supported = [
+                        int(n)
+                        for n in np.unique(near)
+                        if np.count_nonzero(near == n)
+                        >= self.config.minimum_positive_merge_returns
+                    ]
+                    if supported == [new]:
+                        return q, basis, shift
+                return None
+
             proposals = {}
+            matches = {}
             for key, (old_point, old_time) in missing.items():
                 if key not in pending:
                     continue
-                nearby_ids = ids[
-                    np.linalg.norm(xyz - old_point, axis=1)
-                    <= self.config.positive_merge_distance_m
-                ]
-                positive_ids = [
-                    int(n)
-                    for n in np.unique(nearby_ids)
-                    if np.count_nonzero(nearby_ids == n)
-                    >= self.config.minimum_positive_merge_returns
-                ]
-                choices = [
-                    new
-                    for new, point in current.items()
-                    if new in pending
-                    and new != key
-                    and abs(pending[new][1] - old_time)
-                    <= self.config.maximum_missing_seconds + 1e-9
-                    and np.linalg.norm(point - old_point)
-                    <= self.config.reassociation_distance_m
-                    and positive_ids == [new]
-                ]
+                choices = []
+                for new in current:
+                    if (
+                        new in pending
+                        and new != key
+                        and abs(pending[new][1] - old_time)
+                        <= self.config.maximum_missing_seconds + 1e-9
+                    ):
+                        found = match_query(old_point, old_time, new)
+                        if found is not None:
+                            choices.append(new)
+                            matches[key, new] = found
                 proposals[key] = choices
             for key, choices in proposals.items():
                 if (
@@ -192,17 +253,29 @@ class NearbyTrackLossGuard:
                 ):
                     new = choices[0]
                     old_point, old_time = pending.pop(key)
+                    query, basis, shift = matches[key, new]
                     merged.append(
                         {
                             "lost_track_id": int(key),
                             "current_track_id": int(new),
                             "original_last_seen_time": old_time,
                             "current_source_time": source_time,
-                            "positive_returns_near_old_centroid": int(
+                            "basis": basis,
+                            "old_centroid_world_xy": old_point.tolist(),
+                            "query_world_xy": query.tolist(),
+                            "translation_world_xy": shift.tolist(),
+                            "current_velocity_source_time": source_time,
+                            "previous_velocity_source_time": self.velocities[new][1]
+                            if new in self.velocities
+                            else None,
+                            "current_cluster_velocity_world_xy": velocities[
+                                new
+                            ].tolist(),
+                            "positive_returns_near_query": int(
                                 np.count_nonzero(
                                     (ids == new)
                                     & (
-                                        np.linalg.norm(xyz - old_point, axis=1)
+                                        np.linalg.norm(xyz - query, axis=1)
                                         <= self.config.positive_merge_distance_m
                                     )
                                 )
@@ -234,6 +307,13 @@ class NearbyTrackLossGuard:
                     }
                 )
         self.observed, self.last_source_time = pending, float(source_time)
+        self.velocities = {
+            key: (velocities[key].copy(), float(source_time))
+            if key in current
+            else self.velocities[key]
+            for key in pending
+            if key in current or key in self.velocities
+        }
         return {
             "blocked": bool(blocking),
             "blocking_tracks": blocking,

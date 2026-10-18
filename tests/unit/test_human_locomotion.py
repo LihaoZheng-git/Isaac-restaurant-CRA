@@ -12,6 +12,29 @@ from robot.scene.restaurant_human_motion import (
 )
 
 
+def test_native_episode_abort_is_idempotent_and_preserves_completed_task():
+    from robot.scene.restaurant_human_episode import RestaurantHumanEpisode
+
+    class Agent:
+        calls = 0
+
+        def idle(self):
+            self.calls += 1
+
+    episode = RestaurantHumanEpisode.__new__(RestaurantHumanEpisode)
+    episode.agent = Agent()
+    episode.task = 3
+    episode.task_succeeded = False
+    episode.phase = "move"
+    episode.abort()
+    episode.abort()
+    assert episode.phase == "aborted" and episode.agent.calls == 1
+    episode.task_succeeded = True
+    episode.phase = "stopped_after"
+    episode.abort()
+    assert episode.phase == "stopped_after" and episode.agent.calls == 1
+
+
 def observations():
     rows = []
     for t in np.arange(0, 5, 0.05):
