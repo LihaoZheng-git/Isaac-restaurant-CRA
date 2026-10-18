@@ -463,3 +463,73 @@
   navigation/control freshness acceptance, real time or robot/human crossing.
   Keep next wheel experiments behind their own current-field/track-loss gates.
   See docs/restaurant_human_perception.md; PR #117's main hold is unchanged.
+- The opt-in native-human navigation mode selects the human as its stationary
+  component gate; unrelated bowl diagnostics remain recorded with their actual
+  failures/priors and physical occupancy. It rejects static occupancy memory,
+  uses .15 s positive scan retention, and may retain only intrinsic mass for
+  3 original-source seconds with 1.5 s confidence half-life. Old body bounds,
+  contact, support, plume and motion cannot be borrowed for articulating humans.
+  Preserve .35 s inference/field caps, nearby-track-loss stops and exact current
+  execution checks. A longer stationary window does not lower SAM's .85 quality
+  gate. Standing/crossing control acceptance is separate from parked perception,
+  complete four-factor sensing, carried bowls, crowds and PR #117's main hold.
+  See docs/restaurant_human_navigation.md for current executed results.
+- The first standing-human navigation trial failed on a lost limb/body fragment
+  near a still-observed body, just before arrival; retain it as failed. The new
+  human-only guard opt-in requires unique current positive geometry to resolve
+  a rejoined fragment: at least 3 returns within .10 m, existing .25 m centroid
+  association and recent coexistence. Ambiguous/unclustered/stale geometry or
+  true disappearance still stops; no identity/property evidence transfers.
+  Native standing-idle is allowed bounded measured sway, never a forced zero
+  motion score. The transverse actor-only zero-wheel walk passed separately;
+  coupled retries still need actual arrival and stopping. No carried-bowl or
+  moving-view thermal acceptance follows from these checks.
+- The original service middle waypoint can overlap the recorded native idle
+  envelope; preserve failed/stalled original-route runs. The separate fixed
+  `human-service` centerline route removes its 20 cm aisle-side corner, without
+  changing online nominal/safety logic. Its independent layout precheck is not
+  motion acceptance; both standing-idle and crossing must complete this same
+  route with unchanged constraints and their actual measured/inferred motion.
+- The centerline standing trial passed separately; the first coupled crossing
+  failed and had zero supported moving-human kinetic rows because close RGB
+  truncation rejected fresh full-instance mass associations. Preserve both
+  findings. Do not relax SAM boundary/quality gates or infer mass from cropped
+  bodies. Explicit camera mount experiments retain stock defaults, unchanged
+  lens calibration, session-only changes and re-read actual extrinsics; require
+  a zero-wheel close-view perception gate before new crossing wheels.
+- Human-only moving-fragment continuity may explicitly use a bounded stable
+  current-parent velocity hypothesis (not oracle actor or lost-limb velocity),
+  at most .35 s query age/.25 m translation/2 m/s speed, .15 s previous velocity
+  age and .3 m/s change. Unique actual current returns and existing .10/.25 m
+  geometric gates remain mandatory. It transfers no factors or semantic identity
+  and establishes neither free space nor general occlusion safety. A focused
+  copied-scan replay is not a successful navigation trial. See
+  docs/restaurant_human_navigation.md and the prospective final experiment plan.
+- Close full-human RGB coverage is a documented limitation: tilt-only and raised
+  camera attempts failed their moving/stationary perception gates. A separate
+  parked crossing-approach view at y=7.4 with stock camera height/+15 degree pitch
+  passed a .5 m/s native walk (10 stationary/nine moving fresh human priors).
+  The .7 m/s version had only three moving rows and remains failed. Explicit
+  actor trigger/speed options change the authored scenario only, never runtime
+  evidence or control. A farther/slow crossing cannot establish close-range,
+  faster, crowded, complete four-factor or main-merge acceptance.
+- The farther .5 m/s coupled crossing (robot-y trigger 7.0, stock-height RGB
+  pitch +15) passed robot/human arrivals, stopping and the live audit: nine
+  supported moving-human kinetic rows with positive current ownership, seven
+  simultaneous rows, all using the configured adult mass prior. Potential and
+  thermal stayed priors; a later validator rejects catalog human mass. Preserve
+  the median-vs-maximum velocity error distinction and the nine old-centroid
+  geometry merges (no velocity-query merge was exercised in that wheel run).
+- Keep the factor-specific uncertainty finding: observed relative energy and
+  nominal kinetic risk increased during crossing, while confidence-adjusted
+  policy scores need not increase because the .25 uncertainty prior/confidence
+  changed. This is not a causal comparison or monotonic phi/clearance result.
+  Do not silently alter confidence, priors or energy scales to improve the
+  figure. Treat calibration/sensitivity explicitly in the final study. See
+  docs/restaurant_human_navigation.md for actual counts and failed attempts.
+- The same-mount standing repeat also passed (234 fields, .222086 m minimum
+  independent clearance, .002281 m stopping drift); its stricter mass-source
+  audit passed. Both bounded examples retain potential/thermal priors, transient
+  velocity errors and rejected stale/failed optimizer results. Their arrivals
+  are not replicated baseline results, full fresh physical estimation or the
+  PR #117/main acceptance gate.

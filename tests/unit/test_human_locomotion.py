@@ -12,6 +12,47 @@ from robot.scene.restaurant_human_motion import (
 )
 
 
+@pytest.mark.parametrize("trigger", [6.7, 7.9, float("nan")])
+def test_native_crossing_rejects_out_of_scope_trigger_before_authoring(trigger):
+    from robot.scene.restaurant_human_episode import RestaurantHumanEpisode
+
+    with pytest.raises(ValueError, match="crossing trigger"):
+        RestaurantHumanEpisode(
+            None, mode="crossing", output=None, trigger_robot_y=trigger
+        )
+
+
+@pytest.mark.parametrize("speed", [0.49, 1.01, float("nan")])
+def test_native_crossing_rejects_out_of_scope_speed_before_authoring(speed):
+    from robot.scene.restaurant_human_episode import RestaurantHumanEpisode
+
+    with pytest.raises(ValueError, match="walking speed"):
+        RestaurantHumanEpisode(None, mode="crossing", output=None, speed_mps=speed)
+
+
+def test_native_episode_abort_is_idempotent_and_preserves_completed_task():
+    from robot.scene.restaurant_human_episode import RestaurantHumanEpisode
+
+    class Agent:
+        calls = 0
+
+        def idle(self):
+            self.calls += 1
+
+    episode = RestaurantHumanEpisode.__new__(RestaurantHumanEpisode)
+    episode.agent = Agent()
+    episode.task = 3
+    episode.task_succeeded = False
+    episode.phase = "move"
+    episode.abort()
+    episode.abort()
+    assert episode.phase == "aborted" and episode.agent.calls == 1
+    episode.task_succeeded = True
+    episode.phase = "stopped_after"
+    episode.abort()
+    assert episode.phase == "stopped_after" and episode.agent.calls == 1
+
+
 def observations():
     rows = []
     for t in np.arange(0, 5, 0.05):

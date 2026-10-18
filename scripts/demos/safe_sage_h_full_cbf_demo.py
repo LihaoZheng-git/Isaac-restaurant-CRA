@@ -94,6 +94,8 @@ simulation_app = SimulationApp(
         "headless": SIMULATION_HEADLESS,
         "enable_motion_bvh": True,
         "extra_args": [
+            *(["--enable", "omni.anim.behavior.core"]
+              if os.environ.get("CRA_NATIVE_HUMAN") == "1" else []),
             (
                 "--/rtx/scenedb/maxHistoryTransformCount="
                 f"{RTX_HISTORY_TRANSFORM_COUNT}"

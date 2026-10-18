@@ -18,8 +18,12 @@ parser.add_argument("--output", type=Path, required=True)
 parser.add_argument("--layout-survey", type=Path, required=True)
 parser.add_argument("--speed", type=float, default=0.7)
 parser.add_argument("--goal-y", type=float, default=12.5)
+parser.add_argument("--goal-x", type=float, default=29.8)
 parser.add_argument("--sensor-diagnostic", action="store_true")
 parser.add_argument("--sensor-simulation-rate", type=float, default=0.1)
+parser.add_argument("--robot-view", choices=("approach", "close", "crossing-approach"), default="approach")
+parser.add_argument("--camera-upward-degrees", type=float, default=0.)
+parser.add_argument("--camera-raise-metres", type=float, default=0.)
 parser.add_argument(
     "--human-mass-prior",
     nargs=3,
@@ -30,8 +34,14 @@ parser.add_argument(
 args = parser.parse_args()
 if not 0.5 <= args.speed <= 2:
     parser.error("bounded native human speed is .5..2 m/s")
-if not 9.8 <= args.goal_y <= 12.5 or not 0.05 <= args.sensor_simulation_rate <= 1:
-    parser.error("goal y must be 9.8..12.5; sensor simulation pacing .05..1")
+if not 0 <= args.camera_upward_degrees <= 25 or not 0 <= args.camera_raise_metres <= .6 or (
+    (args.robot_view != "approach" or args.camera_upward_degrees or args.camera_raise_metres) and not args.sensor_diagnostic
+):
+    parser.error("experimental camera/close view requires sensor diagnostic; pitch 0..25")
+crossing_goal = args.goal_x == 27.8 and args.goal_y == 8.9
+if (not crossing_goal and (args.goal_x != 29.8 or not 9.8 <= args.goal_y <= 12.5)
+    or not 0.05 <= args.sensor_simulation_rate <= 1):
+    parser.error("use original x=29.8/y=9.8..12.5 or crossing goal (27.8,8.9); pacing .05..1")
 args.scene, args.output, args.layout_survey = (
     args.scene.resolve(),
     args.output.resolve(),
@@ -105,7 +115,15 @@ def save(name, data):
 
 
 def main():
-    goal = (29.8, args.goal_y, 0.0)
+    save("run-configuration.json", {
+        key: str(value) if isinstance(value, Path) else value
+        for key, value in vars(args).items()
+    })
+    goal = (args.goal_x, args.goal_y, 0.0)
+    robot_start = (28.8, 7.9, SHORT_START_WORLD_XYZ[2]) if args.robot_view == "close" else SHORT_START_WORLD_XYZ
+    robot_yaw = math.pi / 2 if args.robot_view == "close" else SHORT_START_YAW
+    if args.robot_view == "crossing-approach":
+        robot_start, robot_yaw = (28.8, 7.4, SHORT_START_WORLD_XYZ[2]), math.pi / 2
     sources = {
         ROOT / "scenes/generated/restaurant_base.usda",
         ROOT / "scenes/generated/restaurant_robot.usda",
@@ -138,7 +156,7 @@ def main():
     footprint = RectangularRobotFootprint(0.14, 0.587351, 0.2466, 0.2466, 0.05)
     setup_clearance = authored_raster_clearance(
         points,
-        (*SHORT_START_WORLD_XYZ[:2], SHORT_START_YAW),
+        (*robot_start[:2], robot_yaw),
         footprint,
         pixel_allowance,
     )
@@ -162,9 +180,9 @@ def main():
     for _ in range(10):
         app.update()
     controller.robot.set_world_poses(
-        positions=[SHORT_START_WORLD_XYZ],
+        positions=[robot_start],
         orientations=[
-            [math.cos(SHORT_START_YAW / 2), 0, 0, math.sin(SHORT_START_YAW / 2)]
+            [math.cos(robot_yaw / 2), 0, 0, math.sin(robot_yaw / 2)]
         ],
     )
     for _ in range(60):
@@ -193,8 +211,8 @@ def main():
         camera.MakeMatrixXform().Set(
             Gf.Matrix4d()
             .SetLookAt(
-                Gf.Vec3d(27.7, 10.6, 2.0),
-                Gf.Vec3d(29.8, 10.7, 0.9),
+                Gf.Vec3d(25.9, 6.7, 3.2) if crossing_goal else Gf.Vec3d(27.7, 10.6, 2.0),
+                Gf.Vec3d(29.0, 8.9, .8) if crossing_goal else Gf.Vec3d(29.8, 10.7, 0.9),
                 Gf.Vec3d(0, 0, 1),
             )
             .GetInverse()
@@ -233,9 +251,17 @@ def main():
         app.update()
     sensor = None
     if args.sensor_diagnostic:
+        from robot.config import FRONT_HAWK_LEFT_CAMERA_PRIM_PATH
+        from robot.scene.camera_mount import apply_experimental_camera_pitch
         from robot.evaluation.restaurant_human_sensor import (
             RestaurantHumanSensorDiagnostic,
         )
+
+        save("camera-mount-audit.json", apply_experimental_camera_pitch(
+            stage, FRONT_HAWK_LEFT_CAMERA_PRIM_PATH, args.camera_upward_degrees,
+            ROBOT_BASE_PRIM_PATH,
+            raise_metres=args.camera_raise_metres,
+        ))
 
         sensor = RestaurantHumanSensorDiagnostic(
             stage,

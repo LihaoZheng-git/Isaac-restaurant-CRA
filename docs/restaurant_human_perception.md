@@ -142,3 +142,8 @@ integration gate: carry only justified intrinsic mass priors through visual
 cadence gaps, keep geometry/motion current, preserve track-loss stops, reject
 late fields, and test a controlled crossing before extending the service route.
 PR #117's main-merge hold remains separate and unchanged.
+
+The subsequent bounded control integration and its failed/retried standing
+reference are documented in [restaurant_human_navigation.md](restaurant_human_navigation.md).
+It keeps explicit priors and current geometry; this parked benchmark is not
+retroactively a crossing or real-time validation.

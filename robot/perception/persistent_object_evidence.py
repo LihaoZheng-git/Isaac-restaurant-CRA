@@ -28,11 +28,33 @@ class PersistentObjectEvidenceConfig:
     minimum_visual_reassessment_interval_seconds: float = 1.0
     maximum_visual_tracks_per_update: int = 2
     translate_instance_bounds_prior: bool = False
+    allow_instance_bounds_prior: bool = True
     retain_observed_properties: bool = True
+    retained_properties: tuple[str, ...] = (
+        "mass",
+        "fall_height",
+        "fall_interaction",
+        "contact",
+        "heat",
+    )
 
     def __post_init__(self):
-        if not isinstance(self.translate_instance_bounds_prior, bool) or not isinstance(
-            self.retain_observed_properties, bool
+        allowed = {"mass", "fall_height", "fall_interaction", "contact", "heat"}
+        if (
+            not isinstance(self.retained_properties, tuple)
+            or any(
+                not isinstance(n, str) or n not in allowed
+                for n in self.retained_properties
+            )
+            or len(set(self.retained_properties)) != len(self.retained_properties)
+        ):
+            raise ValueError(
+                "retained properties must be a unique tuple of supported names"
+            )
+        if (
+            not isinstance(self.allow_instance_bounds_prior, bool)
+            or not isinstance(self.translate_instance_bounds_prior, bool)
+            or not isinstance(self.retain_observed_properties, bool)
         ):
             raise TypeError("translated bounds opt-in must be boolean")
         if not isinstance(self.scope, str) or not self.scope.strip():
@@ -47,7 +69,9 @@ class PersistentObjectEvidenceConfig:
             if name in {
                 "scope",
                 "translate_instance_bounds_prior",
+                "allow_instance_bounds_prior",
                 "retain_observed_properties",
+                "retained_properties",
             }:
                 continue
             if (
@@ -215,12 +239,23 @@ class PersistentObjectEvidence:
                     "source_timestamp": item.timestamp_seconds,
                     "source_frame_id": camera_frame_id,
                 }
-                if not competing and self.config.retain_observed_properties:
+                if (
+                    not competing
+                    and self.config.retain_observed_properties
+                    and name in self.config.retained_properties
+                ):
                     self.properties[key] = _Property(
                         item, camera_frame_id, track.centroid_world_xy
                     )
                 continue
-            source = self.properties.get(key)
+            source = (
+                self.properties.get(key)
+                if (
+                    self.config.retain_observed_properties
+                    and name in self.config.retained_properties
+                )
+                else None
+            )
             rejection = reason
             if support_changed and name in {"fall_height", "fall_interaction"}:
                 rejection = "visible height changed; observed support must be reassessed (height is not fall height)"
