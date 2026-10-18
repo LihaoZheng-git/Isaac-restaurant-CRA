@@ -35,6 +35,24 @@ def test_sources_match_cc0_intake_and_meshes_keep_uvs_and_cavities():
         assert not mesh.GetPrim().HasAPI(UsdPhysics.MassAPI)
 
 
+def test_human_centerline_route_preserves_existing_service_and_fixed_world_waypoints():
+    from robot.scene.restaurant_service_build import (
+        restaurant_route_local_xy,
+        SHORT_START_YAW,
+    )
+
+    def world(route):
+        c, s = math.cos(SHORT_START_YAW), math.sin(SHORT_START_YAW)
+        return np.array(route) @ np.array([[c, s], [-s, c]]) + [28.8, 5.6]
+
+    assert world(restaurant_route_local_xy("service")) == pytest.approx(
+        np.array([[28.8, 7.8], [29, 8.7], [28.8, 9.5]])
+    )
+    assert world(restaurant_route_local_xy("human-service")) == pytest.approx(
+        np.array([[28.8, 7.8], [28.8, 8.7], [28.8, 9.5]])
+    )
+
+
 def test_session_authoring_preserves_source_and_places_actual_bases():
     stage = Usd.Stage.CreateInMemory()
     UsdGeom.Cube.Define(stage, "/World/ExistingTable")
@@ -45,9 +63,14 @@ def test_session_authoring_preserves_source_and_places_actual_bases():
     assert stage.GetPrimAtPath("/World/ExistingTable").IsValid()
     assert len(records) == 11
     for record, spec in zip(records, service_props(), strict=True):
-        low, high = np.array(record["bounds_minimum"]), np.array(record["bounds_maximum"])
+        low, high = (
+            np.array(record["bounds_minimum"]),
+            np.array(record["bounds_maximum"]),
+        )
         assert low[2] == pytest.approx(spec.base_world_xyz_m[2], abs=1e-6)
-        assert ((low + high) / 2)[:2] == pytest.approx(spec.base_world_xyz_m[:2], abs=1e-5)
+        assert ((low + high) / 2)[:2] == pytest.approx(
+            spec.base_world_xyz_m[:2], abs=1e-5
+        )
         assert not record["available_as_physical_factor_input"]
         assert record["provenance"] == "authored_placement_and_rendering_only"
     text = stage.GetSessionLayer().ExportToString()
@@ -83,18 +106,27 @@ def test_saved_additions_reopen_and_base_cannot_be_overwritten(tmp_path):
 
 
 def test_zero_length_source_timeline_is_rejected_before_creating_output(tmp_path):
-    base=tmp_path/"bad-time.usda"
-    source=Usd.Stage.CreateNew(str(base))
+    base = tmp_path / "bad-time.usda"
+    source = Usd.Stage.CreateNew(str(base))
     source.GetRootLayer().Save()
-    output=tmp_path/"service.usda"
-    with pytest.raises(ValueError,match="nonempty simulation time range"):
-        build_service_scene(output,base_scene=base)
+    output = tmp_path / "service.usda"
+    with pytest.raises(ValueError, match="nonempty simulation time range"):
+        build_service_scene(output, base_scene=base)
     assert not output.exists()
 
 
-@pytest.mark.parametrize("change", [dict(width_m=0), dict(width_m=math.nan), dict(model="../outside"), dict(name="not a path"), dict(base_world_xyz_m=(1, 2, math.inf))])
+@pytest.mark.parametrize(
+    "change",
+    [
+        dict(width_m=0),
+        dict(width_m=math.nan),
+        dict(model="../outside"),
+        dict(name="not a path"),
+        dict(base_world_xyz_m=(1, 2, math.inf)),
+    ],
+)
 def test_bad_placement_rejected(change):
-    fields = dict(name="Test", model="bowl", base_world_xyz_m=(0, 0, 0), width_m=.3)
+    fields = dict(name="Test", model="bowl", base_world_xyz_m=(0, 0, 0), width_m=0.3)
     fields.update(change)
     with pytest.raises(ValueError):
         ServiceProp(**fields)
@@ -108,12 +140,15 @@ def test_left_start_route_remains_a_proposal_and_exceeds_thirty_metres():
 
 def test_service_route_extends_short_route_inside_existing_field_with_room_for_base():
     from robot.scene.restaurant_service_build import restaurant_route_local_xy
-    short=restaurant_route_local_xy()
-    service=np.array(restaurant_route_local_xy("service"))
-    assert len(short)==1 and len(service)==3
-    assert service[0]==pytest.approx(short[0])
-    assert np.linalg.norm(np.diff(np.vstack([[0,0],service]),axis=0),axis=1).sum()==pytest.approx(3.94657557085)
-    assert np.all((service[:,0]>.7)&(service[:,0]<4.2))
-    assert np.all(abs(service[:,1])<2.2)
+
+    short = restaurant_route_local_xy()
+    service = np.array(restaurant_route_local_xy("service"))
+    assert len(short) == 1 and len(service) == 3
+    assert service[0] == pytest.approx(short[0])
+    assert np.linalg.norm(
+        np.diff(np.vstack([[0, 0], service]), axis=0), axis=1
+    ).sum() == pytest.approx(3.94657557085)
+    assert np.all((service[:, 0] > 0.7) & (service[:, 0] < 4.2))
+    assert np.all(abs(service[:, 1]) < 2.2)
     with pytest.raises(ValueError):
         restaurant_route_local_xy("unbounded")

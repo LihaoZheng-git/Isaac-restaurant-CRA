@@ -222,7 +222,8 @@ def assess_all_objects(worker, packet):
             owned = selected
             selected_count += int(selected.sum())
         elif (
-            any(
+            memory.config.allow_instance_bounds_prior
+            and any(
                 detail["mode"] == "persistence_prior"
                 for detail in assessment["persistence"].values()
             )

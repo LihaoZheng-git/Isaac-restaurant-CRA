@@ -56,3 +56,75 @@ def test_guard_rejects_invalid_scope_and_duplicate_geometric_ids():
     guard = NearbyTrackLossGuard()
     with pytest.raises(ValueError):
         guard.observe((track(1), track(1)), source_time=1, robot_world_xy=(0, 0))
+
+
+def merge_guard(enabled=True):
+    guard = NearbyTrackLossGuard(
+        NearbyTrackLossConfig(allow_observed_fragment_merges=enabled)
+    )
+    guard.observe((track(1, 1.1), track(2, 1.25)), source_time=1, robot_world_xy=(0, 0))
+    return guard
+
+
+def test_current_positive_points_resolve_one_fragment_rejoining_existing_body():
+    guard = merge_guard()
+    parent = replace(track(2, 1.25), point_count=4)
+    result = guard.observe(
+        (parent,),
+        source_time=1.2,
+        robot_world_xy=(0, 0),
+        current_points_world_xy=[[1.1, 0], [1.1, 0.01], [1.1, -0.01], [1.7, 0]],
+        current_point_track_ids=[2, 2, 2, 2],
+        current_points_source_time=1.2,
+    )
+    assert not result["blocked"]
+    assert len(result["observed_fragment_merges"]) == 1
+    assert result["observed_fragment_merges"][0]["lost_track_id"] == 1
+    assert set(guard.observed) == {2}
+    assert guard.observe((), source_time=1.4, robot_world_xy=(.2, 0))["blocked"]
+
+
+@pytest.mark.parametrize(
+    "problem", ["legacy", "missing", "too_few", "far", "ambiguous", "unclustered"]
+)
+def test_centroid_or_ambiguous_returns_never_resolve_missing_fragment(problem):
+    guard = merge_guard(problem != "legacy")
+    parent = replace(track(2, 1.25), point_count=4)
+    tracks = (parent,)
+    points = [[1.1, 0], [1.1, 0.01], [1.1, -0.01], [1.7, 0]]
+    ids = [2, 2, 2, 2]
+    if problem == "too_few":
+        points[2] = [1.7, 0]
+    if problem == "far":
+        points = [[1.4, 0]] * 4
+    if problem in {"ambiguous", "unclustered"}:
+        points += [[1.1, 0.02]] * 4
+        ids += [3 if problem == "ambiguous" else -1] * 4
+        if problem == "ambiguous":
+            tracks += (replace(track(3, 1.1), point_count=4),)
+    kwargs = (
+        {}
+        if problem == "missing"
+        else dict(
+            current_points_world_xy=points,
+            current_point_track_ids=ids,
+            current_points_source_time=1.2,
+        )
+    )
+    assert guard.observe(tracks, source_time=1.2, robot_world_xy=(0, 0), **kwargs)[
+        "blocked"
+    ]
+
+
+def test_misaligned_geometry_never_commits_guard_state():
+    guard = merge_guard()
+    with pytest.raises(ValueError, match="aligned current"):
+        guard.observe(
+            (track(2),),
+            source_time=1.2,
+            robot_world_xy=(0, 0),
+            current_points_world_xy=[[1.1, 0]],
+            current_point_track_ids=[2],
+            current_points_source_time=1.0,
+        )
+    assert guard.last_source_time == 1

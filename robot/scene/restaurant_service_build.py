@@ -47,11 +47,11 @@ def restaurant_route_local_xy(name="short"):
     """
     if name == "short":
         return (SHORT_GOAL_LOCAL_XY,)
-    if name != "service":
+    if name not in {"service", "human-service"}:
         raise ValueError("unknown restaurant route")
     start = np.asarray(SHORT_START_WORLD_XYZ[:2])
     c, s = math.cos(SHORT_START_YAW), math.sin(SHORT_START_YAW)
-    world = np.array([(28.8, 7.8), (29.0, 8.7), (28.8, 9.5)])
+    world = np.array([(28.8, 7.8), (28.8 if name == "human-service" else 29.0, 8.7), (28.8, 9.5)])
     return tuple(map(tuple, (world - start) @ np.array([[c, -s], [s, c]])))
 
 

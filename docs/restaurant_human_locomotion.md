@@ -120,3 +120,17 @@ should a separate controlled robot/human crossing be tested.
 
 This validated child branch targets the live development branch. Draft PR #117
 and the main branch retain their separate hold.
+
+## Transverse crossing component
+
+`human-crossing-actor-v1` separately passed the aisle-crossing goal `(27.8,8.9,0)`
+at a .7 m/s request, selected with `--goal-x 27.8 --goal-y 8.9`. This is the
+only additional goal pair accepted by the script; the original x=29.8 routes
+remain unchanged. The diagnostic camera uses a wider crossing view.
+
+Observed speed was .688367 m/s, relative foot range .838306 m, minimum independent
+actor/layout clearance .301914 m, and stop drift .014822 m. Actual arrival,
+root grounding, PhysX collider following, zero robot wheels and 54 decoded /
+48 distinct RGB frames passed. All source scene files remained unchanged.
+This is actor-only component acceptance, separate from sensor velocity or coupled
+robot/human navigation. See `restaurant_human_navigation.md` for the latter.

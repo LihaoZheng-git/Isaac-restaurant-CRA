@@ -28,8 +28,12 @@ parser.add_argument("--restaurant-layout-survey", type=Path,
                     help="fingerprinted authored layout raster, independent clearance monitor only")
 parser.add_argument("--restaurant-view", choices=("bowl", "pot", "counter", "front", "server"), default="bowl",
                     help="explicit stationary robot view; target names are evaluation metadata only")
-parser.add_argument("--restaurant-route", choices=("short", "service"), default="short")
+parser.add_argument("--restaurant-route", choices=("short", "service", "human-service"), default="short")
 parser.add_argument("--restaurant-server", action="store_true", help="explicit static-server scene opt-in; stationary actor gate required before wheels")
+parser.add_argument("--restaurant-human", choices=("standing", "crossing"),
+                    help="native adult-human control integration; no static occupancy or shape persistence")
+parser.add_argument("--human-mass-prior", nargs=3, type=float, default=(70.,45.,100.),
+                    metavar=("KG", "LOWER", "UPPER"), help="configured adult demonstration mass interval; not measured weight")
 parser.add_argument("--sam-observed-context-box", action="store_true",
                     help="explicit generic observed-LiDAR context-box retry; unchanged SAM quality/ownership gates")
 parser.add_argument("--restaurant-plume-diagnostic", action="store_true",
@@ -98,12 +102,19 @@ parser.add_argument(
 )
 args = parser.parse_args()
 if args.restaurant_scene and (
-    not args.persistent_object_risk_map or not args.static_occupancy_memory_prior
+    not args.persistent_object_risk_map
+    or (args.static_occupancy_memory_prior == bool(args.restaurant_human))
     or args.fixture_layout != "single" or args.actor_shape != "sphere"
     or args.plume_control != "none" or args.moving_actor or args.kinetic_diagnostic
     or args.evidence_gap_diagnostic or args.restaurant_layout_survey is None
 ):
     parser.error("restaurant component requires static persistent mapping, single/default selectors, no emitted plume/actors, and an independent authored layout survey")
+if args.restaurant_human and (not args.restaurant_scene or not args.restaurant_server
+    or args.restaurant_view != "bowl" or args.restaurant_plume_diagnostic
+    or args.disable_lidar_deskew or args.restaurant_route not in {"service", "human-service"}):
+    parser.error("native human requires restaurant service route/server, deskew, bowl start and no plume")
+if args.restaurant_route == "human-service" and not args.restaurant_human:
+    parser.error("human-service is the separate native-human centerline route")
 if args.restaurant_layout_survey and not args.restaurant_scene:
     parser.error("restaurant layout survey requires the explicit restaurant scene")
 if args.restaurant_view != "bowl" and (not args.restaurant_scene or args.motion):
@@ -125,8 +136,8 @@ if args.progress_timeout_seconds != 0 and not 10 <= args.progress_timeout_second
     parser.error("progress watchdog must be disabled or within [10, 30] seconds")
 if args.fixture_spacing != "tight" and args.fixture_layout != "three":
     parser.error("spacing option requires the three-object fixture")
-if not 1 <= args.visual_reassessment_interval <= 10:
-    parser.error("visual reassessment interval must lie within [1, 10] seconds")
+if not (0.2 if args.restaurant_human else 1) <= args.visual_reassessment_interval <= 10:
+    parser.error("visual reassessment interval must lie within [.2, 10] for native humans, [1, 10] otherwise")
 if not 100 <= args.qp_iteration_limit <= 4000:
     parser.error("live QP iteration budget must lie within [100, 4000]")
 if not 1 <= args.nonlinear_rescue_iterations <= 300:
@@ -159,6 +170,8 @@ if args.stream_live_records and (args.output / "live-fields.jsonl").exists():
 os.environ.setdefault("WARP_CACHE_PATH", str(args.output / "warp"))
 os.environ.setdefault("ISAAC_SIM_HEADLESS", "1")
 os.environ.setdefault("ISAAC_RTX_HISTORY_TRANSFORM_COUNT", "128")
+if args.restaurant_human:
+    os.environ["CRA_NATIVE_HUMAN"] = "1"
 
 # Import the existing vision stack before Kit changes package resolution.
 from robot.perception.visual_mass_runtime import (
@@ -178,6 +191,7 @@ from robot.perception.yolo_detector import (
     YoloSegmentationConfig,
     YoloSegmentationDetector,
 )
+from robot.perception.human_mass_prior import HumanMassPriorConfig, PERSON_CHECKPOINT_SHA256
 from scripts.demos import safe_sage_unicycle_mpc_motion_demo as existing
 
 import cv2
@@ -194,7 +208,7 @@ from robot.evaluation.live_object_perception import (
 )
 from robot.evaluation.factor_specific_cra import diagnose_factor_specific_cra
 from robot.evaluation.kinetic_fixture import actor_offset_velocity, summarize_kinetic_records, summarize_live_relative_motion
-from robot.evaluation.nearby_track_loss_guard import NearbyTrackLossGuard
+from robot.evaluation.nearby_track_loss_guard import NearbyTrackLossConfig, NearbyTrackLossGuard
 from robot.evaluation.object_map_validation import summarize_fixture_assessments, bounded_fixture_checks, kinetic_actor_fixture_checks
 from robot.evaluation.restaurant_service_validation import (
     authored_raster_clearance, load_authored_layout_monitor, restaurant_asset_checks, restaurant_plume_checks,
@@ -244,6 +258,7 @@ from robot.sensor.lidar_geometry import filter_valid_points, transform_points
 
 stationary = existing.stationary
 app = existing.simulation_app
+ACTIVE_HUMAN = None
 RADIUS = 0.18
 ACTOR_HEIGHT = 1.4 if args.actor_shape == "upright_capsule" else 2 * RADIUS
 ACTOR_CENTER_Z = ACTOR_HEIGHT / 2
@@ -326,6 +341,7 @@ def save_instance_snapshot(result):
 
 
 def main():
+    global ACTIVE_HUMAN
     print("Auditing/loading existing local models...", flush=True)
     weights = {}
     for name, variable, default in (
@@ -370,6 +386,16 @@ def main():
         )
     )
     contact.initialize()
+    person = None
+    if args.restaurant_human:
+        path = ROOT / "outputs/restaurant_human_model_audit/yolo11n-seg.pt"
+        digest = hashlib.sha256(path.read_bytes()).hexdigest()
+        if digest != PERSON_CHECKPOINT_SHA256:
+            raise ValueError("person weights differ from the audited official checkpoint")
+        weights["person"] = {"path": str(path), "sha256": digest}
+        person = YoloSegmentationDetector(YoloSegmentationConfig(
+            path, device=device, confidence_threshold=.5, allowed_classes=("person",)))
+        person.initialize()
     print("Local models ready; loading the unchanged scene...", flush=True)
     original_hash = hashlib.sha256(
         SCENE_PATH.read_bytes()
@@ -381,6 +407,17 @@ def main():
         expected_meters_per_unit=1.0,
     )
     stage = loaded.stage
+    source_hashes = {layer.realPath: hashlib.sha256(Path(layer.realPath).read_bytes()).hexdigest()
+        for layer in stage.GetLayerStack() if layer.realPath and Path(layer.realPath).is_file()}
+    human = None
+    if args.restaurant_human:
+        from robot.scene.restaurant_human_episode import RestaurantHumanEpisode
+        human = RestaurantHumanEpisode(stage, mode=args.restaurant_human, output=args.output)
+        ACTIVE_HUMAN = human
+        save_json("human-native-setup.json", human.setup)
+        for _ in range(20):
+            app.update()
+        human.bake()
     center_world = np.array(stationary.ROBOT_START_POSITION_WORLD[:2]) + [1.3, 0.0]
     fixture_specs = [
         {"name": "ground", "offset_xy": (1.3, 0.3 if args.fixture_layout == "three" else 0.0), "drop_m": 0.0,
@@ -477,7 +514,7 @@ def main():
                             puff.CreateDisplayColorAttr([Gf.Vec3f(.9)])
                             puff.MakeInvisible()
                             puffs.append(puff)
-        if has_server:
+        if has_server and human is None:
             bounds = read_world_bounds(stage,SERVER_PRIM_PATH)
             restaurant_props.append({"name":"Server","prim_path":SERVER_PRIM_PATH,
                 "bounds_minimum":bounds.minimum,"bounds_maximum":bounds.maximum})
@@ -487,7 +524,7 @@ def main():
         layout_monitor = load_authored_layout_monitor(args.restaurant_layout_survey, restaurant_props)
         save_json("restaurant-placement-monitor.json", {"props":restaurant_props,
             "basis":"authored actual-mesh bounds for independent evaluation/abort only; no factor inputs",
-            "humans_added":int(has_server),"actor_motion_enabled":False,"payload_added":False})
+            "humans_added":int(has_server),"actor_motion_enabled":args.restaurant_human == "crossing","payload_added":False})
         setup_footprint = RectangularRobotFootprint(stationary.ROBOT_FRONT_EXTENT,
             stationary.ROBOT_REAR_EXTENT,stationary.ROBOT_LEFT_EXTENT,
             stationary.ROBOT_RIGHT_EXTENT,stationary.ROBOT_SAFETY_MARGIN)
@@ -507,6 +544,9 @@ def main():
     timeline = omni.timeline.get_timeline_interface()
     timeline.play()
     app_utils.update_app(steps=10)
+    if human is not None:
+        human.initialize()
+        human.start_video()
     controller.verify_articulation()
     stationary.position_robot_for_experiment(controller)
     for _ in range(stationary.SETTLE_STEPS):
@@ -580,6 +620,11 @@ def main():
         segmenter=segmenter,
         mass_estimator=mass,
         contact_detector=contact,
+        person_detector=person,
+        human_mass_prior_config=HumanMassPriorConfig(
+            "bounded adult-human navigation; visually associated configured mass interval, not calibration",
+            mass_kg=args.human_mass_prior[0], lower_kg=args.human_mass_prior[1], upper_kg=args.human_mass_prior[2],
+        ) if person is not None else None,
         calibration=calibration,
         class_policy=class_policy,
         guidance_policy=guidance,
@@ -591,7 +636,7 @@ def main():
         negative_plume_scope=("bounded stationary native-aspect real-bowl view: explicitly clean reference phase; object-associated visible cue only, not absence of heat"
             if args.restaurant_plume_diagnostic else None) if args.restaurant_scene else PLUME_SCOPE,
         rectify_plume=True,
-        occupancy_retention_seconds=0.15 if args.kinetic_diagnostic or args.moving_actor else 0.5,
+        occupancy_retention_seconds=0.15 if args.kinetic_diagnostic or args.moving_actor or human is not None else 0.5,
         static_occupancy_memory_prior_scope=("bounded static dressed restaurant and stationary staff avatar; positive observed occupancy retained; no moving people/assets or free-space clearing"
             if args.restaurant_scene else "bounded static sphere/environment; positive occupancy remains until experiment end; no dynamic-actor or free-space-clearing claim")
         if args.static_occupancy_memory_prior
@@ -600,6 +645,15 @@ def main():
         if args.disable_evidence_retention or args.persistent_object_risk_map
         else TemporalObjectEvidenceConfig(),
         persistent_property_config=PersistentObjectEvidenceConfig(
+            "bounded one-adult navigation: only intrinsic mass may persist for 3 s; articulated shape/contact, support, plume and motion remain current",
+            maximum_property_age_seconds=3.0,
+            confidence_half_life_seconds=1.5,
+            retained_properties=("mass",),
+            translate_instance_bounds_prior=False,
+            allow_instance_bounds_prior=False,
+            minimum_visual_reassessment_interval_seconds=args.visual_reassessment_interval,
+            maximum_visual_tracks_per_update=args.live_visual_tracks,
+        ) if human is not None else PersistentObjectEvidenceConfig(
             "bounded static restaurant: acquired intrinsic properties persist with original expiry; potential/thermal unsupported inputs retain configured priors"
             if args.restaurant_scene else "bounded separated fixture: mass/visible contact/plume assumed unchanged; support invalidates on displacement; current motion/route; moving actor uses short occupancy expiry",
             translate_instance_bounds_prior=args.kinetic_diagnostic or args.moving_actor,
@@ -633,6 +687,8 @@ def main():
     history = EgoPoseHistory()
     captures, rejections, records = [], [], []
     last_sensor_id = -1
+    copied_scan = None
+    navigation_active = False
 
     def state():
         pose = stationary.read_robot_pose(stage)
@@ -663,6 +719,9 @@ def main():
         history.append(
             EgoPoseSample(now, matrix, EstimateStatus.ORACLE, "isaac_usd_chassis_pose")
         )
+        if human is not None:
+            human.update(now, (matrix[0, 3], matrix[1, 3]), command, layout_monitor,
+                         navigation=navigation_active)
         if paced:
             time.sleep(
                 max(
@@ -674,14 +733,28 @@ def main():
         return now
 
     def capture(clean=False):
-        nonlocal last_sensor_id
-        raw = lidar.get_point_cloud()
-        info = lidar.get_frame_info()
-        if info.sensor_frame_id <= last_sensor_id:
-            return None
-        rgb = camera.get_rgb()
-        camera_info = camera.get_frame_info()
-        metadata = lidar.get_scan_metadata()
+        nonlocal last_sensor_id, copied_scan
+        if copied_scan is None:
+            raw = lidar.get_point_cloud().copy()
+            info = lidar.get_frame_info()
+            if info.sensor_frame_id <= last_sensor_id:
+                return None
+            rgb = camera.get_rgb().copy()
+            camera_info = camera.get_frame_info()
+            metadata = lidar.get_scan_metadata()
+            if human is not None:
+                copied_scan = (raw, info, rgb, camera_info, metadata, float(timeline.get_current_time()))
+                last_sensor_id = info.sensor_frame_id
+        if copied_scan is not None:
+            raw, info, rgb, camera_info, metadata, queued_time = copied_scan
+            offsets = metadata.point_time_offsets_nanoseconds
+            now = float(timeline.get_current_time())
+            if offsets is None or not len(offsets) or now - queued_time > .05 + 1e-9:
+                copied_scan = None
+                raise ValueError("copied human scan missing timing or exceeded .05 s pose wait")
+            if info.sensor_timestamp_nanoseconds * 1e-9 + int(offsets.max()) * 1e-9 > history.samples[-1].timestamp_seconds + 1e-9:
+                return None
+            copied_scan = None
         scan_audit = metadata.summary()
         for name, scan_pose in (
             ("start", metadata.frame_start),
@@ -739,9 +812,9 @@ def main():
             scene,
             ObstacleDetectionConfig(
                 minimum_height=floor + 0.05,
-                maximum_height=floor + 1.0,
+                maximum_height=floor + (1.8 if human is not None else 1.0),
                 minimum_range=0.15,
-                maximum_range=5.0,
+                maximum_range=7.5 if human is not None else 5.0,
                 forward_only=False,
                 angular_bin_size_degrees=None,
             ),
@@ -940,18 +1013,27 @@ def main():
     }
     if args.restaurant_scene:
         object_summary = summarize_fixture_assessments(records, fixtures, maximum_distance_m=0.20)
-        if args.restaurant_server:
+        if args.restaurant_server and human is None:
             server_summary = summarize_fixture_assessments(records,[f for f in fixtures if f["name"]=="Server"],maximum_distance_m=.40)
             object_summary["fixtures"]["Server"] = server_summary["fixtures"]["Server"]
             object_summary["server_matching_scope"] = "independent planar .40 m partial-body match; unchanged mask/ownership gates; not calibrated whole-human geometry"
         gate["restaurant_component_checks"] = restaurant_asset_checks(object_summary, restaurant_target)
         gate["restaurant_observation"] = args.restaurant_view
         gate["fixture_gate_scope"] = f"real {restaurant_target} mesh: owned RGB/LiDAR mass, contact proxy and motion; potential/thermal may use labeled priors; not full four-factor sensor acceptance"
-        gate["passed"] = stationary_ready = bool(stationary_ready and all(gate["restaurant_component_checks"].values()))
-        if args.restaurant_server:
+        if human is None:
+            gate["passed"] = stationary_ready = bool(stationary_ready and all(gate["restaurant_component_checks"].values()))
+        else:
+            gate["other_restaurant_components_scope"] = "bowl diagnostics retained; the selected stationary component is the human; unsupported other tracks retain occupancy and labeled factor priors"
+        if args.restaurant_server and human is None:
             gate["server_component_checks"] = restaurant_asset_checks(object_summary,"Server")
             gate["passed"] = stationary_ready = bool(stationary_ready and all(gate["server_component_checks"].values()))
         save_json("stationary-object-validation.json", object_summary)
+        if human is not None:
+            from robot.evaluation.human_navigation_validation import human_stationary_checks
+            gate["human_component_checks"] = human_stationary_checks(records)
+            gate["passed"] = stationary_ready = bool(stationary_ready
+                and all(gate["human_component_checks"].values()))
+            gate["fixture_gate_scope"] = "fresh visually associated adult mass prior/current motion/contact proxy; potential and thermal priors; wheels still blocked until this gate passes"
         if args.restaurant_plume_diagnostic:
             plume_validation = restaurant_plume_checks(records, fixtures)
             save_json("restaurant-plume-validation.json", plume_validation)
@@ -966,7 +1048,7 @@ def main():
         gate["passed"] = stationary_ready = bool(stationary_ready and gate["bounded_fixture_checks"] and all(gate["bounded_fixture_checks"].values()))
         save_json("stationary-object-validation.json", object_summary)
     save_json("stationary-gate.json", gate)
-    print(json.dumps(gate), flush=True)
+    print(json.dumps({key: value for key, value in gate.items() if key != "last_objects"}), flush=True)
     if not stationary_ready:
         controller.stop()
         raise RuntimeError("stationary restaurant component gate failed; wheels are blocked"
@@ -1167,11 +1249,28 @@ def main():
         (buffer.commit if buffer.initialized else buffer.initialize)(snapshot)
 
     commit(latest, float(timeline.get_current_time()))
-    coverage_guard = NearbyTrackLossGuard() if args.moving_actor else None
+    coverage_guard = NearbyTrackLossGuard(NearbyTrackLossConfig(
+        allow_observed_fragment_merges=human is not None)) if args.moving_actor or human is not None else None
     coverage_result = None
+    coverage_events = []
+    submitted_packet = None
+
+    def coverage_geometry(result, source_packet):
+        if human is None:
+            return {}
+        if source_packet.sensor_frame_id != result.field.sensor_frame_id:
+            raise ValueError("coverage guard packet differs from completed source")
+        c, s = math.cos(source_packet.robot_yaw), math.sin(source_packet.robot_yaw)
+        world = source_packet.obstacle_xyz[:, :2] @ np.array([[c, s], [-s, c]])
+        world += source_packet.robot_position_world_xy
+        return {"current_points_world_xy": world,
+            "current_point_track_ids": result.field.tracking_result.point_track_ids,
+            "current_points_source_time": source_packet.sensor_timestamp_seconds}
+
     if coverage_guard is not None:
         coverage_result = coverage_guard.observe(latest.field.tracking_result.tracked_obstacles,
-            source_time=latest.field.sensor_timestamp_seconds, robot_world_xy=(anchor.x, anchor.y))
+            source_time=latest.field.sensor_timestamp_seconds, robot_world_xy=(anchor.x, anchor.y),
+            **coverage_geometry(latest, packet))
     def infer_with_timing(packet):
         started = time.perf_counter()
         result = perception(packet)
@@ -1210,6 +1309,7 @@ def main():
         maximum_result_age_seconds=args.planner_result_max_age,
     )
     start_sim = float(timeline.get_current_time())
+    navigation_active = True
     if args.moving_actor:
         actor_start_time = start_sim
     start_wall = time.perf_counter()
@@ -1240,6 +1340,12 @@ def main():
                 reason = "progress_timeout"
                 break
             clearances = []
+            if human is not None:
+                xy = human.position()[:2] - [anchor.x, anchor.y]
+                c, s = math.cos(anchor.yaw), math.sin(anchor.yaw)
+                local = (c * xy[0] + s * xy[1], -s * xy[0] + c * xy[1])
+                clearances.append(disk_footprint_clearance(current, center_xy=local,
+                    radius_m=human.setup["collision_radius_m"], footprint=footprint))
             for fixture in fixtures:
                 xy = np.array(fixture["center_world_xy"])
                 if args.moving_actor and fixture["name"] == "ground":
@@ -1275,11 +1381,17 @@ def main():
                         c, s = math.cos(anchor.yaw), math.sin(anchor.yaw)
                         coverage_result = coverage_guard.observe(outcome.value.field.tracking_result.tracked_obstacles,
                             source_time=outcome.value.field.sensor_timestamp_seconds,
-                            robot_world_xy=(anchor.x+c*current[0]-s*current[1], anchor.y+s*current[0]+c*current[1]))
+                            robot_world_xy=(anchor.x+c*current[0]-s*current[1], anchor.y+s*current[0]+c*current[1]),
+                            **coverage_geometry(outcome.value, submitted_packet))
+                        if coverage_result["observed_fragment_merges"] or coverage_result["blocked"]:
+                            coverage_events.append(coverage_result)
                         if coverage_result["blocked"]:
                             reason = "nearby_track_lost"
                             controller.stop()
                             save_json("unpublished-coverage-stop-field.json", field_record(outcome.value, now, current))
+                            if human is not None:
+                                np.savez_compressed(args.output / "unpublished-coverage-source.npz",
+                                    **coverage_geometry(outcome.value, submitted_packet))
                             print(json.dumps({"coverage_stop": coverage_result, "sim_seconds": now-start_sim}), flush=True)
                             break
                     consecutive_failures = 0
@@ -1300,7 +1412,7 @@ def main():
                     if len(live_fields) == 1 or len(live_fields) % 20 == 0:
                         save_json("live-fields.json", live_fields[-5:] if args.stream_live_records else live_fields)
                         save_json("commands.json", commands)
-                        if packet.camera_frame_id == latest.detections.source_frame_id:
+                        if packet is not None and packet.camera_frame_id == latest.detections.source_frame_id:
                             cv2.imwrite(
                                 str(args.output / "live-current.png"),
                                 packet.rgb[:, :, ::-1],
@@ -1350,6 +1462,7 @@ def main():
                             sensor_timestamp_seconds=packet.sensor_timestamp_seconds,
                             packet=packet,
                         )
+                        submitted_packet = packet
                 except (RuntimeError, ValueError) as error:
                     rejections.append(str(error))
             plan_outcome = planner.poll(current_sensor_time_seconds=now)
@@ -1505,6 +1618,8 @@ def main():
             step(command, paced=True)
     finally:
         controller.stop()
+        if human is not None and not arrived:
+            human.abort()
         inference.close()
         planner.close()
     arrival_state = state()
@@ -1527,6 +1642,14 @@ def main():
         and len(live_fields) >= 10
         and moving_field_count >= 10
     )
+    human_validation = None
+    if human is not None:
+        from robot.evaluation.human_navigation_validation import summarize_human_navigation
+        human_validation = summarize_human_navigation(live_fields, human.records,
+            mode=args.restaurant_human)
+        completed = completed and human_validation["passed"]
+        save_json("human-navigation-validation.json", human_validation)
+        save_json("human-truth-evaluation-only.json", human.records)
     simultaneous_kinetic_updates = 0
     live_kinetic_validation = None
     if args.moving_actor:
@@ -1545,17 +1668,22 @@ def main():
     scene_unchanged = (
         original_hash
         == hashlib.sha256(SCENE_PATH.read_bytes()).hexdigest()
-    )
+    ) and all(hashlib.sha256(Path(p).read_bytes()).hexdigest() == h for p, h in source_hashes.items())
     save_json("live-fields.json", live_fields[-5:] if args.stream_live_records else live_fields)
     save_json("captures.json", captures)
     save_json("commands.json", commands)
     save_json("trajectory.json", trajectory)
     save_json("waypoint-events.json", waypoint_events)
+    save_json("nearby-track-coverage-events.json", coverage_events)
     report = {
         "acceptance_scope": "bounded_navigation_with_explicit_factor_and_property_priors; all-track numeric scores are separate from physical perception readiness"
         if args.persistent_object_risk_map
         else "bounded_conservative_navigation; four-factor availability reported separately",
         "passed": completed and scene_unchanged and root_unchanged_by_fixture,
+        "human_navigation_validation": human_validation,
+        "native_human_mode": args.restaurant_human,
+        "human_mass_prior_config": asdict(perception.human_mass_prior_config) if human is not None else None,
+        "scene_source_sha256": source_hashes,
         "completed": arrived,
         "reason": reason,
         "minimum_clearance_m": minimum_clearance,
@@ -1694,6 +1822,16 @@ def main():
             if args.restaurant_scene else "bounded separated sources with validated initial clean-reference registration and retained cues; no moving-view plume/human/crowd generalization",
         ],
     }
+    if human is not None:
+        report["limitations"] = [
+            "one native adult; human mass is configured 70 [45,100] kg prior selected by fresh person/SAM association; original catalog estimates retained",
+            "only intrinsic mass persists for at most 3 original-source seconds; current view contact, support, plume, motion and old body bounds never borrowed",
+            "potential/thermal use explicit factor priors where unavailable; visual silhouette is not physical sharpness, hardness or injury severity",
+            "all physical LiDAR occupancy retained with .15 s positive expiry; track-loss watchdog is bounded, not general occlusion or crowd support",
+            "oracle ego pose/extrinsics/gravity; RGB acquisition is read-time approximation; ego deskew does not correct moving articulated actors",
+            "fixed lambda 1.25, unchanged nominal/exact MPC/DTCBF/analytical CBF; paced development, not real-time or causal CRA superiority",
+            "renderer transform-history warning remains unresolved; carried load and moving-view plume are not validated by this episode",
+        ]
     save_json("report.json", report)
     print(
         json.dumps(
@@ -1724,4 +1862,8 @@ except Exception:
     traceback.print_exc()
     raise
 finally:
+    if ACTIVE_HUMAN is not None:
+        ACTIVE_HUMAN.abort()
+        save_json("human-truth-evaluation-only.json", ACTIVE_HUMAN.records)
+        ACTIVE_HUMAN.close()
     app.close()

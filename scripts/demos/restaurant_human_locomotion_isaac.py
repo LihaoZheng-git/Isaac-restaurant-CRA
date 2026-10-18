@@ -18,6 +18,7 @@ parser.add_argument("--output", type=Path, required=True)
 parser.add_argument("--layout-survey", type=Path, required=True)
 parser.add_argument("--speed", type=float, default=0.7)
 parser.add_argument("--goal-y", type=float, default=12.5)
+parser.add_argument("--goal-x", type=float, default=29.8)
 parser.add_argument("--sensor-diagnostic", action="store_true")
 parser.add_argument("--sensor-simulation-rate", type=float, default=0.1)
 parser.add_argument(
@@ -30,8 +31,10 @@ parser.add_argument(
 args = parser.parse_args()
 if not 0.5 <= args.speed <= 2:
     parser.error("bounded native human speed is .5..2 m/s")
-if not 9.8 <= args.goal_y <= 12.5 or not 0.05 <= args.sensor_simulation_rate <= 1:
-    parser.error("goal y must be 9.8..12.5; sensor simulation pacing .05..1")
+crossing_goal = args.goal_x == 27.8 and args.goal_y == 8.9
+if (not crossing_goal and (args.goal_x != 29.8 or not 9.8 <= args.goal_y <= 12.5)
+    or not 0.05 <= args.sensor_simulation_rate <= 1):
+    parser.error("use original x=29.8/y=9.8..12.5 or crossing goal (27.8,8.9); pacing .05..1")
 args.scene, args.output, args.layout_survey = (
     args.scene.resolve(),
     args.output.resolve(),
@@ -105,7 +108,7 @@ def save(name, data):
 
 
 def main():
-    goal = (29.8, args.goal_y, 0.0)
+    goal = (args.goal_x, args.goal_y, 0.0)
     sources = {
         ROOT / "scenes/generated/restaurant_base.usda",
         ROOT / "scenes/generated/restaurant_robot.usda",
@@ -193,8 +196,8 @@ def main():
         camera.MakeMatrixXform().Set(
             Gf.Matrix4d()
             .SetLookAt(
-                Gf.Vec3d(27.7, 10.6, 2.0),
-                Gf.Vec3d(29.8, 10.7, 0.9),
+                Gf.Vec3d(25.9, 6.7, 3.2) if crossing_goal else Gf.Vec3d(27.7, 10.6, 2.0),
+                Gf.Vec3d(29.0, 8.9, .8) if crossing_goal else Gf.Vec3d(29.8, 10.7, 0.9),
                 Gf.Vec3d(0, 0, 1),
             )
             .GetInverse()

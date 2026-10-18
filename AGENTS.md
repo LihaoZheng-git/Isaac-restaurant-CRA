@@ -463,3 +463,30 @@
   navigation/control freshness acceptance, real time or robot/human crossing.
   Keep next wheel experiments behind their own current-field/track-loss gates.
   See docs/restaurant_human_perception.md; PR #117's main hold is unchanged.
+- The opt-in native-human navigation mode selects the human as its stationary
+  component gate; unrelated bowl diagnostics remain recorded with their actual
+  failures/priors and physical occupancy. It rejects static occupancy memory,
+  uses .15 s positive scan retention, and may retain only intrinsic mass for
+  3 original-source seconds with 1.5 s confidence half-life. Old body bounds,
+  contact, support, plume and motion cannot be borrowed for articulating humans.
+  Preserve .35 s inference/field caps, nearby-track-loss stops and exact current
+  execution checks. A longer stationary window does not lower SAM's .85 quality
+  gate. Standing/crossing control acceptance is separate from parked perception,
+  complete four-factor sensing, carried bowls, crowds and PR #117's main hold.
+  See docs/restaurant_human_navigation.md for current executed results.
+- The first standing-human navigation trial failed on a lost limb/body fragment
+  near a still-observed body, just before arrival; retain it as failed. The new
+  human-only guard opt-in requires unique current positive geometry to resolve
+  a rejoined fragment: at least 3 returns within .10 m, existing .25 m centroid
+  association and recent coexistence. Ambiguous/unclustered/stale geometry or
+  true disappearance still stops; no identity/property evidence transfers.
+  Native standing-idle is allowed bounded measured sway, never a forced zero
+  motion score. The transverse actor-only zero-wheel walk passed separately;
+  coupled retries still need actual arrival and stopping. No carried-bowl or
+  moving-view thermal acceptance follows from these checks.
+- The original service middle waypoint can overlap the recorded native idle
+  envelope; preserve failed/stalled original-route runs. The separate fixed
+  `human-service` centerline route removes its 20 cm aisle-side corner, without
+  changing online nominal/safety logic. Its independent layout precheck is not
+  motion acceptance; both standing-idle and crossing must complete this same
+  route with unchanged constraints and their actual measured/inferred motion.

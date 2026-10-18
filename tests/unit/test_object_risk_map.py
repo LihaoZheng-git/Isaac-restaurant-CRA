@@ -101,6 +101,37 @@ def resolve(memory, track, attrs, t, *, tracks=None, contact=None, potential=Non
     )
 
 
+def test_articulating_mass_only_retention_never_borrows_contact_support_or_heat():
+    track = worker()(packet()).field.tracking_result.tracked_obstacles[0]
+    memory = PersistentObjectEvidence(PersistentObjectEvidenceConfig(
+        "one articulating adult; mass only, 3 s original expiry",
+        maximum_property_age_seconds=3, confidence_half_life_seconds=1.5,
+        retained_properties=("mass",)))
+    resolve(memory, track, observed(), 1.1, contact=scalar(.8))
+    assert set(k[1] for k in memory.properties) == {"mass"}
+    memory.finish_epoch((track,), 1.1)
+    memory.freeze_properties()
+    later = replace(track, observation_count=2, matched_previous_track=True)
+    attrs, _, contact, details = resolve(memory, later, unknown(1.3), 1.3)
+    assert attrs.mass.mass_kg.status is EstimateStatus.PRIOR
+    assert attrs.mass.mass_kg.timestamp_seconds == 1.1
+    assert attrs.mass.mass_kg.confidence < .75
+    assert not attrs.geometry.fall_height_m.is_available
+    assert not attrs.thermal.heat_source_likelihood.is_available
+    assert contact is None
+    assert details["mass"]["mode"] == "persistence_prior"
+    assert all(v["mode"] != "persistence_prior" for k, v in details.items() if k != "mass")
+    memory.finish_epoch((later,), 1.3)
+    attrs, _, _, _ = resolve(memory, later, unknown(4.2), 4.2)
+    assert not attrs.mass.mass_kg.is_available  # Borrowing never renews original expiry.
+
+
+@pytest.mark.parametrize("names", [("mass", "mass"), ("motion",), ["mass"], (3,)])
+def test_property_retention_subset_rejects_invalid_or_motion_names(names):
+    with pytest.raises(ValueError, match="retained properties"):
+        PersistentObjectEvidenceConfig("unit", retained_properties=names)
+
+
 def test_numeric_priors_do_not_claim_measured_low_factors_or_saturate_unknown_phi():
     adapted = adapt_physical_factors(unknown(), timestamp_seconds=1.1)
     policy, details = evaluate_object_risk(adapted, ObjectRiskPriorConfig())
@@ -430,6 +461,23 @@ def test_all_tracks_and_unclustered_occupancy_receive_numeric_field_policies():
         item.attributes.motion.relative_speed_mps.value == pytest.approx(0.2)
         for item in second.objects
     )
+
+
+def test_retained_mass_never_authorizes_old_body_bounds_for_articulating_actor():
+    runtime = mapped_worker()
+    runtime.persistent_properties.config = replace(runtime.persistent_properties.config,
+        retained_properties=("mass",), allow_instance_bounds_prior=False)
+    first = packet()
+    result = runtime(first)
+    track = result.field.tracking_result.tracked_obstacles[0]
+    resolve(runtime.persistent_properties, track, observed(1.1), 1.1)
+    runtime.persistent_properties.freeze_properties()
+    runtime.object_ownership_bounds = {track.track_id: (
+        first.obstacle_xyz.min(0), first.obstacle_xyz.max(0), 1.1, track.centroid_world_xy)}
+    result = runtime(packet(2, 1.1))
+    assert result.objects[0].diagnostics["property_evidence"]["mass"]["mode"] == "persistence_prior"
+    assert result.objects[0].diagnostics["policy_return_count"] == 0
+    assert result.field.all_obstacle_point_count == 4
 
 
 def test_distinct_computed_object_policies_reach_same_field_without_dropping_occupancy():
