@@ -140,6 +140,13 @@ def main():
         for label, point in (("human start", human_xy[0]), ("human last", human_xy[-1])):
             axis.add_patch(Circle(point, .4, color="#a04e79", alpha=.12))
             axis.annotate(label, point + [.1, .15], fontsize=8)
+        if report.get("native_carried_bowl"):
+            carry = json.loads((args.source / "carry-records.json").read_text())
+            bowl_xy = np.array([r["bowl_center_xyz"][:2] for r in carry if r["phase"] != "pickup"])
+            if len(bowl_xy):
+                bowl_xy = (bowl_xy-[x,y]) @ np.array([[c,-s],[s,c]])
+                axis.plot(bowl_xy[:,0], bowl_xy[:,1], ":", color="#df852f",
+                          label="Actual carried-bowl center (oracle evaluation only)")
     axis.scatter(
         [0, goal], [0, goal_xy[1]], color=["black", "#237742"], marker="x", s=60
     )
@@ -149,7 +156,11 @@ def main():
     axis.grid(alpha=0.2)
     axis.set_xlabel("Anchored local x (m)")
     axis.set_ylabel("Anchored local y (m)")
-    axis.legend(loc="lower left", fontsize=8)
+    if report.get("native_carried_bowl"):
+        fig.set_size_inches(13, 7.5)
+        axis.legend(loc="upper left", bbox_to_anchor=(1.02, 1), fontsize=8)
+    else:
+        axis.legend(loc="lower left", fontsize=8)
     axis.set_title(
         f"Live CRA/Safe-SAGE: {report['reason']}\n{report['live_field_count']} fields; lambda=1.25; pacing={report['simulation_rate_limit']} simulation s/wall s",
         fontsize=11,

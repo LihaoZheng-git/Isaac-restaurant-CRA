@@ -49,7 +49,7 @@ def packet(frame=1, t=1.0, x=0.0):
     )
 
 
-def worker():
+def worker(**overrides):
     policy = ClassSafetyPolicy(
         {"unknown": ClassSafetyParameters(risk=1, boundary_flux_magnitude=4)}
     )
@@ -85,7 +85,26 @@ def worker():
         ),
         anchor_position_world_xy=(0, 0),
         anchor_yaw=0,
+        **overrides,
     )
+
+
+@pytest.mark.parametrize("radius,expected_clusters", [(.12, 2), (.18, 1)])
+def test_explicit_3d_connectivity_changes_grouping_without_discarding_returns(radius, expected_clusters):
+    runtime = worker(cluster_in_3d=True, cluster_radius_m=radius)
+    points = np.array([[1.+dx, 0., .5] for dx in (0.,.01,.02,.03,.17,.18,.19,.20)])
+    before = points.copy()
+    result = runtime.tracker.update(points[:,:2], robot_position_world_xy=np.zeros(2),
+        robot_yaw=0., timestamp_seconds=1., clustering_points_robot_xyz=points)
+    assert len(result.tracked_obstacles) == expected_clusters
+    assert sum(t.point_count for t in result.tracked_obstacles) == len(points)
+    assert np.all(result.point_track_ids >= 0)
+    np.testing.assert_array_equal(points, before)
+
+
+def test_clustering_override_preserves_existing_default_radii():
+    assert worker().tracker.config.cluster_radius == .20
+    assert worker(cluster_in_3d=True).tracker.config.cluster_radius == .12
 
 
 def test_missing_visual_instance_retains_all_returns_and_conservative_policy():

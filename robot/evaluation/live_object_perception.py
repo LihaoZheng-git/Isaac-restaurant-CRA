@@ -217,6 +217,7 @@ class LiveObjectPerception:
         fall_surface_config=None,
         fall_interaction_prior_scope=None,
         cluster_in_3d=False,
+        cluster_radius_m=None,
         camera_visibility_radius_pixels=0,
         mask_foreground_depth_gap_m=None,
         plume_view_fov_degrees=140.0,
@@ -325,7 +326,7 @@ class LiveObjectPerception:
         )
         self.tracker = ObstacleTracker(
             ObstacleTrackerConfig(
-                cluster_radius=0.12 if cluster_in_3d else 0.20,
+                cluster_radius=(0.12 if cluster_in_3d else 0.20) if cluster_radius_m is None else cluster_radius_m,
                 minimum_cluster_points=4,
                 maximum_association_distance=0.50,
                 clustering_backend="kdtree",

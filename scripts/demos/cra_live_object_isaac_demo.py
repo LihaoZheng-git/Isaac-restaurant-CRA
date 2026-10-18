@@ -30,7 +30,7 @@ parser.add_argument("--restaurant-view", choices=("bowl", "pot", "counter", "fro
                     help="explicit stationary robot view; target names are evaluation metadata only")
 parser.add_argument("--restaurant-route", choices=("short", "service", "human-service"), default="short")
 parser.add_argument("--restaurant-server", action="store_true", help="explicit static-server scene opt-in; stationary actor gate required before wheels")
-parser.add_argument("--restaurant-human", choices=("standing", "crossing"),
+parser.add_argument("--restaurant-human", choices=("standing", "crossing", "continuous-crossing"),
                     help="native adult-human control integration; no static occupancy or shape persistence")
 parser.add_argument("--human-camera-upward-degrees", type=float, default=0.,
                     help="explicit experimental left RGB mount pitch, 0..25 degrees; actual extrinsics re-read")
@@ -40,6 +40,16 @@ parser.add_argument("--human-crossing-trigger-y", type=float, default=7.8,
                     help="explicit native actor-only trigger, world robot y 6.8..7.8; not a control/evidence input")
 parser.add_argument("--human-walking-speed", type=float, default=.7,
                     help="explicit native actor speed .5..1 m/s; never estimator input")
+parser.add_argument("--human-cluster-radius", type=float, default=.12,
+                    help="explicit human 3D connectivity radius .12...20 m; original occupancy and safety gates retained")
+parser.add_argument("--human-carry-bowl", action="store_true",
+                    help="native held bowl in explicit continuous-crossing mode; separate bowl perception remains unvalidated")
+parser.add_argument("--human-upper-continuation", action="store_true",
+                    help="cross once then continue in upper aisle; authored actor route only, no factor/control input")
+parser.add_argument("--human-carry-facing-crossing", action="store_true",
+                    help="explicit initial native actor heading along the first crossing leg; never evidence input")
+parser.add_argument("--human-start-view", choices=("original", "approach-forward", "crossing-approach"), default="original",
+                    help="explicit bounded carrying start; fixed world human-service waypoints remain unchanged")
 parser.add_argument("--human-mass-prior", nargs=3, type=float, default=(70.,45.,100.),
                     metavar=("KG", "LOWER", "UPPER"), help="configured adult demonstration mass interval; not measured weight")
 parser.add_argument("--sam-observed-context-box", action="store_true",
@@ -109,14 +119,26 @@ parser.add_argument(
     help="optimizer candidate age cap; every executed horizon still needs fresh exact validation",
 )
 args = parser.parse_args()
+if not .12 <= args.human_cluster_radius <= .20 or (args.human_cluster_radius != .12 and not args.restaurant_human):
+    parser.error("human 3D radius .12...20 requires a native human scenario")
 if not .5 <= args.human_walking_speed <= 1. or (
-    args.human_walking_speed != .7 and args.restaurant_human != "crossing"
+    args.human_walking_speed != .7 and args.restaurant_human not in {"crossing", "continuous-crossing"}
 ):
     parser.error("coupled walking-speed override requires crossing mode, .5..1 m/s")
 if not 6.8 <= args.human_crossing_trigger_y <= 7.8 or (
-    args.human_crossing_trigger_y != 7.8 and args.restaurant_human != "crossing"
+    args.human_crossing_trigger_y != 7.8 and args.restaurant_human not in {"crossing", "continuous-crossing"}
 ):
     parser.error("crossing trigger override requires crossing mode, world y=6.8..7.8")
+if args.restaurant_human == "continuous-crossing" and args.human_walking_speed != .5:
+    parser.error("bounded continuous crossing currently requires .5 m/s")
+if args.human_carry_bowl and args.restaurant_human != "continuous-crossing":
+    parser.error("native carrying requires explicit continuous crossing")
+if args.human_upper_continuation and not args.human_carry_bowl:
+    parser.error("upper continuation requires the explicit carried-server scenario")
+if args.human_carry_facing_crossing and not args.human_carry_bowl:
+    parser.error("initial carrying heading requires the carried bowl")
+if args.human_start_view != "original" and (not args.human_carry_bowl or args.restaurant_route != "human-service"):
+    parser.error("forward robot start requires carrying and the human-service world route")
 if not 0 <= args.human_camera_upward_degrees <= 25 or not 0 <= args.human_camera_raise_metres <= .6 or (
     (args.human_camera_upward_degrees or args.human_camera_raise_metres) and not args.restaurant_human
 ):
@@ -287,10 +309,14 @@ SCENE_PATH = args.restaurant_scene.resolve() if args.restaurant_scene else Path(
 if args.restaurant_scene:
     restaurant_target, restaurant_start, restaurant_yaw = (SERVER_OBSERVATION
         if args.restaurant_view == "server" else RESTAURANT_OBSERVATIONS[args.restaurant_view])
+    if args.human_start_view != "original":
+        restaurant_yaw = math.pi / 2
+    if args.human_start_view == "crossing-approach":
+        restaurant_start = (28.8, 7.4, restaurant_start[2])
     stationary.ROBOT_START_POSITION_WORLD = restaurant_start
     stationary.ROBOT_START_YAW_RADIANS = restaurant_yaw
-    GOAL = restaurant_route_local_xy(args.restaurant_route)[-1]
-ROUTE = restaurant_route_local_xy(args.restaurant_route) if args.restaurant_scene else (GOAL,)
+    GOAL = restaurant_route_local_xy(args.restaurant_route, human_start_view=args.human_start_view)[-1]
+ROUTE = restaurant_route_local_xy(args.restaurant_route, human_start_view=args.human_start_view) if args.restaurant_scene else (GOAL,)
 GROUND_SCOPE = "bounded separated ground sphere; observed flat plane with assumed unseen local support/landing continuity"
 PLUME_SCOPE = "bounded rendered matte sphere and opaque bright puffs; validated initial clean reference; registered object-associated visible-plume proxy only"
 if args.actor_shape == "upright_capsule":
@@ -437,7 +463,10 @@ def main():
     if args.restaurant_human:
         from robot.scene.restaurant_human_episode import RestaurantHumanEpisode
         human = RestaurantHumanEpisode(stage, mode=args.restaurant_human, output=args.output,
-                                       trigger_robot_y=args.human_crossing_trigger_y, speed_mps=args.human_walking_speed)
+                                       trigger_robot_y=args.human_crossing_trigger_y, speed_mps=args.human_walking_speed,
+                                       carry_bowl=args.human_carry_bowl,
+                                       carry_facing_crossing=args.human_carry_facing_crossing,
+                                       upper_continuation=args.human_upper_continuation)
         ACTIVE_HUMAN = human
         save_json("human-native-setup.json", human.setup)
         for _ in range(20):
@@ -549,7 +578,8 @@ def main():
         layout_monitor = load_authored_layout_monitor(args.restaurant_layout_survey, restaurant_props)
         save_json("restaurant-placement-monitor.json", {"props":restaurant_props,
             "basis":"authored actual-mesh bounds for independent evaluation/abort only; no factor inputs",
-            "humans_added":int(has_server),"actor_motion_enabled":args.restaurant_human == "crossing","payload_added":False})
+            "humans_added":int(has_server),"actor_motion_enabled":args.restaurant_human in {"crossing", "continuous-crossing"},
+            "payload_added":False,"human_carried_bowl_added":args.human_carry_bowl})
         setup_footprint = RectangularRobotFootprint(stationary.ROBOT_FRONT_EXTENT,
             stationary.ROBOT_REAR_EXTENT,stationary.ROBOT_LEFT_EXTENT,
             stationary.ROBOT_RIGHT_EXTENT,stationary.ROBOT_SAFETY_MARGIN)
@@ -567,16 +597,51 @@ def main():
         dt=stationary.PHYSICS_DT, device=stationary.PHYSICS_DEVICE
     )
     timeline = omni.timeline.get_timeline_interface()
+    if args.human_carry_bowl:
+        carb.settings.get_settings().set("/app/player/useFixedTimeStepping", True)
+        timeline.set_play_every_frame(True)
+        timeline.set_time_codes_per_second(60)
     timeline.play()
     app_utils.update_app(steps=10)
-    if human is not None:
+    if human is not None and not args.human_carry_bowl:
         human.initialize()
         human.start_video()
     controller.verify_articulation()
-    stationary.position_robot_for_experiment(controller)
+    if args.human_carry_bowl:
+        # Match the validated native component's startup chronology. Pickup
+        # before native idle settling can select a different articulated pose.
+        yaw = stationary.ROBOT_START_YAW_RADIANS
+        controller.robot.set_world_poses(positions=[stationary.ROBOT_START_POSITION_WORLD],
+            orientations=[[math.cos(yaw/2), 0., 0., math.sin(yaw/2)]])
+    else:
+        stationary.position_robot_for_experiment(controller)
     for _ in range(stationary.SETTLE_STEPS):
         controller.stop()
         app.update()
+    if args.human_carry_bowl:
+        human.start_video()
+        for _ in range(30):
+            controller.stop()
+            app.update()
+        human.initialize()
+        for _ in range(60):
+            controller.stop()
+            app.update()
+        human.begin_carry()
+        for _ in range(180):
+            controller.stop()
+            app.update()
+            pose = stationary.read_robot_pose(stage)
+            human.update(float(timeline.get_current_time()), (pose.x, pose.y), (0., 0.), layout_monitor)
+            if human.carry.ready:
+                break
+        if not human.carry.ready:
+            raise RuntimeError("native stationary hand attachment failed before perception")
+        save_json("native-carry-startup-audit.json", {
+            "robot_settle_steps": stationary.SETTLE_STEPS, "camera_settle_steps": 30,
+            "native_idle_settle_steps": 60, "pickup_ready_time": float(timeline.get_current_time()),
+            "pickup_status": str(human.agent.get_task_status(human.carry.task)),
+            "scope": "initial zero-wheel native component chronology; no scheduled observation pauses during navigation"})
     anchor = stationary.read_robot_pose(stage)
     if layout_monitor is not None:
         settled_clearance = authored_raster_clearance(layout_monitor[0],(anchor.x,anchor.y,anchor.yaw),setup_footprint,layout_monitor[1])
@@ -711,6 +776,7 @@ def main():
         fall_interaction_prior_scope="bounded multi-object support test; worst-case harmful fall interaction, not measured fall probability"
         if args.fixture_layout == "three" else None,
         cluster_in_3d=args.fixture_layout == "three" or args.actor_shape == "upright_capsule" or bool(args.restaurant_scene),
+        cluster_radius_m=args.human_cluster_radius if human is not None else None,
         camera_visibility_radius_pixels=4 if args.fixture_layout == "three" or args.actor_shape == "upright_capsule" or args.restaurant_scene else 0,
         mask_foreground_depth_gap_m=0.5 if args.fixture_layout == "three" or args.actor_shape == "upright_capsule" or args.restaurant_scene else None,
         plume_view_fov_degrees=args.plume_view_fov,
@@ -753,6 +819,21 @@ def main():
         if human is not None:
             human.update(now, (matrix[0, 3], matrix[1, 3]), command, layout_monitor,
                          navigation=navigation_active)
+            if human.carry is not None and human.carry.ready:
+                pose = stationary.read_robot_pose(stage)
+                bowl = human.carry.records[-1]
+                clearance = min(
+                    disk_footprint_clearance((pose.x, pose.y, pose.yaw),
+                        center_xy=human.position()[:2], radius_m=human.setup["collision_radius_m"],
+                        footprint=setup_footprint),
+                    disk_footprint_clearance((pose.x, pose.y, pose.yaw),
+                        center_xy=bowl["bowl_center_xyz"][:2],
+                        radius_m=float(np.linalg.norm(bowl["world_half_extents"][:2])),
+                        footprint=setup_footprint))
+                human.records[-1]["independent_robot_clearance_m"] = clearance
+                if clearance <= .02:
+                    controller.stop()
+                    raise RuntimeError("independent body/bowl robot-clearance guard")
         if paced:
             time.sleep(
                 max(
@@ -1378,6 +1459,12 @@ def main():
                 local = (c * xy[0] + s * xy[1], -s * xy[0] + c * xy[1])
                 clearances.append(disk_footprint_clearance(current, center_xy=local,
                     radius_m=human.setup["collision_radius_m"], footprint=footprint))
+                if human.carry is not None and human.carry.records:
+                    bowl = human.carry.records[-1]
+                    xy = np.array(bowl["bowl_center_xyz"][:2]) - [anchor.x, anchor.y]
+                    local = (c*xy[0]+s*xy[1], -s*xy[0]+c*xy[1])
+                    clearances.append(disk_footprint_clearance(current, center_xy=local,
+                        radius_m=float(np.linalg.norm(bowl["world_half_extents"][:2])), footprint=footprint))
             for fixture in fixtures:
                 xy = np.array(fixture["center_world_xy"])
                 if args.moving_actor and fixture["name"] == "ground":
@@ -1416,6 +1503,12 @@ def main():
                             robot_world_xy=(anchor.x+c*current[0]-s*current[1], anchor.y+s*current[0]+c*current[1]),
                             **coverage_geometry(outcome.value, submitted_packet))
                         if coverage_result["observed_fragment_merges"] or coverage_result["blocked"]:
+                            if any(e.get("coexistence_basis") == "retained_original_coobservation"
+                                   for e in coverage_result["observed_fragment_merges"]):
+                                audit_name = f"coverage-merge-{outcome.value.field.sensor_frame_id}.npz"
+                                np.savez_compressed(args.output / audit_name,
+                                    **coverage_geometry(outcome.value, submitted_packet))
+                                coverage_result["current_positive_geometry_audit_file"] = audit_name
                             coverage_events.append(coverage_result)
                         if coverage_result["blocked"]:
                             reason = "nearby_track_lost"
@@ -1659,6 +1752,10 @@ def main():
         step()
     final_state = state()
     stop_drift = float(np.linalg.norm(final_state[:2] - arrival_state[:2]))
+    if human is not None and human.carry is not None:
+        minimum_clearance = min(minimum_clearance, min(
+            r["independent_robot_clearance_m"] for r in human.records
+            if "independent_robot_clearance_m" in r))
     moving_field_count = sum(
         np.linalg.norm(
             np.asarray(live_fields[i]["state_at_commit"][:2])
@@ -1678,10 +1775,18 @@ def main():
     if human is not None:
         from robot.evaluation.human_navigation_validation import summarize_human_navigation
         human_validation = summarize_human_navigation(live_fields, human.records,
-            mode=args.restaurant_human)
+            mode=args.restaurant_human, upper_continuation=args.human_upper_continuation)
         completed = completed and human_validation["passed"]
         save_json("human-navigation-validation.json", human_validation)
         save_json("human-truth-evaluation-only.json", human.records)
+        if human.carry is not None:
+            from robot.scene.restaurant_human_carry import summarize_carry_records
+            carry_validation = summarize_carry_records(human.carry.records, continuous=human.circuit is not None)
+            carry_validation["source_asset_unchanged"] = hashlib.sha256(Path(human.carry_setup["source"]).read_bytes()).hexdigest() == human.carry_setup["source_sha256"]
+            carry_validation["scope"] = "native attachment during live robot navigation; separate bowl physical perception remains unvalidated; no actor endpoint-stop claim"
+            completed = completed and carry_validation["passed"] and carry_validation["source_asset_unchanged"]
+            save_json("carry-validation.json", carry_validation)
+            save_json("carry-records.json", human.carry.records)
     simultaneous_kinetic_updates = 0
     live_kinetic_validation = None
     if args.moving_actor:
@@ -1714,6 +1819,9 @@ def main():
         "passed": completed and scene_unchanged and root_unchanged_by_fixture,
         "human_navigation_validation": human_validation,
         "native_human_mode": args.restaurant_human,
+        "human_lidar_cluster_radius_m": args.human_cluster_radius,
+        "native_carried_bowl": args.human_carry_bowl,
+        "native_human_upper_continuation": args.human_upper_continuation,
         "human_crossing_trigger_robot_world_y": args.human_crossing_trigger_y,
         "human_requested_walking_speed_mps": args.human_walking_speed,
         "experimental_camera_mount": {
@@ -1868,7 +1976,7 @@ def main():
             "all physical LiDAR occupancy retained with .15 s positive expiry; track-loss watchdog is bounded, not general occlusion or crowd support",
             "oracle ego pose/extrinsics/gravity; RGB acquisition is read-time approximation; ego deskew does not correct moving articulated actors",
             "fixed lambda 1.25, unchanged nominal/exact MPC/DTCBF/analytical CBF; paced development, not real-time or causal CRA superiority",
-            "renderer transform-history warning remains unresolved; carried load and moving-view plume are not validated by this episode",
+            "renderer transform-history warning remains unresolved; separate carried-bowl physical assessment, calibrated load and moving-view plume remain unvalidated",
         ]
     save_json("report.json", report)
     print(
@@ -1903,5 +2011,10 @@ finally:
     if ACTIVE_HUMAN is not None:
         ACTIVE_HUMAN.abort()
         save_json("human-truth-evaluation-only.json", ACTIVE_HUMAN.records)
+        if ACTIVE_HUMAN.carry is not None:
+            save_json("carry-records.json", ACTIVE_HUMAN.carry.records)
+            save_json("native-carry-setup.json", ACTIVE_HUMAN.carry_setup)
+        if ACTIVE_HUMAN.circuit is not None:
+            save_json("continuous-server-route-events.json", ACTIVE_HUMAN.circuit.events)
         ACTIVE_HUMAN.close()
     app.close()

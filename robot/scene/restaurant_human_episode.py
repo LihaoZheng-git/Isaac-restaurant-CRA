@@ -14,9 +14,29 @@ from robot.scene.restaurant_human_motion import prepare_native_restaurant_human
 
 
 class RestaurantHumanEpisode:
-    def __init__(self, stage, *, mode, output, trigger_robot_y=7.8, speed_mps=0.7):
-        if mode not in {"standing", "crossing"}:
+    def __init__(
+        self,
+        stage,
+        *,
+        mode,
+        output,
+        trigger_robot_y=7.8,
+        speed_mps=0.7,
+        carry_bowl=False,
+        carry_facing_crossing=False,
+        upper_continuation=False,
+    ):
+        if mode not in {"standing", "crossing", "continuous-crossing"}:
             raise ValueError("unknown human episode")
+        if carry_bowl and mode != "continuous-crossing":
+            raise ValueError("carried server requires explicit continuous crossing")
+        if upper_continuation and mode != "continuous-crossing":
+            raise ValueError("upper continuation requires continuous crossing")
+        if carry_facing_crossing and not carry_bowl:
+            raise ValueError("initial carrying heading requires a carried bowl")
+        self.carry_facing_crossing = carry_facing_crossing
+        if mode == "continuous-crossing" and speed_mps != 0.5:
+            raise ValueError("bounded continuous circuit requires .5 m/s")
         if not math.isfinite(trigger_robot_y) or not 6.8 <= trigger_robot_y <= 7.8:
             raise ValueError("bounded native crossing trigger must be y=6.8..7.8")
         self.trigger_robot_y = trigger_robot_y
@@ -34,6 +54,19 @@ class RestaurantHumanEpisode:
         self.writer = None
         self.last_frame = -math.inf
         self.frame_count = 0
+        from robot.scene.restaurant_continuous_server import ContinuousServerRoute
+
+        self.circuit = (
+            ContinuousServerRoute(upper_continuation=upper_continuation)
+            if mode == "continuous-crossing"
+            else None
+        )
+        self.carry = None
+        self.carry_setup = None
+        if carry_bowl:
+            from robot.scene.restaurant_human_carry import author_native_carry_bowl
+
+            self.carry_setup = author_native_carry_bowl(stage)
 
     def bake(self):
         import omni.anim.navigation.core as nav
@@ -65,6 +98,23 @@ class RestaurantHumanEpisode:
             )
             for side in ("L", "R")
         }
+        if self.carry_setup is not None:
+            from robot.scene.restaurant_human_carry import NativeBowlCarry
+
+            self.carry = NativeBowlCarry(self.agent, self.carry_setup, names)
+
+    def begin_carry(self):
+        """Call only after the native idle/robot startup has settled."""
+        if (
+            self.carry is None
+            or self.carry.task is not None
+            or self.phase != "idle_before"
+        ):
+            raise RuntimeError(
+                "native carry start requires a settled idle and no previous pickup"
+            )
+        self.carry.start()
+        self.phase = "pickup"
 
     def start_video(self):
         import cv2
@@ -77,8 +127,12 @@ class RestaurantHumanEpisode:
             prim.MakeMatrixXform().Set(
                 Gf.Matrix4d()
                 .SetLookAt(
-                    Gf.Vec3d(25.9, 6.7, 3.2),
-                    Gf.Vec3d(29.0, 8.2, 0.7),
+                    Gf.Vec3d(26.5, 7.7, 2.4)
+                    if self.carry_setup is not None
+                    else Gf.Vec3d(25.9, 6.7, 3.2),
+                    Gf.Vec3d(29.0, 9.5, 0.8)
+                    if self.carry_setup is not None
+                    else Gf.Vec3d(29.0, 8.2, 0.7),
                     Gf.Vec3d(0, 0, 1),
                 )
                 .GetInverse()
@@ -108,12 +162,16 @@ class RestaurantHumanEpisode:
         # This controls the scripted actor only. No actor state enters CRA.
         if (
             navigation
-            and self.mode == "crossing"
+            and self.mode in {"crossing", "continuous-crossing"}
             and self.task is None
+            and self.phase == "idle_before"
             and robot_xy[1] >= self.trigger_robot_y
         ):
             self.agent.set_speed(self.speed)
-            self.task = self.agent.move_to(self.goal, auto_brake=True)
+            self.task = self.agent.move_to(
+                self.circuit.goal if self.circuit else self.goal,
+                auto_brake=self.circuit is None,
+            )
             if self.task == bh.BEHAVIOR_TASK_ID_INVALID:
                 raise RuntimeError("native crossing task rejected")
             self.phase = "move"
@@ -123,12 +181,21 @@ class RestaurantHumanEpisode:
             and self.phase != "aborted"
         ):
             status = self.agent.get_task_status(self.task)
-            if status == bh.BehaviorTaskStatus.SUCCEEDED:
+            if status == bh.BehaviorTaskStatus.FAILED:
+                raise RuntimeError("native crossing task failed")
+            if self.circuit is not None:
+                if self.circuit.advance(self.position(), now):
+                    self.task = self.agent.move_to(self.circuit.goal, auto_brake=False)
+                    if self.task == bh.BEHAVIOR_TASK_ID_INVALID:
+                        raise RuntimeError("continuous crossing next-leg task rejected")
+                elif status == bh.BehaviorTaskStatus.SUCCEEDED:
+                    raise RuntimeError(
+                        "native task success without actual crossing progress"
+                    )
+            elif status == bh.BehaviorTaskStatus.SUCCEEDED:
                 self.task_succeeded = True
                 self.agent.idle()
                 self.phase = "stopped_after"
-            elif status == bh.BehaviorTaskStatus.FAILED:
-                raise RuntimeError("native crossing task failed")
         xyz = self.position()
         feet = {}
         for side, i in self.feet.items():
@@ -158,6 +225,15 @@ class RestaurantHumanEpisode:
             ),
         }
         self.records.append(row)
+        if self.carry is not None:
+            self.carry.tick(now, self.phase, layout)
+            if self.phase == "pickup" and self.carry.ready:
+                self.agent.idle(
+                    facing=carb.Float3(-1, 0, 0)
+                    if self.carry_facing_crossing
+                    else self.agent.get_facing_direction()
+                )
+                self.phase = "idle_before"
         if (
             actor_clearance <= 0.02
             or row["collider_alignment_error_m"] > 0.03
