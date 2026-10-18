@@ -576,3 +576,17 @@
   velocity checks passed but world/relative error maxima reached 1.640/1.586 m/s.
   Preserve those transients, failed repeated-return cases, oracle ego references,
   read-time RGB clock approximation, renderer warning and main's existing hold.
+- The opt-in general object-height path fits a local LiDAR floor in an explicitly
+  declared frame/reference and reports visible elevation and adjacent support
+  separately from strict local drop. Ground-supported potential baseline priors
+  and uncertainty priors may both be .25 but must retain their distinct basis;
+  no missing landing, hidden bottom, center/body/hand height or unowned cluster
+  becomes fall height. Reject competing support levels; retain original source
+  times, all occupancy and legacy sphere/bottom/continuity gates separately.
+  Ground/raised zero-wheel component gates passed with an explicitly wider .80 m
+  neighborhood and existing .20 m gap, not new runtime defaults. The ground
+  strict-drop result remains unavailable; raised drop was .300817 m. These are
+  configured target-selection and oracle-frame-assisted sensor diagnostics,
+  not moving-human support, carried-bowl ownership or new wheel acceptance.
+  Preserve sparse-support/startup failures and unchanged calibration/main hold.
+  See docs/object_height_estimation.md; carried-object association is next.

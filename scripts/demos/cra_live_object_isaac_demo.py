@@ -74,6 +74,12 @@ parser.add_argument("--visual-reassessment-interval", type=float, default=1.0,
 parser.add_argument("--live-visual-tracks", type=int, choices=(1, 2), default=2,
                     help="existing fair visual-attempt budget per live update; all tracks still receive geometry/motion and numeric policies")
 parser.add_argument("--vectorized-fields", action="store_true")
+parser.add_argument("--object-height-evidence", action="store_true",
+                    help="opt-in general LiDAR floor/elevation/support evidence; no carried-object relationship or hidden-base inference")
+parser.add_argument("--height-support-margin", type=float, default=.12,
+                    help="explicit general-height support neighborhood in metres; legacy defaults remain unchanged")
+parser.add_argument("--height-support-gap", type=float, default=.06,
+                    help="maximum visible-lower-boundary to support gap for general-height inference; not measured contact")
 parser.add_argument("--stream-live-records", action="store_true",
                     help="append complete field records as compact JSONL; JSON checkpoint contains only the latest five fields")
 parser.add_argument("--immediate-replan", action="store_true",
@@ -119,6 +125,11 @@ parser.add_argument(
     help="optimizer candidate age cap; every executed horizon still needs fresh exact validation",
 )
 args = parser.parse_args()
+if (not math.isfinite(args.height_support_margin) or not .12 <= args.height_support_margin <= 1.
+        or not math.isfinite(args.height_support_gap) or not .02 <= args.height_support_gap <= .20):
+    raise ValueError("height support margin/gap must lie within [.12,1.] / [.02,.20] m")
+if not args.object_height_evidence and (args.height_support_margin != .12 or args.height_support_gap != .06):
+    raise ValueError("height support configuration requires --object-height-evidence")
 if not .12 <= args.human_cluster_radius <= .20 or (args.human_cluster_radius != .12 and not args.restaurant_human):
     parser.error("human 3D radius .12...20 requires a native human scenario")
 if not .5 <= args.human_walking_speed <= 1. or (
@@ -712,6 +723,8 @@ def main():
             ),
         ),
     )
+    from robot.perception.object_height import ObjectHeightConfig
+
     perception = LiveObjectPerception(
         segmenter=segmenter,
         mass_estimator=mass,
@@ -728,7 +741,7 @@ def main():
         field_config=field_config,
         anchor_position_world_xy=(anchor.x, anchor.y),
         anchor_yaw=anchor.yaw,
-        ground_prior_scope=GROUND_SCOPE if args.actor_shape == "sphere" and not args.restaurant_scene else None,
+        ground_prior_scope=GROUND_SCOPE if args.actor_shape == "sphere" and not args.restaurant_scene and not args.object_height_evidence else None,
         negative_plume_scope=("bounded stationary native-aspect real-bowl view: explicitly clean reference phase; object-associated visible cue only, not absence of heat"
             if args.restaurant_plume_diagnostic else None) if args.restaurant_scene else PLUME_SCOPE,
         rectify_plume=True,
@@ -772,9 +785,13 @@ def main():
             support_xy_margin_m=0.30, support_maximum_gap_m=0.20,
             minimum_support_overhang_m=0.05, landing_maximum_offset_m=2.5,
             allow_equal_height_multiple_landings=True,
-        ) if args.fixture_layout == "three" else None,
+        ) if args.fixture_layout == "three" and not args.object_height_evidence else None,
         fall_interaction_prior_scope="bounded multi-object support test; worst-case harmful fall interaction, not measured fall probability"
-        if args.fixture_layout == "three" else None,
+        if args.fixture_layout == "three" or args.object_height_evidence else None,
+        object_height_config=ObjectHeightConfig(surface_config=LidarFallSurfaceConfig(
+            support_xy_margin_m=args.height_support_margin,
+            support_maximum_gap_m=args.height_support_gap,
+        )) if args.object_height_evidence else None,
         cluster_in_3d=args.fixture_layout == "three" or args.actor_shape == "upright_capsule" or bool(args.restaurant_scene),
         cluster_radius_m=args.human_cluster_radius if human is not None else None,
         camera_visibility_radius_pixels=4 if args.fixture_layout == "three" or args.actor_shape == "upright_capsule" or args.restaurant_scene else 0,

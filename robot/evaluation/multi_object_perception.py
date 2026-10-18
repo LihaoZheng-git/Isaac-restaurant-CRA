@@ -198,7 +198,8 @@ def assess_all_objects(worker, packet):
         contact_frame = assessment["contact_frame"]
         adapted = assessment["adapted"]
         policy, factor_details = evaluate_object_risk(
-            adapted, worker.object_factor_prior_config
+            adapted, worker.object_factor_prior_config,
+            height_evidence=assessment.get("height_evidence"),
         )
         semantic = SemanticObstacle(
             track,

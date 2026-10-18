@@ -37,6 +37,9 @@ from robot.config import (
     ROBOT_PRIM_PATH,
     ROBOT_SCENE_PATH,
 )
+# Load the existing conda perception dependencies before Kit prepends its
+# legacy ML bundle, matching the live demo's startup order. No package changes.
+from robot.perception.object_height import ObjectHeightConfig, estimate_object_height
 from isaacsim import SimulationApp
 
 
@@ -91,17 +94,22 @@ if (not math.isfinite(SUPPORT_WIDTH_M) or not .5 <= SUPPORT_WIDTH_M <= 1.4
     raise ValueError("support width must be in [0.5, 1.4] m and contain the 0.14 m object")
 FIXTURE_CENTER_ROBOT_XY = np.asarray((FIXTURE_DISTANCE_M, OBJECT_LATERAL_M), dtype=np.float64)
 SUPPORT_DROP_M = float(os.environ.get("CRA_FALL_SUPPORT_DROP_M", "0.80"))
-if not math.isfinite(SUPPORT_DROP_M) or SUPPORT_DROP_M <= 0:
+HEIGHT_DIAGNOSTIC = os.environ.get("CRA_OBJECT_HEIGHT_DIAGNOSTIC", "0") == "1"
+if (not math.isfinite(SUPPORT_DROP_M) or SUPPORT_DROP_M < 0
+        or (SUPPORT_DROP_M == 0 and not HEIGHT_DIAGNOSTIC)):
     raise ValueError("CRA_FALL_SUPPORT_DROP_M must be positive and finite")
 SUPPORT_SIZE_M = (SUPPORT_WIDTH_M, SUPPORT_WIDTH_M, 0.10)
 OBJECT_SIZE_M = (0.14, 0.14, 0.34)
 CAPTURE_FRAME_COUNT = 12
 MAXIMUM_SENSOR_WAIT_STEPS = 400
 LANDING_MAXIMUM_OFFSET_M = float(os.environ.get("CRA_FALL_LANDING_MAXIMUM_OFFSET_M", "1.5"))
+SUPPORT_XY_MARGIN_M = float(os.environ.get("CRA_FALL_SUPPORT_XY_MARGIN_M", "0.30"))
+if not math.isfinite(SUPPORT_XY_MARGIN_M) or not .12 <= SUPPORT_XY_MARGIN_M <= 1.:
+    raise ValueError("support XY search margin must lie within [0.12, 1.0] m")
 if not math.isfinite(LANDING_MAXIMUM_OFFSET_M) or not .12 < LANDING_MAXIMUM_OFFSET_M <= 3:
     raise ValueError("landing search offset must lie within (0.12, 3.0] m")
 FIXTURE_SURFACE_CONFIG = LidarFallSurfaceConfig(
-    support_xy_margin_m=0.30,
+    support_xy_margin_m=SUPPORT_XY_MARGIN_M,
     support_maximum_gap_m=0.20,
     minimum_support_overhang_m=0.05,
     # At the mounted scanner's elevation, the first visible floor returns
@@ -292,6 +300,11 @@ def main() -> None:
         config=FIXTURE_SURFACE_CONFIG,
     )
     fall = estimate_fall_height(surface_result.evidence, timestamp_seconds=timestamp)
+    height_evidence = estimate_object_height(scene_points, object_points,
+        timestamp_seconds=timestamp, scene_timestamp_seconds=timestamp,
+        floor_reference_m=floor_z,
+        reference_scope="stationary Isaac oracle ego/gravity/ground-band reference; authored target selection; plane/support heights fitted from real LiDAR returns",
+        config=ObjectHeightConfig(surface_config=FIXTURE_SURFACE_CONFIG))
     report = evaluate_fall_height_diagnostic(
         fall,
         authored_support_height_m=support_height,
@@ -303,6 +316,19 @@ def main() -> None:
     drift = float(np.linalg.norm(final_pose[:2] - initial_pose[:2]))
     yaw_drift = abs(math.atan2(math.sin(final_pose[2] - initial_pose[2]), math.cos(final_pose[2] - initial_pose[2])))
     blockers = list(report.blockers)
+    if HEIGHT_DIAGNOSTIC:
+        # Separate general-height component gate, not a relaxed positive-drop
+        # acceptance. Preserve the original strict fall report below.
+        expected_state = "ground_supported" if SUPPORT_DROP_M == 0 else "elevated_supported"
+        support_above = height_evidence.support_height_above_ground_m
+        blockers = []
+        if height_evidence.support_state != expected_state:
+            blockers.append("height support state does not match independent fixture evaluation")
+        if (not support_above.is_available or abs(support_above.value - SUPPORT_DROP_M) > .1
+            or not support_above.lower_bound <= SUPPORT_DROP_M <= support_above.upper_bound):
+            blockers.append("support elevation error/interval failed independent evaluation")
+        if not height_evidence.visible_center_height_m.is_available:
+            blockers.append("visible envelope elevation unavailable")
     if drift > 0.005 or yaw_drift > math.radians(0.1):
         blockers.append("robot did not remain stationary")
     # Simulation setup may author runtime physics settings. Audit fixture
@@ -342,6 +368,9 @@ def main() -> None:
         **asdict(report),
         "blockers": blockers,
         "passed": not blockers,
+        "diagnostic_mode": "general_object_height" if HEIGHT_DIAGNOSTIC else "positive_fall_height",
+        "object_height_evidence": asdict(height_evidence),
+        "strict_positive_fall_report": {**asdict(report), "passed": report.passed},
         "evidence_source": fall.source,
         "evidence_status": fall.status.value,
         "object_height_used_as_fall_height": False,
@@ -361,7 +390,7 @@ def main() -> None:
         "robot_position_drift_m": drift,
         "robot_yaw_drift_degrees": math.degrees(yaw_drift),
         "robot_motion_command": "zero",
-        "oracle_role": "fixture authoring, target location/height selection and separate offline scoring; not supplied support/landing heights to inference",
+        "oracle_role": "fixture authoring, target location/height selection, ego/gravity/ground-band reference and separate offline scoring; not supplied support/landing heights as inferred scalars",
         "fixture_geometry_valid": fixture_geometry_valid,
         "rendered_support_top_world_m": support_bounds.maximum[2],
         "rendered_object_bottom_world_m": object_bounds.minimum[2],

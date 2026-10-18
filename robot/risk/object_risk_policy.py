@@ -31,9 +31,14 @@ class ObjectRiskPriorConfig:
             raise ValueError("factor priors require an explicit scope")
 
 
-def evaluate_object_risk(adapted, config):
+def evaluate_object_risk(adapted, config, *, height_evidence=None):
     if not isinstance(config, ObjectRiskPriorConfig):
         raise TypeError("config must be ObjectRiskPriorConfig")
+    if height_evidence is not None:
+        from robot.perception.object_height import ObjectHeightEvidence
+
+        if not isinstance(height_evidence, ObjectHeightEvidence):
+            raise TypeError("height_evidence must be ObjectHeightEvidence")
     policy = CRASafeSAGEPolicy(
         risk_assessor=CRARiskAssessor(
             CRAAssessmentConfig(fallback_risks=config.factor_risks)
@@ -62,6 +67,15 @@ def evaluate_object_risk(adapted, config):
             "prior_risk": prior,
             "basis": diagnostic.basis,
         }
+        if factor.value == "potential" and height_evidence is not None:
+            details[factor.value]["height_context"] = {
+                "support_state": height_evidence.support_state,
+                "score_basis": "ground_supported_baseline_prior"
+                if missing and height_evidence.support_state == "ground_supported"
+                else "uncertainty_prior" if missing else "physical_drop_estimate",
+                "support_height_above_ground_m": height_evidence.support_height_above_ground_m.value,
+                "reference_scope": height_evidence.reference_scope,
+            }
     result = policy.evaluate(replace(adapted.profile, **estimates))
     for factor, detail in details.items():
         assessed = next(
