@@ -98,6 +98,8 @@ parser.add_argument("--qp-iteration-limit", type=int, default=4000,
                     help="explicit live OSQP iteration budget; failed solves still require exact-safe recovery or stopping")
 parser.add_argument("--nonlinear-rescue-iterations", type=int, default=300,
                     help="explicit optional SLSQP rescue budget; exact verification and recovery remain mandatory")
+parser.add_argument("--progress-seed-fraction", type=float, default=.5,
+                    help="search existing exact-safe turn seeds when MPC forward speed falls below this fraction of nominal; legacy .5, audited early-search .9")
 parser.add_argument("--plume-view-fov", type=float, default=140.0)
 parser.add_argument(
     "--evidence-gap-diagnostic",
@@ -135,6 +137,8 @@ parser.add_argument(
     help="optimizer candidate age cap; every executed horizon still needs fresh exact validation",
 )
 args = parser.parse_args()
+if not math.isfinite(args.progress_seed_fraction) or not 0 < args.progress_seed_fraction < 1:
+    parser.error("progress seed fraction must be finite and in (0,1)")
 if args.human_crossing_direction == "left-to-right" and args.restaurant_human != "crossing":
     parser.error("mirrored actor direction requires standalone crossing mode")
 if args.motion_aware_passing and not (args.restaurant_human == "crossing" and args.persistent_object_risk_map
@@ -1380,7 +1384,7 @@ def main():
             enable_recovery_feasibility_pruning=True,
             maximum_solver_iterations=args.qp_iteration_limit,
             maximum_nonlinear_rescue_iterations=args.nonlinear_rescue_iterations,
-            progress_seed_linear_fraction=0.5,
+            progress_seed_linear_fraction=args.progress_seed_fraction,
             configuration_position_padding_m=0.025,
             configuration_yaw_padding_radians=0.21,
             configuration_padding_initial_fraction=0.1,
@@ -2011,6 +2015,8 @@ def main():
         "recovery_feasibility_pruning": mpc.config.enable_recovery_feasibility_pruning,
         "qp_iteration_limit": mpc.config.maximum_solver_iterations,
         "nonlinear_rescue_iteration_limit": mpc.config.maximum_nonlinear_rescue_iterations,
+        "progress_seed_linear_fraction": mpc.config.progress_seed_linear_fraction,
+        "mpc_configuration": asdict(mpc.config),
         "immediate_replan_after_invalidations": args.immediate_replan,
         "verified_command_interval_seconds": mpc.config.time_step,
         "wall_seconds": time.perf_counter() - start_wall,

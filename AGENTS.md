@@ -696,3 +696,11 @@
   A proactive guidance-tracking MPC objective is a pending research choice,
   not implemented or authorized by these diagnostics. Keep the main and long
   service holds, unchanged evidence/continuity gates and original comparisons.
+- The user's later controller decision prioritizes fixed-field planar/unicycle
+  isolation and the existing online search before any new guidance cost. The
+  explicit live `--progress-seed-fraction .9` recipe activates the unchanged
+  cheaper/exact-safe bounded turn search earlier; legacy .5 remains the default.
+  Keep the same option in matched fixed-class/CRA comparisons and retain all
+  prior failures. Virtual ORACLE-field arrival is not native crossing or fresh
+  perception acceptance. See docs/guidance_control_audit.md; the main/long-service
+  holds and all evidence, occupancy and freshness gates remain unchanged.

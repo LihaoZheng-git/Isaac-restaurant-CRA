@@ -131,7 +131,10 @@ active only for a qualified crossing and zero outside it. Keep the original
 waypoints, exact acceptance, all occupancy and lambda unchanged; expose weights
 and speed bounds and make the same option available to fixed-class and CRA
 controllers. Evaluate it separately from the original primary comparison.
-This objective change is not implemented and awaits a user research decision.
+This objective change is not implemented. The user's later decision is to
+audit and improve the existing controller realization first; see
+`docs/guidance_control_audit.md`. Do not treat the earlier proposal as an
+instruction to add a guidance-tracking objective.
 
 Validation completed during implementation: the full unit suite passed 2,058
 tests; subsequent focused checks of the selector, validator and actual object-map

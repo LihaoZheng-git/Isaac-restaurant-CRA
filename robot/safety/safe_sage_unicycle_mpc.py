@@ -936,6 +936,7 @@ class SafeSAGEUnicycleMPC:
                 h_full=h_full,
                 guidance_fields=guidance_fields,
                 temporal_safety_derivative=temporal_safety_derivative,
+                require_feasible=self.config.enable_recovery_feasibility_pruning,
             )
             if candidate is None or not self._trajectory_is_safe(candidate):
                 continue

@@ -155,6 +155,7 @@ def extract_trial(directory, trial):
         "configuration": {key: report.get(key) for key in (
             "experiment_baseline", "fixed_lambda", "nominal_route_local_xy", "scene_source_sha256",
             "simulation_rate_limit", "qp_iteration_limit", "nonlinear_rescue_iteration_limit",
+            "progress_seed_linear_fraction", "mpc_configuration",
             "planner_candidate_maximum_age_seconds", "human_crossing_delay_seconds",
             "human_body_contact_prior_config", "experimental_camera_mount", "human_mass_prior_config",
             "object_factor_prior_risk", "persistent_property_config", "temporal_evidence_config",
