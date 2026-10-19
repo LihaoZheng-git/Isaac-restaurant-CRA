@@ -228,6 +228,7 @@ class LiveObjectPerception:
         object_height_config=None,
         carried_object_config=None,
         pose_detector=None,
+        human_body_contact_config=None,
     ):
         self.segmenter, self.mass_estimator, self.contact_detector = (
             segmenter,
@@ -247,6 +248,13 @@ class LiveObjectPerception:
             raise TypeError("invalid human mass prior configuration")
         self.person_detector = person_detector
         self.human_mass_prior_config = human_mass_prior_config
+        from robot.perception.human_body_contact import HumanBodyContactPriorConfig
+        if human_body_contact_config is not None and (
+            not isinstance(human_body_contact_config, HumanBodyContactPriorConfig)
+            or person_detector is None or persistent_property_config is None
+        ):
+            raise ValueError("human body contact prior requires fresh person association and object-map mode")
+        self.human_body_contact_config = human_body_contact_config
         self._person_packet = self._person_frame = None
         from robot.perception.lidar_fall_surfaces import LidarFallSurfaceConfig
 
@@ -917,6 +925,7 @@ class LiveObjectPerception:
         thermal_interaction = None
         geometry_diagnostics = {"accepted_instance": accepted}
         height_evidence = None
+        human_body_contact_prior = part_contact_diagnostic = None
         if self.object_height_config is not None and accepted:
             height_evidence = estimate_object_height(
                 packet.scene_xyz,
@@ -971,6 +980,15 @@ class LiveObjectPerception:
                         mass.mass_kg
                     )
                     mass = MassAttributes(prior)
+                if self.human_body_contact_config is not None:
+                    from robot.perception.human_body_contact import select_visual_human_body_contact_prior
+                    human_body_contact_prior = select_visual_human_body_contact_prior(
+                        frame, association, self.visual_person_frame(packet),
+                        track_id=target.track_id, timestamp_seconds=timestamp,
+                        association_config=self.human_mass_prior_config,
+                        config=self.human_body_contact_config,
+                    )
+                    geometry_diagnostics["human_body_contact_prior"] = asdict(human_body_contact_prior)
             object_xyz = packet.obstacle_xyz[selected]
             sphere = None
             if height_evidence is None:
@@ -1095,6 +1113,17 @@ class LiveObjectPerception:
                 frame, links, part_proxies=parts
             ).get(target.track_id)
             attributes = replace(attributes, geometry=geometry, mass=mass)
+            if (human_body_contact_prior is not None and human_body_contact_prior.is_available
+                    and target.track_id in parts and parts[target.track_id].is_available):
+                # Retain an accepted part cue separately: the combined outline
+                # maximum is inappropriate for a human body, not for a real edge.
+                part_contact_diagnostic = adapt_physical_factors(
+                    attributes, timestamp_seconds=timestamp,
+                    visual_contact_proxy=parts[target.track_id],
+                    visual_contact_basis="visual_exposed_edge_proxy",
+                    contact_interaction_likelihood=motion.route_crossing_likelihood,
+                    config=PhysicalFactorAdapterConfig(allow_visual_contact_proxy=True),
+                ).contact
             if candidate_persistent is None or not candidate_persistent.has_thermal(
                 target.track_id, timestamp
             ):
@@ -1215,4 +1244,6 @@ class LiveObjectPerception:
             "reasons": reasons,
             "persistence": persistence_diagnostics,
             "contact_frame": shared_contact_frame,
+            "human_body_contact_prior": human_body_contact_prior,
+            "human_part_contact": part_contact_diagnostic,
         }
