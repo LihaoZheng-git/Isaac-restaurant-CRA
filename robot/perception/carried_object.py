@@ -32,6 +32,7 @@ class CarriedObjectConfig:
     maximum_gap_seconds: float = 0.35
     maximum_window_seconds: float = 2.0
     minimum_human_translation_m: float = 0.12
+    minimum_object_translation_m: float = 0.12
     maximum_relative_drift_m: float = 0.15
     maximum_relative_speed_mps: float = 0.3
 
@@ -421,7 +422,6 @@ class CarryObservation:
     hand_distance_m: float
     wrist_confidence: float
     fresh_separate_instances: bool = True
-    hand_world_xyz: tuple | None = None
 
 
 class CarriedRelationHistory:
@@ -434,19 +434,19 @@ class CarriedRelationHistory:
         row = observation
         if (
             not isinstance(row, CarryObservation)
+            or any(
+                isinstance(v, (bool, np.bool_))
+                or not isinstance(v, (int, np.integer))
+                or v < 0
+                for v in (row.human_id, row.object_id, row.source_frame_id)
+            )
+            or row.human_id == row.object_id
             or not math.isfinite(row.timestamp)
             or row.timestamp < 0
             or not np.isfinite(row.human_world_xyz).all()
             or not np.isfinite(row.object_world_xyz).all()
             or np.shape(row.human_world_xyz) != (3,)
             or np.shape(row.object_world_xyz) != (3,)
-            or (
-                row.hand_world_xyz is not None
-                and (
-                    np.shape(row.hand_world_xyz) != (3,)
-                    or not np.isfinite(row.hand_world_xyz).all()
-                )
-            )
         ):
             raise ValueError(
                 "carry observation needs finite same-frame metric geometry"
@@ -483,16 +483,17 @@ class CarriedRelationHistory:
         span = row.timestamp - history[0].timestamp
         human = np.array([r.human_world_xyz for r in history])
         obj = np.array([r.object_world_xyz for r in history])
-        hand_rows = [r.hand_world_xyz for r in history]
-        if all(h is not None for h in hand_rows):
-            hands = np.asarray(hand_rows, dtype=float)
-            relative = obj - hands
-            motion_basis = "RGB wrist plus same-source LiDAR depth proxy"
-        else:
-            relative = obj - human
-            motion_basis = "member centroid offset (no hand proxy supplied)"
-        drift = float(np.linalg.norm(relative - relative[0], axis=1).max())
+        relative = obj - human
+        # A carried object's offset rotates when the person turns. Bound member
+        # separation instead of requiring a fixed world-frame offset vector;
+        # still require both members to translate and limit net relative motion.
+        distances = np.linalg.norm(relative, axis=1)
+        drift = float(np.abs(distances - distances[0]).max())
+        vector_drift = float(np.linalg.norm(relative - relative[0], axis=1).max())
         translation = float(np.linalg.norm(human[:, :2] - human[0, :2], axis=1).max())
+        object_translation = float(
+            np.linalg.norm(obj[:, :2] - obj[0, :2], axis=1).max()
+        )
         relative_speed = (
             float(np.linalg.norm(relative[-1] - relative[0]) / span)
             if span > 0
@@ -502,6 +503,8 @@ class CarriedRelationHistory:
             "enough_distinct_frames": len(history) >= c.minimum_observations,
             "enough_time": span >= c.minimum_span_seconds - 1e-9,
             "actual_world_translation": translation >= c.minimum_human_translation_m,
+            "actual_object_translation": object_translation
+            >= c.minimum_object_translation_m,
             "relative_position_consistent": drift <= c.maximum_relative_drift_m,
             "co_motion": relative_speed is not None
             and relative_speed <= c.maximum_relative_speed_mps,
@@ -516,8 +519,10 @@ class CarriedRelationHistory:
             "original_window_start": history[0].timestamp,
             "span_seconds": span,
             "human_translation_m": translation,
+            "object_translation_m": object_translation,
             "relative_drift_m": drift,
+            "relative_vector_drift_m": vector_drift,
             "relative_speed_mps": relative_speed,
-            "motion_reference": motion_basis,
+            "motion_reference": "rotation-invariant member separation plus net relative centroid motion",
             "basis": "RGB wrist proximity + separately owned LiDAR world co-motion; inferred relationship, not grasp sensing",
         }

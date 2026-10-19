@@ -193,3 +193,36 @@ def test_failed_field_transaction_does_not_advance_carried_identity_or_motion(
     recovered = runtime(observed_packet(3, 1.2))
     assert recovered.field.sensor_timestamp_seconds == 1.2
     assert runtime.carried_runtime_state.last_times["human"] == 1.2
+
+
+def test_missing_prop_keeps_only_bounded_identity_without_publishing_old_evidence(
+    monkeypatch,
+):
+    import robot.evaluation.carried_object_runtime as bridge
+
+    runtime = setup(monkeypatch)
+    for frame, t in enumerate((1.0, 1.2, 1.4), 1):
+        result = runtime(observed_packet(frame, t))
+    detail = result.diagnostics["carried_object_groups"]
+    object_id = detail["members"]["object"]
+    original = bridge.propose_carried_object
+    monkeypatch.setattr(bridge, "propose_carried_object", lambda *a, **kw: (None, []))
+    missing = runtime(observed_packet(4, 1.5))
+    assert not missing.diagnostics["carried_object_groups"]["confirmed_groups"]
+    assert not any(
+        o.diagnostics.get("carried_member") == "object" for o in missing.objects
+    )
+    assert runtime.carried_runtime_state.last_times["object"] == 1.4
+    monkeypatch.setattr(bridge, "propose_carried_object", original)
+    recovered = runtime(observed_packet(5, 1.6))
+    assert (
+        recovered.diagnostics["carried_object_groups"]["members"]["object"] == object_id
+    )
+    assert recovered.diagnostics["carried_object_groups"]["confirmed_groups"]
+    # Beyond .35 s, even identity must restart from fresh observations.
+    # The unchanged temporal-field gap gate first requires an unpublished baseline.
+    with pytest.raises(ValueError, match="temporal source gap"):
+        runtime(observed_packet(6, 2.0))
+    later = runtime(observed_packet(7, 2.1))
+    assert later.diagnostics["carried_object_groups"]["members"]["object"] != object_id
+    assert not later.diagnostics["carried_object_groups"]["confirmed_groups"]

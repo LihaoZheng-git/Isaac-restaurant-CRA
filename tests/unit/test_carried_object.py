@@ -62,10 +62,10 @@ def test_gap_resets_relation_without_refreshing_previous_observations():
     assert result["original_window_start"] == 2.0
 
 
-def test_hand_relative_motion_accepts_a_carried_prop_during_a_person_turn():
+def test_rotation_invariant_separation_accepts_a_bounded_person_turn():
     history = CarriedRelationHistory(CarriedObjectConfig())
-    for frame, t in enumerate((1.0, 1.2, 1.4)):
-        angle = frame * np.pi / 4
+    for frame, t in enumerate((1.0, 1.3, 1.6)):
+        angle = frame * np.pi / 12
         h = np.array([0.5 * t, 0.0, 1.0])
         hand = h + [0.3 * np.cos(angle), 0.3 * np.sin(angle), 0.1]
         result = history.update(
@@ -74,15 +74,15 @@ def test_hand_relative_motion_accepts_a_carried_prop_during_a_person_turn():
                 frame,
                 human=tuple(h),
                 obj=tuple(hand + [0, 0, 0.05]),
-                hand_world_xyz=tuple(hand),
             )
         )
     assert result["confirmed"]
     assert result["relative_drift_m"] < 1e-12
-    assert "wrist" in result["motion_reference"]
+    assert result["relative_vector_drift_m"] > 0.15
+    assert "rotation-invariant" in result["motion_reference"]
 
 
-def test_hand_reference_does_not_accept_a_stationary_object_beside_a_moving_person():
+def test_relation_does_not_accept_a_stationary_object_beside_a_moving_person():
     history = CarriedRelationHistory(CarriedObjectConfig())
     for frame, t in enumerate((1.0, 1.2, 1.4)):
         result = history.update(
@@ -90,20 +90,31 @@ def test_hand_reference_does_not_accept_a_stationary_object_beside_a_moving_pers
                 t,
                 frame,
                 obj=(0.5, 0.2, 1.1),
-                hand_world_xyz=(0.5 * t, 0.2, 1.05),
             )
         )
     assert not result["confirmed"]
     assert not result["checks"]["co_motion"]
+    assert not result["checks"]["actual_object_translation"]
 
 
-@pytest.mark.parametrize("hand", [(1, 2), (1, np.nan, 3)])
-def test_invalid_hand_geometry_cannot_advance_relation_history(hand):
+@pytest.mark.parametrize("obj", [(1, 2), (1, np.nan, 3)])
+def test_invalid_geometry_cannot_advance_relation_history(obj):
     history = CarriedRelationHistory(CarriedObjectConfig())
     history.update(observation(1.0, 1))
     with pytest.raises(ValueError, match="finite same-frame"):
-        history.update(observation(1.2, 2, hand_world_xyz=hand))
+        history.update(observation(1.2, 2, obj=obj))
     assert len(history.samples[(1, 2)]) == 1
+
+
+@pytest.mark.parametrize(
+    "field,value",
+    [("source_frame_id", -1), ("source_frame_id", True), ("object_id", 1)],
+)
+def test_relation_requires_distinct_member_ids_and_valid_source_frame(field, value):
+    history = CarriedRelationHistory(CarriedObjectConfig())
+    with pytest.raises(ValueError, match="finite same-frame"):
+        history.update(replace(observation(1.0, 1), **{field: value}))
+    assert not history.samples
 
 
 def test_missing_instance_clears_relationship_and_repeated_epoch_rejected():

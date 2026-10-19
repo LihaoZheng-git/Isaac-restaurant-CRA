@@ -197,8 +197,9 @@ def augment_carried_object(
             "rejection": "person association/mass-prior gate failed after refinement",
         }
     if child is None:
-        state.trackers.pop("object", None)
-        state.last_times.pop("object", None)
+        # Keep identity/history through the existing short source-gap gate.
+        # No object assessment, factor, velocity or group overlay is published
+        # from it. A later fresh instance must reassociate within the bounds.
         detail["rejection"] = (
             "no independently accepted separate object; person-only assessment"
         )
@@ -317,7 +318,6 @@ def augment_carried_object(
             tuple(oxyz),
             hand_distance,
             proposed["wrist_confidence"],
-            hand_world_xyz=tuple(hand_world),
         )
     )
     detail["relationship"] = relation
