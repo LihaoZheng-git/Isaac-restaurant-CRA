@@ -729,3 +729,10 @@
   point-query diagnostics are not natural continuity validation. Recovery may
   reject an already unsafe candidate early, but every accepted candidate needs
   all original dense/padding queries. See docs/positive_fragment_continuity.md.
+- The 1091122 primary-8 s trial arrived/stopped (23.5167 s, .292790 m signed
+  monitor clearance, .002420 m drift, 216 fields/211 translating) and passed
+  human validation with six supported moving-kinetic rows. Overall passing
+  acceptance still failed identity/visible-arc/behind checks; an additional
+  insufficiently verified geometric track was selected. The two new extent
+  merges were environment geometry, not natural human-fragment acceptance.
+  Keep these distinctions, long-compute/source-gap failures and main hold.

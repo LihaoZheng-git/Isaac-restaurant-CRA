@@ -48,3 +48,21 @@ causal comparison of the continuity option. Its own 60-frame parked gate must
 pass before wheels. No native acceptance is claimed before that result.
 Use the original priors, lambda 1.25, RGB read-time approximation and oracle
 ego-reference provenance. The previous main/long-service holds remain.
+
+At 1091122 the 8 s native trial reached all waypoints at 23.5167 s, with
+.292790 m minimum signed monitor clearance and .002420 m stopping drift;
+216 live fields were committed, 211 while translating. Human validation passed
+all checks with six supported moving-kinetic rows. Overall acceptance still
+failed the passing-policy identity/visible-arc/behind-actor checks: IDs 74 and
+477 were selected, and the maximum independent centroid error was .798841 m.
+The controller must not treat geometric motion consistency as a fresh person
+association. This is arrival/stopping acceptance, not a validated visible bypass.
+
+Two new positive-extent events were recorded (.438/.440 m parent-centroid
+distances, 174 current supporting returns each, .1 s original ages). Their
+locations were environment geometry near (30.67,6.62), not the human. They
+exercise the positive-return dataflow but do not establish natural human-
+fragment continuity. The two other merges used the legacy route. Keep the
+remaining failed human-passing gate, intermittent supported perception and
+roughly 11 s compute/stale-source failures; no real-time claim or causal
+improvement over the differently timed 13 s cases follows.
