@@ -638,3 +638,28 @@
   calibrated body contact. Preserve the remaining view/height/plume limitations.
   Keep the chosen human contact model fixed in matched controller experiments;
   show contact-prior sensitivity and risk-dependent lambda separately.
+- The bounded restaurant comparison opt-in preserves raw CRA assessments and
+  records the separately applied field policy. Fixed-class uses only the fresh
+  person association or unknown fallback; an accepted SAM mask never invents a
+  low-risk generic class. The circular velocity-aware geometric CBF is a
+  different controller reference with conservative footprint/cell allowances,
+  source-age rejection, inferred tracker motion and labeled zero-motion priors;
+  its shadow risk field is never its wheel controller. Compare fixed-class and
+  CRA under identical MPC/CBF settings and lambda 1.25. Geometric CBF margin units
+  differ from h_full and its shadow perception overhead is not pure CBF timing.
+  The prespecified crossing variants use elapsed navigation time, independent
+  of robot progress; preserve the legacy robot-y trigger separately. Keep all
+  failed/missing reports and signed inflated-monitor overlap, distinct from
+  measured physical collision. See docs/restaurant_baseline_comparison.md.
+- The first complete matched pilot at 9220f4c retained six full passes (all
+  static/standing methods) and three crossing failures. CRA/geometric stopped
+  on unresolved old moving-body fragments; fixed-class arrived but had only
+  four supported moving-kinetic rows versus five required. Keep all failures,
+  sparse fresh perception and prior reliance; never relabel arrival/positive
+  clearance as full acceptance. Static fixed-class and CRA paths were identical;
+  the standing pair is one descriptive time/clearance tradeoff, not superiority.
+  An offline one-scan .18 m connectivity audit joined the same positive human
+  returns that .12 m split, using actor references only for scoring. It supplies
+  neither runtime geometry nor motion acceptance. Any explicit wider setting
+  must pass a new stationary gate and matched wheel trials with unchanged
+  priors, score/confidence formulas, lambda and continuity/freshness checks.

@@ -22,6 +22,10 @@ sys.path.insert(0, str(ROOT))
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument("--output", type=Path, required=True)
 parser.add_argument("--motion", action="store_true")
+parser.add_argument("--experiment-baseline", choices=("geometric_velocity_cbf", "fixed_class_safe_sage", "continuous_cra_safe_sage"),
+                    default="continuous_cra_safe_sage", help="explicit matched restaurant comparison; physical assessments always retained")
+parser.add_argument("--human-body-contact-prior", type=float,
+                    help="opt-in fresh-person blunt-body contact PRIOR, e.g. .10; not measured sharpness")
 parser.add_argument("--restaurant-scene", type=Path,
                     help="separate dressed restaurant scene; bounded 2.2 m real-bowl component route")
 parser.add_argument("--restaurant-layout-survey", type=Path,
@@ -38,6 +42,8 @@ parser.add_argument("--human-camera-raise-metres", type=float, default=0.,
                     help="explicit experimental RGB mount height increase, 0...6 m")
 parser.add_argument("--human-crossing-trigger-y", type=float, default=7.8,
                     help="explicit native actor-only trigger, world robot y 6.8..7.8; not a control/evidence input")
+parser.add_argument("--human-crossing-delay-seconds", type=float,
+                    help="opt-in exogenous actor start after navigation begins; shared timing across baselines, independent of robot progress")
 parser.add_argument("--human-walking-speed", type=float, default=.7,
                     help="explicit native actor speed .5..1 m/s; never estimator input")
 parser.add_argument("--human-cluster-radius", type=float, default=.12,
@@ -125,6 +131,19 @@ parser.add_argument(
     help="optimizer candidate age cap; every executed horizon still needs fresh exact validation",
 )
 args = parser.parse_args()
+if args.human_crossing_delay_seconds is not None and (
+    args.restaurant_human not in {"crossing", "continuous-crossing"}
+    or not math.isfinite(args.human_crossing_delay_seconds)
+    or not 0 <= args.human_crossing_delay_seconds <= 30
+):
+    parser.error("exogenous crossing delay requires crossing mode and 0..30 seconds")
+if args.experiment_baseline != "continuous_cra_safe_sage" and not (args.restaurant_scene and args.persistent_object_risk_map):
+    parser.error("matched baselines require the explicit persistent restaurant runner")
+if args.human_body_contact_prior is not None and (
+    not args.restaurant_human or not math.isfinite(args.human_body_contact_prior)
+    or not 0 < args.human_body_contact_prior < 1
+):
+    parser.error("body contact PRIOR requires a native human and a finite score strictly between 0 and 1")
 if (not math.isfinite(args.height_support_margin) or not .12 <= args.height_support_margin <= 1.
         or not math.isfinite(args.height_support_gap) or not .02 <= args.height_support_gap <= .20):
     raise ValueError("height support margin/gap must lie within [.12,1.] / [.02,.20] m")
@@ -475,6 +494,7 @@ def main():
         from robot.scene.restaurant_human_episode import RestaurantHumanEpisode
         human = RestaurantHumanEpisode(stage, mode=args.restaurant_human, output=args.output,
                                        trigger_robot_y=args.human_crossing_trigger_y, speed_mps=args.human_walking_speed,
+                                       crossing_delay_seconds=args.human_crossing_delay_seconds,
                                        carry_bowl=args.human_carry_bowl,
                                        carry_facing_crossing=args.human_carry_facing_crossing,
                                        upper_continuation=args.human_upper_continuation)
@@ -724,6 +744,7 @@ def main():
         ),
     )
     from robot.perception.object_height import ObjectHeightConfig
+    from robot.perception.human_body_contact import HumanBodyContactPriorConfig
 
     perception = LiveObjectPerception(
         segmenter=segmenter,
@@ -734,6 +755,10 @@ def main():
             "bounded adult-human navigation; visually associated configured mass interval, not calibration",
             mass_kg=args.human_mass_prior[0], lower_kg=args.human_mass_prior[1], upper_kg=args.human_mass_prior[2],
         ) if person is not None else None,
+        human_body_contact_config=HumanBodyContactPriorConfig(
+            score=args.human_body_contact_prior,
+        ) if args.human_body_contact_prior is not None else None,
+        experiment_baseline=args.experiment_baseline,
         calibration=calibration,
         class_policy=class_policy,
         guidance_policy=guidance,
@@ -1033,7 +1058,8 @@ def main():
         step()
     latest = None
     observation_frames = args.stationary_frames * (3 if args.restaurant_plume_diagnostic else 1)
-    for _ in range(1000 if args.restaurant_plume_diagnostic else 400):
+    for _ in range(max(1000 if args.restaurant_plume_diagnostic else 400,
+                       observation_frames * 10 + 40)):
         now = step()
         try:
             packet = capture(clean=(len(records) < args.stationary_frames
@@ -1177,7 +1203,7 @@ def main():
         gate["passed"] = stationary_ready = bool(stationary_ready and gate["bounded_fixture_checks"] and all(gate["bounded_fixture_checks"].values()))
         save_json("stationary-object-validation.json", object_summary)
     save_json("stationary-gate.json", gate)
-    print(json.dumps({key: value for key, value in gate.items() if key != "last_objects"}), flush=True)
+    print(json.dumps({key: value for key, value in gate.items() if key != "last_objects"}, default=json_default), flush=True)
     if not stationary_ready:
         controller.stop()
         raise RuntimeError("stationary restaurant component gate failed; wheels are blocked"
@@ -1440,6 +1466,8 @@ def main():
     )
     start_sim = float(timeline.get_current_time())
     navigation_active = True
+    if human is not None:
+        human.navigation_start_time = start_sim
     if args.moving_actor:
         actor_start_time = start_sim
     start_wall = time.perf_counter()
@@ -1659,7 +1687,7 @@ def main():
                         next_plan_due = now
             status = buffer.inspect(current_simulation_time_seconds=now)
             fresh = not status.fail_closed
-            if fresh and not planner.busy and now >= next_plan_due:
+            if fresh and args.experiment_baseline != "geometric_velocity_cbf" and not planner.busy and now >= next_plan_due:
                 reuse = buffer.reuse(current_simulation_time_seconds=now)
                 fresh = not reuse.fail_closed
                 next_plan_due = now + 0.75 * mpc.config.time_step
@@ -1683,7 +1711,21 @@ def main():
                 plan_id += 1
             stop_reason = None
             command = np.zeros(2)
-            if not fresh:
+            geometric_diagnostic = None
+            if args.experiment_baseline == "geometric_velocity_cbf":
+                from robot.evaluation.restaurant_baselines import geometric_cbf_command
+                if fresh:
+                    command, geometric_diagnostic = geometric_cbf_command(
+                        latest.field, latest.source_occupancy_grid, current,
+                        (nominal.linear_velocity, nominal.angular_velocity), footprint, now,
+                        alpha=stationary.CBF_GAMMA,
+                    )
+                    stop_reason = geometric_diagnostic["stop_reason"]
+                    if geometric_diagnostic["cbf_margin"] is not None and stop_reason is None:
+                        minimum_cbf_margin = min(minimum_cbf_margin, geometric_diagnostic["cbf_margin"])
+                else:
+                    stop_reason = "stale_field"
+            elif not fresh:
                 stop_reason = "stale_field"
             elif active_plan is None or not active_plan_lease.candidate_available(now):
                 stop_reason = "waiting_for_fresh_valid_plan"
@@ -1748,6 +1790,10 @@ def main():
                     "generation": buffer.generation,
                     "target_waypoint_index": waypoint.current_waypoint_index,
                     "stop_reason": stop_reason,
+                    "nominal_v": nominal.linear_velocity,
+                    "nominal_omega": nominal.angular_velocity,
+                    "experiment_baseline": args.experiment_baseline,
+                    "geometric_cbf": geometric_diagnostic,
                     "optimizer_candidate_source_age": None
                     if active_plan_lease is None
                     else now - active_plan_lease.source_timestamp_seconds,
@@ -1834,12 +1880,16 @@ def main():
         if args.persistent_object_risk_map
         else "bounded_conservative_navigation; four-factor availability reported separately",
         "passed": completed and scene_unchanged and root_unchanged_by_fixture,
+        "experiment_baseline": args.experiment_baseline,
+        "human_body_contact_prior_config": asdict(perception.human_body_contact_config) if perception.human_body_contact_config is not None else None,
         "human_navigation_validation": human_validation,
         "native_human_mode": args.restaurant_human,
         "human_lidar_cluster_radius_m": args.human_cluster_radius,
         "native_carried_bowl": args.human_carry_bowl,
         "native_human_upper_continuation": args.human_upper_continuation,
         "human_crossing_trigger_robot_world_y": args.human_crossing_trigger_y,
+        "human_crossing_delay_seconds": args.human_crossing_delay_seconds,
+        "actor_trigger_basis": "exogenous_navigation_elapsed_time" if args.human_crossing_delay_seconds is not None else "robot_world_y",
         "human_requested_walking_speed_mps": args.human_walking_speed,
         "experimental_camera_mount": {
             "upward_degrees": args.human_camera_upward_degrees,
@@ -1939,6 +1989,8 @@ def main():
         "immediate_replan_after_invalidations": args.immediate_replan,
         "verified_command_interval_seconds": mpc.config.time_step,
         "wall_seconds": time.perf_counter() - start_wall,
+        "navigation_simulation_seconds": now - start_sim,
+        "controller_scope": "circular_velocity_aware_cbf_nominal_omega_no_mpc; shadow_CRA_fields_for_matched_perception" if args.experiment_baseline == "geometric_velocity_cbf" else "online_unicycle_MPC_exact_DTCBF_geometry_and_analytical_CBF",
         "fixed_lambda": 1.25,
         "plume_control": args.plume_control,
         "restaurant_scene": str(SCENE_PATH) if args.restaurant_scene else None,
@@ -1992,7 +2044,9 @@ def main():
             "potential/thermal use explicit factor priors where unavailable; visual silhouette is not physical sharpness, hardness or injury severity",
             "all physical LiDAR occupancy retained with .15 s positive expiry; track-loss watchdog is bounded, not general occlusion or crowd support",
             "oracle ego pose/extrinsics/gravity; RGB acquisition is read-time approximation; ego deskew does not correct moving articulated actors",
-            "fixed lambda 1.25, unchanged nominal/exact MPC/DTCBF/analytical CBF; paced development, not real-time or causal CRA superiority",
+            ("geometric circular velocity-aware CBF reference; nominal omega retained, no MPC/DTCBF/h_full command; shadow fields retain lambda 1.25"
+             if args.experiment_baseline == "geometric_velocity_cbf" else
+             "fixed lambda 1.25, unchanged nominal/exact MPC/DTCBF/analytical CBF; paced development, not real-time or causal CRA superiority"),
             "renderer transform-history warning remains unresolved; separate carried-bowl physical assessment, calibrated load and moving-view plume remain unvalidated",
         ]
     save_json("report.json", report)

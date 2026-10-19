@@ -66,7 +66,7 @@ def restaurant_asset_checks(summary, target_name="FoodBowl"):
     speed = latest["attributes"]["motion"]["relative_speed_mps"]
     diagnostic = latest["diagnostics"]
     factors = diagnostic["factor_scores"]
-    return {
+    checks = {
         "target_owned_visual_instance":row["accepted_visual_updates"] >= 3
         and diagnostic["accepted_instance"] and diagnostic["policy_return_count"] > 0,
         "target_sensor_mass":mass["value"] is not None and mass["status"] in {"measured","inferred"},
@@ -75,6 +75,7 @@ def restaurant_asset_checks(summary, target_name="FoodBowl"):
         "target_current_motion":speed["value"] is not None and speed["status"] in {"measured","inferred"},
         "four_numeric_policy_scores":len(factors) == 4 and all(math.isfinite(item["score"]) and 0 <= item["score"] <= 1 for item in factors.values()),
     }
+    return {key: bool(value) for key, value in checks.items()}
 
 
 def load_authored_layout_monitor(survey_path, additions):

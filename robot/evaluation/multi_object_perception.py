@@ -467,6 +467,10 @@ def assess_all_objects(worker, packet):
                     "retained_occupancy_factor_priors",
                 )
             )
+    from robot.evaluation.restaurant_baselines import applied_field_policies
+    applied_guidance, baseline_audit = applied_field_policies(
+        getattr(worker, "experiment_baseline", None), policies, objects,
+    )
     cells = np.floor(
         (points - [worker.grid_config.minimum_x, worker.grid_config.minimum_y])
         / worker.grid_config.resolution
@@ -480,8 +484,7 @@ def assess_all_objects(worker, packet):
         class_safety_policy=worker.class_policy,
         config=worker.grid_config,
         track_safety_parameters={
-            key: value.guidance_parameters.safety_parameters
-            for key, value in policies.items()
+            key: value.safety_parameters for key, value in applied_guidance.items()
         },
     )
     pipeline_started = time.perf_counter()
@@ -496,9 +499,7 @@ def assess_all_objects(worker, packet):
             ),
         ),
         semantic_obstacles=semantics,
-        track_guidance_parameters={
-            key: value.guidance_parameters for key, value in policies.items()
-        },
+        track_guidance_parameters=applied_guidance,
     )
     pipeline_seconds = time.perf_counter() - pipeline_started
     temporal = 0.0
@@ -581,6 +582,8 @@ def assess_all_objects(worker, packet):
         },
         "measured_robot_velocity_world_xy": packet.measured_robot_velocity_world_xy,
         "mode": "persistent_multi_object_factor_priors",
+        "experiment_baseline": worker.experiment_baseline.value,
+        "applied_field_policies": baseline_audit,
         "object_count": len(objects),
         "objects": [item.diagnostics for item in objects],
         "carried_object_groups":carried_detail,
@@ -638,4 +641,5 @@ def assess_all_objects(worker, packet):
         raw["fusion"],
         diagnostics,
         tuple(objects),
+        grid,
     )

@@ -35,6 +35,14 @@ def test_real_mesh_gate_accepts_bounded_component_with_explicit_missing_priors()
     assert all(restaurant_asset_checks(_summary()).values())
 
 
+def test_failed_numpy_gate_values_are_json_serializable_booleans():
+    summary = _summary()
+    summary["fixtures"]["FoodBowl"]["accepted_visual_updates"] = np.int64(2)
+    checks = restaurant_asset_checks(summary)
+    assert all(type(value) is bool for value in checks.values())
+    assert not json.loads(json.dumps(checks))["target_owned_visual_instance"]
+
+
 @pytest.mark.parametrize("problem", ["no_mass","retained_mass","no_instance","no_points","only_two_frames","prior_contact","missing_factor","nonfinite"])
 def test_numeric_policies_do_not_replace_real_mesh_component_evidence(problem):
     summary=copy.deepcopy(_summary())

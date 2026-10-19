@@ -177,6 +177,23 @@ def test_stationary_gate_requires_actual_fresh_visual_mass_and_contact():
     assert not all(human_stationary_checks(records).values())
 
 
+def test_fresh_body_prior_has_separate_stationary_policy_gate():
+    from robot.perception.human_body_contact import HUMAN_BODY_CONTACT_SOURCE
+    records, _ = episode()
+    for r in records:
+        obj = r["objects"][0]
+        obj["diagnostics"]["factor_scores"]["contact"] = {
+            "mode": "configured_human_body_contact_prior",
+            "human_body_prior": {"status": "prior", "source": HUMAN_BODY_CONTACT_SOURCE,
+                "value": .1, "confidence": 0, "timestamp_seconds": r["sensor_timestamp"],
+                "evidence": ["track_id=7"]},
+        }
+    assert all(human_stationary_checks(records).values())
+    for r in records:
+        r["objects"][0]["diagnostics"]["factor_scores"]["contact"]["human_body_prior"]["timestamp_seconds"] -= 1
+    assert not all(human_stationary_checks(records).values())
+
+
 def test_standing_reference_rejects_translating_actor_and_wrong_world_velocity():
     records, truth = episode("standing")
     for r in truth:

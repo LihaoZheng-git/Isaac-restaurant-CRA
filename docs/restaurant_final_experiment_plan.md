@@ -91,3 +91,9 @@ This study supports the selected simulation restaurant scenes. It does not
 establish calibrated kilograms, physical sharpness, temperature, crowded tracking,
 real-time control, exact planar/unicycle equivalence to Safe-SAGE, or deployment
 safety. A plume is a visible RGB cue; no-plume observations do not establish cold.
+
+The first live baseline implementation and refined prespecified timing matrix
+are in [restaurant_baseline_comparison.md](restaurant_baseline_comparison.md).
+Exogenous crossing-time variants replace new lateral placement shifts for the
+first comparison; actor geometry remains unchanged. This prospective document
+and older component results are not completed comparative results.
