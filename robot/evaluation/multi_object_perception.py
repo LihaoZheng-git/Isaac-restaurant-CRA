@@ -146,6 +146,18 @@ def assess_all_objects(worker, packet):
                     chosen,
                     *fair[: memory.config.maximum_visual_tracks_per_update - 1],
                 }
+    if worker.carried_object_config is not None:
+        # The dedicated current RGB person/depth partition resolves articulated
+        # fragments and touching props. Do not also assess those same returns
+        # as generic independent instances; their occupancy/priors remain.
+        person_frame=worker.visual_person_frame(packet)
+        person_hits=np.zeros(len(projection.source_indices),bool)
+        for person in person_frame.detections:
+            if person.semantic_class=="person" and person.confidence>=.5:
+                person_hits |= person.mask[projection.pixel_indices_xy[:,1],projection.pixel_indices_xy[:,0]]
+        person_tracks={track_id for track_id in attempted if np.count_nonzero(person_hits &
+            (tracking.point_track_ids[projection.source_indices]==track_id))>=4}
+        attempted-=person_tracks
     if attempted:
         worker.segmenter.set_image(packet.rgb)
     world = packet.obstacle_xyz.copy()

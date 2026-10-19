@@ -242,7 +242,7 @@ class RestaurantHumanSensorDiagnostic:
                 maximum_visual_tracks_per_update=2,
             ),
             object_factor_prior_config=ObjectRiskPriorConfig(),
-            carried_object_config=CarriedObjectConfig() if carried_object_groups else None,
+            carried_object_config=CarriedObjectConfig(allow_occluding_subinstance=True) if carried_object_groups else None,
             pose_detector=pose_detector,
             object_height_config=ObjectHeightConfig() if carried_object_groups else None,
         )
@@ -404,6 +404,7 @@ class RestaurantHumanSensorDiagnostic:
                     "completion_age_sim_seconds": now - packet.sensor_timestamp_seconds,
                     "processing_wall_seconds": time.perf_counter() - start,
                     "carried_object_groups":result.diagnostics.get("carried_object_groups"),
+                    "occupancy_policies":result.diagnostics.get("occupancy_policies"),
                     "objects": [
                         {
                             "attributes": asdict(o.attributes),
@@ -424,6 +425,17 @@ class RestaurantHumanSensorDiagnostic:
                     sensor_time=packet.sensor_timestamp_seconds,camera_time=packet.camera_timestamp_seconds,
                     camera_frame_id=packet.camera_frame_id,robot_position_world_xy=packet.robot_position_world_xy,
                     robot_yaw=packet.robot_yaw,floor_reference_m=packet.floor_height_robot_m)
+                debug=getattr(getattr(self.worker,"carried_runtime_state",None),"debug_masks",None)
+                if debug and debug["source_frame_id"]==packet.camera_frame_id:
+                    overlay=packet.rgb[:,:,::-1].copy()
+                    for key,color in (("human",np.array([255,120,0])),("object",np.array([0,80,255]))):
+                        if debug[key] is not None:
+                            m=debug[key]
+                            overlay[m]=(.6*overlay[m]+.4*color).astype(np.uint8)
+                    cv2.imwrite(str(snapshots/f"{stem}-instances.png"),overlay)
+                    np.savez_compressed(snapshots/f"{stem}-masks.npz",human=debug["human"],
+                        object_mask=np.zeros_like(debug["human"]) if debug["object"] is None else debug["object"],
+                        source_frame_id=packet.camera_frame_id)
             with (self.output / "human-sensor-records.jsonl").open(
                 "a", encoding="utf-8"
             ) as stream:

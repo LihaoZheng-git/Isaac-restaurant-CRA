@@ -546,6 +546,12 @@ def main():
         report["carry_attachment_gate"] = carry_report
         report["passed"] &= carry_report["passed"]
         save("carry-validation.json", carry_report)
+    if args.carried_object_groups:
+        from robot.evaluation.carried_object_validation import summarize_carried_groups
+        grouped=summarize_carried_groups(sensor.records,carry.records)
+        report["carried_object_group_gate"]=grouped
+        report["passed"] &= grouped["passed"]
+        save("carried-object-validation.json",grouped)
     save("validation.json", report)
     print(json.dumps(report), flush=True)
     if not report["passed"]:
