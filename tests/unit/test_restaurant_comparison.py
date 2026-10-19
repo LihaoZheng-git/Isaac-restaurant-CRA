@@ -31,12 +31,18 @@ def test_runner_options_preserve_stationary_gate_and_human_scope():
         if trial["case"] != "static_aisle":
             assert "--static-occupancy-memory-prior" not in options
             assert "--human-body-contact-prior" in options
+        else:
+            assert options[options.index("--stationary-frames")+1] == "60"
+            assert "--sam-observed-context-box" in options
 
 
 def test_missing_report_and_negative_clearance_are_retained(tmp_path):
     trial = comparison_plan()[0]
     missing = extract_trial(tmp_path, trial)
     assert not missing["report_available"] and not missing["passed"]
+    (tmp_path / "stationary-gate.json").write_text(json.dumps({"passed": False}), encoding="utf-8")
+    blocked = extract_trial(tmp_path, trial)
+    assert blocked["reason"] == "stationary_gate_failed" and not blocked["motion_started"]
     (tmp_path / "report.json").write_text(json.dumps({"passed": False, "completed": False,
         "reason": "clearance_guard", "minimum_clearance_m": -.02}), encoding="utf-8")
     row = extract_trial(tmp_path, trial)

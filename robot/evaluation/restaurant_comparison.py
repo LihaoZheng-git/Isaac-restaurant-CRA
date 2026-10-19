@@ -42,7 +42,7 @@ def trial_options(trial):
     if trial["case"] == "static_aisle":
         options += ["--restaurant-scene", "scenes/generated/restaurant_service_v2.usda",
                     "--restaurant-route", "service", "--static-occupancy-memory-prior",
-                    "--stationary-frames", "18", "--visual-reassessment-interval", "5",
+                    "--sam-observed-context-box", "--stationary-frames", "60", "--visual-reassessment-interval", "5",
                     "--live-visual-tracks", "1"]
     else:
         mode = "standing" if trial["case"] == "standing_server" else "crossing"
@@ -110,7 +110,8 @@ def extract_trial(directory, trial):
         **trial, "directory": str(directory), "evidence_mode": "prior",
         "report_available": bool(report), "stationary_gate_passed": gate.get("passed"),
         "passed": report.get("passed", False), "arrived": report.get("completed", False),
-        "reason": report.get("reason", "missing_motion_report"),
+        "reason": report.get("reason", "stationary_gate_failed" if gate.get("passed") is False else "missing_motion_report"),
+        "motion_started": bool(commands or report),
         "minimum_signed_monitor_clearance_m": clearance,
         "monitor_overlap": None if clearance is None else clearance < 0,
         "collision_scope": "inflated independent geometry monitor; physical contact is not measured",

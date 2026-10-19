@@ -1058,7 +1058,8 @@ def main():
         step()
     latest = None
     observation_frames = args.stationary_frames * (3 if args.restaurant_plume_diagnostic else 1)
-    for _ in range(1000 if args.restaurant_plume_diagnostic else 400):
+    for _ in range(max(1000 if args.restaurant_plume_diagnostic else 400,
+                       observation_frames * 10 + 40)):
         now = step()
         try:
             packet = capture(clean=(len(records) < args.stationary_frames
@@ -1202,7 +1203,7 @@ def main():
         gate["passed"] = stationary_ready = bool(stationary_ready and gate["bounded_fixture_checks"] and all(gate["bounded_fixture_checks"].values()))
         save_json("stationary-object-validation.json", object_summary)
     save_json("stationary-gate.json", gate)
-    print(json.dumps({key: value for key, value in gate.items() if key != "last_objects"}), flush=True)
+    print(json.dumps({key: value for key, value in gate.items() if key != "last_objects"}, default=json_default), flush=True)
     if not stationary_ready:
         controller.stop()
         raise RuntimeError("stationary restaurant component gate failed; wheels are blocked"

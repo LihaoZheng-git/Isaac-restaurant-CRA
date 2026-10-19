@@ -60,6 +60,16 @@ cannot be triggered by controller progress in these matched trials. Standing
 and crossing use the same +15 degree mount, .2 s visual cadence, two visual
 slots and .10 body prior. Static uses its existing accepted bowl view/route.
 Every run repeats stationary perception acceptance before nonzero wheels.
+The first 18-frame static pilot failed the third method's component gate with
+only two fresh bowl associations and no confirmed motion on its last matched
+new track. Its two earlier navigation passes and failed zero-wheel attempt
+remain under `outputs/restaurant_baselines/pilot-v2/`; they do not form a
+complete comparative cell. The subsequent development recipe uses **60 frames
+and the audited observed-LiDAR SAM context-box retry for all three methods**.
+All original mask/ownership/three-observation and factor checks stay unchanged.
+This is a newly labeled initial-acquisition configuration, not a retroactive
+pass or a claim that one of those two changes alone fixes perception. Component
+observation history and current live field freshness remain separate.
 All cases retain a 90 s navigation limit, fixed .05 simulation pacing, 1000 QP /
 20 nonlinear-rescue iterations and .5 s optimizer candidate age; original field
 and execution expiry stay unchanged. No observation pauses are scheduled.
