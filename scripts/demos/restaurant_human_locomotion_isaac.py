@@ -22,6 +22,8 @@ parser.add_argument("--goal-x", type=float, default=29.8)
 parser.add_argument("--sensor-diagnostic", action="store_true")
 parser.add_argument("--carry-bowl", action="store_true",
                     help="native hand attachment / zero-wheel component; separate bowl perception remains unvalidated")
+parser.add_argument("--carried-object-groups",action="store_true",
+                    help="opt-in separate wrist-seeded object perception and maximum-member field policy; zero robot wheels")
 parser.add_argument("--continuous-crossing", action="store_true",
                     help="explicit carried-server circuit, no actor endpoint-stop claim; robot remains parked")
 parser.add_argument("--continuous-upper-continuation", action="store_true",
@@ -31,7 +33,7 @@ parser.add_argument("--carry-facing-crossing", action="store_true",
 parser.add_argument("--sensor-simulation-rate", type=float, default=0.1)
 parser.add_argument("--human-cluster-radius", type=float, default=.12,
                     help="explicit 3D connected-cluster radius .12...20 m; all sensor occupancy retained")
-parser.add_argument("--robot-view", choices=("approach", "approach-forward", "close", "crossing-approach"), default="approach")
+parser.add_argument("--robot-view", choices=("approach", "approach-forward", "close", "crossing-approach", "carried-front", "carried-diagonal"), default="approach")
 parser.add_argument("--camera-upward-degrees", type=float, default=0.)
 parser.add_argument("--camera-raise-metres", type=float, default=0.)
 parser.add_argument(
@@ -42,6 +44,10 @@ parser.add_argument(
     metavar=("KG", "LOWER", "UPPER"),
 )
 args = parser.parse_args()
+if args.carried_object_groups and not (args.carry_bowl and args.sensor_diagnostic and args.continuous_crossing):
+    parser.error("carried-object grouping requires the continuous carry sensor component")
+if args.robot_view in {"carried-front", "carried-diagonal"} and not args.carried_object_groups:
+    parser.error("the frontal parked pose is bounded to the carried-object sensor component")
 if not .12 <= args.human_cluster_radius <= .20 or (args.human_cluster_radius != .12 and not args.sensor_diagnostic):
     parser.error("3D radius .12...20 requires the native human sensor diagnostic")
 if args.carry_facing_crossing and not args.continuous_crossing:
@@ -147,6 +153,13 @@ def main():
     robot_yaw = math.pi / 2 if args.robot_view == "close" else SHORT_START_YAW
     if args.robot_view == "crossing-approach":
         robot_start, robot_yaw = (28.8, 7.4, SHORT_START_WORLD_XYZ[2]), math.pi / 2
+    if args.robot_view == "carried-front":
+        # Separate authored observation fixture only; not a navigation route,
+        # perception target, runtime mask, relationship or factor input.
+        robot_start, robot_yaw = (26.2, 9.3, SHORT_START_WORLD_XYZ[2]), 0.0
+    if args.robot_view == "carried-diagonal":
+        robot_start = (26.5, 7.4, SHORT_START_WORLD_XYZ[2])
+        robot_yaw = math.atan2(1.5, 2.8)
     if args.robot_view == "approach-forward":
         robot_yaw = math.pi / 2
     sources = {
@@ -319,6 +332,7 @@ def main():
             get_prim_planar_pose(stage, ROBOT_BASE_PRIM_PATH),
             mass_interval=args.human_mass_prior,
             cluster_radius_m=args.human_cluster_radius,
+            carried_object_groups=args.carried_object_groups,
         )
     phase = "idle_before"
     phase_start = timeline.get_current_time()
@@ -541,6 +555,12 @@ def main():
         report["carry_attachment_gate"] = carry_report
         report["passed"] &= carry_report["passed"]
         save("carry-validation.json", carry_report)
+    if args.carried_object_groups:
+        from robot.evaluation.carried_object_validation import summarize_carried_groups
+        grouped=summarize_carried_groups(sensor.records,carry.records)
+        report["carried_object_group_gate"]=grouped
+        report["passed"] &= grouped["passed"]
+        save("carried-object-validation.json",grouped)
     save("validation.json", report)
     print(json.dumps(report), flush=True)
     if not report["passed"]:

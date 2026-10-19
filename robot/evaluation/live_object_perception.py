@@ -226,6 +226,8 @@ class LiveObjectPerception:
         person_detector=None,
         human_mass_prior_config=None,
         object_height_config=None,
+        carried_object_config=None,
+        pose_detector=None,
     ):
         self.segmenter, self.mass_estimator, self.contact_detector = (
             segmenter,
@@ -264,6 +266,15 @@ class LiveObjectPerception:
         if object_height_config is not None and (ground_prior_scope is not None or fall_surface_config is not None):
             raise ValueError("general object height and legacy spherical support modes must be selected separately")
         self.object_height_config = object_height_config
+        from robot.perception.carried_object import CarriedObjectConfig
+        if (carried_object_config is None) != (pose_detector is None):
+            raise ValueError("carried-object mode requires both config and RGB pose detector")
+        if carried_object_config is not None and (
+            not isinstance(carried_object_config,CarriedObjectConfig)
+            or person_detector is None or persistent_property_config is None
+            or static_occupancy_memory_prior_scope is not None):
+            raise ValueError("carried-object mode requires fresh person/multi-object inputs and no static memory")
+        self.carried_object_config, self.pose_detector = carried_object_config, pose_detector
         if not isinstance(cluster_in_3d, bool):
             raise TypeError("3D clustering opt-in must be boolean")
         CameraLidarFusionConfig(
@@ -707,6 +718,7 @@ class LiveObjectPerception:
         image_is_set=False,
         candidate_persistent=None,
         shared_contact_frame=None,
+        proposal_override=None,
     ):
         timestamp = packet.camera_timestamp_seconds
         frame = SemanticDetectionFrame(
@@ -725,7 +737,7 @@ class LiveObjectPerception:
         if observable:
             if not image_is_set:
                 self.segmenter.set_image(packet.rgb)
-            proposal = self.segmenter.propose(
+            proposal = proposal_override or self.segmenter.propose(
                 tracking.point_track_ids, projection, track_id=target.track_id
             )
             sam_candidates.append(

@@ -589,4 +589,32 @@
   configured target-selection and oracle-frame-assisted sensor diagnostics,
   not moving-human support, carried-bowl ownership or new wheel acceptance.
   Preserve sparse-support/startup failures and unchanged calibration/main hold.
-  See docs/object_height_estimation.md; carried-object association is next.
+  See docs/object_height_estimation.md for its bounded component gate.
+- The opt-in carried-object component separates current positive human/object
+  RGB/SAM/LiDAR ownership before independent mass, motion and factor assessment.
+  Person mass remains the adult prior; the prop uses its own rough-mass network.
+  Confirmed groups apply maximum member phi over both members' occupancy only;
+  never mix human mass with prop height or spread the maximum to other obstacles.
+  RGB COCO wrists are association cues, not measured joints or grasp evidence.
+  Short identity continuity does not publish missing member factors or motion.
+  The bounded rotation-invariant relation requires both members to translate,
+  stable separation and limited net relative centroid motion; preserve its source
+  gaps/ambiguity gates. Wrist-depth motion was rejected after observed jitter.
+  The two-wrist compact mode must never silently fall back to the broader
+  one-wrist scene-component prototype; its observed background-mask error is
+  preserved. Only the explicit two-wrist mode has the later component gate.
+  Keep failed side-view trials and their independently wrong/missing partitions.
+  Separate bowl fall/plume evidence and new grouped wheel acceptance remain
+  unvalidated until their own gates pass. Main's existing hold remains unchanged.
+  See docs/carried_object_groups.md for the separate parked component results.
+- The diagonal zero-wheel carried-group component passed with 167 fields, 26
+  separate assessments and three confirmed moving groups (7.6/7.8/7.9 s), .158226 m
+  maximum bowl-centroid error and .183333 s group completion age. Its explicit
+  `(26.5,7.4)`/atan2(1.5,2.8) parked view and crossing-facing actor initialization
+  are authored scenario choices, not estimator inputs. This brief interval is
+  not continuous carrying coverage or grouped robot navigation. Preserve the
+  side-view failures and blocked direct-frontal startup. Human contact silhouette
+  proxy saturation made all three group phis 1.0; potential/plume stayed .25
+  uncertainty priors. Keep that factor-specific finding, the adult mass prior,
+  rough bowl mass, oracle frame references and main hold explicit; do not tune
+  confidence/scales/priors to make the group less risky.
