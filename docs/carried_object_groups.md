@@ -1,5 +1,10 @@
 # Human and carried-object CRA grouping
 
+The user subsequently approved a separate low nonzero human-body contact prior.
+See [human_body_contact.md](human_body_contact.md) for its explicit opt-in and
+new component results. The outline-based results below, including group phi 1.0,
+remain the original legacy-model experiment and are not relabeled.
+
 This opt-in component estimates a person and a compact carried object separately,
 then applies `max(phi_person, phi_object)` over both members' observed occupancy
 when their carrying relationship passes the visual/metric association gates.

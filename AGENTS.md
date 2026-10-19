@@ -618,3 +618,23 @@
   uncertainty priors. Keep that factor-specific finding, the adult mass prior,
   rough bowl mass, oracle frame references and main hold explicit; do not tune
   confidence/scales/priors to make the group less risky.
+- The user's later decision authorizes a separate explicit human-body contact
+  model: default .10 nonzero blunt-body PRIOR after fresh unambiguous person/SAM
+  association. This supersedes the generic outline policy only in that opt-in
+  scope, not physical sharpness/hardness, accepted part cues or carried objects.
+  Preserve raw outline scores/old phi=1 results and their original source times;
+  never raise measurement confidence to select the prior. Retained human mass,
+  class text or an authored role alone cannot select it. Keep other factors,
+  unmatched occupancy, group maximum, primary lambda and all safety checks
+  unchanged. A separately accepted edge uses its original uncertainty policy
+  and wins over the body prior when stronger. This new declared model is not
+  physical contact calibration or new wheel acceptance; retain the legacy mode
+  by omitting the explicit config/diagnostic flag. See docs/human_body_contact.md.
+- The .10 body-prior zero-wheel component passed with 167 fields, 108 fresh
+  human-prior rows (92 moving), no nonhuman assignment and preserved raw scores
+  (15 were saturated). Three confirmed groups used bowl phis .822696/.821154/
+  .822236 over person phis about .609. This is prior-assisted same-frame policy
+  dataflow, not new grouped navigation, continuous association coverage or
+  calibrated body contact. Preserve the remaining view/height/plume limitations.
+  Keep the chosen human contact model fixed in matched controller experiments;
+  show contact-prior sensitivity and risk-dependent lambda separately.
