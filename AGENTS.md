@@ -675,3 +675,24 @@
   evidence. These prior-assisted pilots establish neither CRA superiority nor
   the main branch's complete fresh moving four-factor gate. No long service
   demonstration or standing actor correction has been implemented by this step.
+- The opt-in motion-aware passing selector uses current LiDAR geometry/inferred
+  world velocity to choose a trailing tangent for one separated crossing. Its
+  same-track side memory is controller policy, never retained physical evidence;
+  original eight-second selection expiry, identity/source-gap release and all
+  physical freshness gates remain. It changes neither nominal waypoints, CRA
+  factors, flux mapping, occupancy nor lambda 1.25. Both field controllers can
+  use it; geometric CBF keeps its separate wheel controller. Preserve the oracle
+  ego-reference and read-time RGB-clock limitations. See docs/motion_aware_passing.md.
+- Two mirrored native-human zero-wheel gates passed, including the separate
+  +.60 m level-camera/.20 m connectivity component. The three later 13 s timed
+  wheel attempts at fb8d8af all failed full acceptance: v1 policy-off arrived but
+  had zero supported moving kinetic rows; v1 policy-on stopped on an old body
+  fragment; raised-camera v2 policy-on stopped on a newer unresolved fragment.
+  High-quality boundary-truncated masks remained rejected and human mass expired
+  at its original three-second limit. Preserve those failures, safe stops,
+  latency rejections and labeled priors. The selected trailing side did not
+  produce the required .20 m moving-encounter curve. PR #137 stays draft and
+  unmerged; earlier 8 s crossing acceptance is not this new fixture's acceptance.
+  A proactive guidance-tracking MPC objective is a pending research choice,
+  not implemented or authorized by these diagnostics. Keep the main and long
+  service holds, unchanged evidence/continuity gates and original comparisons.
