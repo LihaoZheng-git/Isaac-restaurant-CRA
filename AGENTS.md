@@ -745,3 +745,10 @@
   thread limits change merely by profiling. Partial-duration profile trials
   are not arrival acceptance. Diagnose the numeric workers before changing
   temporal forecasting, safety checks or objectives. See docs/observed_human_guidance.md.
+- The native partial runtime profile located repeated scalar interpolation as
+  the dominant planner workload (22.5 million calls), not a demonstrated BLAS
+  issue. Batched trajectory sampling retains independent scalar-reference
+  parity tests and the original field/domain/yaw-mask/temporal gates; no fields
+  are cached across calls. Its 5.95x zero-wheel sampling benchmark and repeated
+  virtual arrival are bounded numeric diagnostics, not native real-time or
+  moving-human bypass acceptance. Keep all exact safety/freshness checks.

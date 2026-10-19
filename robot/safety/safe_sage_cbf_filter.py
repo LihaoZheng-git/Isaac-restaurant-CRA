@@ -37,8 +37,10 @@ from robot.safety.safe_sage_configuration_space import (
 )
 from robot.safety.safe_sage_h_full import SafeSAGEHFullResult
 from robot.safety.safe_sage_temporal_derivative import (
+    SafeSAGETemporalDerivativeResult,
     TemporalSafetyDerivativeInput,
     sample_temporal_safety_derivative,
+    validate_temporal_safety_derivative,
 )
 
 
@@ -544,9 +546,9 @@ class SafeSAGECBFSafetyFilter:
     ) -> tuple[SafeSAGEConstraintEvaluation, ...]:
         """Sample a trajectory with one field validation per call.
 
-        This uses the same scalar interpolation, yaw-mask convention and
-        temporal checks as ``evaluate_constraint``. Nothing is cached across
-        calls: a replacement or invalid field is validated again.
+        Interpolation is batched with the scalar API's cell-center, yaw-knot
+        and unsafe-mask conventions. Nothing is cached across calls: a
+        replacement or invalid field is validated again.
         """
 
         states = np.asarray(query_states_grid, dtype=np.float64)
@@ -556,16 +558,91 @@ class SafeSAGECBFSafetyFilter:
             raise ValueError("query_states_grid must contain only finite values.")
         guidance_sequence = tuple(guidance_fields)
         _validate_field_alignment(configuration_space, h_full, guidance_sequence)
+        grid = configuration_space.occupancy_grids[0]
+        temporal = validate_temporal_safety_derivative(
+            temporal_safety_derivative,
+            h_full=h_full,
+            grid_config=grid.config,
+        )
+        sampler = _TrajectoryFieldSampler(
+            states, grid=grid, yaw_count=h_full.yaw_slice_count
+        )
+        safety, spatial_gradient, interpolant_yaw = sampler.scalar_with_gradient(
+            h_full.values
+        )
+        yaw_derivative = sampler.scalar(h_full.yaw_derivatives)
+        tolerance = self.config.numerical_tolerance
+        interpolant_yaw = np.where(
+            sampler.yaw_weight <= tolerance, yaw_derivative, interpolant_yaw
+        )
+        guidance = sampler.guidance(guidance_sequence)
+        temporal_values = (
+            sampler.scalar(temporal.values)
+            if isinstance(temporal, SafeSAGETemporalDerivativeResult)
+            else np.full(len(states), temporal, dtype=np.float64)
+        )
+        masks = h_full.dirichlet_boundary_masks
+        boundary = (
+            (sampler.yaw_weight <= 0.5 + tolerance)
+            & masks[sampler.lower_yaw, sampler.rows, sampler.columns]
+        ) | (
+            (sampler.yaw_weight >= 0.5 - tolerance)
+            & masks[sampler.upper_yaw, sampler.rows, sampler.columns]
+        )
+        guidance_norm = np.linalg.norm(guidance, axis=1)
+        denominator = np.linalg.norm(spatial_gradient, axis=1) + (
+            self.config.temporal_scaling_epsilon
+            * (1.0 - np.exp(-self.config.temporal_scaling_kappa * np.maximum(0.0, safety)))
+        )
+        scaling = np.where(guidance_norm > 0.0, 1.0, 0.0)
+        np.divide(
+            guidance_norm,
+            denominator,
+            out=scaling,
+            where=denominator > np.finfo(np.float64).eps,
+        )
+        scaling = np.minimum(scaling, 1.0)
+        scaled_temporal = scaling * temporal_values
+        rhs = -self.config.gamma * np.maximum(0.0, safety) - scaled_temporal
         return tuple(
-            self._evaluate_aligned_constraint(
-                state[:2],
-                float(state[2]),
-                configuration_space=configuration_space,
-                h_full=h_full,
-                guidance_fields=guidance_sequence,
-                temporal_safety_derivative=temporal_safety_derivative,
+            SafeSAGEConstraintEvaluation(
+                query_position_grid_xy=(float(state[0]), float(state[1])),
+                query_yaw_radians=float(state[2]),
+                query_cell=(int(sampler.rows[i]), int(sampler.columns[i])),
+                lower_yaw_slice=int(sampler.lower_yaw[i]),
+                upper_yaw_slice=int(sampler.upper_yaw[i]),
+                yaw_interpolation_weight=float(sampler.yaw_weight[i]),
+                sampled_safety_value=float(safety[i]),
+                sampled_gradient=(
+                    float(spatial_gradient[i, 0]),
+                    float(spatial_gradient[i, 1]),
+                    float(yaw_derivative[i]),
+                ),
+                interpolant_gradient=(
+                    float(spatial_gradient[i, 0]),
+                    float(spatial_gradient[i, 1]),
+                    float(interpolant_yaw[i]),
+                ),
+                sampled_guidance_grid_xy=(float(guidance[i, 0]), float(guidance[i, 1])),
+                temporal_safety_derivative=float(temporal_values[i]),
+                temporal_scaling=float(scaling[i]),
+                scaled_temporal_safety_derivative=float(scaled_temporal[i]),
+                constraint_normal=(
+                    float(guidance[i, 0]),
+                    float(guidance[i, 1]),
+                    float(yaw_derivative[i]),
+                ),
+                constraint_right_hand_side=float(rhs[i]),
+                query_on_unsafe_boundary=bool(boundary[i]),
+                unsafe_reason=(
+                    "unsafe_configuration_boundary"
+                    if boundary[i]
+                    else "negative_safety_value"
+                    if safety[i] < -tolerance
+                    else None
+                ),
             )
-            for state in states
+            for i, state in enumerate(states)
         )
 
     def _evaluate_aligned_constraint(
@@ -991,6 +1068,118 @@ def _sample_periodic_scalar_and_spatial_gradient(
         np.asarray(sampled_gradient, dtype=np.float64),
         float(yaw_derivative),
     )
+
+
+class _TrajectoryFieldSampler:
+    """One checked coordinate calculation shared by all trajectory fields.
+
+    The scalar public API remains independent as an interpolation reference.
+    No field arrays are copied or retained across evaluations.
+    """
+
+    def __init__(self, states: np.ndarray, *, grid, yaw_count: int) -> None:
+        config = grid.config
+        column = (states[:, 0] - config.minimum_x) / config.resolution
+        row = (states[:, 1] - config.minimum_y) / config.resolution
+        if np.any(
+            (states[:, 0] < config.minimum_x)
+            | (states[:, 0] >= config.maximum_x)
+            | (states[:, 1] < config.minimum_y)
+            | (states[:, 1] >= config.maximum_y)
+        ):
+            raise ValueError("query_position_grid_xy lies outside the local grid.")
+        self.rows = np.floor(row).astype(np.int64)
+        self.columns = np.floor(column).astype(np.int64)
+        row, column = row - 0.5, column - 0.5
+        tolerance = 1e-9
+        if np.any(
+            (row < -tolerance)
+            | (row > config.row_count - 1 + tolerance)
+            | (column < -tolerance)
+            | (column > config.column_count - 1 + tolerance)
+        ):
+            raise ValueError(
+                "query_position_grid_xy must lie within the grid-cell-center domain."
+            )
+        row = np.clip(row, 0.0, config.row_count - 1)
+        column = np.clip(column, 0.0, config.column_count - 1)
+        self.r0, self.c0 = (
+            np.floor(row).astype(np.int64),
+            np.floor(column).astype(np.int64),
+        )
+        self.r1 = np.minimum(self.r0 + 1, config.row_count - 1)
+        self.c1 = np.minimum(self.c0 + 1, config.column_count - 1)
+        self.rf, self.cf = (row - self.r0)[:, None], (column - self.c0)[:, None]
+        self.resolution = config.resolution
+        self.yaw_spacing = math.tau / yaw_count
+        wrapped = (states[:, 2] + math.pi) % math.tau - math.pi
+        position = (wrapped + math.pi) / self.yaw_spacing
+        floor_position = np.floor(position)
+        self.lower_yaw = floor_position.astype(np.int64) % yaw_count
+        self.upper_yaw = (self.lower_yaw + 1) % yaw_count
+        self.yaw_weight = position - floor_position
+        self.yaws = np.column_stack((self.lower_yaw, self.upper_yaw))
+
+    def _corners(self, values: np.ndarray) -> tuple[np.ndarray, ...]:
+        return tuple(
+            values[self.yaws, rows[:, None], columns[:, None]]
+            for rows, columns in (
+                (self.r0, self.c0),
+                (self.r0, self.c1),
+                (self.r1, self.c0),
+                (self.r1, self.c1),
+            )
+        )
+
+    def _spatial_sample(self, corners: tuple[np.ndarray, ...]) -> np.ndarray:
+        v00, v01, v10, v11 = corners
+        lower = (1.0 - self.cf) * v00 + self.cf * v01
+        upper = (1.0 - self.cf) * v10 + self.cf * v11
+        return (1.0 - self.rf) * lower + self.rf * upper
+
+    def _yaw_sample(self, values: np.ndarray) -> np.ndarray:
+        return (1.0 - self.yaw_weight) * values[:, 0] + self.yaw_weight * values[:, 1]
+
+    def scalar(self, values: np.ndarray) -> np.ndarray:
+        return self._yaw_sample(self._spatial_sample(self._corners(values)))
+
+    def scalar_with_gradient(
+        self, values: np.ndarray
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        corners = self._corners(values)
+        sampled = self._spatial_sample(corners)
+        v00, v01, v10, v11 = corners
+        dx = ((1.0 - self.rf) * (v01 - v00) + self.rf * (v11 - v10)) / self.resolution
+        dy = ((1.0 - self.cf) * (v10 - v00) + self.cf * (v11 - v01)) / self.resolution
+        return (
+            self._yaw_sample(sampled),
+            np.column_stack((self._yaw_sample(dx), self._yaw_sample(dy))),
+            (sampled[:, 1] - sampled[:, 0]) / self.yaw_spacing,
+        )
+
+    def guidance(self, fields: tuple[LaplaceGuidanceFieldResult, ...]) -> np.ndarray:
+        # Group by yaw instead of stacking/copying every full vector grid for
+        # each optimizer trajectory. Each query still samples both yaw slices.
+        sampled = np.empty(self.yaws.shape + (2,), dtype=np.float64)
+        for yaw in np.unique(self.yaws):
+            rows, slots = np.nonzero(self.yaws == yaw)
+            values = fields[int(yaw)].vectors_robot_xy
+            corners = tuple(
+                values[r[rows], c[rows]]
+                for r, c in (
+                    (self.r0, self.c0),
+                    (self.r0, self.c1),
+                    (self.r1, self.c0),
+                    (self.r1, self.c1),
+                )
+            )
+            v00, v01, v10, v11 = corners
+            cf, rf = self.cf[rows], self.rf[rows]
+            lower = (1.0 - cf) * v00 + cf * v01
+            upper = (1.0 - cf) * v10 + cf * v11
+            sampled[rows, slots] = (1.0 - rf) * lower + rf * upper
+        weight = self.yaw_weight[:, None]
+        return (1.0 - weight) * sampled[:, 0] + weight * sampled[:, 1]
 
 
 def _bilinear_sample_cell_centers(
