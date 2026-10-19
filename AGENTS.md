@@ -663,3 +663,15 @@
   neither runtime geometry nor motion acceptance. Any explicit wider setting
   must pass a new stationary gate and matched wheel trials with unchanged
   priors, score/confidence formulas, lambda and continuity/freshness checks.
+- The explicit .18 m human recipe subsequently passed a new zero-wheel bare
+  crossing and all three timed-crossing controller trials. The six selected
+  human comparisons at d0ed2a9 recorded six robot arrivals but only five full
+  passes: geometric standing failed the unchanged .25 m native-idle root-drift
+  bound at .286741 m, despite passing robot stopping/perception checks. Preserve
+  that failure, the earlier .12 m failures, sparse visual coverage and factor
+  priors. Do not loosen the bound, truncate observations or select favorable
+  idle repetitions. Validate a newly declared full-duration standing fixture
+  before replicated paper collection; an authored root anchor is not sensor
+  evidence. These prior-assisted pilots establish neither CRA superiority nor
+  the main branch's complete fresh moving four-factor gate. No long service
+  demonstration or standing actor correction has been implemented by this step.
