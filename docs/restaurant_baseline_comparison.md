@@ -124,3 +124,70 @@ seeing results to improve a method.
 Long-route field transitions, payload transport, carried-group wheel control
 and moving-camera plume acceptance are outside this comparison gate. Main's
 separate strict fresh-perception merge hold remains unchanged.
+
+## First complete pilot: actual results, not final paper collection
+
+`outputs/restaurant_baselines/pilot-v3/` collected all nine attempted trials
+at source **9220f4c**. All three case cells matched the invocation contract,
+actual model hashes, route, scene hashes, source handling, priors, mount,
+clustering, control budgets and lambda. The post-collection extraction under
+`pilot-v3-analysis/` makes acceptance failures after arrival explicit; original
+reports and `comparison.json` are preserved. One trial per method/case is
+descriptive and does not establish statistical superiority.
+
+| Case | Method | Full acceptance | Navigation simulation seconds | Minimum independent monitor clearance (m) |
+| --- | --- | --- | --- | --- |
+| Static aisle | Geometric CBF | Pass | 23.867 | 1.213 |
+| Static aisle | Fixed-class Safe-SAGE | Pass | 20.500 | 1.219 |
+| Static aisle | CRA + Safe-SAGE | Pass | 20.500 | 1.219 |
+| Standing server | Geometric CBF | Pass | 25.150 | .255 |
+| Standing server | Fixed-class Safe-SAGE | Pass | 21.917 | .222 |
+| Standing server | CRA + Safe-SAGE | Pass | 23.100 | .273 |
+| Timed crossing | Geometric CBF | Fail: lost-track stop | 14.350 (abort) | .643 |
+| Timed crossing | Fixed-class Safe-SAGE | Fail: perception coverage after arrival | 22.533 | .309 |
+| Timed crossing | CRA + Safe-SAGE | Fail: lost-track stop | 14.750 (abort) | .709 |
+
+Thus **six full passes and three failures** were retained. Seven robots reached
+their goals, but fixed-class crossing had only four supported steady-moving
+kinetic rows versus the unchanged requirement of five. CRA crossing also had
+four, and geometric crossing had six; all three passed the median motion-error
+checks. Positive clearance and numerical phi never replace full acceptance.
+
+Static fixed-class and CRA paths/times were identical: this is a wide-aisle
+negative control, not a demonstrated CRA advantage. Standing CRA had about
+5 cm more monitor clearance and 1.18 s more travel time than fixed-class in
+this pair. Geometric CBF had 178 fail-closed command samples (about 2.97 sim s)
+in the static case; rejected margins were materially negative, not rounding
+noise. Its circular model and margin units remain distinct from the primary
+fixed-class/CRA comparison. All these runs are prior-assisted and simulation
+paced. Sparse fresh masks and numerous environmental factor priors remain in
+the full streams; numeric completeness is not complete physical estimation.
+
+### Crossing limitation and bounded next diagnostic
+
+CRA stopped on track626's former `(28.716,9.066)` position, originally seen at
+18.1 s and missing 4.7 s when the robot entered its 1.2 m watch region.
+Geometric CBF stopped on track596's former `(29.334,9.003)` position, missing
+5.0 s. Both had finite CRA policies; the unresolved positive geometry, rather
+than missing factor scores, caused the stops. Do not delete those observations,
+extend merge/source clocks or call the stops successful arrivals.
+
+An **offline, one-scan** clustering audit used the nearest copied original scans
+(18.2 / 18.1 s). At .12 m, the independently selected human region split into
+854+79 returns and 903+112 returns (plus three unclustered). At .18 m, those
+same 933 / 1,018 positive returns formed one component, with no extra-region
+returns in those selected components; .20 m gave the same body component.
+The actor reference selects the scoring region only and never supplies runtime
+geometry/factors. This supports testing the existing explicit .18 m setting,
+not a repaired identity history or new motion acceptance. The radius is not a
+mass, confidence, risk, safety-distance or unknown-evidence adjustment.
+
+Audit: `outputs/restaurant_baselines/crossing-cluster-audit.json`. Validate a
+bare crossing with the robot parked before any new wheel trials; retain every
+failed original case. A later comparison must share its newly declared
+configuration across methods. Broad occlusion/crowd tracking, articulated
+free-space inference and general body reconstruction remain outside this gate.
+
+The **75-trial replicated collection is implemented but has not been run**.
+Resolve the selected crossing's continuity/kinetic coverage before spending
+that collection. No long service mission was started, and main stays unchanged.

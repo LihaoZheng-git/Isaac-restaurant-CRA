@@ -58,6 +58,12 @@ def test_comparison_loads_explicit_policy_instead_of_legacy_field_defaults():
     assert comparison.parameters_for("person").tangential_strength == 1.25
 
 
+def test_api_rejects_comparison_selector_without_object_map():
+    from test_live_object_perception import worker
+    with pytest.raises(ValueError, match="object-map"):
+        worker(experiment_baseline="fixed_class_safe_sage")
+
+
 def geometric_fixture(distance=1., velocity=(-.5, 0.), anchor_yaw=0.):
     config = LocalOccupancyGridConfig(resolution=.1, minimum_x=0, maximum_x=3,
                                     minimum_y=-.05, maximum_y=.05)

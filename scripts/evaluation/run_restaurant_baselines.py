@@ -64,6 +64,11 @@ def main():
         done = directory / "execution.json"
         selected = (not args.case or trial["case"] in args.case) and (not args.baseline or trial["baseline"] in args.baseline)
         if args.execute and selected and not done.exists() and not (args.output / "STOP").exists():
+            current_revision = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip()
+            current_dirty = bool(subprocess.check_output(["git", "status", "--porcelain"], cwd=ROOT, text=True).strip())
+            if current_revision != revision or current_dirty:
+                (args.output / "STOP").write_text("Source revision changed during collection; remaining trials were not started.\n", encoding="utf-8")
+                raise RuntimeError("frozen source changed; retain completed trials and use a new output root")
             directory.mkdir(parents=True, exist_ok=True)
             if (directory / "stationary-fields.json").exists() or (directory / "live-fields.jsonl").exists():
                 raise RuntimeError(f"unfinished trial artifacts retained at {directory}; use a new output root for a retry")

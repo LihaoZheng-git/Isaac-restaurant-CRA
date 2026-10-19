@@ -114,12 +114,21 @@ def extract_trial(directory, trial):
                     or abs(c["omega"] - c.get("nominal_omega", c["omega"])) > 1e-6 for c in commands]
     reasons = [c.get("stop_reason") for c in commands]
     clearance = report.get("minimum_clearance_m")
+    failed_checks = {
+        name: [key for key, passed in (report.get(name) or {}).get("checks", {}).items() if not passed]
+        for name in ("human_navigation_validation", "live_relative_motion_validation")
+    }
+    reason = report.get("reason", "stationary_gate_failed" if gate.get("passed") is False else "missing_motion_report")
+    if report.get("completed") and not report.get("passed"):
+        reason = "acceptance_failed_after_arrival"
     return {
         **trial, "directory": str(directory), "evidence_mode": "prior",
         "invocation_contract_sha256": invocation.get("contract_sha256"),
         "report_available": bool(report), "stationary_gate_passed": gate.get("passed"),
         "passed": report.get("passed", False), "arrived": report.get("completed", False),
-        "reason": report.get("reason", "stationary_gate_failed" if gate.get("passed") is False else "missing_motion_report"),
+        "reason": reason,
+        "navigation_termination_reason": report.get("reason"),
+        "failed_validation_checks": {key:value for key,value in failed_checks.items() if value},
         "motion_started": bool(commands or report),
         "minimum_signed_monitor_clearance_m": clearance,
         "monitor_overlap": None if clearance is None else clearance < 0,
@@ -146,7 +155,12 @@ def extract_trial(directory, trial):
             "experiment_baseline", "fixed_lambda", "nominal_route_local_xy", "scene_source_sha256",
             "simulation_rate_limit", "qp_iteration_limit", "nonlinear_rescue_iteration_limit",
             "planner_candidate_maximum_age_seconds", "human_crossing_delay_seconds",
-            "human_body_contact_prior_config", "experimental_camera_mount")},
+            "human_body_contact_prior_config", "experimental_camera_mount", "human_mass_prior_config",
+            "object_factor_prior_risk", "persistent_property_config", "temporal_evidence_config",
+            "maximum_simulation_seconds", "human_lidar_cluster_radius_m", "native_human_mode",
+            "human_requested_walking_speed_mps", "restaurant_route", "lidar_ego_motion_correction",
+            "plume_view_fov_degrees")}
+            | {"weight_sha256": {name:info["sha256"] for name,info in gate.get("weights", {}).items()}},
     }
 
 
@@ -163,7 +177,11 @@ def comparison_summary(rows):
     matches = []
     common = ("fixed_lambda", "nominal_route_local_xy", "scene_source_sha256", "simulation_rate_limit",
               "qp_iteration_limit", "nonlinear_rescue_iteration_limit", "planner_candidate_maximum_age_seconds",
-              "human_crossing_delay_seconds", "human_body_contact_prior_config", "experimental_camera_mount")
+              "human_crossing_delay_seconds", "human_body_contact_prior_config", "experimental_camera_mount",
+              "human_mass_prior_config", "object_factor_prior_risk", "persistent_property_config",
+              "temporal_evidence_config", "maximum_simulation_seconds", "human_lidar_cluster_radius_m",
+              "native_human_mode", "human_requested_walking_speed_mps", "restaurant_route",
+              "lidar_ego_motion_correction", "plume_view_fov_degrees", "weight_sha256")
     for key, cell in cells.items():
         available = expected <= cell.keys() and all(r["report_available"] for r in cell.values())
         mismatch = []

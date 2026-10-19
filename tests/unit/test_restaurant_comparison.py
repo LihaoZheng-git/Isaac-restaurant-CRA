@@ -76,3 +76,12 @@ def test_only_explicit_zero_wheel_gate_rejection_is_expected():
     assert not expected_stationary_rejection({"passed":False,"nonzero_wheel_commands":1}, message)
     assert not expected_stationary_rejection({"passed":False,"nonzero_wheel_commands":0}, "TypeError: logging failed")
     assert not expected_stationary_rejection({}, message)
+
+
+def test_arrival_does_not_hide_failed_perception_acceptance(tmp_path):
+    (tmp_path/"report.json").write_text(json.dumps({"completed":True,"passed":False,
+        "reason":"goal_reached","human_navigation_validation":{"checks":{"kinetic_coverage":False}}}))
+    row=extract_trial(tmp_path,comparison_plan()[0])
+    assert row["arrived"] and not row["passed"]
+    assert row["reason"] == "acceptance_failed_after_arrival"
+    assert row["failed_validation_checks"] == {"human_navigation_validation":["kinetic_coverage"]}

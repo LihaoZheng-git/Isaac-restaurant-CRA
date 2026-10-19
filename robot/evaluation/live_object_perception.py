@@ -12,7 +12,7 @@ import time
 
 import numpy as np
 
-from robot.evaluation.cra_experiments import RestaurantScenario
+from robot.evaluation.cra_experiments import CRABaseline, RestaurantScenario
 from robot.evaluation.perception_readiness import (
     evaluate_perception_readiness,
     runtime_factor_evidence_mode,
@@ -251,6 +251,8 @@ class LiveObjectPerception:
         self.person_detector = person_detector
         from robot.evaluation.restaurant_baselines import validate_baseline
         self.experiment_baseline = validate_baseline(experiment_baseline)
+        if self.experiment_baseline is not CRABaseline.CONTINUOUS_CRA_SAFE_SAGE and persistent_property_config is None:
+            raise ValueError("comparison baseline requires persistent object-map mode")
         self.human_mass_prior_config = human_mass_prior_config
         from robot.perception.human_body_contact import HumanBodyContactPriorConfig
         if human_body_contact_config is not None and (
