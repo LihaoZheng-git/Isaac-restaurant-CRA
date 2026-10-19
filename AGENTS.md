@@ -769,13 +769,22 @@
   no new objective may relax physical provenance, mask/identity gates,
   occupancy continuity, optimizer age, exact DTCBF/dense geometry or analytical
   CBF checks. Do not claim it solves unresolved moving-view perception.
-- The approved guidance ablation is a separate bounded heading preference:
-  freeze directions sampled along the unchanged nominal rollout, cap them
-  around its terminal heading, and use the same nonnegative term in all
-  optimizer/rescue/recovery cost paths. Guidance-following seeds require full
-  exact safety validation and improved evaluated cost; source times never
-  renew. Weight zero delegates to the primary. Do not pool enabled ablations
-  into primary comparisons or attribute controller changes only to CRA.
-  Failed command/rate/uncapped-heading development variants stay recorded and
-  are not integrated. See docs/guidance_tracking_ablation.md for the bounded
-  ORACLE fixture and pending frozen/native acceptance.
+- The approved guidance ablation now tracks a fully checked local unicycle
+  path and its commands. The current field direction is capped about the active
+  configured waypoint bearing and fades near that waypoint; goal coordinates
+  are nominal-route data, not physical evidence. Six bounded references need
+  full exact DTCBF/dense geometry acceptance; no safe progress reference falls
+  back to the primary. Added state/normalized-command costs remain consistent
+  in QP, gradients, rescue and recovery. Original source times never renew.
+  Weight zero delegates directly to the primary. Do not pool enabled ablations
+  into primary comparisons or attribute controller changes only to CRA. Keep
+  failed earlier variants. See docs/guidance_tracking_ablation.md.
+- The optional state-path audit was initially mislabeled as matching native
+  control. Actual live SafeSAGEControlRuntime forwards the nominal command
+  horizon without explicit state-path targets. Keep those stress fixtures
+  separate from command-only/native comparisons. The 9d753bf native heading
+  ablation was interrupted for sustained intermediate-waypoint nonprogress;
+  its partial 295 fields have no final arrival/clearance/stopping acceptance.
+  The revision uses the request's active configured waypoint and blends only
+  its auxiliary reference near that point. Do not infer physical evidence from
+  configured goals or alter safety/uncertainty gates to rejoin.

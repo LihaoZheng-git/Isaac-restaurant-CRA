@@ -166,6 +166,8 @@ def run_control_audit(
     progress=None,
     guidance_tracking_config=None,
     track_nominal_states=False,
+    active_goal_reference=False,
+    route_points=None,
 ):
     if kind not in {"planar", "unicycle"}:
         raise ValueError("planar or unicycle required")
@@ -226,7 +228,7 @@ def run_control_audit(
         guidance_fields=pipeline.guidance_fields,
     )
     waypoint = WaypointController(
-        [Waypoint(3.3, 0.0)],
+        [Waypoint(*point) for point in (route_points or ((3.3, 0.0),))],
         config=WaypointControllerConfig(
             rotate_in_place_threshold_radians=math.radians(100)
         ),
@@ -249,6 +251,15 @@ def run_control_audit(
                 safety if kind == "planar" else chassis,
                 planar if kind == "planar" else wheel,
                 initial_command_guess=warm,
+                **(
+                    {
+                        "nominal_goal_grid_xy": np.array(
+                            [waypoint.current_waypoint.x, waypoint.current_waypoint.y]
+                        )
+                    }
+                    if active_goal_reference and guidance_tracking_config is not None
+                    else {}
+                ),
                 **(
                     {"target_chassis_states_grid": mpc._rollout(chassis, wheel)}
                     if track_nominal_states
@@ -398,6 +409,8 @@ def run_control_audit(
         if guidance_tracking_config
         else None,
         track_nominal_states=track_nominal_states,
+        active_goal_reference=active_goal_reference,
+        route_points=route_points or ((3.3, 0.0),),
         fixed_lambda=1.25,
         nonzero_wheel_commands=0,
         scope="authored fixed ORACLE occupancy/phi; virtual controller comparison; no sensor or wheel acceptance",

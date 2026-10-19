@@ -27,11 +27,15 @@ parser.add_argument("--experiment-baseline", choices=("geometric_velocity_cbf", 
 parser.add_argument("--motion-aware-passing", action="store_true",
                     help="opt-in current LiDAR crossing-side preference; unchanged CRA scores/lambda/safety checks")
 parser.add_argument("--guidance-tracking-weight", type=float, default=0.0,
-                    help="separate bounded Laplace-guidance heading MPC ablation; zero preserves primary")
+                    help="separate checked Laplace local-path MPC ablation; zero preserves primary")
 parser.add_argument("--guidance-activation-h", type=float, default=1.0,
                     help="ablation reference activates smoothly below this safety-field value")
 parser.add_argument("--guidance-max-heading-bias-degrees", type=float, default=45.0,
-                    help="maximum ablation heading preference relative to nominal (strictly below 90 degrees)")
+                    help="maximum local-reference heading bias about the active waypoint bearing")
+parser.add_argument("--guidance-reference-goal-radius", type=float, default=0.04,
+                    help="local reference stops inside this radius; actual waypoint acceptance is unchanged")
+parser.add_argument("--guidance-fade-distance", type=float, default=0.5,
+                    help="fade local guidance bias toward the active waypoint inside this distance")
 parser.add_argument("--human-positive-fragment-extent", action="store_true",
                     help="bare-human recent-coobservation/current-positive-return fragment association; no free-space or factor transfer")
 parser.add_argument("--human-observed-passing-target", action="store_true",
@@ -156,6 +160,10 @@ if args.guidance_tracking_weight > 0 and args.experiment_baseline == "geometric_
     parser.error("guidance tracking is a separate MPC ablation, unavailable for geometric CBF")
 if not math.isfinite(args.guidance_max_heading_bias_degrees) or not 0 < args.guidance_max_heading_bias_degrees < 90:
     parser.error("guidance heading bias must be finite and strictly between 0 and 90 degrees")
+if not math.isfinite(args.guidance_reference_goal_radius) or args.guidance_reference_goal_radius <= 0:
+    parser.error("guidance reference goal radius must be finite and positive")
+if not math.isfinite(args.guidance_fade_distance) or args.guidance_fade_distance <= args.guidance_reference_goal_radius:
+    parser.error("guidance fade distance must exceed the positive reference goal radius")
 if args.human_observed_passing_target and not (args.motion_aware_passing and args.restaurant_human and not args.human_carry_bowl):
     parser.error("observed-human passing requires the bare-human motion-aware component")
 if args.human_positive_fragment_extent and (args.restaurant_human is None or args.human_carry_bowl):
@@ -1421,7 +1429,8 @@ def main():
     if args.guidance_tracking_weight > 0:
         mpc = LaplaceGuidanceTrackingMPC(mpc.paper_filter, mpc.config,
             guidance_config=LaplaceGuidanceTrackingConfig(args.guidance_tracking_weight, args.guidance_activation_h,
-                math.radians(args.guidance_max_heading_bias_degrees)))
+                math.radians(args.guidance_max_heading_bias_degrees), args.guidance_reference_goal_radius,
+                args.guidance_fade_distance))
     control = SafeSAGEControlRuntime(mpc=mpc, backup_filter=backup)
     waypoint = WaypointController(
         [Waypoint(*point) for point in ROUTE],
@@ -1498,6 +1507,7 @@ def main():
             data[1],
             data[2],
             initial_command_guess=data[3],
+            **({"nominal_goal_grid_xy": data[4]} if args.guidance_tracking_weight > 0 else {}),
             profile_path=args.output / "profiles" / f"planner-{data[2].sensor_frame_id}.pstats"
             if args.profile_runtime else None,
         )
@@ -1750,7 +1760,8 @@ def main():
                 planner.submit(
                     frame_id=plan_id,
                     sensor_timestamp_seconds=now,
-                    packet=(current.copy(), sequence, latest.field, warm),
+                    packet=(current.copy(), sequence, latest.field, warm,
+                        np.array(ROUTE[waypoint.current_waypoint_index], dtype=float) if args.guidance_tracking_weight > 0 else None),
                 )
                 plan_waypoints[plan_id] = waypoint.current_waypoint_index
                 plan_id += 1
@@ -2049,12 +2060,16 @@ def main():
         "guidance_tracking_ablation": {"enabled": args.guidance_tracking_weight > 0,
             "weight": args.guidance_tracking_weight, "activation_safety_value": args.guidance_activation_h,
             "maximum_heading_bias_radians": math.radians(args.guidance_max_heading_bias_degrees),
-            "scope": "separate bounded guidance-heading objective; primary nominal unchanged; not paper equivalence"},
+            "reference_goal_radius_m": args.guidance_reference_goal_radius,
+            "guidance_fade_distance_m": args.guidance_fade_distance,
+            "forward_speed_reference": "maximum forward speed in original obstacle-unaware nominal horizon, clipped to actuator bounds",
+            "heading_reference_basis": "active_obstacle_unaware_waypoint; same field frame; request-time waypoint index",
+            "scope": "separate checked local guidance-path tracking objective; primary nominal unchanged; not paper equivalence"},
         "immediate_replan_after_invalidations": args.immediate_replan,
         "verified_command_interval_seconds": mpc.config.time_step,
         "wall_seconds": time.perf_counter() - start_wall,
         "navigation_simulation_seconds": now - start_sim,
-        "controller_scope": "circular_velocity_aware_cbf_nominal_omega_no_mpc; shadow_CRA_fields_for_matched_perception" if args.experiment_baseline == "geometric_velocity_cbf" else "bounded_guidance_heading_ablation_with_exact_DTCBF_geometry_and_analytical_CBF" if args.guidance_tracking_weight > 0 else "online_unicycle_MPC_exact_DTCBF_geometry_and_analytical_CBF",
+        "controller_scope": "circular_velocity_aware_cbf_nominal_omega_no_mpc; shadow_CRA_fields_for_matched_perception" if args.experiment_baseline == "geometric_velocity_cbf" else "checked_guidance_local_path_ablation_with_exact_DTCBF_geometry_and_analytical_CBF" if args.guidance_tracking_weight > 0 else "online_unicycle_MPC_exact_DTCBF_geometry_and_analytical_CBF",
         "fixed_lambda": 1.25,
         "plume_control": args.plume_control,
         "restaurant_scene": str(SCENE_PATH) if args.restaurant_scene else None,

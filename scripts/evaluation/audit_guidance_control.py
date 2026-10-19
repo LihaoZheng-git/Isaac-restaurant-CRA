@@ -40,17 +40,33 @@ def main():
     parser.add_argument("--guidance-tracking-weight", type=float, default=0.0)
     parser.add_argument("--guidance-activation-h", type=float, default=1.0)
     parser.add_argument("--guidance-max-heading-bias-degrees", type=float, default=45.0)
+    parser.add_argument("--guidance-reference-goal-radius", type=float, default=0.04)
+    parser.add_argument("--guidance-fade-distance", type=float, default=0.5)
+    parser.add_argument("--active-goal-reference", action="store_true")
+    parser.add_argument(
+        "--intermediate-waypoints",
+        action="store_true",
+        help="two reachable collinear waypoints before the final goal",
+    )
     parser.add_argument("--track-nominal-states", action="store_true")
     args = parser.parse_args()
     guidance_config = LaplaceGuidanceTrackingConfig(
         args.guidance_tracking_weight,
         args.guidance_activation_h,
         np.deg2rad(args.guidance_max_heading_bias_degrees),
+        args.guidance_reference_goal_radius,
+        args.guidance_fade_distance,
     )
     if (
         args.guidance_tracking_weight > 0 or args.track_nominal_states
     ) and "planar" in args.kind:
         parser.error("this ablation audit requires --kind unicycle")
+    if args.guidance_tracking_weight > 0 and (
+        not args.active_goal_reference or args.track_nominal_states
+    ):
+        parser.error(
+            "local guidance path needs --active-goal-reference and a command-only nominal"
+        )
     config = GuidanceAuditConfig(
         maximum_seconds=args.maximum_seconds,
         cbf_angular_weight=args.cbf_angular_weight,
@@ -67,6 +83,10 @@ def main():
         configuration=asdict(config),
         guidance_tracking_ablation=asdict(guidance_config),
         track_nominal_states=args.track_nominal_states,
+        active_goal_reference=args.active_goal_reference,
+        route_points=((0.5, 0.0), (2.8, 0.0), (3.3, 0.0))
+        if args.intermediate_waypoints
+        else None,
         sides=args.side,
         controllers=args.kind,
         nominal="same obstacle-unaware waypoint horizon, mapped into each command space",
@@ -112,6 +132,10 @@ def main():
                 if args.guidance_tracking_weight > 0
                 else None,
                 track_nominal_states=args.track_nominal_states,
+                active_goal_reference=args.active_goal_reference,
+                route_points=((0.5, 0.0), (2.8, 0.0), (3.3, 0.0))
+                if args.intermediate_waypoints
+                else None,
             )
             report.update(passing_side=side, field_sha256=digest)
             (args.output / f"{side}-{kind}.json").write_text(

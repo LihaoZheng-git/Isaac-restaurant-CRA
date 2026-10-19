@@ -1,71 +1,94 @@
-# Bounded Laplace-guidance heading ablation
+# Checked local Laplace-guidance tracking ablation
 
-The user approved this separate controller variant after the primary native
-8 s crossing arrived/passed behind the person but failed the 20 cm visible-arc
-criterion, and the 13 s repeat stopped on unresolved occupancy. Those failures
-remain in `docs/observed_human_guidance.md`. The primary objective is unchanged.
+The user approved explicit guidance tracking as a separately reported controller
+ablation. The original Safe-SAGE objective remains the primary; lambda stays
+1.25. This changes controller preferences, not CRA scores, physical evidence,
+occupancy, safety constraints or the obstacle-unaware waypoint nominal.
 
-The ablation adds a nonnegative heading cost to the existing MPC objective:
+## Current method
 
-`J = J_primary + beta * sum(a[k] * wrap(yaw[k+1] - reference[k])**2)`.
+`LaplaceGuidanceTrackingMPC` builds a short reachable reference from the current
+Laplace field and **active configured waypoint**, in the same field frame.
+The goal is copied with the asynchronous planning request; the existing
+waypoint-index check rejects results for an earlier waypoint. Configured goal
+coordinates are nominal-route data, never perceived physical evidence.
 
-For one synchronous solve, the current field is sampled along the unchanged
-obstacle-unaware nominal rollout at its look-ahead states. Each valid guidance
-direction supplies a preferred heading, capped to +/-45 degrees around the
-nominal rollout's terminal heading. This terminal heading approximates the
-nominal direction of progress; it is not an obstacle-aware waypoint or a hard
-constraint on actual heading. `a = clip(1 - h / activation_h, 0, 1)**2`.
-Unavailable/out-of-domain/unsafe reference stages, negligible guidance and
-nonpositive nominal forward speed omit only this auxiliary preference. Their
-physical evidence/occupancy and exact safety checks are never removed or
-interpreted as low risk. The development setting is beta=100, activation_h=1,
-heading bias=45 degrees, fixed lambda=1.25.
+The reference heading follows the field direction, bounded about the waypoint
+bearing. The bias fades quadratically within .5 m of that waypoint. This fade
+affects only reference generation, never physical risk or any safety condition.
+Forward preference comes from the maximum forward speed in the unchanged
+nominal horizon, clipped to actuator bounds. Heading alignment and a radial
+speed cap reduce translation when facing away/near the goal. References stop
+inside .04 m; actual waypoint acceptance is unchanged (.10 m in the live demo).
 
-Two bounded guidance-following rollout seeds (turn caps .4/.8 rad/s, clipped
-to actual actuator bounds) can initialize the optimizer. They retain the nominal
-forward-speed sequence and original stop/rotation commands. A seed is used only
-after complete exact DTCBF/dense geometry/temporal validation and lower evaluated
-cost than the current safe incumbent. No feasible incumbent means an unsafe
-nominal has no admissible cost to beat. The same heading term appears in QP,
-rescue, recovery ranking, gradients and exact objective comparisons. Cheap
-recovery lower bounds may omit the added nonnegative state cost. The per-plan
-reference/cost arrays are owned and immutable; no shared planning context or
-source clock is renewed.
+Six bounded rollouts use moving turn caps .4/.8 rad/s and turn-first caps
+.1/.2/.4/.8 rad/s, clipped to actuator limits. Every reference needs the original
+full temporal DTCBF and dense geometry checks. Safe references are ranked by
+goal progress plus look-ahead-distance-scaled heading improvement. No usable
+reference means the original controller is called. Reference generation is
+local and does not establish convergence or a global path planner.
 
-Zero weight delegates directly to the original controller, including its result
-type. The primary gets no extra sampling, seed, cost or shortcut change. Runtime
-flags are `--guidance-tracking-weight`, `--guidance-activation-h` and
-`--guidance-max-heading-bias-degrees`; all defaults retain the primary. The
-geometric CBF baseline rejects the MPC-only opt-in. Reports and per-plan
-diagnostics name the variant; the primary comparison aggregator rejects enabled
-ablations. A later matched ablation comparison must apply the same controller
-configuration to fixed-policy Safe-SAGE and CRA Safe-SAGE before attributing an
-effect to CRA.
+The selected reference supplies states and commands to an MPC worker. It adds
+position weight `e`, yaw weight `e * lookahead_distance**2`, and command weights
+`e / actuator_limit**2`, where
+`e = beta * clip(1 - h_current / activation_h, 0, 1)**2`.
+The original nominal-command cost remains. The added command term appears in
+QP, nonlinear objective, gradient and recovery ranking; lower bounds may omit
+only nonnegative state costs. Reference arrays are owned and read-only. The
+normal final trajectory/command checks still apply after optimization.
 
-Development is zero-wheel and uses an authored disk/phi, not perception. The
-audit's `--track-nominal-states` matches the native path-cost mode; the earlier
-audit without this path cost is a different controller configuration. With
-path tracking, the unchanged primary stalled on both sides at 9.95 s. Initial
-command-projection, fixed angular-rate and uncapped-heading candidates also
-failed; all raw trials under `outputs/guidance_tracking_ablation` remain.
-Those failed alternatives are not integrated modes.
+The development candidate is beta=100, activation_h=1, heading cap=60 degrees,
+fade=.5 m, reference goal radius=.04 m. These are engineering settings for a
+separate ablation, not fitted physical parameters or an automatic runtime tuner.
+Weight zero delegates directly to the primary, including its result type and
+without extra reference sampling. A separate state-path target is rejected in
+the enabled variant rather than silently replaced.
 
-The terminal-direction heading variant with validated seeds reached both goals
-in the dirty-tree development fixture (31.0/34.45 s, .936351/-.963203 m
-excursions). Its ORACLE geometry, .05 virtual integration step and lack of native
-future-configuration padding remain explicit. Frozen-source and native results
-must be recorded separately; development arrival is not a moving-person,
-sensor-derived four-factor, real-time or universal-convergence acceptance.
+Runtime flags: `--guidance-tracking-weight`, `--guidance-activation-h`,
+`--guidance-max-heading-bias-degrees`, `--guidance-reference-goal-radius`,
+`--guidance-fade-distance`. Defaults keep the primary disabled. Per-plan reports
+record the checked reference, effective weights and active goal. The primary
+comparison aggregator rejects enabled ablations. Any later attribution of a
+CRA benefit needs matched fixed-policy and CRA runs with the same controller.
 
-Unit checks cover zero-weight identity, frame rotations, both steering signs,
-unchanged nominal inputs, zero guidance/far field/zero-speed behavior, unsafe
-initial stops, rejected seeds, bounded references, immutable cost data, finite-
-difference gradients/QP agreement and exclusion from primary comparisons.
-Native testing must retain the 60-frame stationary gate and all original mask,
-provenance, continuity, field/candidate age, execution-lease and CBF limits.
-This objective does not fix close-view human truncation or unresolved fragments.
+## Validation contract and retained failures
 
-The final implementation passed 2,127 unit tests and repository Ruff. The
-development beta=10 seeded heading variant still stalled; beta=100 is the fixed
-candidate for the next frozen fixture/native collection, not an automatically
-retuned runtime value. Frozen results must use the committed source hash.
+The fixed-field audit uses authored ORACLE disk geometry/phi, .05 s virtual
+integration, no native future-configuration padding and no wheel commands.
+Command-only nominal horizons match the live runtime's nominal interface.
+`--track-nominal-states` is a **separate stress fixture**: an earlier account
+incorrectly called this the native contract. The runtime does not normally pass
+an explicit state-path target. Those earlier results cannot stand in for a
+command-only/native comparison.
+
+The old heading-only prototype at 9d753bf passed both state-path stress sides
+(31.0/34.45 s) but its native 8 s human crossing was interrupted for sustained
+intermediate-waypoint nonprogress. Its 295 partial fields have no final report,
+arrival, independent clearance, stopping or final human acceptance. See
+`outputs/guidance_tracking_ablation/native-beta100-8s-v1/agent-interruption.json`.
+Failed command/rate/uncapped-heading and active-goal variants remain in the
+output tree; archived source is under `archived-active-heading-speed`.
+
+The checked-path-only and initial checked-command references also circled near
+intermediate goals. `checked-command-path-v22` failed both 40 s completion gates
+while its geometry/CBF checks passed. Do not erase this negative result. The
+goal-approach blend in `checked-command-fade-v23` then completed the command-only
+three-waypoint fixture: left 35.6 s / +1.062406 m arc; right 31.7 s / -.792146 m.
+Both had exact accepted geometry/CBF margins. These are dirty-tree development
+results; source digests are in each manifest. Frozen-source repeat results and
+native results must be recorded separately.
+
+Unit checks cover zero-weight identity, active-goal validation, frame rotation,
+both steering signs, unchanged nominal inputs, safe-reference/fallback paths,
+zero guidance/speed, unsafe initial stops, waypoint approach, owned arrays,
+finite-difference objective gradients, QP consistency and runtime epoch
+preservation. The primary-comparison exclusion is also tested.
+
+Native collection must first pass the unchanged 60-frame stationary gate. Keep
+all mask/identity, provenance, occupancy continuity, field/candidate age,
+execution lease, full exact DTCBF/dense geometry and per-step analytical CBF
+checks. This ablation does not fix moving-camera plume, close-view human mask
+truncation, unresolved occupancy fragments or complete four-factor readiness.
+Paced prior-assisted navigation is not a real-time guarantee, exact paper
+equivalence, universal safety, or a causal CRA advantage. Main and long-service
+holds remain until the intended acceptance is sound.

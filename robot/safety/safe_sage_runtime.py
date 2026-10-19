@@ -1118,10 +1118,24 @@ class SafeSAGEControlRuntime:
         *,
         initial_command_guess: Sequence[float] | np.ndarray | None = None,
         preferred_lateral_direction_grid_y: float | None = None,
+        nominal_goal_grid_xy: Sequence[float] | np.ndarray | None = None,
     ) -> SafeSAGEUnicycleMPCResult:
         """Run predictive filtering against one accepted field snapshot."""
 
         self._validate_field(field)
+        extra = {}
+        if nominal_goal_grid_xy is not None:
+            from robot.safety.laplace_guidance_tracking_mpc import (
+                LaplaceGuidanceTrackingMPC,
+            )
+
+            if not isinstance(self.mpc, LaplaceGuidanceTrackingMPC):
+                raise ValueError(
+                    "nominal goal preference is only available in the explicit guidance ablation"
+                )
+            extra["nominal_goal_grid_xy"] = _finite_vector(
+                nominal_goal_grid_xy, size=2, name="nominal_goal_grid_xy"
+            )
         return self.mpc.plan(
             chassis_state_grid,
             nominal_commands,
@@ -1130,9 +1144,8 @@ class SafeSAGEControlRuntime:
             h_full=field.pipeline.h_full,
             guidance_fields=field.pipeline.guidance_fields,
             temporal_safety_derivative=field.temporal_safety_derivative,
-            preferred_lateral_direction_grid_y=(
-                preferred_lateral_direction_grid_y
-            ),
+            preferred_lateral_direction_grid_y=(preferred_lateral_direction_grid_y),
+            **extra,
         )
 
     def filter_command(
