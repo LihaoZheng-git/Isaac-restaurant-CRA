@@ -24,6 +24,8 @@ parser.add_argument("--output", type=Path, required=True)
 parser.add_argument("--motion", action="store_true")
 parser.add_argument("--experiment-baseline", choices=("geometric_velocity_cbf", "fixed_class_safe_sage", "continuous_cra_safe_sage"),
                     default="continuous_cra_safe_sage", help="explicit matched restaurant comparison; physical assessments always retained")
+parser.add_argument("--motion-aware-passing", action="store_true",
+                    help="opt-in current LiDAR crossing-side preference; unchanged CRA scores/lambda/safety checks")
 parser.add_argument("--human-body-contact-prior", type=float,
                     help="opt-in fresh-person blunt-body contact PRIOR, e.g. .10; not measured sharpness")
 parser.add_argument("--restaurant-scene", type=Path,
@@ -44,6 +46,8 @@ parser.add_argument("--human-crossing-trigger-y", type=float, default=7.8,
                     help="explicit native actor-only trigger, world robot y 6.8..7.8; not a control/evidence input")
 parser.add_argument("--human-crossing-delay-seconds", type=float,
                     help="opt-in exogenous actor start after navigation begins; shared timing across baselines, independent of robot progress")
+parser.add_argument("--human-crossing-direction", choices=("right-to-left", "left-to-right"), default="right-to-left",
+                    help="authored standalone actor fixture only; never supplies estimator velocity or passing direction")
 parser.add_argument("--human-walking-speed", type=float, default=.7,
                     help="explicit native actor speed .5..1 m/s; never estimator input")
 parser.add_argument("--human-cluster-radius", type=float, default=.12,
@@ -131,6 +135,10 @@ parser.add_argument(
     help="optimizer candidate age cap; every executed horizon still needs fresh exact validation",
 )
 args = parser.parse_args()
+if args.human_crossing_direction == "left-to-right" and args.restaurant_human != "crossing":
+    parser.error("mirrored actor direction requires standalone crossing mode")
+if args.motion_aware_passing and not (args.restaurant_human == "crossing" and args.persistent_object_risk_map):
+    parser.error("bounded motion-aware passing requires the standalone crossing object-map scenario")
 if args.human_crossing_delay_seconds is not None and (
     args.restaurant_human not in {"crossing", "continuous-crossing"}
     or not math.isfinite(args.human_crossing_delay_seconds)
@@ -493,6 +501,7 @@ def main():
     if args.restaurant_human:
         from robot.scene.restaurant_human_episode import RestaurantHumanEpisode
         human = RestaurantHumanEpisode(stage, mode=args.restaurant_human, output=args.output,
+                                       crossing_direction=args.human_crossing_direction,
                                        trigger_robot_y=args.human_crossing_trigger_y, speed_mps=args.human_walking_speed,
                                        crossing_delay_seconds=args.human_crossing_delay_seconds,
                                        carry_bowl=args.human_carry_bowl,
@@ -745,6 +754,7 @@ def main():
     )
     from robot.perception.object_height import ObjectHeightConfig
     from robot.perception.human_body_contact import HumanBodyContactPriorConfig
+    from robot.safety.motion_aware_passing import MotionAwarePassingConfig
 
     perception = LiveObjectPerception(
         segmenter=segmenter,
@@ -759,6 +769,7 @@ def main():
             score=args.human_body_contact_prior,
         ) if args.human_body_contact_prior is not None else None,
         experiment_baseline=args.experiment_baseline,
+        motion_passing_config=MotionAwarePassingConfig() if args.motion_aware_passing else None,
         calibration=calibration,
         class_policy=class_policy,
         guidance_policy=guidance,
@@ -1838,7 +1849,8 @@ def main():
     if human is not None:
         from robot.evaluation.human_navigation_validation import summarize_human_navigation
         human_validation = summarize_human_navigation(live_fields, human.records,
-            mode=args.restaurant_human, upper_continuation=args.human_upper_continuation)
+            mode=args.restaurant_human, upper_continuation=args.human_upper_continuation,
+            crossing_direction=args.human_crossing_direction)
         completed = completed and human_validation["passed"]
         save_json("human-navigation-validation.json", human_validation)
         save_json("human-truth-evaluation-only.json", human.records)
@@ -1889,6 +1901,8 @@ def main():
         "native_human_upper_continuation": args.human_upper_continuation,
         "human_crossing_trigger_robot_world_y": args.human_crossing_trigger_y,
         "human_crossing_delay_seconds": args.human_crossing_delay_seconds,
+        "human_crossing_direction": args.human_crossing_direction,
+        "motion_aware_passing_config": asdict(perception.motion_passing.config) if perception.motion_passing is not None else None,
         "actor_trigger_basis": "exogenous_navigation_elapsed_time" if args.human_crossing_delay_seconds is not None else "robot_world_y",
         "human_requested_walking_speed_mps": args.human_walking_speed,
         "experimental_camera_mount": {

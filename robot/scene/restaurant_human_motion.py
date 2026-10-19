@@ -71,7 +71,7 @@ def attach_moving_human_collider(stage, rig, *, radius=0.4, height=1.7):
     return collider
 
 
-def prepare_native_restaurant_human(stage):
+def prepare_native_restaurant_human(stage, *, crossing_direction="right-to-left"):
     import omni.client
     import omni.kit.commands
     from pxr import NavSchema, Sdf, Usd
@@ -85,6 +85,11 @@ def prepare_native_restaurant_human(stage):
             "native human motion library unavailable or fingerprint changed"
         )
     server = stage.GetPrimAtPath(SERVER_PRIM_PATH)
+    if crossing_direction not in {"right-to-left", "left-to-right"}:
+        raise ValueError("unsupported authored crossing direction")
+    if crossing_direction == "left-to-right":
+        # Explicit session-only actor fixture; never estimator/control data.
+        server.GetAttribute("xformOp:translate").Set(Gf.Vec3d(27.8, 8.9, 0.))
     rigs = [p for p in Usd.PrimRange(server) if p.IsA(UsdSkel.Root)]
     skeletons = [p for p in Usd.PrimRange(server) if p.IsA(UsdSkel.Skeleton)]
     if len(rigs) != 1 or len(skeletons) != 1:
@@ -122,4 +127,5 @@ def prepare_native_restaurant_human(stage):
         "collision_radius_m": 0.4,
         "collision_height_m": 1.7,
         "scope": "native actor motion/render/independent evaluation only; no estimator inputs",
+        "authored_crossing_direction": crossing_direction,
     }

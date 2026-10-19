@@ -88,8 +88,17 @@ class RestaurantHumanSensorDiagnostic:
         self, stage, root, output, anchor, *, mass_interval=(70.0, 45.0, 100.0), cluster_radius_m=.12,
         carried_object_groups=False,
         human_body_contact_prior_score=None,
+        motion_aware_passing=False,
     ):
         self.stage, self.output = stage, output
+        from robot.safety.motion_aware_passing import MotionAwarePassingConfig
+        self.passing_goal_world_xy = (28.8, 9.4) if motion_aware_passing else (30.6, 11.8)
+        if motion_aware_passing:
+            self.save("motion-passing-configuration.json", {
+                "configuration":asdict(MotionAwarePassingConfig()),
+                "nominal_waypoint_context_world_xy":self.passing_goal_world_xy,
+                "scope":"parked robot, observed crossing; hypothetical service waypoint context, zero wheels",
+            })
         self.carried_object_groups=carried_object_groups
         from robot.perception.human_body_contact import HumanBodyContactPriorConfig
         body_contact_config = (None if human_body_contact_prior_score is None
@@ -178,6 +187,7 @@ class RestaurantHumanSensorDiagnostic:
             lookahead_distance=0.1,
         )
         self.worker = LiveObjectPerception(
+            motion_passing_config=MotionAwarePassingConfig() if motion_aware_passing else None,
             segmenter=SamInstanceSegmenter(
                 SamInstanceConfig(
                     paths["sam"],
@@ -379,7 +389,7 @@ class RestaurantHumanSensorDiagnostic:
             self.history.velocity_world_xy(scan_time),
             epoch.camera_from_scan_robot @ np.linalg.inv(gravity),
             floor,
-            (30.6, 11.8),
+            self.passing_goal_world_xy,
             pose_source=epoch.lidar_pose.source,
             pose_status=epoch.lidar_pose.status,
         )
@@ -412,6 +422,8 @@ class RestaurantHumanSensorDiagnostic:
                     "processing_wall_seconds": time.perf_counter() - start,
                     "carried_object_groups":result.diagnostics.get("carried_object_groups"),
                     "occupancy_policies":result.diagnostics.get("occupancy_policies"),
+                    "motion_aware_passing":result.diagnostics.get("motion_aware_passing"),
+                    "applied_field_policies":result.diagnostics.get("applied_field_policies"),
                     "objects": [
                         {
                             "attributes": asdict(o.attributes),

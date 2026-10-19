@@ -105,6 +105,18 @@ def test_independent_current_human_motion_and_numeric_policy_checks(mode):
         assert report["median_steady_world_velocity_error_mps"] < 1e-8
 
 
+def test_mirrored_actor_crossing_has_its_own_endpoint_and_velocity_audit():
+    records, truth = episode()
+    for row in truth:
+        row["actor_xyz"][0] = 57.6-row["actor_xyz"][0]
+    for row in records:
+        obj = row["objects"][0]
+        obj["diagnostics"]["centroid_world_xy"][0] = 57.6-obj["diagnostics"]["centroid_world_xy"][0]
+        obj["attributes"]["motion"]["velocity_x_mps"]["value"] = .7
+    assert summarize_human_navigation(records, truth, mode="crossing", crossing_direction="left-to-right")["passed"]
+    assert not summarize_human_navigation(records, truth, mode="crossing")["passed"]
+
+
 @pytest.mark.parametrize(
     "failure",
     [

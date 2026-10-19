@@ -1,0 +1,223 @@
+"""Bounded crossing-side preference from current LiDAR tracking.
+
+This is policy hysteresis, never retained physical evidence, free-space inference
+or a collision predictor guarantee. Exact MPC/CBF acceptance remains separate.
+"""
+
+from dataclasses import dataclass, asdict
+import math
+
+import numpy as np
+
+from robot.safety.safe_sage_guidance_policy import PassingSide
+
+
+@dataclass(frozen=True)
+class MotionAwarePassingConfig:
+    minimum_speed_mps: float = 0.2
+    maximum_speed_mps: float = 2.0
+    maximum_source_gap_seconds: float = 0.35
+    maximum_velocity_change_mps: float = 0.35
+    maximum_prediction_residual_m: float = 0.2
+    minimum_consistent_observations: int = 3
+    minimum_point_count: int = 20
+    maximum_distance_m: float = 3.0
+    prediction_horizon_seconds: float = 4.0
+    maximum_predicted_separation_m: float = 1.6
+    minimum_transverse_fraction: float = 0.6
+    maximum_encounter_seconds: float = 8.0
+    passed_distance_m: float = 0.4
+
+    def __post_init__(self):
+        for name, value in asdict(self).items():
+            if isinstance(value, bool) or not math.isfinite(value) or value <= 0:
+                raise ValueError(f"{name} must be finite and positive")
+        for name in ("minimum_consistent_observations", "minimum_point_count"):
+            if not isinstance(getattr(self, name), int) or getattr(self, name) < 3:
+                raise ValueError(f"{name} must be an integer >= 3")
+        if (
+            self.minimum_speed_mps >= self.maximum_speed_mps
+            or self.minimum_transverse_fraction > 1
+        ):
+            raise ValueError("invalid motion limits")
+
+
+class MotionAwarePassing:
+    def __init__(self, config=None):
+        self.config = config or MotionAwarePassingConfig()
+        if not isinstance(self.config, MotionAwarePassingConfig):
+            raise TypeError("motion passing config required")
+        self.history = {}
+        self.encounter = None
+        self.last_timestamp = None
+
+    def update(self, tracking, *, robot_xy, robot_velocity_xy, goal_xy):
+        cfg = self.config
+        t = float(tracking.timestamp_seconds)
+        if (
+            not math.isfinite(t)
+            or t < 0
+            or self.last_timestamp is not None
+            and t <= self.last_timestamp
+        ):
+            raise ValueError("passing source timestamps must increase")
+        robot, robot_v, goal = (
+            np.asarray(v, dtype=float) for v in (robot_xy, robot_velocity_xy, goal_xy)
+        )
+        if any(
+            v.shape != (2,) or not np.isfinite(v).all() for v in (robot, robot_v, goal)
+        ):
+            raise ValueError("finite planar passing inputs required")
+        delta = goal - robot
+        distance = float(np.linalg.norm(delta))
+        direction = delta / max(distance, 1e-9)
+        tracks = {track.track_id: track for track in tracking.tracked_obstacles}
+        if len(tracks) != len(tracking.tracked_obstacles):
+            raise ValueError("ambiguous duplicate track identity")
+        candidates, history, rejected = [], {}, {}
+        for key, track in tracks.items():
+            p, v = (
+                np.asarray(track.centroid_world_xy),
+                np.asarray(track.velocity_world_xy),
+            )
+            if (
+                p.shape != (2,)
+                or v.shape != (2,)
+                or not np.isfinite(p).all()
+                or not np.isfinite(v).all()
+            ):
+                raise ValueError("finite current track geometry and velocity required")
+            speed = float(np.linalg.norm(v))
+            old = self.history.get(key)
+            count = 1
+            if old is not None:
+                dt = t - old[0]
+                if (
+                    0 < dt <= cfg.maximum_source_gap_seconds + 1e-9
+                    and cfg.minimum_speed_mps <= speed <= cfg.maximum_speed_mps
+                    and cfg.minimum_speed_mps
+                    <= np.linalg.norm(old[2])
+                    <= cfg.maximum_speed_mps
+                    and np.linalg.norm(v - old[2]) <= cfg.maximum_velocity_change_mps
+                    and np.linalg.norm(p - old[1] - 0.5 * (v + old[2]) * dt)
+                    <= cfg.maximum_prediction_residual_m
+                ):
+                    count = old[3] + 1
+            history[key] = (t, p.copy(), v.copy(), count)
+            rel = p - robot
+            rel_v = v - robot_v
+            t_closest = -float(rel @ rel_v) / max(float(rel_v @ rel_v), 1e-9)
+            separation = float(
+                np.linalg.norm(
+                    rel + np.clip(t_closest, 0, cfg.prediction_horizon_seconds) * rel_v
+                )
+            )
+            reasons = []
+            if (
+                not track.matched_previous_track
+                or track.observation_count < 3
+                or count < cfg.minimum_consistent_observations
+            ):
+                reasons.append("insufficient_consistent_current_motion")
+            if track.point_count < cfg.minimum_point_count:
+                reasons.append("sparse_geometry")
+            if not cfg.minimum_speed_mps <= speed <= cfg.maximum_speed_mps:
+                reasons.append("not_bounded_moving_obstacle")
+            if (
+                distance < 0.2
+                or rel @ direction <= 0
+                or np.linalg.norm(rel) > cfg.maximum_distance_m
+            ):
+                reasons.append("outside_forward_encounter")
+            transverse = abs(float(direction[0] * v[1] - direction[1] * v[0])) / max(
+                speed, 1e-9
+            )
+            if transverse < cfg.minimum_transverse_fraction:
+                reasons.append("not_transverse_crossing")
+            if (
+                not 0 < t_closest <= cfg.prediction_horizon_seconds
+                or separation > cfg.maximum_predicted_separation_m
+            ):
+                reasons.append("no_near_term_encounter")
+            n = rel / max(float(np.linalg.norm(rel)), 1e-9)
+            ccw = np.array([-n[1], n[0]])
+            alignment = float(ccw @ v) / max(speed, 1e-9)
+            if abs(alignment) < 0.5:
+                reasons.append("ambiguous_trailing_tangent")
+            if reasons:
+                rejected[key] = reasons
+            else:
+                side = PassingSide.LEFT if alignment < 0 else PassingSide.RIGHT
+                candidates.append((key, side, t_closest, separation, alignment))
+        decision, preferences = "no_qualified_crossing", {}
+        if self.encounter is not None:
+            key, side, started, original_velocity = self.encounter
+            track = tracks.get(key)
+            if any(item[0] != key for item in candidates):
+                self.encounter = None
+                decision = "released_ambiguous_multiple_crossings"
+            elif track is None or t - started > cfg.maximum_encounter_seconds:
+                self.encounter = None
+                decision = "released_missing_or_expired_target"
+            else:
+                rel = np.asarray(track.centroid_world_xy) - robot
+                v = np.asarray(track.velocity_world_xy)
+                if (
+                    rel @ direction < -cfg.passed_distance_m
+                    or np.linalg.norm(rel) > cfg.maximum_distance_m
+                    or np.linalg.norm(v) > cfg.maximum_speed_mps
+                    or (
+                        np.linalg.norm(v) >= cfg.minimum_speed_mps
+                        and v @ original_velocity < 0
+                    )
+                ):
+                    self.encounter = None
+                    decision = "released_passed_or_changed_encounter"
+                elif (
+                    t - self.last_timestamp > cfg.maximum_source_gap_seconds + 1e-9
+                    or track.point_count < cfg.minimum_point_count
+                    or not track.matched_previous_track
+                ):
+                    self.encounter = None
+                    decision = "released_source_or_identity_gap"
+                else:
+                    preferences[key] = side
+                    decision = "held_current_track_policy_preference"
+        if (
+            self.encounter is None
+            and len(candidates) == 1
+            and not decision.startswith("released")
+        ):
+            key, side, *_ = candidates[0]
+            self.encounter = (key, side, t, np.array(tracks[key].velocity_world_xy))
+            preferences[key] = side
+            decision = "selected_trailing_tangent"
+        elif self.encounter is None and len(candidates) > 1:
+            decision = "ambiguous_multiple_crossings"
+        self.history, self.last_timestamp = history, t
+        audit = {
+            "decision": decision,
+            "source_timestamp": t,
+            "encounter_selected_timestamp": None
+            if self.encounter is None
+            else self.encounter[2],
+            "selection_velocity_world_xy": None
+            if self.encounter is None
+            else self.encounter[3].tolist(),
+            "preferences": {key: side.value for key, side in preferences.items()},
+            "qualified_candidates": [
+                {
+                    "track_id": key,
+                    "side": side.value,
+                    "time_to_closest_seconds": tc,
+                    "predicted_separation_m": sep,
+                    "ccw_motion_alignment": a,
+                }
+                for key, side, tc, sep, a in candidates
+            ],
+            "rejections": rejected,
+            "configuration": asdict(cfg),
+            "basis": "current LiDAR geometry/inferred world velocity; constant-relative-velocity selection hypothesis",
+            "scope": "one separated crossing; latched policy preference only; no evidence retention, free-space clearing or guaranteed passing side",
+        }
+        return preferences, audit

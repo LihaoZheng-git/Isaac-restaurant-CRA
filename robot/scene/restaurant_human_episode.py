@@ -23,6 +23,7 @@ class RestaurantHumanEpisode:
         output,
         trigger_robot_y=7.8,
         crossing_delay_seconds=None,
+        crossing_direction="right-to-left",
         speed_mps=0.7,
         carry_bowl=False,
         carry_facing_crossing=False,
@@ -30,6 +31,11 @@ class RestaurantHumanEpisode:
     ):
         if mode not in {"standing", "crossing", "continuous-crossing"}:
             raise ValueError("unknown human episode")
+        if crossing_direction not in {"right-to-left", "left-to-right"} or (
+            crossing_direction == "left-to-right" and mode != "crossing"
+        ):
+            raise ValueError("mirrored crossing is bounded to standalone walking")
+        self.crossing_direction = crossing_direction
         if carry_bowl and mode != "continuous-crossing":
             raise ValueError("carried server requires explicit continuous crossing")
         if upper_continuation and mode != "continuous-crossing":
@@ -53,8 +59,8 @@ class RestaurantHumanEpisode:
             raise ValueError("bounded coupled native walking speed must be .5..1 m/s")
         self.stage, self.mode, self.output = stage, mode, output
         with Usd.EditContext(stage, stage.GetSessionLayer()):
-            self.setup = prepare_native_restaurant_human(stage)
-        self.goal = (27.8, 8.9, 0.0)
+            self.setup = prepare_native_restaurant_human(stage, crossing_direction=crossing_direction)
+        self.goal = (29.8 if crossing_direction == "left-to-right" else 27.8, 8.9, 0.0)
         self.speed = speed_mps
         self.phase = "idle_before"
         self.task = None
@@ -91,7 +97,11 @@ class RestaurantHumanEpisode:
         if self.agent is None:
             raise RuntimeError("native human behavior unavailable")
         self.agent.set_auto_avoidance_enabled(False)
-        self.agent.idle()
+        if self.crossing_direction == "left-to-right":
+            import carb
+            self.agent.idle(facing=carb.Float3(1, 0, 0))
+        else:
+            self.agent.idle()
         self.body = RigidPrim(self.setup["collider_path"])
         if not self.body.is_physics_tensor_entity_valid():
             raise RuntimeError("human collider has no physics readback")

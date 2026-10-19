@@ -231,6 +231,7 @@ class LiveObjectPerception:
         pose_detector=None,
         human_body_contact_config=None,
         experiment_baseline=None,
+        motion_passing_config=None,
     ):
         self.segmenter, self.mass_estimator, self.contact_detector = (
             segmenter,
@@ -251,6 +252,13 @@ class LiveObjectPerception:
         self.person_detector = person_detector
         from robot.evaluation.restaurant_baselines import validate_baseline
         self.experiment_baseline = validate_baseline(experiment_baseline)
+        from robot.safety.motion_aware_passing import MotionAwarePassing, MotionAwarePassingConfig
+        if motion_passing_config is not None and (
+            not isinstance(motion_passing_config, MotionAwarePassingConfig)
+            or persistent_property_config is None or carried_object_config is not None
+        ):
+            raise ValueError("motion-aware passing requires standalone persistent object-map mode")
+        self.motion_passing = MotionAwarePassing(motion_passing_config) if motion_passing_config is not None else None
         if self.experiment_baseline is not CRABaseline.CONTINUOUS_CRA_SAFE_SAGE and persistent_property_config is None:
             raise ValueError("comparison baseline requires persistent object-map mode")
         self.human_mass_prior_config = human_mass_prior_config

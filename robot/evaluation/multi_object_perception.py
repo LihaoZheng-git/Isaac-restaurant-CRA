@@ -471,6 +471,24 @@ def assess_all_objects(worker, packet):
     applied_guidance, baseline_audit = applied_field_policies(
         getattr(worker, "experiment_baseline", None), policies, objects,
     )
+    passing = copy.deepcopy(getattr(worker, "motion_passing", None))
+    passing_audit = None
+    if passing is not None:
+        sides, passing_audit = passing.update(
+            tracking, robot_xy=packet.robot_position_world_xy,
+            robot_velocity_xy=packet.measured_robot_velocity_world_xy,
+            goal_xy=packet.waypoint_world_xy,
+        )
+        # A side preference can cover this track's unmatched returns too, but
+        # their own risk/flux/unknown provenance and occupancy stay unchanged.
+        for key, parameters in tuple(applied_guidance.items()):
+            original = key if key in sides else key-1_000_000_000
+            if original in sides:
+                applied_guidance[key] = replace(parameters, passing_side=sides[original])
+        for row in baseline_audit:
+            key = row["track_or_group_id"]
+            row["cra_passing_side"] = policies[key].passing_side.value
+            row["applied_passing_side"] = applied_guidance[key].passing_side.value
     cells = np.floor(
         (points - [worker.grid_config.minimum_x, worker.grid_config.minimum_y])
         / worker.grid_config.resolution
@@ -568,6 +586,8 @@ def assess_all_objects(worker, packet):
         field,
     )
     worker.static_points, worker.object_ownership_bounds = static, ownership
+    if passing is not None:
+        worker.motion_passing = passing
     worker.temporal_recovery_baseline = None
     if carried_state is not None:
         worker.carried_runtime_state=carried_state
@@ -584,6 +604,7 @@ def assess_all_objects(worker, packet):
         "mode": "persistent_multi_object_factor_priors",
         "experiment_baseline": worker.experiment_baseline.value,
         "applied_field_policies": baseline_audit,
+        "motion_aware_passing": passing_audit,
         "object_count": len(objects),
         "objects": [item.diagnostics for item in objects],
         "carried_object_groups":carried_detail,

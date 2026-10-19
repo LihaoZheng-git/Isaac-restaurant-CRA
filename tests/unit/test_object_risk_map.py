@@ -570,6 +570,44 @@ def test_failed_multi_object_field_does_not_commit_tracker_or_property_memory():
     )
 
 
+def test_motion_passing_state_is_transactional_with_the_actual_field():
+    from robot.safety.motion_aware_passing import MotionAwarePassing
+    runtime = mapped_worker()
+    runtime.motion_passing = MotionAwarePassing()
+    first = runtime(multi_packet())
+    original = runtime.motion_passing
+    assert original.last_timestamp == 1.
+    with pytest.raises(ValueError, match="unpublished recovery baseline"):
+        runtime(multi_packet(2, 1.5))
+    assert runtime.previous is first.field
+    assert runtime.motion_passing is original and original.last_timestamp == 1.
+    runtime(multi_packet(3, 1.1))
+    assert runtime.motion_passing.last_timestamp == 1.1
+
+
+def test_observed_crossing_changes_only_field_side_and_keeps_all_risks_and_returns():
+    from robot.safety.motion_aware_passing import MotionAwarePassing, MotionAwarePassingConfig
+    runtime = mapped_worker()
+    baseline = mapped_worker()
+    runtime.motion_passing = MotionAwarePassing(MotionAwarePassingConfig(minimum_point_count=3))
+    for i in range(6):
+        value = packet(i+1, 1.+.1*i)
+        points = value.obstacle_xyz + [0,.6-.04*i,0]
+        result = runtime(replace(value,obstacle_xyz=points,scene_xyz=points))
+        reference = baseline(replace(value,obstacle_xyz=points,scene_xyz=points))
+    assert result.diagnostics["motion_aware_passing"]["preferences"] == {0:"left"}
+    assert result.field.all_obstacle_point_count == 4
+    actual_field = result.field.pipeline.guidance_fields[0]
+    reference_field = reference.field.pipeline.guidance_fields[0]
+    assert not np.allclose(actual_field.tangential_boundary_vectors_robot_xy,
+                           reference_field.tangential_boundary_vectors_robot_xy)
+    for row in result.diagnostics["applied_field_policies"]:
+        if row["track_or_group_id"] == 0:
+            assert row["cra_passing_side"] == "right" and row["applied_passing_side"] == "left"
+            assert row["cra_phi"] == row["applied_field_risk"] == .68359375
+            assert row["lambda"] == 1.25
+
+
 def test_temporal_gap_requires_unpublished_baseline_then_actual_fresh_pair():
     runtime = mapped_worker()
     first = runtime(multi_packet())

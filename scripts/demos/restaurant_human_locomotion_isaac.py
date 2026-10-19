@@ -20,6 +20,8 @@ parser.add_argument("--speed", type=float, default=0.7)
 parser.add_argument("--goal-y", type=float, default=12.5)
 parser.add_argument("--goal-x", type=float, default=29.8)
 parser.add_argument("--sensor-diagnostic", action="store_true")
+parser.add_argument("--crossing-direction", choices=("right-to-left", "left-to-right"), default="right-to-left")
+parser.add_argument("--motion-aware-passing", action="store_true")
 parser.add_argument("--human-body-contact-prior", type=float, default=None, metavar="SCORE",
                     help="explicit low nonzero human-body contact policy prior; legacy outline mode if omitted")
 parser.add_argument("--carry-bowl", action="store_true",
@@ -46,6 +48,8 @@ parser.add_argument(
     metavar=("KG", "LOWER", "UPPER"),
 )
 args = parser.parse_args()
+if args.motion_aware_passing and (not args.sensor_diagnostic or args.carry_bowl):
+    parser.error("motion-aware stationary component requires standalone sensor mode")
 if args.human_body_contact_prior is not None and (
     not args.sensor_diagnostic or not math.isfinite(args.human_body_contact_prior)
     or not 0 < args.human_body_contact_prior < 1
@@ -73,6 +77,10 @@ if not 0 <= args.camera_upward_degrees <= 25 or not 0 <= args.camera_raise_metre
 ):
     parser.error("experimental camera/close view requires sensor diagnostic; pitch 0..25")
 crossing_goal = args.goal_x == 27.8 and args.goal_y == 8.9
+if args.crossing_direction == "left-to-right":
+    if not args.sensor_diagnostic or args.carry_bowl or args.goal_x != 29.8 or args.goal_y != 8.9:
+        parser.error("mirrored sensor crossing requires standalone goal (29.8,8.9)")
+    crossing_goal = True
 if (not crossing_goal and (args.goal_x != 29.8 or not 9.8 <= args.goal_y <= 12.5)
     or not 0.05 <= args.sensor_simulation_rate <= 1):
     parser.error("use original x=29.8/y=9.8..12.5 or crossing goal (27.8,8.9); pacing .05..1")
@@ -208,7 +216,7 @@ def main():
     if setup_clearance <= 0.02:
         raise RuntimeError("configured parked robot overlaps authored occupancy")
     with Usd.EditContext(stage, stage.GetSessionLayer()):
-        setup = prepare_native_restaurant_human(stage)
+        setup = prepare_native_restaurant_human(stage, crossing_direction=args.crossing_direction)
     carry_setup = None
     if args.carry_bowl:
         from robot.scene.restaurant_human_carry import author_native_carry_bowl
@@ -293,7 +301,10 @@ def main():
         )
         for side in ("L", "R")
     }
-    agent.idle()
+    if args.crossing_direction == "left-to-right":
+        agent.idle(facing=carb.Float3(1, 0, 0))
+    else:
+        agent.idle()
     # Let the native idle transition and its one-physics-step collider settle
     # before starting the recorded idle/walk/stop episode.
     for _ in range(60):
@@ -341,6 +352,7 @@ def main():
             cluster_radius_m=args.human_cluster_radius,
             carried_object_groups=args.carried_object_groups,
             human_body_contact_prior_score=args.human_body_contact_prior,
+            motion_aware_passing=args.motion_aware_passing,
         )
     phase = "idle_before"
     phase_start = timeline.get_current_time()

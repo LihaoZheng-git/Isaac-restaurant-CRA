@@ -53,9 +53,11 @@ def _current_contact_policy(obj):
     )
 
 
-def summarize_human_navigation(records, truth, *, mode, upper_continuation=False):
+def summarize_human_navigation(records, truth, *, mode, upper_continuation=False, crossing_direction="right-to-left"):
     if mode not in {"standing", "crossing", "continuous-crossing"}:
         raise ValueError("unknown human navigation mode")
+    if crossing_direction not in {"right-to-left", "left-to-right"}:
+        raise ValueError("unsupported crossing evaluation direction")
     rows = []
     if len(truth) >= 3:
         times = np.array([r["time"] for r in truth])
@@ -214,6 +216,9 @@ def summarize_human_navigation(records, truth, *, mode, upper_continuation=False
             and truth[-1]["actor_xyz"][0] <= 28.05
             and truth[-1]["phase"] == "stopped_after",
         )
+        if mode == "crossing" and crossing_direction == "left-to-right":
+            checks["actual_crossing"] = (bool(truth) and truth[0]["actor_xyz"][0] <= 28.1
+                and truth[-1]["actor_xyz"][0] >= 29.55 and truth[-1]["phase"] == "stopped_after")
         if mode == "continuous-crossing":
             from robot.evaluation.continuous_server_validation import summarize_continuous_server
             checks.pop("actual_crossing")
