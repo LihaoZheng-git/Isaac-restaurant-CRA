@@ -286,6 +286,12 @@ def propose_carried_object(
                 return None, diagnostics + [
                     {"rejection": "ambiguous distinct two-wrist subinstances"}
                 ]
+        # This is an explicitly bounded two-wrist compact-object mode. Do not
+        # silently fall back to a broader one-wrist scene component when it
+        # fails; that can select nearby background geometry during a turn.
+        return None, diagnostics + [
+            {"rejection": "no accepted two-wrist compact subinstance; no mode fallback"}
+        ]
     for wrist_index in (9, 10):
         wrist = pose.keypoints[wrist_index]
         if wrist[2] < config.minimum_wrist_confidence:

@@ -262,6 +262,17 @@ def test_rejected_segmentation_never_becomes_a_low_risk_object():
     assert result is None and details[-1]["accepted_candidates"] == 0
 
 
+def test_two_wrist_mode_never_falls_back_to_a_looser_one_wrist_scene_component():
+    args = fixture()
+    accepted, _ = propose_carried_object(*args, CarriedObjectConfig())
+    assert accepted is not None
+    rejected, detail = propose_carried_object(
+        *args, CarriedObjectConfig(allow_occluding_subinstance=True)
+    )
+    assert rejected is None
+    assert "no mode fallback" in detail[-1]["rejection"]
+
+
 def test_pose_match_rejects_competing_people_and_copies_keypoints():
     _, _, person, pose, _ = fixture()
     frame = HumanPoseFrame(7, 1.0, (300, 200), (pose,))
