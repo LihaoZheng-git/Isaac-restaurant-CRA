@@ -3,11 +3,31 @@
 from collections import Counter
 import hashlib
 import json
+import math
 from pathlib import Path
 
 import numpy as np
 
 from robot.evaluation.cra_experiments import PRIMARY_BASELINES
+
+
+def planner_result_diagnostic(result):
+    """Keep failed-plan margins unavailable in strict JSON, never zero them."""
+    margin = None if result is None else result.minimum_dtcbf_margin
+    finite = margin is not None and math.isfinite(margin)
+    return {
+        "first_command": None if result is None else result.first_command,
+        "nominal_first_command": (
+            None if result is None else result.nominal_first_command
+        ),
+        "minimum_dtcbf_margin": float(margin) if finite else None,
+        "minimum_dtcbf_margin_status": (
+            "finite" if finite else "unavailable_no_result"
+            if result is None else "unavailable_nonfinite"
+        ),
+        "solver_success": None if result is None else result.success,
+        "solver_fallback_active": None if result is None else result.fallback_active,
+    }
 
 
 def comparison_plan(*, phase="pilot", repetitions=None):

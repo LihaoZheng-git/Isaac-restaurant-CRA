@@ -12,6 +12,9 @@ The disk occupancy and phi .65 are authored **ORACLE** inputs. The measured
 robot rectangle is shifted to the .10 m look-ahead reference; lambda is 1.25.
 This has no Isaac dependency, no sensor estimation and no wheel commands.
 It is a controller isolation diagnostic, not a reproduction of all paper settings.
+The virtual step is .05 s with no added future-configuration padding; the
+native demo uses physics substeps and its existing .025 m/.21 rad padding.
+Both full configurations are recorded; virtual success is not native acceptance.
 
 The same obstacle-unaware waypoint horizon is mapped into each command space.
 Records include guidance, the planar constraint normal, its `B(theta)^T` pullback,
@@ -67,3 +70,41 @@ remove unresolved occupancy or relax field/optimizer freshness to pass. A
 virtual arrival does not establish moving-camera perception, fresh four-factor
 coverage, native stopping or restaurant crossing acceptance. Main and the long
 service demonstration remain on hold.
+
+## Native development checks at f39395d
+
+`native-parked-v1` passed the 60-frame fresh-person/mass-prior/contact/current-
+motion component with zero wheel commands. Potential and thermal remained
+labeled priors. `native-static-v1` then passed actual service-route arrival in
+20.50 simulated seconds, 1.219426 m minimum signed monitor clearance and
+.002268 m stopping drift. These are prior-assisted paced Isaac checks, not
+complete fresh four-factor perception.
+
+`native-crossing-v1` retained the original .5 m/s left-to-right, 13 s actor delay
+and +15 degree camera. It failed at 15.15 navigation seconds on unresolved track
+484 (last observed 22.5 source seconds, missing .7 s, robot distance 1.108 m).
+Only one policy-selection row survived; the moving arc was .013946 m and human
+validation had zero supported moving-kinetic rows. Planner computations reached
+11.83 wall seconds; perception reached 10.40 s including a 7.19 s field stage,
+followed by unchanged stale/source-gap rejections. Keep all raw records and the
+failed independent validators. This does not establish a native bypass.
+
+The launcher returned zero after a separate final-report JSON failure: a
+failed MPC result correctly contained a NaN unavailable margin, which the
+strict serializer rejected inside `plan_events`. The canonical `report.json`
+is absent; do not reconstruct missing stopping/clearance metrics or mark the
+trial passed. The reporting fix stores a null margin with an explicit
+unavailable status and preserves failure/fallback flags, without changing the
+controller result. Subsequent runs use fresh directories.
+
+The subsequent performance correction removes repeated dense-mask work from
+the nonlinear rescue's internal smooth constraint/Jacobian callbacks, which
+never used that discrete mask. The final optimizer proposal still receives a
+full exact/DTCBF/dense validation before acceptance, even when the optimizer
+reports failure. A regression deliberately proposes an endpoint-feasible
+inter-sample collision and requires rejection. No safety threshold, objective,
+iteration budget, evidence clock or occupancy-loss rule changes.
+
+Software validation after those corrections: 2,072 unit tests passed; repository
+Ruff passed. The static trial recorded 204 live fields, 203 while translating.
+These results do not supersede the failed late-crossing gate.

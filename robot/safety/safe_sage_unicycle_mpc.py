@@ -1359,6 +1359,7 @@ class SafeSAGEUnicycleMPC:
                 h_full=h_full,
                 guidance_fields=guidance_fields,
                 temporal_safety_derivative=temporal_safety_derivative,
+                check_dense_geometry=False,
             )
             return cached_evaluation
 
@@ -1446,7 +1447,17 @@ class SafeSAGEUnicycleMPC:
             },
         )
         iteration_count = int(getattr(optimization, "nit", 0))
-        candidate = evaluate(np.asarray(optimization.x, dtype=np.float64))
+        # The optimizer uses smooth endpoint constraints/Jacobians only. Dense
+        # mask work cannot change those values; do it once on the final proposal
+        # before accepting it, including when the optimizer reports failure.
+        candidate = self._evaluate_trajectory(
+            initial_state,
+            np.asarray(optimization.x, dtype=np.float64).reshape(horizon, 2),
+            configuration_space=configuration_space,
+            h_full=h_full,
+            guidance_fields=guidance_fields,
+            temporal_safety_derivative=temporal_safety_derivative,
+        )
         if candidate is not None and self._trajectory_is_safe(candidate):
             return candidate, iteration_count, str(optimization.message)
         minimum_margin = (
@@ -1857,6 +1868,7 @@ class SafeSAGEUnicycleMPC:
         guidance_fields: Sequence[LaplaceGuidanceFieldResult],
         temporal_safety_derivative: TemporalSafetyDerivativeInput,
         require_feasible: bool = False,
+        check_dense_geometry: bool = True,
     ) -> _TrajectoryEvaluation | None:
         """Roll out and sample one complete command sequence."""
 
@@ -1884,10 +1896,14 @@ class SafeSAGEUnicycleMPC:
             # constraint. Recovery does not use infeasible evaluations for
             # gradients or restoration, unlike the main solver.
             return None
-        if not np.any(samples.unsafe_configuration_mask) and (
-            self.config.safety_substeps_per_interval > 1
-            or self.config.configuration_position_padding_m > 0
-            or self.config.configuration_yaw_padding_radians > 0
+        if (
+            check_dense_geometry
+            and not np.any(samples.unsafe_configuration_mask)
+            and (
+                self.config.safety_substeps_per_interval > 1
+                or self.config.configuration_position_padding_m > 0
+                or self.config.configuration_yaw_padding_radians > 0
+            )
         ):
             unsafe_mask = self._inter_sample_unsafe_mask(
                 chassis_states,

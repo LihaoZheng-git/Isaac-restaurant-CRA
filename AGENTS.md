@@ -704,3 +704,13 @@
   prior failures. Virtual ORACLE-field arrival is not native crossing or fresh
   perception acceptance. See docs/guidance_control_audit.md; the main/long-service
   holds and all evidence, occupancy and freshness gates remain unchanged.
+- The f39395d control audit passed both virtual unicycle sides, a 60-frame
+  parked-human component and static restaurant arrival/stopping. Its late
+  13 s mirrored crossing still failed on unresolved fragment 484 after long
+  compute/stale-source gaps, with zero supported moving-kinetic rows. Its final
+  JSON report was lost to a NaN failed-plan diagnostic; retain the raw failure
+  and never infer missing clearance/stopping metrics. Failed-plan margins must
+  serialize as explicitly unavailable nulls, not zero. Nonlinear rescue may
+  skip dense-mask work only in its internal smooth callbacks; every final
+  proposal still needs full exact DTCBF/dense geometry acceptance. Neither this
+  performance correction nor static arrival grants crossing/perception acceptance.

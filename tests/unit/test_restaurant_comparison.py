@@ -4,8 +4,38 @@ import pytest
 
 from robot.evaluation.restaurant_comparison import (
     comparison_plan, comparison_summary, contract_fingerprint, expected_stationary_rejection,
-    extract_trial, trial_options,
+    extract_trial, trial_options, planner_result_diagnostic,
 )
+
+
+def test_failed_plan_margin_remains_unavailable_in_strict_json():
+    import numpy as np
+    from test_safe_sage_unicycle_mpc import make_mpc
+
+    mpc = make_mpc()
+    result = mpc._fallback_result(np.zeros(3), np.tile([.2, 0.], (10, 1)),
+                                  status="declared rejected horizon")
+    record = {"accepted": False, "reason": result.status,
+              **planner_result_diagnostic(result)}
+    decoded = json.loads(json.dumps(record, allow_nan=False))
+    assert decoded["minimum_dtcbf_margin"] is None
+    assert decoded["minimum_dtcbf_margin_status"] == "unavailable_nonfinite"
+    assert not decoded["accepted"] and not decoded["solver_success"]
+    assert decoded["solver_fallback_active"]
+    assert decoded["reason"] == "declared rejected horizon"
+    assert np.isnan(result.minimum_dtcbf_margin)  # reporting never mutates control
+
+
+def test_absent_and_finite_plan_diagnostics_are_distinct():
+    from test_safe_sage_unicycle_mpc import plan_synthetic
+
+    absent = planner_result_diagnostic(None)
+    assert absent["minimum_dtcbf_margin_status"] == "unavailable_no_result"
+    result = plan_synthetic(guidance=(0, 0), gradient=(0, 0, 0), safety_value=2.)
+    record = planner_result_diagnostic(result)
+    assert record["minimum_dtcbf_margin"] == result.minimum_dtcbf_margin
+    assert record["minimum_dtcbf_margin_status"] == "finite"
+    json.dumps([absent, record], allow_nan=False)
 
 
 def test_plan_pairs_all_methods_and_prespecifies_crossing_timing():

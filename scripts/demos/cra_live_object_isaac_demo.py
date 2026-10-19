@@ -291,6 +291,7 @@ from robot.evaluation.live_object_perception import (
     LiveObjectPacket,
     LiveObjectPerception,
 )
+from robot.evaluation.restaurant_comparison import planner_result_diagnostic
 from robot.evaluation.factor_specific_cra import diagnose_factor_specific_cra
 from robot.evaluation.kinetic_fixture import actor_offset_velocity, summarize_kinetic_records, summarize_live_relative_motion
 from robot.evaluation.nearby_track_loss_guard import NearbyTrackLossConfig, NearbyTrackLossGuard
@@ -1674,15 +1675,7 @@ def main():
                         else result.status,
                         "source_age_seconds": now
                         - plan_outcome.sensor_timestamp_seconds,
-                        "first_command": None
-                        if result is None
-                        else result.first_command,
-                        "nominal_first_command": None
-                        if result is None
-                        else result.nominal_first_command,
-                        "minimum_dtcbf_margin": None
-                        if result is None
-                        else result.minimum_dtcbf_margin,
+                        **planner_result_diagnostic(result),
                     }
                 )
                 if accepted:

@@ -1,5 +1,6 @@
 import math
 import time
+from types import SimpleNamespace
 
 import numpy as np
 import pytest
@@ -914,6 +915,44 @@ def test_unhinted_recovery_can_return_upward_with_lower_nominal_cost():
     assert free.chassis_states[-1, 1] > 0 > forced.chassis_states[-1, 1]
     assert mpc._objective_value(free.commands, nominal) < mpc._objective_value(forced.commands, nominal)
     assert mpc._trajectory_is_safe(free) and mpc._trajectory_is_safe(forced)
+
+
+def test_rescue_checks_dense_geometry_once_after_smooth_optimization(monkeypatch):
+    """Positive endpoint margins cannot accept an inter-sample collision."""
+    import robot.safety.safe_sage_unicycle_mpc as module
+
+    configuration_space, h_full, guidance = make_fields(
+        guidance=(0, 0), gradient=(0, 0, 0), safety_value=2.,
+        unsafe_yaw_indices=(0, 1, 2, 3),
+    )
+    mpc = make_mpc(horizon_steps=1, time_step=1., maximum_linear_velocity=2.,
+                   safety_substeps_per_interval=2)
+    state = np.array([-1.1, 0., 0.])
+    nominal = np.array([[2., 0.]])
+    fields = dict(configuration_space=configuration_space, h_full=h_full,
+                  guidance_fields=guidance, temporal_safety_derivative=0.)
+    reference = mpc._evaluate_trajectory(state, nominal, **fields)
+    assert reference is not None and not mpc._trajectory_is_safe(reference)
+    calls = []
+    original = mpc._inter_sample_unsafe_mask
+
+    def count_dense(*args, **kwargs):
+        calls.append(1)
+        return original(*args, **kwargs)
+
+    def propose_unsafe_horizon(_objective, x, **kwargs):
+        constraints = kwargs["constraints"]
+        assert np.min(constraints["fun"](x)) >= 0
+        constraints["jac"](x)
+        assert calls == []
+        return SimpleNamespace(x=x, nit=1, message="endpoint-feasible test proposal")
+
+    monkeypatch.setattr(mpc, "_inter_sample_unsafe_mask", count_dense)
+    monkeypatch.setattr(module, "minimize", propose_unsafe_horizon)
+    candidate, iterations, _ = mpc._solve_exact_nonlinear_rescue(
+        reference, initial_state=state, nominal_sequence=nominal, **fields)
+    assert candidate is None  # the full dense gate still rejects this proposal
+    assert iterations == 1 and calls == [1]
 
 
 def test_geometry_padding_grows_within_first_execution_interval(monkeypatch):
