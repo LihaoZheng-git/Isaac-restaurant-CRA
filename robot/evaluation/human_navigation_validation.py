@@ -29,11 +29,28 @@ def human_stationary_checks(records):
             for o in fresh
         )
         >= 3,
-        "observed_contact_proxy": any(
-            o["diagnostics"]["factor_scores"]["contact"]["mode"] == "evidence_supported"
+        "current_contact_proxy_or_explicit_body_prior": any(
+            _current_contact_policy(o)
             for o in fresh
         ),
     }
+
+
+def _current_contact_policy(obj):
+    contact = obj["diagnostics"]["factor_scores"]["contact"]
+    if contact["mode"] == "evidence_supported":
+        return True
+    if contact["mode"] != "configured_human_body_contact_prior":
+        return False
+    from robot.perception.human_body_contact import HUMAN_BODY_CONTACT_SOURCE
+    prior = contact.get("human_body_prior", {})
+    return (
+        prior.get("status") == "prior" and prior.get("source") == HUMAN_BODY_CONTACT_SOURCE
+        and prior.get("value") is not None and 0 < prior["value"] < 1
+        and prior.get("confidence") == 0
+        and prior.get("timestamp_seconds") == obj["attributes"]["mass"]["mass_kg"]["timestamp_seconds"]
+        and f"track_id={obj['track_id']}" in prior.get("evidence", ())
+    )
 
 
 def summarize_human_navigation(records, truth, *, mode, upper_continuation=False):

@@ -191,6 +191,7 @@ class LiveObjectResult:
     fusion: object | None
     diagnostics: dict
     objects: tuple = ()
+    source_occupancy_grid: object | None = None
 
 
 class LiveObjectPerception:
@@ -229,6 +230,7 @@ class LiveObjectPerception:
         carried_object_config=None,
         pose_detector=None,
         human_body_contact_config=None,
+        experiment_baseline=None,
     ):
         self.segmenter, self.mass_estimator, self.contact_detector = (
             segmenter,
@@ -247,6 +249,8 @@ class LiveObjectPerception:
         ):
             raise TypeError("invalid human mass prior configuration")
         self.person_detector = person_detector
+        from robot.evaluation.restaurant_baselines import validate_baseline
+        self.experiment_baseline = validate_baseline(experiment_baseline)
         self.human_mass_prior_config = human_mass_prior_config
         from robot.perception.human_body_contact import HumanBodyContactPriorConfig
         if human_body_contact_config is not None and (

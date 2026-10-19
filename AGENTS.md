@@ -638,3 +638,16 @@
   calibrated body contact. Preserve the remaining view/height/plume limitations.
   Keep the chosen human contact model fixed in matched controller experiments;
   show contact-prior sensitivity and risk-dependent lambda separately.
+- The bounded restaurant comparison opt-in preserves raw CRA assessments and
+  records the separately applied field policy. Fixed-class uses only the fresh
+  person association or unknown fallback; an accepted SAM mask never invents a
+  low-risk generic class. The circular velocity-aware geometric CBF is a
+  different controller reference with conservative footprint/cell allowances,
+  source-age rejection, inferred tracker motion and labeled zero-motion priors;
+  its shadow risk field is never its wheel controller. Compare fixed-class and
+  CRA under identical MPC/CBF settings and lambda 1.25. Geometric CBF margin units
+  differ from h_full and its shadow perception overhead is not pure CBF timing.
+  The prespecified crossing variants use elapsed navigation time, independent
+  of robot progress; preserve the legacy robot-y trigger separately. Keep all
+  failed/missing reports and signed inflated-monitor overlap, distinct from
+  measured physical collision. See docs/restaurant_baseline_comparison.md.

@@ -9,6 +9,7 @@ import numpy as np
 from pxr import Gf, Usd, UsdGeom, UsdSkel
 
 from robot.evaluation.restaurant_service_validation import authored_raster_clearance
+from robot.evaluation.restaurant_baselines import crossing_due
 from robot.safety.safe_sage_configuration_space import RectangularRobotFootprint
 from robot.scene.restaurant_human_motion import prepare_native_restaurant_human
 
@@ -21,6 +22,7 @@ class RestaurantHumanEpisode:
         mode,
         output,
         trigger_robot_y=7.8,
+        crossing_delay_seconds=None,
         speed_mps=0.7,
         carry_bowl=False,
         carry_facing_crossing=False,
@@ -40,6 +42,13 @@ class RestaurantHumanEpisode:
         if not math.isfinite(trigger_robot_y) or not 6.8 <= trigger_robot_y <= 7.8:
             raise ValueError("bounded native crossing trigger must be y=6.8..7.8")
         self.trigger_robot_y = trigger_robot_y
+        if crossing_delay_seconds is not None and (
+            mode == "standing" or not math.isfinite(crossing_delay_seconds)
+            or not 0 <= crossing_delay_seconds <= 30
+        ):
+            raise ValueError("exogenous crossing delay requires crossing and 0..30 seconds")
+        self.crossing_delay_seconds = crossing_delay_seconds
+        self.navigation_start_time = None
         if not math.isfinite(speed_mps) or not 0.5 <= speed_mps <= 1.0:
             raise ValueError("bounded coupled native walking speed must be .5..1 m/s")
         self.stage, self.mode, self.output = stage, mode, output
@@ -165,7 +174,9 @@ class RestaurantHumanEpisode:
             and self.mode in {"crossing", "continuous-crossing"}
             and self.task is None
             and self.phase == "idle_before"
-            and robot_xy[1] >= self.trigger_robot_y
+            and crossing_due(now=now, robot_y=robot_xy[1], trigger_y=self.trigger_robot_y,
+                             delay_seconds=self.crossing_delay_seconds,
+                             navigation_start=self.navigation_start_time)
         ):
             self.agent.set_speed(self.speed)
             self.task = self.agent.move_to(
