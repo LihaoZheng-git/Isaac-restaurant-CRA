@@ -3,7 +3,8 @@ import json
 import pytest
 
 from robot.evaluation.restaurant_comparison import (
-    comparison_plan, comparison_summary, contract_fingerprint, extract_trial, trial_options,
+    comparison_plan, comparison_summary, contract_fingerprint, expected_stationary_rejection,
+    extract_trial, trial_options,
 )
 
 
@@ -67,3 +68,11 @@ def test_matched_configuration_rejects_changed_camera_and_keeps_failures(tmp_pat
     assert all(s["passes"] == 0 and s["attempts"] == 1 for s in summary["summary"])
     rows[0]["configuration"]["experimental_camera_mount"] = {"upward_degrees": 20}
     assert comparison_summary(rows)["matched_cells"][0]["mismatches"] == ["experimental_camera_mount"]
+
+
+def test_only_explicit_zero_wheel_gate_rejection_is_expected():
+    message = "RuntimeError: stationary restaurant component gate failed; wheels are blocked"
+    assert expected_stationary_rejection({"passed":False,"nonzero_wheel_commands":0}, message)
+    assert not expected_stationary_rejection({"passed":False,"nonzero_wheel_commands":1}, message)
+    assert not expected_stationary_rejection({"passed":False,"nonzero_wheel_commands":0}, "TypeError: logging failed")
+    assert not expected_stationary_rejection({}, message)

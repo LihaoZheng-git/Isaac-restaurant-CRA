@@ -13,7 +13,8 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 
 from robot.evaluation.restaurant_comparison import (
-    comparison_plan, comparison_summary, contract_fingerprint, extract_trial, trial_options,
+    comparison_plan, comparison_summary, contract_fingerprint, expected_stationary_rejection,
+    extract_trial, trial_options,
 )
 
 
@@ -27,6 +28,8 @@ def main():
     parser.add_argument("--phase", choices=("pilot", "study"), default="pilot")
     parser.add_argument("--repetitions", type=int)
     parser.add_argument("--execute", action="store_true")
+    parser.add_argument("--continue-after-stationary-rejection", action="store_true",
+                        help="retain a validated zero-wheel component rejection as an end-to-end failure, then try the next independent trial")
     parser.add_argument("--case", action="append", help="execute selected cases from the unchanged manifest")
     parser.add_argument("--baseline", action="append", help="execute selected baselines from the unchanged manifest")
     parser.add_argument("--isaac-python", type=Path, default=Path("C:/isaacsim/python.bat"))
@@ -39,6 +42,7 @@ def main():
     dirty = bool(subprocess.check_output(["git", "status", "--porcelain"], cwd=ROOT, text=True).strip())
     manifest = {"schema_version": 1, "phase": args.phase, "trials": trials,
                 "case_options": options, "code_revision": revision, "working_tree_dirty": dirty,
+                "continue_after_stationary_rejection": args.continue_after_stationary_rejection,
                 "case_contract_sha256": {k: contract_fingerprint(v) for k, v in options.items()},
                 "scope": "short restaurant baselines only; labeled factor/adult/body-contact priors; no long service demonstration",
                 "study_design": "nominal static/standing, exogenous crossing at 7/8/9 seconds; timing variants replace new placement changes; actor path unchanged",
@@ -77,8 +81,11 @@ def main():
                                          stderr=subprocess.STDOUT, check=False)
             # Isaac's batch launcher may return zero after a script exception.
             log = (directory / "isaac.log").read_text(encoding="utf-8", errors="replace")
+            gate_path = directory / "stationary-gate.json"
+            gate = json.loads(gate_path.read_text()) if gate_path.is_file() else {}
             save(done, {"launcher_returncode": process.returncode,
                         "traceback_present": "Traceback (most recent call last)" in log,
+                        "expected_stationary_rejection": expected_stationary_rejection(gate, log),
                         "motion_report_available": (directory / "report.json").is_file(),
                         "ended_utc": datetime.now(timezone.utc).isoformat()})
             row = extract_trial(directory, trial)
@@ -90,7 +97,10 @@ def main():
                 row["passed"] = False
                 row["execution_validation_error"] = "report pass contradicted by process/log failure"
             rows.append(row)
-            if args.execute and selected and not row["report_available"]:
+            if args.execute and selected and not row["report_available"] and not (
+                args.continue_after_stationary_rejection
+                and row["execution"].get("expected_stationary_rejection", False)
+            ):
                 # A controller timeout is an outcome; failure before motion is
                 # a setup/perception blocker, not another controller result.
                 (args.output / "STOP").write_text(

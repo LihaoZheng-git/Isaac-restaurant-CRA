@@ -88,6 +88,19 @@ can execute a subset of the unchanged manifest; incomplete cells stay visible.
 A `STOP` file prevents subsequent starts while allowing the current bounded
 trial to stop normally. Missing motion reports create this file automatically;
 ordinary motion timeouts remain comparative outcomes and do not halt the batch.
+The explicit `--continue-after-stationary-rejection` collection option can count
+the saved zero-wheel component rejection as an end-to-end failure and proceed
+to the next independent trial. It requires the exact gate rejection, saved
+failed gate and zero wheel count; a logging/process error still halts. Every
+later trial repeats its own unchanged gate. Report all attempted trials and
+controller-stage attempts separately, never silently discard initial failures
+or treat a missing trajectory as a navigation collision.
+
+Three independent zero-wheel repeats of the 60-frame/context recipe passed all
+component checks at source `5878a35`, each with eight fresh matched bowl masks.
+Artifacts: `outputs/restaurant_baselines/init60-context-v1/repeat-00..02/`.
+These support the next newly frozen pilot, not the failed 18-frame case or
+complete fresh perception during navigation.
 
 ## Measurements and interpretation
 

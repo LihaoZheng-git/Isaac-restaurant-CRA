@@ -67,10 +67,18 @@ def _read(path, default=None):
     return json.loads(path.read_text(encoding="utf-8")) if path.is_file() else default
 
 
+def expected_stationary_rejection(gate, log):
+    return (
+        gate.get("passed") is False and gate.get("nonzero_wheel_commands") == 0
+        and "RuntimeError: stationary restaurant component gate failed; wheels are blocked" in log
+    )
+
+
 def extract_trial(directory, trial):
     """Never turn missing reports, prior scores, or clearance guards into passes."""
     directory = Path(directory)
     report = _read(directory / "report.json", {})
+    invocation = _read(directory / "invocation.json", {})
     gate = _read(directory / "stationary-gate.json", {})
     if not gate:
         gate = _read(directory / "stationary-report.json", {})
@@ -108,6 +116,7 @@ def extract_trial(directory, trial):
     clearance = report.get("minimum_clearance_m")
     return {
         **trial, "directory": str(directory), "evidence_mode": "prior",
+        "invocation_contract_sha256": invocation.get("contract_sha256"),
         "report_available": bool(report), "stationary_gate_passed": gate.get("passed"),
         "passed": report.get("passed", False), "arrived": report.get("completed", False),
         "reason": report.get("reason", "stationary_gate_failed" if gate.get("passed") is False else "missing_motion_report"),
@@ -161,7 +170,10 @@ def comparison_summary(rows):
         if available:
             first = next(iter(cell.values()))["configuration"]
             mismatch = [k for k in common if any(r["configuration"][k] != first[k] for r in cell.values())]
-        matches.append({"case": key[0], "repeat": key[1], "all_motion_reports": available,
+        hashes = {row.get("invocation_contract_sha256") for row in cell.values()}
+        matches.append({"case": key[0], "repeat": key[1], "all_attempts_recorded": expected <= cell.keys(),
+                        "matched_invocation_contract": expected <= cell.keys() and None not in hashes and len(hashes) == 1,
+                        "all_motion_reports": available,
                         "matched_configuration": available and not mismatch, "mismatches": mismatch})
     summaries = []
     for case in dict.fromkeys(r["case"] for r in rows):
@@ -172,6 +184,8 @@ def comparison_summary(rows):
             summaries.append({"case": case, "baseline": baseline.value, "attempts": len(selected),
                               "passes": sum(r["passed"] for r in selected),
                               "arrivals": sum(r["arrived"] for r in selected),
+                              "stationary_rejections": sum(r["reason"] == "stationary_gate_failed" for r in selected),
+                              "controller_attempts": sum(r["motion_started"] for r in selected),
                               "missing_reports": sum(not r["report_available"] for r in selected)})
     return {"scope": "bounded prior-assisted simulation comparison; descriptive repetitions; no real-time or superiority claim",
             "matched_cells": matches, "summary": summaries, "trials": rows}

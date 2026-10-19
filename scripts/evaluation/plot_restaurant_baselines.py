@@ -29,7 +29,7 @@ def main():
     cases = list(dict.fromkeys(row["case"] for row in data["trials"]))
     if not cases:
         raise ValueError("no executed trials to plot")
-    fig = plt.figure(figsize=(5 * len(cases), 8), layout="constrained")
+    fig = plt.figure(figsize=(max(12, 5 * len(cases)), 8), layout="constrained")
     layout = fig.add_gridspec(2, len(cases), height_ratios=(3, 1.7))
     table_rows = []
     for index, case in enumerate(cases):
@@ -84,7 +84,8 @@ def main():
     table.auto_set_font_size(False)
     table.set_fontsize(8)
     table.scale(1, 1.45)
-    fig.suptitle("Restaurant baseline comparison — actual bounded prior-assisted trials", fontsize=15)
+    incomplete = any(not cell["all_motion_reports"] for cell in data.get("matched_cells", []))
+    fig.suptitle("Restaurant baseline comparison — " + ("incomplete pilot" if incomplete else "actual bounded prior-assisted trials"), fontsize=15)
     fig.supxlabel("Circles: full acceptance; crosses: failed endpoints. Dotted lines: independent human-root evaluation traces.\n"
         "Room/prop occupancy omitted from this trajectory plot. Mass/contact/fall/thermal priors retain provenance; no calibrated injury or real-time claim.", fontsize=9)
     output = args.source / "comparison-overview.png"
