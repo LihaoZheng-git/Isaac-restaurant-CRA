@@ -714,3 +714,8 @@
   skip dense-mask work only in its internal smooth callbacks; every final
   proposal still needs full exact DTCBF/dense geometry acceptance. Neither this
   performance correction nor static arrival grants crossing/perception acceptance.
+- The e534647 exact late-crossing repeat also failed on old fragment 357 at
+  17.533 s; 162 fields/156 while translating, .173236 m signed monitor clearance,
+  .004167 m stop drift, zero supported moving kinetic and only .081634 m curved
+  excursion. Its strict failure report saved; long planner/perception calls
+  persisted. Preserve both failures and do not call the latency issue resolved.

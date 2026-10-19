@@ -108,3 +108,19 @@ iteration budget, evidence clock or occupancy-loss rule changes.
 Software validation after those corrections: 2,072 unit tests passed; repository
 Ruff passed. The static trial recorded 204 live fields, 203 while translating.
 These results do not supersede the failed late-crossing gate.
+
+The exact repeat `native-crossing-v2` at e534647 also failed: robot termination
+at 17.5333 s on unresolved fragment 357 (original source 18.0 s, missing 7.6 s,
+distance 1.19995 m). It retained 162 live fields/156 while translating, .173236 m
+minimum signed monitor clearance and .004167 m stopping drift. Nineteen
+side-selection rows produced only .081634 m left excursion; human validation
+still had zero supported moving-kinetic rows. Planner/perception calls still
+exceeded 10 wall seconds; removing redundant rescue masks did not resolve
+native latency. The strict report now saved successfully, including one
+explicitly unavailable failed-plan margin. The subsequent expected wheel-gate
+exception remains a failure even though the batch launcher returned zero.
+
+The next bounded continuity step investigates fresh positive returns covering
+a former fragment despite a farther cluster centroid, and early rejection of
+already-colliding recovery candidates. It must preserve unobserved occupancy,
+factor expiry, primary lambda and exact acceptance; no new guidance cost.
