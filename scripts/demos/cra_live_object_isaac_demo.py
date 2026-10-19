@@ -26,6 +26,12 @@ parser.add_argument("--experiment-baseline", choices=("geometric_velocity_cbf", 
                     default="continuous_cra_safe_sage", help="explicit matched restaurant comparison; physical assessments always retained")
 parser.add_argument("--motion-aware-passing", action="store_true",
                     help="opt-in current LiDAR crossing-side preference; unchanged CRA scores/lambda/safety checks")
+parser.add_argument("--guidance-tracking-weight", type=float, default=0.0,
+                    help="separate bounded Laplace-guidance heading MPC ablation; zero preserves primary")
+parser.add_argument("--guidance-activation-h", type=float, default=1.0,
+                    help="ablation reference activates smoothly below this safety-field value")
+parser.add_argument("--guidance-max-heading-bias-degrees", type=float, default=45.0,
+                    help="maximum ablation heading preference relative to nominal (strictly below 90 degrees)")
 parser.add_argument("--human-positive-fragment-extent", action="store_true",
                     help="bare-human recent-coobservation/current-positive-return fragment association; no free-space or factor transfer")
 parser.add_argument("--human-observed-passing-target", action="store_true",
@@ -143,6 +149,13 @@ parser.add_argument(
     help="optimizer candidate age cap; every executed horizon still needs fresh exact validation",
 )
 args = parser.parse_args()
+if (not math.isfinite(args.guidance_tracking_weight) or args.guidance_tracking_weight < 0
+    or not math.isfinite(args.guidance_activation_h) or args.guidance_activation_h <= 0):
+    parser.error("guidance tracking weight must be finite/nonnegative; activation h finite/positive")
+if args.guidance_tracking_weight > 0 and args.experiment_baseline == "geometric_velocity_cbf":
+    parser.error("guidance tracking is a separate MPC ablation, unavailable for geometric CBF")
+if not math.isfinite(args.guidance_max_heading_bias_degrees) or not 0 < args.guidance_max_heading_bias_degrees < 90:
+    parser.error("guidance heading bias must be finite and strictly between 0 and 90 degrees")
 if args.human_observed_passing_target and not (args.motion_aware_passing and args.restaurant_human and not args.human_carry_bowl):
     parser.error("observed-human passing requires the bare-human motion-aware component")
 if args.human_positive_fragment_extent and (args.restaurant_human is None or args.human_carry_bowl):
@@ -341,6 +354,7 @@ from robot.safety.safe_sage_runtime import (
     SafeSAGEPlanExecutionLease,
 )
 from robot.safety.safe_sage_unicycle_mpc import SafeSAGEUnicycleMPC
+from robot.safety.laplace_guidance_tracking_mpc import LaplaceGuidanceTrackingMPC, LaplaceGuidanceTrackingConfig
 from robot.scene.camera_calibration import read_fisheye_polynomial_calibration
 from robot.scene.loader import load_robot_scene
 from robot.scene.transforms import compute_relative_prim_transform
@@ -1404,6 +1418,10 @@ def main():
             configuration_padding_initial_fraction=0.1,
         ),
     )
+    if args.guidance_tracking_weight > 0:
+        mpc = LaplaceGuidanceTrackingMPC(mpc.paper_filter, mpc.config,
+            guidance_config=LaplaceGuidanceTrackingConfig(args.guidance_tracking_weight, args.guidance_activation_h,
+                math.radians(args.guidance_max_heading_bias_degrees)))
     control = SafeSAGEControlRuntime(mpc=mpc, backup_filter=backup)
     waypoint = WaypointController(
         [Waypoint(*point) for point in ROUTE],
@@ -2028,11 +2046,15 @@ def main():
         "nonlinear_rescue_iteration_limit": mpc.config.maximum_nonlinear_rescue_iterations,
         "progress_seed_linear_fraction": mpc.config.progress_seed_linear_fraction,
         "mpc_configuration": asdict(mpc.config),
+        "guidance_tracking_ablation": {"enabled": args.guidance_tracking_weight > 0,
+            "weight": args.guidance_tracking_weight, "activation_safety_value": args.guidance_activation_h,
+            "maximum_heading_bias_radians": math.radians(args.guidance_max_heading_bias_degrees),
+            "scope": "separate bounded guidance-heading objective; primary nominal unchanged; not paper equivalence"},
         "immediate_replan_after_invalidations": args.immediate_replan,
         "verified_command_interval_seconds": mpc.config.time_step,
         "wall_seconds": time.perf_counter() - start_wall,
         "navigation_simulation_seconds": now - start_sim,
-        "controller_scope": "circular_velocity_aware_cbf_nominal_omega_no_mpc; shadow_CRA_fields_for_matched_perception" if args.experiment_baseline == "geometric_velocity_cbf" else "online_unicycle_MPC_exact_DTCBF_geometry_and_analytical_CBF",
+        "controller_scope": "circular_velocity_aware_cbf_nominal_omega_no_mpc; shadow_CRA_fields_for_matched_perception" if args.experiment_baseline == "geometric_velocity_cbf" else "bounded_guidance_heading_ablation_with_exact_DTCBF_geometry_and_analytical_CBF" if args.guidance_tracking_weight > 0 else "online_unicycle_MPC_exact_DTCBF_geometry_and_analytical_CBF",
         "fixed_lambda": 1.25,
         "plume_control": args.plume_control,
         "restaurant_scene": str(SCENE_PATH) if args.restaurant_scene else None,

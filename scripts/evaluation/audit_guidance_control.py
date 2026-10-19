@@ -18,6 +18,7 @@ from robot.evaluation.guidance_control_audit import (
     build_audit_field,
     run_control_audit,
 )
+from robot.safety.laplace_guidance_tracking_mpc import LaplaceGuidanceTrackingConfig
 
 
 def main():
@@ -36,7 +37,20 @@ def main():
     parser.add_argument("--cbf-angular-weight", type=float, default=1.0)
     parser.add_argument("--solver-iterations", type=int, default=1000)
     parser.add_argument("--progress-seed-fraction", type=float, default=0.5)
+    parser.add_argument("--guidance-tracking-weight", type=float, default=0.0)
+    parser.add_argument("--guidance-activation-h", type=float, default=1.0)
+    parser.add_argument("--guidance-max-heading-bias-degrees", type=float, default=45.0)
+    parser.add_argument("--track-nominal-states", action="store_true")
     args = parser.parse_args()
+    guidance_config = LaplaceGuidanceTrackingConfig(
+        args.guidance_tracking_weight,
+        args.guidance_activation_h,
+        np.deg2rad(args.guidance_max_heading_bias_degrees),
+    )
+    if (
+        args.guidance_tracking_weight > 0 or args.track_nominal_states
+    ) and "planar" in args.kind:
+        parser.error("this ablation audit requires --kind unicycle")
     config = GuidanceAuditConfig(
         maximum_seconds=args.maximum_seconds,
         cbf_angular_weight=args.cbf_angular_weight,
@@ -51,6 +65,8 @@ def main():
             ["git", "rev-parse", "HEAD"], cwd=ROOT, text=True
         ).strip(),
         configuration=asdict(config),
+        guidance_tracking_ablation=asdict(guidance_config),
+        track_nominal_states=args.track_nominal_states,
         sides=args.side,
         controllers=args.kind,
         nominal="same obstacle-unaware waypoint horizon, mapped into each command space",
@@ -69,6 +85,8 @@ def main():
                 ROOT / "robot/evaluation/guidance_control_audit.py",
                 ROOT / "robot/safety/safe_sage_unicycle_mpc.py",
                 ROOT / "robot/safety/safe_sage_planar_mpc.py",
+                ROOT / "robot/safety/laplace_guidance_tracking_mpc.py",
+                ROOT / "robot/safety/safe_sage_cbf_filter.py",
             )
         },
     )
@@ -86,7 +104,14 @@ def main():
                 flush=True,
             )
             report = run_control_audit(
-                field, kind, config, progress=lambda p: print(json.dumps(p), flush=True)
+                field,
+                kind,
+                config,
+                progress=lambda p: print(json.dumps(p), flush=True),
+                guidance_tracking_config=guidance_config
+                if args.guidance_tracking_weight > 0
+                else None,
+                track_nominal_states=args.track_nominal_states,
             )
             report.update(passing_side=side, field_sha256=digest)
             (args.output / f"{side}-{kind}.json").write_text(

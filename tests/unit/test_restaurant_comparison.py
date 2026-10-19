@@ -38,6 +38,11 @@ def test_absent_and_finite_plan_diagnostics_are_distinct():
     json.dumps([absent, record], allow_nan=False)
 
 
+def test_guidance_ablation_cannot_enter_primary_comparison():
+    with pytest.raises(ValueError, match="separate comparison"):
+        comparison_summary([{"configuration": {"guidance_tracking_ablation": {"enabled": True}}}])
+
+
 def test_plan_pairs_all_methods_and_prespecifies_crossing_timing():
     pilot = comparison_plan()
     assert len(pilot) == 9

@@ -425,6 +425,8 @@ class _SparseQPSolution:
 class SafeSAGEUnicycleMPC:
     """Finite-horizon Safe-SAGE predictive filter for ``(v, omega)``."""
 
+    _additional_tracking_objective_active = False
+
     def __init__(
         self,
         paper_filter: SafeSAGECBFSafetyFilter,
@@ -527,7 +529,7 @@ class SafeSAGEUnicycleMPC:
         target_states = self._target_state_sequence(
             target_chassis_states_grid
         )
-        state_tracking_active = bool(
+        tracking_objective_active = self._additional_tracking_objective_active or bool(
             target_states is not None
             and (
                 self.config.position_tracking_weight > 0.0
@@ -592,7 +594,7 @@ class SafeSAGEUnicycleMPC:
         if (
             initial_command_guess is not None
             and self._trajectory_is_safe(reference)
-            and not state_tracking_active
+            and not tracking_objective_active
         ):
             nominal_reference = self._evaluate_trajectory(
                 initial_state,
@@ -622,7 +624,7 @@ class SafeSAGEUnicycleMPC:
                 completed_sqp_iterations += improvement_steps
                 total_qp_iterations += improvement_iterations
 
-        if state_tracking_active and self._trajectory_is_safe(reference):
+        if tracking_objective_active and self._trajectory_is_safe(reference):
             reference, improvement_steps, improvement_iterations = (
                 self._improve_safe_warm_start(
                     reference,

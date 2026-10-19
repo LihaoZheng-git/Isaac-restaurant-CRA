@@ -1,6 +1,7 @@
 """Prespecified bounded baseline matrix and failure-preserving result extraction."""
 
 from collections import Counter
+from dataclasses import asdict
 import hashlib
 import json
 import math
@@ -27,6 +28,8 @@ def planner_result_diagnostic(result):
         ),
         "solver_success": None if result is None else result.success,
         "solver_fallback_active": None if result is None else result.fallback_active,
+        **({"guidance_tracking_ablation": asdict(result.guidance_tracking)}
+           if result is not None and hasattr(result, "guidance_tracking") else {}),
     }
 
 
@@ -175,7 +178,7 @@ def extract_trial(directory, trial):
         "configuration": {key: report.get(key) for key in (
             "experiment_baseline", "fixed_lambda", "nominal_route_local_xy", "scene_source_sha256",
             "simulation_rate_limit", "qp_iteration_limit", "nonlinear_rescue_iteration_limit",
-            "progress_seed_linear_fraction", "mpc_configuration",
+            "progress_seed_linear_fraction", "mpc_configuration", "guidance_tracking_ablation",
             "planner_candidate_maximum_age_seconds", "human_crossing_delay_seconds",
             "human_body_contact_prior_config", "experimental_camera_mount", "human_mass_prior_config",
             "object_factor_prior_risk", "persistent_property_config", "temporal_evidence_config",
@@ -190,6 +193,8 @@ def comparison_summary(rows):
     """Incomplete cells stay visible; complete failures remain in denominators."""
     cells = {}
     for row in rows:
+        if (row.get("configuration", {}).get("guidance_tracking_ablation") or {}).get("enabled"):
+            raise ValueError("guidance-tracking ablations require a separate comparison, not the primary matrix")
         key = (row["case"], row["repeat"])
         cell = cells.setdefault(key, {})
         if row["baseline"] in cell:

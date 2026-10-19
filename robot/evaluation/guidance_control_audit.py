@@ -158,9 +158,19 @@ def nominal_sequences(chassis, waypoint, horizon_steps, time_step=0.2):
     return wheel, np.array(planar)
 
 
-def run_control_audit(pipeline, kind, config, *, progress=None):
+def run_control_audit(
+    pipeline,
+    kind,
+    config,
+    *,
+    progress=None,
+    guidance_tracking_config=None,
+    track_nominal_states=False,
+):
     if kind not in {"planar", "unicycle"}:
         raise ValueError("planar or unicycle required")
+    if track_nominal_states and kind != "unicycle":
+        raise ValueError("matched nominal-state tracking audit is unicycle-only")
     paper = SafeSAGECBFSafetyFilter(
         SafeSAGECBFConfig(
             gamma=1.0,
@@ -196,6 +206,16 @@ def run_control_audit(pipeline, kind, config, *, progress=None):
             ),
         )
     )
+    if guidance_tracking_config is not None:
+        if kind != "unicycle":
+            raise ValueError("guidance tracking ablation is unicycle-only")
+        from robot.safety.laplace_guidance_tracking_mpc import (
+            LaplaceGuidanceTrackingMPC,
+        )
+
+        mpc = LaplaceGuidanceTrackingMPC(
+            paper, mpc.config, guidance_config=guidance_tracking_config
+        )
     backup = SafeSAGEUnicycleCBFFilter(
         paper,
         SafeSAGEUnicycleCBFConfig(angular_velocity_weight=config.cbf_angular_weight),
@@ -229,6 +249,11 @@ def run_control_audit(pipeline, kind, config, *, progress=None):
                 safety if kind == "planar" else chassis,
                 planar if kind == "planar" else wheel,
                 initial_command_guess=warm,
+                **(
+                    {"target_chassis_states_grid": mpc._rollout(chassis, wheel)}
+                    if track_nominal_states
+                    else {}
+                ),
                 **field,
             )
             solve_time = time.perf_counter() - tic
@@ -244,6 +269,11 @@ def run_control_audit(pipeline, kind, config, *, progress=None):
                     cost=plan.objective_value,
                     status=plan.status,
                     dtcbf_margins=plan.dtcbf_margins.tolist(),
+                    guidance_tracking=(
+                        asdict(plan.guidance_tracking)
+                        if hasattr(plan, "guidance_tracking")
+                        else None
+                    ),
                 )
             )
             warm = (
@@ -364,6 +394,10 @@ def run_control_audit(pipeline, kind, config, *, progress=None):
         maximum_negative_lateral_m=min(p[1] for p in trajectory),
         configuration=asdict(config),
         mpc_configuration=asdict(mpc.config),
+        guidance_tracking_ablation=asdict(guidance_tracking_config)
+        if guidance_tracking_config
+        else None,
+        track_nominal_states=track_nominal_states,
         fixed_lambda=1.25,
         nonzero_wheel_commands=0,
         scope="authored fixed ORACLE occupancy/phi; virtual controller comparison; no sensor or wheel acceptance",
