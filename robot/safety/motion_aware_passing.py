@@ -14,6 +14,7 @@ from robot.safety.safe_sage_guidance_policy import PassingSide
 
 @dataclass(frozen=True)
 class MotionAwarePassingConfig:
+    require_visual_person_selection: bool = False
     minimum_speed_mps: float = 0.2
     maximum_speed_mps: float = 2.0
     maximum_source_gap_seconds: float = 0.35
@@ -29,7 +30,11 @@ class MotionAwarePassingConfig:
     passed_distance_m: float = 0.4
 
     def __post_init__(self):
+        if not isinstance(self.require_visual_person_selection, bool):
+            raise TypeError("visual-person selection opt-in must be boolean")
         for name, value in asdict(self).items():
+            if name == "require_visual_person_selection":
+                continue
             if isinstance(value, bool) or not math.isfinite(value) or value <= 0:
                 raise ValueError(f"{name} must be finite and positive")
         for name in ("minimum_consistent_observations", "minimum_point_count"):
@@ -49,9 +54,10 @@ class MotionAwarePassing:
             raise TypeError("motion passing config required")
         self.history = {}
         self.encounter = None
+        self.encounter_person_verified = False
         self.last_timestamp = None
 
-    def update(self, tracking, *, robot_xy, robot_velocity_xy, goal_xy):
+    def update(self, tracking, *, robot_xy, robot_velocity_xy, goal_xy, visual_person_track_ids=None):
         cfg = self.config
         t = float(tracking.timestamp_seconds)
         if (
@@ -74,6 +80,18 @@ class MotionAwarePassing:
         tracks = {track.track_id: track for track in tracking.tracked_obstacles}
         if len(tracks) != len(tracking.tracked_obstacles):
             raise ValueError("ambiguous duplicate track identity")
+        if cfg.require_visual_person_selection:
+            if visual_person_track_ids is None:
+                raise ValueError("explicit current visual-person IDs required")
+            eligible = tuple(visual_person_track_ids)
+            if any(isinstance(k, (bool, np.bool_)) or not isinstance(k, (int, np.integer))
+                   or k not in tracks for k in eligible) or len(set(eligible)) != len(eligible):
+                raise ValueError("visual-person IDs must be unique current tracks")
+            eligible = set(eligible)
+        else:
+            if visual_person_track_ids is not None:
+                raise ValueError("visual-person IDs require the explicit selection opt-in")
+            eligible = set(tracks)
         candidates, history, rejected = [], {}, {}
         for key, track in tracks.items():
             p, v = (
@@ -186,14 +204,18 @@ class MotionAwarePassing:
         if (
             self.encounter is None
             and len(candidates) == 1
+            and candidates[0][0] in eligible
             and not decision.startswith("released")
         ):
             key, side, *_ = candidates[0]
             self.encounter = (key, side, t, np.array(tracks[key].velocity_world_xy))
+            self.encounter_person_verified = cfg.require_visual_person_selection
             preferences[key] = side
             decision = "selected_trailing_tangent"
         elif self.encounter is None and len(candidates) > 1:
             decision = "ambiguous_multiple_crossings"
+        elif self.encounter is None and len(candidates) == 1 and candidates[0][0] not in eligible:
+            decision = "unverified_visual_person_target"
         self.history, self.last_timestamp = history, t
         audit = {
             "decision": decision,
@@ -204,6 +226,10 @@ class MotionAwarePassing:
             "selection_velocity_world_xy": None
             if self.encounter is None
             else self.encounter[3].tolist(),
+            "original_selection_visual_person_verified": (
+                self.encounter_person_verified if self.encounter is not None else None
+            ),
+            "current_visual_person_track_ids": sorted(eligible) if cfg.require_visual_person_selection else None,
             "preferences": {key: side.value for key, side in preferences.items()},
             "qualified_candidates": [
                 {

@@ -736,3 +736,12 @@
   insufficiently verified geometric track was selected. The two new extent
   merges were environment geometry, not natural human-fragment acceptance.
   Keep these distinctions, long-compute/source-gap failures and main hold.
+- The optional observed-human passing gate requires a fresh accepted same-frame
+  person/SAM association only for a new side-policy selection. A retained mass
+  prior or class text cannot select; the original policy latch is not current
+  physical/class evidence and retains its original expiry. Keep all geometric
+  ambiguity/source-gap releases and every other obstacle's CRA/occupancy intact.
+  Runtime profiles/library-thread metadata are diagnostic only; no packages or
+  thread limits change merely by profiling. Partial-duration profile trials
+  are not arrival acceptance. Diagnose the numeric workers before changing
+  temporal forecasting, safety checks or objectives. See docs/observed_human_guidance.md.

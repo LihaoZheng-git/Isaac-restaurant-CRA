@@ -258,6 +258,9 @@ class LiveObjectPerception:
             or persistent_property_config is None or carried_object_config is not None
         ):
             raise ValueError("motion-aware passing requires standalone persistent object-map mode")
+        if (motion_passing_config is not None and motion_passing_config.require_visual_person_selection
+            and person_detector is None):
+            raise ValueError("observed-human passing requires the audited visual person detector")
         self.motion_passing = MotionAwarePassing(motion_passing_config) if motion_passing_config is not None else None
         if self.experiment_baseline is not CRABaseline.CONTINUOUS_CRA_SAFE_SAGE and persistent_property_config is None:
             raise ValueError("comparison baseline requires persistent object-map mode")

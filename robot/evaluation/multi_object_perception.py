@@ -44,6 +44,25 @@ class ObjectAssessment:
     diagnostics: dict
 
 
+def fresh_person_selection_evidence(objects, camera_timestamp, camera_frame_id):
+    """Reuse the same-frame accepted person/SAM cue, never retained mass/class."""
+    from robot.perception.human_mass_prior import HUMAN_MASS_PRIOR_SOURCE
+
+    eligible = {}
+    for item in objects:
+        d = item.diagnostics
+        cue = d.get("geometry_evidence", {}).get("human_mass_prior", {})
+        if (d.get("accepted_instance") and cue.get("source") == HUMAN_MASS_PRIOR_SOURCE
+            and cue.get("status") == "prior" and cue.get("value") is not None
+            and abs(cue.get("timestamp_seconds", -math.inf) - camera_timestamp) <= 1e-9):
+            eligible[item.attributes.track_id] = {
+                "basis": "fresh_same_frame_person_SAM_association; class cue only, not measured mass",
+                "camera_frame_id": camera_frame_id,
+                "camera_timestamp_seconds": camera_timestamp,
+            }
+    return eligible
+
+
 def assess_all_objects(worker, packet):
     from robot.evaluation.live_object_perception import LiveObjectResult
 
@@ -474,11 +493,15 @@ def assess_all_objects(worker, packet):
     passing = copy.deepcopy(getattr(worker, "motion_passing", None))
     passing_audit = None
     if passing is not None:
+        visual = fresh_person_selection_evidence(objects, packet.camera_timestamp_seconds,
+            packet.camera_frame_id) if passing.config.require_visual_person_selection else None
         sides, passing_audit = passing.update(
             tracking, robot_xy=packet.robot_position_world_xy,
             robot_velocity_xy=packet.measured_robot_velocity_world_xy,
             goal_xy=packet.waypoint_world_xy,
+            visual_person_track_ids=None if visual is None else tuple(visual),
         )
+        passing_audit["current_visual_selection_evidence"] = visual
         passing_audit["ego_pose_reference"] = {"source":packet.pose_source,"status":packet.pose_status.value,
                                               "robot_velocity_source":"derivative of the declared ego pose history"}
         # A side preference can cover this track's unmatched returns too, but

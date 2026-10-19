@@ -28,6 +28,10 @@ parser.add_argument("--motion-aware-passing", action="store_true",
                     help="opt-in current LiDAR crossing-side preference; unchanged CRA scores/lambda/safety checks")
 parser.add_argument("--human-positive-fragment-extent", action="store_true",
                     help="bare-human recent-coobservation/current-positive-return fragment association; no free-space or factor transfer")
+parser.add_argument("--human-observed-passing-target", action="store_true",
+                    help="require fresh person/SAM association for new human passing choices; all obstacles retain CRA/safety intervention")
+parser.add_argument("--profile-runtime", action="store_true",
+                    help="diagnostic worker call profiles for jobs over 3 wall seconds; profiling timings are not performance acceptance")
 parser.add_argument("--human-body-contact-prior", type=float,
                     help="opt-in fresh-person blunt-body contact PRIOR, e.g. .10; not measured sharpness")
 parser.add_argument("--restaurant-scene", type=Path,
@@ -139,6 +143,8 @@ parser.add_argument(
     help="optimizer candidate age cap; every executed horizon still needs fresh exact validation",
 )
 args = parser.parse_args()
+if args.human_observed_passing_target and not (args.motion_aware_passing and args.restaurant_human and not args.human_carry_bowl):
+    parser.error("observed-human passing requires the bare-human motion-aware component")
 if args.human_positive_fragment_extent and (args.restaurant_human is None or args.human_carry_bowl):
     parser.error("positive fragment extent requires the bounded bare native-human scenario")
 if not math.isfinite(args.progress_seed_fraction) or not 0 < args.progress_seed_fraction < 1:
@@ -296,6 +302,7 @@ from robot.evaluation.live_object_perception import (
     LiveObjectPerception,
 )
 from robot.evaluation.restaurant_comparison import planner_result_diagnostic
+from robot.evaluation.runtime_diagnostics import profile_call, numeric_runtime_contract
 from robot.evaluation.factor_specific_cra import diagnose_factor_specific_cra
 from robot.evaluation.kinetic_fixture import actor_offset_velocity, summarize_kinetic_records, summarize_live_relative_motion
 from robot.evaluation.nearby_track_loss_guard import NearbyTrackLossConfig, NearbyTrackLossGuard
@@ -779,7 +786,7 @@ def main():
             score=args.human_body_contact_prior,
         ) if args.human_body_contact_prior is not None else None,
         experiment_baseline=args.experiment_baseline,
-        motion_passing_config=MotionAwarePassingConfig() if args.motion_aware_passing else None,
+        motion_passing_config=MotionAwarePassingConfig(require_visual_person_selection=args.human_observed_passing_target) if args.motion_aware_passing else None,
         calibration=calibration,
         class_policy=class_policy,
         guidance_policy=guidance,
@@ -1376,6 +1383,8 @@ def main():
         timeline.stop()
         return
 
+    save_json("numeric-runtime-contract.json", numeric_runtime_contract())
+
     mpc, backup = existing.create_controller_stack(controller)
     substeps = round(mpc.config.time_step / stationary.PHYSICS_DT)
     mpc = SafeSAGEUnicycleMPC(
@@ -1451,7 +1460,9 @@ def main():
             **coverage_geometry(latest, packet))
     def infer_with_timing(packet):
         started = time.perf_counter()
-        result = perception(packet)
+        result = profile_call(perception, packet,
+            profile_path=args.output / "profiles" / f"perception-{packet.sensor_frame_id}.pstats"
+            if args.profile_runtime else None)
         elapsed = time.perf_counter() - started
         if elapsed > 3.0:
             print(json.dumps({"slow_perception_compute": {
@@ -1464,11 +1475,13 @@ def main():
 
     def plan_with_timing(data):
         started = time.perf_counter()
-        result = control.plan(
+        result = profile_call(control.plan,
             data[0],
             data[1],
             data[2],
             initial_command_guess=data[3],
+            profile_path=args.output / "profiles" / f"planner-{data[2].sensor_frame_id}.pstats"
+            if args.profile_runtime else None,
         )
         elapsed = time.perf_counter() - started
         if elapsed > 3.0:
