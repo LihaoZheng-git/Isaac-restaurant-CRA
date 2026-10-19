@@ -6,7 +6,7 @@ import pytest
 
 from robot.evaluation.cra_experiments import CRABaseline
 from robot.evaluation.restaurant_baselines import (
-    applied_field_policies, crossing_due, geometric_cbf_command, validate_baseline,
+    applied_field_policies, crossing_due, fixed_class_comparison_policy, geometric_cbf_command, validate_baseline,
 )
 from robot.risk.object_risk_policy import ObjectRiskPriorConfig, evaluate_object_risk
 from robot.risk.physical_factor_adapter import adapt_physical_factors
@@ -24,32 +24,38 @@ def policy():
 
 def test_fixed_class_retains_unknown_sam_and_physical_assessments():
     cra = policy()
-    classes = SafeSAGEGuidancePolicy.from_json("configs/safe_sage_paper_baseline.json")
     obj = NS(attributes=NS(track_id=7), diagnostics={"accepted_instance": True})
-    guidance, audit = applied_field_policies("fixed_class_safe_sage", {7: cra}, [obj], classes)
+    guidance, audit = applied_field_policies("fixed_class_safe_sage", {7: cra}, [obj])
     assert guidance[7].risk == 1
     assert audit[0]["observed_class"] == "unknown"
     assert cra.risk == .68359375
     assert audit[0]["cra_phi"] == cra.risk
     assert guidance[7].tangential_strength == 1.25
     obj.diagnostics["geometry_evidence"] = {"human_mass_prior": {"value": 70, "status": "prior"}}
-    _, audit = applied_field_policies("fixed_class_safe_sage", {7: cra}, [obj], classes)
+    _, audit = applied_field_policies("fixed_class_safe_sage", {7: cra}, [obj])
     assert audit[0]["observed_class"] == "person"
     obj.diagnostics["accepted_instance"] = False
-    _, audit = applied_field_policies("fixed_class_safe_sage", {7: cra}, [obj], classes)
+    _, audit = applied_field_policies("fixed_class_safe_sage", {7: cra}, [obj])
     assert audit[0]["observed_class"] == "unknown"
 
 
 def test_default_cra_guidance_is_identical_and_geometric_field_is_shadow_only():
     cra = policy()
-    classes = SafeSAGEGuidancePolicy.from_json("configs/safe_sage_paper_baseline.json")
-    actual, audit = applied_field_policies(None, {7: cra}, [], classes)
+    actual, audit = applied_field_policies(None, {7: cra}, [])
     assert actual[7] is cra.guidance_parameters
     assert audit[0]["field_used_for_control"]
-    _, audit = applied_field_policies("geometric_velocity_cbf", {7: cra}, [], classes)
+    _, audit = applied_field_policies("geometric_velocity_cbf", {7: cra}, [])
     assert not audit[0]["field_used_for_control"]
     with pytest.raises(ValueError):
         validate_baseline(CRABaseline.CRA_RISK_DEPENDENT_LAMBDA_ABLATION)
+
+
+def test_comparison_loads_explicit_policy_instead_of_legacy_field_defaults():
+    legacy = SafeSAGEGuidancePolicy.from_json("configs/safe_sage_class_safety.json")
+    assert legacy.parameters_for("unknown").boundary_flux == -6.
+    comparison = fixed_class_comparison_policy()
+    assert comparison.parameters_for("unknown").boundary_flux == -1.7
+    assert comparison.parameters_for("person").tangential_strength == 1.25
 
 
 def geometric_fixture(distance=1., velocity=(-.5, 0.), anchor_yaw=0.):

@@ -59,7 +59,7 @@ def main():
         directory = args.output / trial["case"] / f"repeat-{trial['repeat']:02d}" / trial["baseline"]
         done = directory / "execution.json"
         selected = (not args.case or trial["case"] in args.case) and (not args.baseline or trial["baseline"] in args.baseline)
-        if args.execute and selected and not done.exists():
+        if args.execute and selected and not done.exists() and not (args.output / "STOP").exists():
             directory.mkdir(parents=True, exist_ok=True)
             if (directory / "stationary-fields.json").exists() or (directory / "live-fields.jsonl").exists():
                 raise RuntimeError(f"unfinished trial artifacts retained at {directory}; use a new output root for a retry")
@@ -90,6 +90,13 @@ def main():
                 row["passed"] = False
                 row["execution_validation_error"] = "report pass contradicted by process/log failure"
             rows.append(row)
+            if args.execute and selected and not row["report_available"]:
+                # A controller timeout is an outcome; failure before motion is
+                # a setup/perception blocker, not another controller result.
+                (args.output / "STOP").write_text(
+                    f"Missing motion report in {directory}; retained for investigation.\n",
+                    encoding="utf-8",
+                )
         save(args.output / "comparison.json", comparison_summary(rows))
     print(json.dumps({"planned_trials": len(trials), "executed_trials": len(rows),
                       "passed": sum(r["passed"] for r in rows), "manifest": str(path)}), flush=True)

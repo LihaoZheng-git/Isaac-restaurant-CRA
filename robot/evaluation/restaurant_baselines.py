@@ -7,12 +7,15 @@ low-risk generic object class merely because a mask exists.
 """
 
 import math
+from functools import lru_cache
+from pathlib import Path
 
 import numpy as np
 
 from robot.evaluation.cra_experiments import CRABaseline, PRIMARY_BASELINES
 from robot.perception.physical_attributes import EstimateStatus
 from robot.safety.cbf_filter import CBFConfig, CBFSafetyFilter
+from robot.safety.safe_sage_guidance_policy import SafeSAGEGuidancePolicy
 
 
 def validate_baseline(value):
@@ -29,9 +32,22 @@ def crossing_due(*, now, robot_y, trigger_y, delay_seconds, navigation_start):
     return navigation_start is not None and now - navigation_start >= delay_seconds
 
 
-def applied_field_policies(baseline, policies, objects, class_policy):
+@lru_cache(maxsize=1)
+def fixed_class_comparison_policy():
+    # The legacy runtime guidance defaults have a different 1..6 flux scale.
+    # Never inherit that scale into the .5..1.7 CRA comparison.
+    path = Path(__file__).resolve().parents[2] / "configs/safe_sage_paper_baseline.json"
+    policy = SafeSAGEGuidancePolicy.from_json(path)
+    mapping = policy.risk_flux_mapping
+    if not (mapping.minimum_magnitude == .5 and mapping.maximum_magnitude == 1.7):
+        raise ValueError("comparison flux mapping must remain .5..1.7")
+    return policy
+
+
+def applied_field_policies(baseline, policies, objects):
     """Return field guidance and an audit without modifying physical evidence."""
     baseline = validate_baseline(baseline)
+    class_policy = fixed_class_comparison_policy() if baseline is CRABaseline.FIXED_CLASS_SAFE_SAGE else None
     classes = {}
     for item in objects:
         # This is the existing fresh, unambiguous RGB/SAM person association.
@@ -49,6 +65,9 @@ def applied_field_policies(baseline, policies, objects, class_policy):
             else value.guidance_parameters
         )
         guidance[key] = parameters
+        if (not math.isclose(parameters.boundary_flux, -(.5 + 1.2 * parameters.risk), abs_tol=1e-12)
+                or parameters.tangential_strength != 1.25):
+            raise ValueError("primary comparison requires the shared .5..1.7 flux scale and lambda 1.25")
         audit.append({
             "track_or_group_id": key,
             "observed_class": semantic_class,

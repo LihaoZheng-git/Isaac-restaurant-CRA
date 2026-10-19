@@ -32,6 +32,9 @@ uses a risk field to command wheels. Its wall time therefore is not a standalone
 CBF speed benchmark, and its distance-squared CBF margins cannot be numerically
 compared to h_full margins. All records retain raw CRA factors/phi separately
 from the applied baseline field policy; classifier absence remains explicit.
+The explicit comparison loader rejects a changed flux scale or lambda. The
+legacy guidance default uses a different 1..6 flux scale and must never be
+inherited by the fixed-class comparison.
 
 Human mass remains the visually selected adult 70 [45,100] kg prior. The new
 human body contact prior is fixed at .10 with fresh association for every
@@ -72,6 +75,9 @@ code alone never passes Isaac; saved validation, traceback and stopping records
 matter. Each completed invocation enters `comparison.json`, including a missing
 motion report when the stationary gate or process fails. `--case`/`--baseline`
 can execute a subset of the unchanged manifest; incomplete cells stay visible.
+A `STOP` file prevents subsequent starts while allowing the current bounded
+trial to stop normally. Missing motion reports create this file automatically;
+ordinary motion timeouts remain comparative outcomes and do not halt the batch.
 
 ## Measurements and interpretation
 

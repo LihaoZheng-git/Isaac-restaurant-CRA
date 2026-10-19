@@ -470,7 +470,6 @@ def assess_all_objects(worker, packet):
     from robot.evaluation.restaurant_baselines import applied_field_policies
     applied_guidance, baseline_audit = applied_field_policies(
         getattr(worker, "experiment_baseline", None), policies, objects,
-        worker.guidance_policy,
     )
     cells = np.floor(
         (points - [worker.grid_config.minimum_x, worker.grid_config.minimum_y])
