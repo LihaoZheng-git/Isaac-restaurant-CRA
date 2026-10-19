@@ -587,6 +587,12 @@ def main():
         report["human_body_contact_gate"] = body_contact
         report["passed"] &= body_contact["passed"]
         save("human-body-contact-validation.json",body_contact)
+    if args.motion_aware_passing:
+        from robot.evaluation.motion_passing_validation import summarize_motion_passing
+        passing_report = summarize_motion_passing(sensor.records, records)
+        report["motion_passing_validation"] = passing_report
+        report["passed"] &= passing_report["passed"]
+        save("motion-passing-validation.json", passing_report)
     save("validation.json", report)
     print(json.dumps(report), flush=True)
     if not report["passed"]:

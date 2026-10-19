@@ -137,7 +137,8 @@ parser.add_argument(
 args = parser.parse_args()
 if args.human_crossing_direction == "left-to-right" and args.restaurant_human != "crossing":
     parser.error("mirrored actor direction requires standalone crossing mode")
-if args.motion_aware_passing and not (args.restaurant_human == "crossing" and args.persistent_object_risk_map):
+if args.motion_aware_passing and not (args.restaurant_human == "crossing" and args.persistent_object_risk_map
+                                    and args.experiment_baseline != "geometric_velocity_cbf"):
     parser.error("bounded motion-aware passing requires the standalone crossing object-map scenario")
 if args.human_crossing_delay_seconds is not None and (
     args.restaurant_human not in {"crossing", "continuous-crossing"}
@@ -1846,6 +1847,7 @@ def main():
         and moving_field_count >= 10
     )
     human_validation = None
+    passing_validation = None
     if human is not None:
         from robot.evaluation.human_navigation_validation import summarize_human_navigation
         human_validation = summarize_human_navigation(live_fields, human.records,
@@ -1854,6 +1856,14 @@ def main():
         completed = completed and human_validation["passed"]
         save_json("human-navigation-validation.json", human_validation)
         save_json("human-truth-evaluation-only.json", human.records)
+        if args.motion_aware_passing:
+            from robot.evaluation.motion_passing_validation import summarize_motion_passing
+            passing_goal = (anchor.x + math.cos(anchor.yaw)*ROUTE[-1][0] - math.sin(anchor.yaw)*ROUTE[-1][1],
+                            anchor.y + math.sin(anchor.yaw)*ROUTE[-1][0] + math.cos(anchor.yaw)*ROUTE[-1][1])
+            passing_validation = summarize_motion_passing(live_fields, human.records, moving_robot=True,
+                                                         nominal_goal_world_xy=passing_goal)
+            completed = completed and passing_validation["passed"]
+            save_json("motion-passing-validation.json", passing_validation)
         if human.carry is not None:
             from robot.scene.restaurant_human_carry import summarize_carry_records
             carry_validation = summarize_carry_records(human.carry.records, continuous=human.circuit is not None)
@@ -1895,6 +1905,7 @@ def main():
         "experiment_baseline": args.experiment_baseline,
         "human_body_contact_prior_config": asdict(perception.human_body_contact_config) if perception.human_body_contact_config is not None else None,
         "human_navigation_validation": human_validation,
+        "motion_passing_validation": passing_validation,
         "native_human_mode": args.restaurant_human,
         "human_lidar_cluster_radius_m": args.human_cluster_radius,
         "native_carried_bowl": args.human_carry_bowl,

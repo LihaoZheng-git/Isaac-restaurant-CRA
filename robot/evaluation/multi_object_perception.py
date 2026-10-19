@@ -479,6 +479,8 @@ def assess_all_objects(worker, packet):
             robot_velocity_xy=packet.measured_robot_velocity_world_xy,
             goal_xy=packet.waypoint_world_xy,
         )
+        passing_audit["ego_pose_reference"] = {"source":packet.pose_source,"status":packet.pose_status.value,
+                                              "robot_velocity_source":"derivative of the declared ego pose history"}
         # A side preference can cover this track's unmatched returns too, but
         # their own risk/flux/unknown provenance and occupancy stay unchanged.
         for key, parameters in tuple(applied_guidance.items()):
