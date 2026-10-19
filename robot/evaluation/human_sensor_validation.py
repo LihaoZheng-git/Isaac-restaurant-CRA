@@ -35,7 +35,8 @@ def summarize_human_sensor(records, truth):
             matched = [
                 o
                 for o in r["objects"]
-                if o["diagnostics"]["instance_centroid_world_xyz"] is not None
+                if o["attributes"]["mass"]["mass_kg"]["source"] == HUMAN_MASS_PRIOR_SOURCE
+                and o["diagnostics"]["instance_centroid_world_xyz"] is not None
                 and np.linalg.norm(
                     np.array(o["diagnostics"]["instance_centroid_world_xyz"][:2])
                     - center

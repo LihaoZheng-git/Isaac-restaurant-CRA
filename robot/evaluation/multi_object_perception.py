@@ -337,8 +337,15 @@ def assess_all_objects(worker, packet):
             )
         )
         frames.append(assessment)
+    carried_state,carried_detail=None,None
+    if worker.carried_object_config is not None:
+        from robot.evaluation.carried_object_runtime import augment_carried_object
+        carried_state,carried_detail=augment_carried_object(worker,packet,tracking,projection,
+            world,objects,frames,policies,point_ids,semantics,contact_frame)
+        selected_count=int(np.logical_or.reduce([f["selected"] for f in frames]).sum())
     memory.finish_epoch(tracks, packet.camera_timestamp_seconds)
     active = {track.track_id for track in tracks}
+    active.update(o.attributes.track_id for o in objects if o.diagnostics["accepted_instance"])
     ownership = {key: value for key, value in ownership.items() if key in active}
     # Unclustered returns stay occupied and get the same explicit prior policy.
     unclustered = point_ids < 0
@@ -545,6 +552,8 @@ def assess_all_objects(worker, packet):
     )
     worker.static_points, worker.object_ownership_bounds = static, ownership
     worker.temporal_recovery_baseline = None
+    if carried_state is not None:
+        worker.carried_runtime_state=carried_state
     worker.multi_retained = (
         retained + [current_placement] if worker.occupancy_retention_seconds else []
     )
@@ -558,6 +567,7 @@ def assess_all_objects(worker, packet):
         "mode": "persistent_multi_object_factor_priors",
         "object_count": len(objects),
         "objects": [item.diagnostics for item in objects],
+        "carried_object_groups":carried_detail,
         "occupancy_policies": [
             {
                 "track_or_group_id": key,
@@ -565,6 +575,8 @@ def assess_all_objects(worker, packet):
                 if key in active
                 else "unmatched_or_remembered_occupancy_group",
                 "phi": value.risk,
+                "group_policy":next((group for group in (carried_detail or {}).get("confirmed_groups",[]) if key in group["members"]),None),
+                "factor_score_basis":"dominant_member_assessment" if any(key in group["members"] for group in (carried_detail or {}).get("confirmed_groups",[])) else "individual_assessment",
                 "factor_scores": {
                     item.factor.value: item.conservative_risk
                     for item in value.assessment.factors

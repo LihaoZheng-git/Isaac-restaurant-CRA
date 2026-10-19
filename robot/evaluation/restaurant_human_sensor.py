@@ -85,9 +85,11 @@ def _json(value):
 
 class RestaurantHumanSensorDiagnostic:
     def __init__(
-        self, stage, root, output, anchor, *, mass_interval=(70.0, 45.0, 100.0), cluster_radius_m=.12
+        self, stage, root, output, anchor, *, mass_interval=(70.0, 45.0, 100.0), cluster_radius_m=.12,
+        carried_object_groups=False,
     ):
         self.stage, self.output = stage, output
+        self.carried_object_groups=carried_object_groups
         self.camera = NovaCarterCamera(resolution=(400, 640))
         self.lidar = NovaCarterLidar()
         self.camera.initialize()
@@ -147,6 +149,18 @@ class RestaurantHumanSensorDiagnostic:
         )
         person.initialize()
         contact.initialize()
+        pose_detector=None
+        if carried_object_groups:
+            from robot.perception.human_pose import YoloHumanPose,POSE_SHA256,POSE_URL
+            from robot.perception.carried_object import CarriedObjectConfig
+            from robot.perception.object_height import ObjectHeightConfig
+            checkpoint=root/"outputs/carried_object_model_audit/yolo11n-pose.pt"
+            pose_detector=YoloHumanPose(checkpoint)
+            pose_detector.initialize()
+            self.save("carried-pose-model-audit.json",{"path":str(checkpoint),"sha256":POSE_SHA256,
+                "source":POSE_URL,"license":"Ultralytics AGPL-3.0 / Enterprise; not vendored",
+                "training_data":"COCO keypoints pretrained; no retraining/data download",
+                "scope":"RGB wrists, not measured physical hand position or grasp state"})
         guidance = SafeSAGEGuidancePolicy.from_json(
             root / "configs/safe_sage_class_safety.json"
         )
@@ -228,6 +242,9 @@ class RestaurantHumanSensorDiagnostic:
                 maximum_visual_tracks_per_update=2,
             ),
             object_factor_prior_config=ObjectRiskPriorConfig(),
+            carried_object_config=CarriedObjectConfig() if carried_object_groups else None,
+            pose_detector=pose_detector,
+            object_height_config=ObjectHeightConfig() if carried_object_groups else None,
         )
         self.history = EgoPoseHistory(maximum_samples=2048)
         self.truth, self.records, self.rejections = [], [], []
@@ -386,6 +403,7 @@ class RestaurantHumanSensorDiagnostic:
                     "phase": phase,
                     "completion_age_sim_seconds": now - packet.sensor_timestamp_seconds,
                     "processing_wall_seconds": time.perf_counter() - start,
+                    "carried_object_groups":result.diagnostics.get("carried_object_groups"),
                     "objects": [
                         {
                             "attributes": asdict(o.attributes),
@@ -396,6 +414,16 @@ class RestaurantHumanSensorDiagnostic:
                     ],
                 }
             )
+            if self.carried_object_groups and (len(self.records)<=24 or len(self.records)%10==0):
+                snapshots=self.output/"carried-snapshots"
+                snapshots.mkdir(exist_ok=True)
+                stem=f"{packet.sensor_frame_id:06d}"
+                cv2.imwrite(str(snapshots/f"{stem}.png"),packet.rgb[:,:,::-1])
+                np.savez_compressed(snapshots/f"{stem}.npz",scene_xyz=packet.scene_xyz,
+                    obstacle_xyz=packet.obstacle_xyz,camera_from_scan_robot=packet.camera_from_scan_robot,
+                    sensor_time=packet.sensor_timestamp_seconds,camera_time=packet.camera_timestamp_seconds,
+                    camera_frame_id=packet.camera_frame_id,robot_position_world_xy=packet.robot_position_world_xy,
+                    robot_yaw=packet.robot_yaw,floor_reference_m=packet.floor_height_robot_m)
             with (self.output / "human-sensor-records.jsonl").open(
                 "a", encoding="utf-8"
             ) as stream:

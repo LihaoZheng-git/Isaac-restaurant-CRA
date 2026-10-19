@@ -208,6 +208,7 @@ class ObstacleTracker:
         robot_yaw: float,
         timestamp_seconds: float,
         clustering_points_robot_xyz: np.ndarray | None = None,
+        point_instance_groups: tuple[np.ndarray, ...] | None = None,
     ) -> ObstacleTrackingResult:
         """Process one new LiDAR frame.
 
@@ -258,6 +259,21 @@ class ObstacleTracker:
             backend=self.config.clustering_backend,
             minimum_cluster_points=(self.config.minimum_cluster_points),
         )
+        if point_instance_groups is not None:
+            # Explicit same-source visual instance partitions may separate
+            # touching objects. No point coordinate or velocity is fabricated;
+            # unlisted returns retain -1 rather than disappearing.
+            clusters, used = [], set()
+            for group in point_instance_groups:
+                indices = np.asarray(group)
+                if (indices.ndim != 1 or indices.dtype.kind not in "iu"
+                    or len(indices) < self.config.minimum_cluster_points
+                    or np.any(indices < 0) or np.any(indices >= len(points_robot))
+                    or len(np.unique(indices)) != len(indices)
+                    or used.intersection(indices.tolist())):
+                    raise ValueError("instance groups must be disjoint valid same-source point indices")
+                used.update(indices.tolist())
+                clusters.append(indices.astype(np.int64,copy=True))
 
         point_velocities_robot = np.zeros(
             points_robot.shape,
