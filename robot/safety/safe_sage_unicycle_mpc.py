@@ -1911,7 +1911,10 @@ class SafeSAGEUnicycleMPC:
                 commands=clipped_commands,
                 configuration_space=configuration_space,
                 h_full=h_full,
+                stop_on_first_unsafe=require_feasible,
             )
+            if require_feasible and np.any(unsafe_mask):
+                return None
             samples = replace(
                 samples,
                 unsafe_configuration_mask=unsafe_mask,
@@ -1933,6 +1936,7 @@ class SafeSAGEUnicycleMPC:
         commands: np.ndarray,
         configuration_space: SafeSAGEConfigurationSpaceResult,
         h_full: SafeSAGEHFullResult,
+        stop_on_first_unsafe: bool = False,
     ) -> np.ndarray:
         """Mark intervals whose predicted motion enters an unsafe cell.
 
@@ -1994,16 +1998,25 @@ class SafeSAGEUnicycleMPC:
             np.asarray(safety_queries)[:, None, :]
             + scales.reshape(-1, 1, 1) * perturbations[None, :, :]
         )
-        try:
-            query_mask = self.paper_filter.unsafe_configuration_mask(
-                queries.reshape(-1, 3), configuration_space=configuration_space,
-                h_full=h_full,
-            ).reshape(self.config.horizon_steps, substeps, len(perturbations))
-        except ValueError:
-            # A padded future query outside the field is not safe evidence.
-            unsafe[1:] = True
-        else:
-            unsafe[1:] |= query_mask.any(axis=(1, 2))
+        queries = queries.reshape(self.config.horizon_steps, substeps, len(perturbations), 3)
+        # Recovery never uses an infeasible candidate for gradients. One
+        # actually unsafe query suffices to reject it; safe candidates still
+        # receive every original query before they can be selected.
+        chunk = 4 if stop_on_first_unsafe else self.config.horizon_steps
+        for lower in range(0, self.config.horizon_steps, chunk):
+            upper = min(self.config.horizon_steps, lower + chunk)
+            try:
+                query_mask = self.paper_filter.unsafe_configuration_mask(
+                    queries[lower:upper].reshape(-1, 3),
+                    configuration_space=configuration_space, h_full=h_full,
+                ).reshape(upper-lower, substeps, len(perturbations))
+            except ValueError:
+                # A padded query outside the field is never safe evidence.
+                unsafe[1:] = True
+            else:
+                unsafe[lower+1:upper+1] |= query_mask.any(axis=(1, 2))
+            if stop_on_first_unsafe and np.any(unsafe):
+                break
         return np.ascontiguousarray(unsafe, dtype=bool)
 
     def _trajectory_is_safe(

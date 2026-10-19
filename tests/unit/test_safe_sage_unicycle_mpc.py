@@ -955,6 +955,44 @@ def test_rescue_checks_dense_geometry_once_after_smooth_optimization(monkeypatch
     assert iterations == 1 and calls == [1]
 
 
+@pytest.mark.parametrize("collision", [False, True])
+def test_recovery_dense_pruning_never_skips_a_required_safe_query(collision, monkeypatch):
+    configuration_space, h_full, guidance = make_fields(
+        guidance=(0, 0), gradient=(0, 0, 0), safety_value=2.,
+        unsafe_yaw_indices=(0, 1, 2, 3) if collision else (),
+    )
+    mpc = make_mpc(horizon_steps=12, time_step=1., minimum_linear_velocity=-2.,
+                   maximum_linear_velocity=2., safety_substeps_per_interval=2)
+    commands = np.zeros((12, 2))
+    commands[:, 0] = np.tile([2., -2.], 6)
+    state = np.array([-1.1, 0., 0.])
+    fields = dict(configuration_space=configuration_space, h_full=h_full,
+                  guidance_fields=guidance, temporal_safety_derivative=0.)
+    original = mpc.paper_filter.unsafe_configuration_mask
+    counts, outputs = [], []
+    for prune in (False, True):
+        queried = []
+
+        def counted(states, **kwargs):
+            queried.append(len(states))
+            return original(states, **kwargs)
+
+        with monkeypatch.context() as patch:
+            patch.setattr(mpc.paper_filter, "unsafe_configuration_mask", counted)
+            outputs.append(mpc._evaluate_trajectory(state, commands,
+                require_feasible=prune, **fields))
+        counts.append(sum(queried))
+    assert outputs[0] is not None
+    if collision:
+        assert not mpc._trajectory_is_safe(outputs[0])
+        assert outputs[1] is None and counts[1] < counts[0]
+    else:
+        assert outputs[1] is not None and mpc._trajectory_is_safe(outputs[1])
+        assert counts[0] == counts[1]
+        np.testing.assert_array_equal(outputs[0].margins, outputs[1].margins)
+        np.testing.assert_array_equal(outputs[0].commands, outputs[1].commands)
+
+
 def test_geometry_padding_grows_within_first_execution_interval(monkeypatch):
     configuration_space, h_full, _ = make_fields()
     mpc = make_mpc(

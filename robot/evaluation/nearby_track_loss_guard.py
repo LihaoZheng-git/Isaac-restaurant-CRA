@@ -21,6 +21,7 @@ class NearbyTrackLossConfig:
     positive_merge_distance_m: float = 0.10
     minimum_positive_merge_returns: int = 3
     use_observed_merge_velocity: bool = False
+    allow_positive_extent_merges: bool = False
     maximum_merge_speed_mps: float = 2.0
     maximum_merge_translation_m: float = 0.25
     maximum_merge_velocity_change_mps: float = 0.3
@@ -29,12 +30,15 @@ class NearbyTrackLossConfig:
     def __post_init__(self):
         if not isinstance(self.allow_observed_fragment_merges, bool) or not isinstance(
             self.use_observed_merge_velocity, bool
-        ):
+        ) or not isinstance(self.allow_positive_extent_merges, bool):
             raise TypeError("fragment merge opt-in must be boolean")
+        if self.allow_positive_extent_merges and not self.allow_observed_fragment_merges:
+            raise ValueError("positive extent association requires fragment merges")
         for name, value in vars(self).items():
             if name in {
                 "allow_observed_fragment_merges",
                 "use_observed_merge_velocity",
+                "allow_positive_extent_merges",
             }:
                 continue
             if isinstance(value, bool) or not math.isfinite(value) or value <= 0:
@@ -206,7 +210,7 @@ class NearbyTrackLossGuard:
                     <= self.config.maximum_merge_translation_m
                 )
 
-            def match_query(old_point, old_time, new):
+            def match_query(old_point, old_time, new, *, extent_pair=False):
                 queries = [(old_point, "old_centroid_positive_returns", np.zeros(2))]
                 dt = source_time - old_time
                 v = velocities[new]
@@ -224,7 +228,14 @@ class NearbyTrackLossGuard:
                         np.linalg.norm(current[new] - q)
                         > self.config.reassociation_distance_m
                     ):
-                        continue
+                        # A connected body can cover a fragment's old location
+                        # while its centroid is farther away. Only a recent
+                        # actual co-observation and fresh direct positive returns
+                        # can take this route; never an advected query or an
+                        # assumed body box. All occupancy remains in the field.
+                        if not (extent_pair and basis == "old_centroid_positive_returns"):
+                            continue
+                        basis = "coobserved_cluster_extent_positive_returns"
                     near = ids[
                         np.linalg.norm(xyz - q, axis=1)
                         <= self.config.positive_merge_distance_m
@@ -259,18 +270,26 @@ class NearbyTrackLossGuard:
                         <= self.config.maximum_missing_seconds + 1e-9
                         and stable_current_velocity(old_time, new)
                     )
+                    extent_pair = (
+                        self.config.allow_positive_extent_merges
+                        and pair_time is not None
+                        and 0 <= old_time - pair_time <= self.config.maximum_missing_seconds + 1e-9
+                        and 0 < source_time - old_time <= self.config.maximum_merge_age_seconds + 1e-9
+                    )
                     if (
                         new in pending
                         and new != key
-                        and (recent_parent or retained_pair)
+                        and (recent_parent or retained_pair or extent_pair)
                     ):
-                        found = match_query(old_point, old_time, new)
+                        found = match_query(old_point, old_time, new, extent_pair=extent_pair)
                         if found is not None:
                             choices.append(new)
                             matches[key, new] = found
                             coexistence[key, new] = (
                                 pair_time,
-                                "recent_parent_epoch"
+                                "recent_original_coobservation_positive_extent"
+                                if found[1] == "coobserved_cluster_extent_positive_returns"
+                                else "recent_parent_epoch"
                                 if recent_parent
                                 else "retained_original_coobservation",
                             )
@@ -301,6 +320,7 @@ class NearbyTrackLossGuard:
                                 new
                             ].tolist(),
                             "current_centroid_world_xy": current[new].tolist(),
+                            "current_centroid_to_query_distance_m": float(np.linalg.norm(current[new] - query)),
                             "previous_cluster_velocity_world_xy": self.velocities[new][0].tolist()
                             if new in self.velocities else None,
                             "coobservation_source_time": coexistence[key, new][0],
@@ -352,7 +372,7 @@ class NearbyTrackLossGuard:
         # Only simultaneous positive observations renew a pair, never borrowing
         # or continued observation of its parent alone. This is identity history,
         # not a body box, factor value, inferred free space or a new source epoch.
-        if self.config.use_observed_merge_velocity:
+        if self.config.use_observed_merge_velocity or self.config.allow_positive_extent_merges:
             visible = sorted(set(current) & set(pending))
             for i, a in enumerate(visible):
                 for b in visible[i + 1 :]:
@@ -366,5 +386,6 @@ class NearbyTrackLossGuard:
             "watched_tracks": len(pending),
             "source_timestamp": source_time,
             "observed_fragment_merges": merged,
+            "positive_extent_route_enabled": self.config.allow_positive_extent_merges,
             "scope": "nearby positive LiDAR-track continuity watchdog; lost occupancy is unresolved, not free; bounded separated actors; not a dynamic belief map or general occlusion guarantee",
         }

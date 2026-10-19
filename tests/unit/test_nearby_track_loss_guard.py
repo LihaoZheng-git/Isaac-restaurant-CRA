@@ -84,6 +84,54 @@ def test_current_positive_points_resolve_one_fragment_rejoining_existing_body():
     assert guard.observe((), source_time=1.4, robot_world_xy=(0.2, 0))["blocked"]
 
 
+@pytest.mark.parametrize("problem", [None, "legacy", "no_coobservation", "stale", "too_few", "ambiguous", "unclustered"])
+def test_positive_extent_route_requires_recent_original_pair_and_unique_returns(problem):
+    import numpy as np
+
+    guard = NearbyTrackLossGuard(NearbyTrackLossConfig(
+        allow_observed_fragment_merges=True,
+        allow_positive_extent_merges=problem != "legacy"))
+    points = np.array([[x, 0.] for x in [1.1, 1.12, 1.14, 1.26, 1.4, 1.54, 1.68, 1.82]])
+    parent_x = float(points[:, 0].mean())
+    old = (track(1, 1.1), track(2, parent_x))
+    guard.observe(old[:1] if problem == "no_coobservation" else old,
+                  source_time=1., robot_world_xy=(0, 0))
+    if problem == "no_coobservation":
+        guard.observe((old[1],), source_time=1.1, robot_world_xy=(0, 0))
+    ids = [2] * len(points)
+    if problem == "too_few":
+        points[2, 0] = 1.28
+    parent = replace(track(2, float(points[:, 0].mean())), point_count=len(points))
+    tracks = (parent,)
+    if problem in {"ambiguous", "unclustered"}:
+        points = np.vstack((points, [[1.11, 0]] * 3))
+        ids += [3 if problem == "ambiguous" else -1] * 3
+        if problem == "ambiguous":
+            tracks += (replace(track(3, 1.11), point_count=3),)
+    now = 1.5 if problem == "stale" else 1.2
+    result = guard.observe(tracks, source_time=now, robot_world_xy=(0, 0),
+        current_points_world_xy=points, current_point_track_ids=ids,
+        current_points_source_time=now)
+    if problem is not None:
+        assert result["blocked"]
+        assert 1 in guard.observed
+    else:
+        assert not result["blocked"] and set(guard.observed) == {2}
+        event = result["observed_fragment_merges"][0]
+        assert event["basis"] == "coobserved_cluster_extent_positive_returns"
+        assert event["coobservation_source_time"] == 1.
+        assert event["original_last_seen_time"] == 1.
+        assert event["current_centroid_to_query_distance_m"] > .25
+        assert event["positive_returns_near_query"] == 3
+
+
+def test_extent_route_opt_in_is_boolean_and_requires_original_merge_opt_in():
+    with pytest.raises(TypeError):
+        NearbyTrackLossConfig(allow_positive_extent_merges=1)
+    with pytest.raises(ValueError):
+        NearbyTrackLossConfig(allow_positive_extent_merges=True)
+
+
 @pytest.mark.parametrize(
     "problem", ["legacy", "missing", "too_few", "far", "ambiguous", "unclustered"]
 )

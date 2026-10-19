@@ -26,6 +26,8 @@ parser.add_argument("--experiment-baseline", choices=("geometric_velocity_cbf", 
                     default="continuous_cra_safe_sage", help="explicit matched restaurant comparison; physical assessments always retained")
 parser.add_argument("--motion-aware-passing", action="store_true",
                     help="opt-in current LiDAR crossing-side preference; unchanged CRA scores/lambda/safety checks")
+parser.add_argument("--human-positive-fragment-extent", action="store_true",
+                    help="bare-human recent-coobservation/current-positive-return fragment association; no free-space or factor transfer")
 parser.add_argument("--human-body-contact-prior", type=float,
                     help="opt-in fresh-person blunt-body contact PRIOR, e.g. .10; not measured sharpness")
 parser.add_argument("--restaurant-scene", type=Path,
@@ -137,6 +139,8 @@ parser.add_argument(
     help="optimizer candidate age cap; every executed horizon still needs fresh exact validation",
 )
 args = parser.parse_args()
+if args.human_positive_fragment_extent and (args.restaurant_human is None or args.human_carry_bowl):
+    parser.error("positive fragment extent requires the bounded bare native-human scenario")
 if not math.isfinite(args.progress_seed_fraction) or not 0 < args.progress_seed_fraction < 1:
     parser.error("progress seed fraction must be finite and in (0,1)")
 if args.human_crossing_direction == "left-to-right" and args.restaurant_human != "crossing":
@@ -1423,6 +1427,7 @@ def main():
     commit(latest, float(timeline.get_current_time()))
     coverage_guard = NearbyTrackLossGuard(NearbyTrackLossConfig(
         allow_observed_fragment_merges=human is not None,
+        allow_positive_extent_merges=args.human_positive_fragment_extent,
         use_observed_merge_velocity=human is not None)) if args.moving_actor or human is not None else None
     coverage_result = None
     coverage_events = []
@@ -1565,7 +1570,7 @@ def main():
                             robot_world_xy=(anchor.x+c*current[0]-s*current[1], anchor.y+s*current[0]+c*current[1]),
                             **coverage_geometry(outcome.value, submitted_packet))
                         if coverage_result["observed_fragment_merges"] or coverage_result["blocked"]:
-                            if any(e.get("coexistence_basis") == "retained_original_coobservation"
+                            if any(e.get("coexistence_basis") in {"retained_original_coobservation", "recent_original_coobservation_positive_extent"}
                                    for e in coverage_result["observed_fragment_merges"]):
                                 audit_name = f"coverage-merge-{outcome.value.field.sensor_frame_id}.npz"
                                 np.savez_compressed(args.output / audit_name,

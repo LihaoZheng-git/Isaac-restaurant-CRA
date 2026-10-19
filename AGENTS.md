@@ -719,3 +719,13 @@
   .004167 m stop drift, zero supported moving kinetic and only .081634 m curved
   excursion. Its strict failure report saved; long planner/perception calls
   persisted. Preserve both failures and do not call the latency issue resolved.
+- The separate bare-human positive-extent continuity opt-in requires original
+  actual co-observation within .15 s, age <=.35 s, and >=3 fresh uniquely owned
+  returns within .10 m of the old location. It may bypass only the parent-
+  centroid distance heuristic; farther advected queries and the original
+  one-to-one/competitor gates remain rejected. It transfers no factors/class,
+  renews no evidence clocks and removes no current occupancy. Log the original
+  epochs and supporting geometry; missing locations still block. Cross-trial
+  point-query diagnostics are not natural continuity validation. Recovery may
+  reject an already unsafe candidate early, but every accepted candidate needs
+  all original dense/padding queries. See docs/positive_fragment_continuity.md.
