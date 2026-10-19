@@ -191,3 +191,107 @@ free-space inference and general body reconstruction remain outside this gate.
 The **75-trial replicated collection is implemented but has not been run**.
 Resolve the selected crossing's continuity/kinetic coverage before spending
 that collection. No long service mission was started, and main stays unchanged.
+
+### Explicit .18 m human connectivity recipe
+
+The bare-human parked crossing at `bare-cluster18-stationary-v1/` passed native
+arrival/stopping, articulated walking, independent layout clearance, current
+RGB/person/SAM and velocity checks, and the separately typed .10 body-contact
+prior validation. All robot wheel commands were zero. This gate permits testing
+the existing .18 m connected-cluster setting during navigation; it does not
+establish coupled navigation or repair any original failed trial.
+
+The next comparison recipe explicitly selects .18 m for **every human method**,
+standing and crossing. Static options and legacy demo defaults remain unchanged.
+All positive occupancy, association/freshness/track-loss checks, risk/confidence
+formulas, factor priors, field/controller budgets and lambda 1.25 remain intact.
+Use a new immutable output root and report its results separately from pilot-v3.
+
+## Wider-connectivity human collection: actual outcomes
+
+`outputs/restaurant_baselines/human-cluster18-v1/` completed all six selected
+human trials at frozen source **d0ed2a9**. Static trials were not repeated in
+this root. The immutable manifest retains the original nine-cell pilot plan;
+the actual executed subset is standing and crossing. A saved development batch
+boundary prioritized crossing after the first standing run, then resumed the
+remaining standing methods. Every method within a case kept identical options
+and repeated its own zero-wheel gate. Both complete case cells passed the
+invocation/configuration/scene/model-weight/prior matching audits.
+
+| Case | Method | Robot arrived | Full acceptance | Navigation sim s | Minimum monitor clearance m |
+| --- | --- | --- | --- | --- | --- |
+| Standing | Fixed-class Safe-SAGE | Yes | Pass | 23.283 | .246 |
+| Standing | CRA + Safe-SAGE | Yes | Pass | 23.067 | .228 |
+| Standing | Geometric CBF | Yes | **Fail: native idle drift** | 26.667 | .255 |
+| Crossing at 8 s | CRA + Safe-SAGE | Yes | Pass | 22.983 | .293 |
+| Crossing at 8 s | Geometric CBF | Yes | Pass | 23.150 | .308 |
+| Crossing at 8 s | Fixed-class Safe-SAGE | Yes | Pass | 22.750 | .309 |
+
+Thus **six arrivals, five full passes and one failure** were retained. All robot
+stopping checks passed (observed drift about 2--3 mm); these measurements are
+bounded simulation acceptance, not deployment safety. Crossing CRA/geometric/
+fixed-class had **12/11/11** supported moving-kinetic rows and **7/10/9**
+simultaneous-motion rows, respectively. Their median steady world-velocity
+errors were .144/.101/.121 m/s; read the original reports for exact values.
+The earlier .12 m failures remain unchanged and are not pooled into this new
+configuration's pass rate. This one selected collection does not establish
+general continuity, strict risk-to-clearance ordering or CRA superiority.
+
+### Standing fixture blocker for repeated paper collection
+
+The geometric standing robot arrived and stopped, and its perception/motion
+checks passed, but the native idle actor's root moved **.286741 m** from its
+initial pose over the longer observation/navigation interval. The unchanged
+standing bound is **.25 m**. Median root speed was only .006692 m/s; small
+cumulative idle drift is enough to violate this fixture contract. The actual
+last pose was `(29.810444, 8.769803)` versus initial `(29.610128, 8.974972)`.
+Its `bounded_native_standing_idle` check is false. Retain the failed full
+acceptance and expected failing-script traceback; neither robot arrival nor
+positive clearance turns it into a pass.
+
+Do not loosen the bound, truncate the observation or rerun only until a favorable
+idle trace appears. Before the 75-trial paper collection, define and validate a
+stable standing-actor fixture over the full allowed duration, then repeat a
+matched standing cell under that newly declared fixture. Any position-anchored
+animation must be labeled as an authored actor behavior, never sensor evidence.
+Alternatively, a deliberately shifting-person case needs its own prospective
+motion/geometry contract. This choice is still pending; no new actor correction
+or long service demonstration was implemented here.
+
+### Evidence and runtime limits
+
+All six runs are prior-assisted: potential and thermal scores in these streams
+used configured priors, most environmental mass inputs were unavailable and
+used factor priors, and adult mass/body-contact assignments retained their
+declared provenance. Only 50--55 assessments per run had fresh accepted visual
+instances among about 14,000--17,000 object assessments. Owned geometry and
+numeric factors are not continuous fresh visual estimation for every track.
+In CRA crossing the raw/applied phi range included 1.0; its cause must remain in
+the factor diagnostics rather than being suppressed for a cleaner plot.
+The saved `phi-saturation-audit.json` identifies one such assessment at sensor
+time 18.0 s, track347: accepted SAM geometry but ambiguous/weak person ownership
+rejected the human-body prior. The silhouette contact nominal/conservative
+score remained 1.0 at zero confidence, while the other three factors were .25
+priors. The existing assessor only increases a nominal score toward a higher
+fallback; it never lowers a nominal 1.0 to .25. Thus the diagnostic mode
+`configured_prior` here does not mean that the final score equals `prior_risk`.
+Preserve the original fields and this distinction; this is neither measured
+physical sharpness nor proof that an unknown factor alone forced aggregate phi.
+
+CRA standing rejected a .40 s-old inference and a temporal-source-gap result;
+accepted field timestamps were not renewed. Slow solver/perception diagnostics
+and safety stops remain in the logs/command streams. This is paced simulation,
+not real-time acceptance. Fixed-class applied risk stayed 1 for both its person
+and unknown assignments, so it is a conservative fixed-risk reference in these
+scenes. Small single-run clearance/time differences cannot demonstrate a
+physical-cue advantage over a richer class-specific policy.
+
+The comparison runner, raw reports, failed checks and plots are complete for
+these bounded pilot attempts. The **replicated 75-trial study is not complete**,
+and the standing fixture issue blocks starting it soundly. Main's separate fresh
+moving four-factor perception hold remains intact.
+
+Final validation: **2,037 unit tests passed** in 82.64 s on the wider-recipe
+implementation, following 37 focused regression passes. Ruff and whitespace
+checks passed. The outcome-label-only plotting adjustment was rendered and
+visually inspected, including the failed-after-arrival standing row.

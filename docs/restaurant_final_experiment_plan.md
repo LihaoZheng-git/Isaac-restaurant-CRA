@@ -1,9 +1,11 @@
 # Final restaurant experiment plan
 
-This is a prospective protocol, not an experimental result. It builds on the
+This is the experiment roadmap; actual pilot outcomes are recorded separately
+in [restaurant_baseline_comparison.md](restaurant_baseline_comparison.md). It builds on the
 existing restaurant, native Isaac human, real food/tableware meshes and
-obstacle-unaware service waypoints. The current development work is still
-validating coupled human crossing. The old main-merge hold on complete fresh
+obstacle-unaware service waypoints. A matched short baseline pilot has run;
+replicated paper collection is blocked by a standing-actor idle-drift failure.
+The old main-merge hold on complete fresh
 moving-view four-factor perception remains separate and unchanged.
 
 ## Questions and bounded cases
@@ -29,12 +31,12 @@ Do not loosen instance truncation/association gates to make a selected actor pas
 
 ## Primary comparison
 
-Reuse `robot/evaluation/cra_experiments.py`'s three baseline identities:
+The live runner now implements `robot/evaluation/cra_experiments.py`'s three baseline identities:
 geometric velocity-aware CBF, fixed-class Safe-SAGE-style policy, and continuous
-CRA Safe-SAGE-style policy. Their experiment contracts exist; these identities
-do not establish that all three are wired into the current live restaurant
-runner. Review/implement that bounded integration before collecting comparison
-results. Keep lambda **1.25**, identical nominal waypoints, occupancy, tracker,
+CRA Safe-SAGE-style policy. The adapters, immutable manifests, failure-preserving
+reports and trajectory plots have unit and native-pilot validation. That does
+not establish superiority or complete four-factor perception. Keep lambda
+**1.25**, identical nominal waypoints, occupancy, tracker,
 sensor streams, mass assumptions, source-age limits, solver budgets, speed limits,
 exact geometry verification and stopping gates. The policy adapter is the
 intentional change. A risk-dependent lambda is a separate ablation.
@@ -46,11 +48,13 @@ policy-score ordering. Report that sensitivity explicitly. Changing those
 calibration assumptions is a research decision; no such change was made to
 obtain the standing/crossing arrivals.
 
-Use three prespecified, independently placement-checked actor configurations
-(nominal and two small lateral shifts), each with five repeated runs per method.
+The refined protocol uses nominal static/standing cases and exogenous crossing
+triggers at 7/8/9 navigation seconds, each with five repeated runs per method
+(75 trials). These timing variants supersede the older proposed lateral shifts;
+actor path/geometry stays unchanged. Only the nominal bounded pilot has run.
+Validate full-duration standing stability before that repeated collection.
 Record actual geometry and initial states; native animation/inference scheduling
-need not be deterministic. Do not select only favorable repetitions. Finalize
-the two bounded shifts before looking at comparative outcomes. Replay comparisons
+need not be deterministic. Do not select only favorable repetitions. Replay comparisons
 may share recorded observations, but remain offline and cannot count as wheel
 experiments. Do not change hazard geometry between methods and attribute the
 resulting clearance difference to CRA.
@@ -76,16 +80,20 @@ stationary gate.
    3.9 m robot mission and stopping, separately from failed repeated returns.
    Retain the distinction between attachment, human perception and bowl
    assessment; potential/thermal remain priors and velocity transients remain.
-3. Wire and test the matched baseline adapters; run a small bounded pilot before
-   the prespecified repeated study. Diagnose phi saturation by factor and prior
-   sensitivity offline, without lowering unknown scores for navigation.
-4. Expand the mission only after region-transition validation. Record a final
+3. Matched adapters and short pilots are implemented. The first complete pilot
+   retained six passes/nine attempts; a separately declared .18 m human recipe
+   retained five full passes/six human attempts, including all three crossings.
+   All six robots arrived, but geometric standing failed the .25 m idle-drift
+   fixture bound at .286741 m. Preserve that failure and fix/validate the future
+   standing fixture before the repeated study. Diagnose phi saturation by factor
+   and prior sensitivity offline, without lowering unknown scores for navigation.
+4. Stop before the long service demonstration for the user's scenario discussion.
+   Expand the mission only after region-transition validation. Record a final
    service video with score/phi/provenance traces and safety interventions.
 
-Before comparative collection, extend the result contract to retain signed
-clearance for collision/abort outcomes: its current nonnegative-clearance
-validation cannot represent such negative measurements. Preserve those failed
-trials and their raw diagnostics rather than omitting them from summaries.
+The result contract now retains signed inflated-monitor clearance for failed
+outcomes and distinguishes overlap from measured physical contact. Preserve
+failed trials and raw diagnostics rather than omitting them from summaries.
 
 This study supports the selected simulation restaurant scenes. It does not
 establish calibrated kilograms, physical sharpness, temperature, crowded tracking,

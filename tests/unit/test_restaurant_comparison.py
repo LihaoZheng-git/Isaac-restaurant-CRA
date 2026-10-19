@@ -32,6 +32,7 @@ def test_runner_options_preserve_stationary_gate_and_human_scope():
         if trial["case"] != "static_aisle":
             assert "--static-occupancy-memory-prior" not in options
             assert "--human-body-contact-prior" in options
+            assert options[options.index("--human-cluster-radius")+1] == ".18"
         else:
             assert options[options.index("--stationary-frames")+1] == "60"
             assert "--sam-observed-context-box" in options

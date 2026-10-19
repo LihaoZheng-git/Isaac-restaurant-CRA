@@ -62,8 +62,12 @@ def main():
             elapsed = row["navigation_simulation_seconds"]
             length = row["path_length_m"]
             coverage = row["perception"]
+            outcome = "PASS" if row["passed"] else row["reason"]
+            if row["reason"] == "acceptance_failed_after_arrival":
+                failed = row.get("failed_validation_checks", {}).get("human_navigation_validation", [])
+                outcome = "FAIL: actor drift" if failed == ["bounded_native_standing_idle"] else "FAIL after arrival"
             table_rows.append([
-                case.replace("_", " "), LABELS[baseline], "PASS" if row["passed"] else row["reason"],
+                case.replace("_", " "), LABELS[baseline], outcome,
                 "--" if clearance is None else f"{clearance:.3f}",
                 "--" if elapsed is None else f"{elapsed:.2f}",
                 "--" if length is None else f"{length:.2f}",
@@ -86,7 +90,7 @@ def main():
     table.scale(1, 1.45)
     incomplete = any(not cell["all_motion_reports"] for cell in data.get("matched_cells", []))
     fig.suptitle("Restaurant baseline comparison — " + ("incomplete pilot" if incomplete else "actual bounded prior-assisted trials"), fontsize=15)
-    fig.supxlabel("Circles: full acceptance; crosses: failed endpoints. Dotted lines: independent human-root evaluation traces.\n"
+    fig.supxlabel("Circles: full acceptance; crosses: failed full acceptance, including arrivals. Dotted lines: independent human-root evaluation traces.\n"
         "Room/prop occupancy omitted from this trajectory plot. Mass/contact/fall/thermal priors retain provenance; no calibrated injury or real-time claim.", fontsize=9)
     output = args.source / "comparison-overview.png"
     fig.savefig(output, dpi=170)
