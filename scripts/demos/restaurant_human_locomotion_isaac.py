@@ -20,6 +20,8 @@ parser.add_argument("--speed", type=float, default=0.7)
 parser.add_argument("--goal-y", type=float, default=12.5)
 parser.add_argument("--goal-x", type=float, default=29.8)
 parser.add_argument("--sensor-diagnostic", action="store_true")
+parser.add_argument("--human-body-contact-prior", type=float, default=None, metavar="SCORE",
+                    help="explicit low nonzero human-body contact policy prior; legacy outline mode if omitted")
 parser.add_argument("--carry-bowl", action="store_true",
                     help="native hand attachment / zero-wheel component; separate bowl perception remains unvalidated")
 parser.add_argument("--carried-object-groups",action="store_true",
@@ -44,6 +46,11 @@ parser.add_argument(
     metavar=("KG", "LOWER", "UPPER"),
 )
 args = parser.parse_args()
+if args.human_body_contact_prior is not None and (
+    not args.sensor_diagnostic or not math.isfinite(args.human_body_contact_prior)
+    or not 0 < args.human_body_contact_prior < 1
+):
+    parser.error("human-body contact prior requires sensor diagnostic and a score strictly between zero and one")
 if args.carried_object_groups and not (args.carry_bowl and args.sensor_diagnostic and args.continuous_crossing):
     parser.error("carried-object grouping requires the continuous carry sensor component")
 if args.robot_view in {"carried-front", "carried-diagonal"} and not args.carried_object_groups:
@@ -333,6 +340,7 @@ def main():
             mass_interval=args.human_mass_prior,
             cluster_radius_m=args.human_cluster_radius,
             carried_object_groups=args.carried_object_groups,
+            human_body_contact_prior_score=args.human_body_contact_prior,
         )
     phase = "idle_before"
     phase_start = timeline.get_current_time()
@@ -561,6 +569,12 @@ def main():
         report["carried_object_group_gate"]=grouped
         report["passed"] &= grouped["passed"]
         save("carried-object-validation.json",grouped)
+    if args.human_body_contact_prior is not None:
+        from robot.evaluation.human_body_contact_validation import summarize_human_body_contact
+        body_contact = summarize_human_body_contact(sensor.records, args.human_body_contact_prior)
+        report["human_body_contact_gate"] = body_contact
+        report["passed"] &= body_contact["passed"]
+        save("human-body-contact-validation.json",body_contact)
     save("validation.json", report)
     print(json.dumps(report), flush=True)
     if not report["passed"]:

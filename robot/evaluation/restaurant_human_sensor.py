@@ -87,9 +87,13 @@ class RestaurantHumanSensorDiagnostic:
     def __init__(
         self, stage, root, output, anchor, *, mass_interval=(70.0, 45.0, 100.0), cluster_radius_m=.12,
         carried_object_groups=False,
+        human_body_contact_prior_score=None,
     ):
         self.stage, self.output = stage, output
         self.carried_object_groups=carried_object_groups
+        from robot.perception.human_body_contact import HumanBodyContactPriorConfig
+        body_contact_config = (None if human_body_contact_prior_score is None
+            else HumanBodyContactPriorConfig(human_body_contact_prior_score))
         self.camera = NovaCarterCamera(resolution=(400, 640))
         self.lidar = NovaCarterLidar()
         self.camera.initialize()
@@ -245,7 +249,10 @@ class RestaurantHumanSensorDiagnostic:
             carried_object_config=CarriedObjectConfig(allow_occluding_subinstance=True) if carried_object_groups else None,
             pose_detector=pose_detector,
             object_height_config=ObjectHeightConfig() if carried_object_groups else None,
+            human_body_contact_config=body_contact_config,
         )
+        if body_contact_config is not None:
+            self.save("human-body-contact-configuration.json", asdict(body_contact_config))
         self.history = EgoPoseHistory(maximum_samples=2048)
         self.truth, self.records, self.rejections = [], [], []
         self.executor = ThreadPoolExecutor(max_workers=1)

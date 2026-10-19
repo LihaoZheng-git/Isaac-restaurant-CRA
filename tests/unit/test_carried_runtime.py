@@ -226,3 +226,47 @@ def test_missing_prop_keeps_only_bounded_identity_without_publishing_old_evidenc
     later = runtime(observed_packet(7, 2.1))
     assert later.diagnostics["carried_object_groups"]["members"]["object"] != object_id
     assert not later.diagnostics["carried_object_groups"]["confirmed_groups"]
+
+
+def test_human_contact_prior_does_not_change_the_carried_objects_factors_or_occupancy(
+    monkeypatch,
+):
+    from robot.perception.human_body_contact import HumanBodyContactPriorConfig
+
+    baseline = setup(monkeypatch)
+    worker = setup(monkeypatch)
+    worker.human_body_contact_config = HumanBodyContactPriorConfig()
+    for frame, t in enumerate((1.0, 1.2, 1.4), 1):
+        original = baseline(observed_packet(frame, t))
+        revised = worker(observed_packet(frame, t))
+
+    def member(result, role):
+        return next(
+            o for o in result.objects if o.diagnostics.get("carried_member") == role
+        )
+
+    human, obj = member(revised, "human"), member(revised, "object")
+    assert human.diagnostics["factor_scores"]["contact"]["score"] == 0.1
+    assert human.diagnostics["factor_scores"]["contact"]["status"] == "prior"
+    scores = {
+        name: {
+            key: value
+            for key, value in detail.items()
+            if key != "human_body_prior_rejections"
+        }
+        for name, detail in obj.diagnostics["factor_scores"].items()
+    }
+    assert scores == member(original, "object").diagnostics["factor_scores"]
+    assert obj.diagnostics["factor_scores"]["contact"]["human_body_prior_rejections"]
+    assert (
+        revised.field.all_obstacle_point_count
+        == original.field.all_obstacle_point_count
+        == 24
+    )
+    group = revised.diagnostics["carried_object_groups"]["confirmed_groups"][0]
+    assert group["phi"] == max(human.policy.risk, obj.policy.risk)
+    for factor in ("kinetic", "potential", "thermal"):
+        assert (
+            human.diagnostics["factor_scores"][factor]
+            == member(original, "human").diagnostics["factor_scores"][factor]
+        )

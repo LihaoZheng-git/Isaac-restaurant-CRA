@@ -236,6 +236,8 @@ def augment_carried_object(
             assessment["adapted"],
             worker.object_factor_prior_config,
             height_evidence=assessment.get("height_evidence"),
+            human_body_contact_prior=assessment.get("human_body_contact_prior"),
+            human_part_contact=assessment.get("human_part_contact"),
         )
         readiness = evaluate_perception_readiness(
             RestaurantScenario(
