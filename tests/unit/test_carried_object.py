@@ -62,6 +62,50 @@ def test_gap_resets_relation_without_refreshing_previous_observations():
     assert result["original_window_start"] == 2.0
 
 
+def test_hand_relative_motion_accepts_a_carried_prop_during_a_person_turn():
+    history = CarriedRelationHistory(CarriedObjectConfig())
+    for frame, t in enumerate((1.0, 1.2, 1.4)):
+        angle = frame * np.pi / 4
+        h = np.array([0.5 * t, 0.0, 1.0])
+        hand = h + [0.3 * np.cos(angle), 0.3 * np.sin(angle), 0.1]
+        result = history.update(
+            observation(
+                t,
+                frame,
+                human=tuple(h),
+                obj=tuple(hand + [0, 0, 0.05]),
+                hand_world_xyz=tuple(hand),
+            )
+        )
+    assert result["confirmed"]
+    assert result["relative_drift_m"] < 1e-12
+    assert "wrist" in result["motion_reference"]
+
+
+def test_hand_reference_does_not_accept_a_stationary_object_beside_a_moving_person():
+    history = CarriedRelationHistory(CarriedObjectConfig())
+    for frame, t in enumerate((1.0, 1.2, 1.4)):
+        result = history.update(
+            observation(
+                t,
+                frame,
+                obj=(0.5, 0.2, 1.1),
+                hand_world_xyz=(0.5 * t, 0.2, 1.05),
+            )
+        )
+    assert not result["confirmed"]
+    assert not result["checks"]["co_motion"]
+
+
+@pytest.mark.parametrize("hand", [(1, 2), (1, np.nan, 3)])
+def test_invalid_hand_geometry_cannot_advance_relation_history(hand):
+    history = CarriedRelationHistory(CarriedObjectConfig())
+    history.update(observation(1.0, 1))
+    with pytest.raises(ValueError, match="finite same-frame"):
+        history.update(observation(1.2, 2, hand_world_xyz=hand))
+    assert len(history.samples[(1, 2)]) == 1
+
+
 def test_missing_instance_clears_relationship_and_repeated_epoch_rejected():
     history = CarriedRelationHistory(CarriedObjectConfig())
     history.update(observation(1.0, 1))

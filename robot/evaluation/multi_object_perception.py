@@ -355,6 +355,8 @@ def assess_all_objects(worker, packet):
         carried_state,carried_detail=augment_carried_object(worker,packet,tracking,projection,
             world,objects,frames,policies,point_ids,semantics,contact_frame)
         selected_count=int(np.logical_or.reduce([f["selected"] for f in frames]).sum())
+        for item in objects:
+            item.diagnostics["policy_return_count"]=int(np.count_nonzero(point_ids==item.attributes.track_id))
     memory.finish_epoch(tracks, packet.camera_timestamp_seconds)
     active = {track.track_id for track in tracks}
     active.update(o.attributes.track_id for o in objects if o.diagnostics["accepted_instance"])

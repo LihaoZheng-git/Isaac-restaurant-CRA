@@ -34,7 +34,8 @@ def summarize_carried_groups(records, carry_truth):
         current = all(
             o["diagnostics"]["accepted_instance"]
             and o["diagnostics"]["policy_return_count"] >= 8
-            and abs(o["diagnostics"].get("source_time",math.inf) - row["camera_time"]) < 1e-6
+            and abs(o["diagnostics"].get("source_time", math.inf) - row["camera_time"])
+            < 1e-6
             for o in (human, obj)
         )
         mass = (
@@ -115,7 +116,11 @@ def summarize_carried_groups(records, carry_truth):
         "maximum_shared_field_policy": bool(groups)
         and all(r["both_member_field_policies_are_maximum"] for r in groups),
         "fresh_group_completion": bool(groups)
-        and max(r["completion_age_seconds"] for r in groups) <= 0.35 + 1e-9,
+        and all(
+            math.isfinite(r["completion_age_seconds"])
+            and 0 <= r["completion_age_seconds"] <= 0.35 + 1e-9
+            for r in groups
+        ),
     }
     return {
         "passed": all(checks.values()),

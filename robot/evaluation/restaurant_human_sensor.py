@@ -415,7 +415,7 @@ class RestaurantHumanSensorDiagnostic:
                     ],
                 }
             )
-            if self.carried_object_groups and (len(self.records)<=24 or len(self.records)%10==0):
+            if self.carried_object_groups and (len(self.records)<=60 or len(self.records)%10==0):
                 snapshots=self.output/"carried-snapshots"
                 snapshots.mkdir(exist_ok=True)
                 stem=f"{packet.sensor_frame_id:06d}"

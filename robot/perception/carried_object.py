@@ -421,6 +421,7 @@ class CarryObservation:
     hand_distance_m: float
     wrist_confidence: float
     fresh_separate_instances: bool = True
+    hand_world_xyz: tuple | None = None
 
 
 class CarriedRelationHistory:
@@ -439,6 +440,13 @@ class CarriedRelationHistory:
             or not np.isfinite(row.object_world_xyz).all()
             or np.shape(row.human_world_xyz) != (3,)
             or np.shape(row.object_world_xyz) != (3,)
+            or (
+                row.hand_world_xyz is not None
+                and (
+                    np.shape(row.hand_world_xyz) != (3,)
+                    or not np.isfinite(row.hand_world_xyz).all()
+                )
+            )
         ):
             raise ValueError(
                 "carry observation needs finite same-frame metric geometry"
@@ -475,7 +483,14 @@ class CarriedRelationHistory:
         span = row.timestamp - history[0].timestamp
         human = np.array([r.human_world_xyz for r in history])
         obj = np.array([r.object_world_xyz for r in history])
-        relative = obj - human
+        hand_rows = [r.hand_world_xyz for r in history]
+        if all(h is not None for h in hand_rows):
+            hands = np.asarray(hand_rows, dtype=float)
+            relative = obj - hands
+            motion_basis = "RGB wrist plus same-source LiDAR depth proxy"
+        else:
+            relative = obj - human
+            motion_basis = "member centroid offset (no hand proxy supplied)"
         drift = float(np.linalg.norm(relative - relative[0], axis=1).max())
         translation = float(np.linalg.norm(human[:, :2] - human[0, :2], axis=1).max())
         relative_speed = (
@@ -503,5 +518,6 @@ class CarriedRelationHistory:
             "human_translation_m": translation,
             "relative_drift_m": drift,
             "relative_speed_mps": relative_speed,
+            "motion_reference": motion_basis,
             "basis": "RGB wrist proximity + separately owned LiDAR world co-motion; inferred relationship, not grasp sensing",
         }

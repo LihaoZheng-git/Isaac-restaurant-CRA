@@ -301,6 +301,12 @@ def augment_carried_object(
             - proposed["hand_robot_xyz"]
         )
     )
+    hand_world = np.array(proposed["hand_robot_xyz"], dtype=float, copy=True)
+    c, s = np.cos(packet.robot_yaw), np.sin(packet.robot_yaw)
+    hand_world[:2] = (
+        hand_world[:2] @ np.array([[c, s], [-s, c]]) + packet.robot_position_world_xy
+    )
+    hand_world[2] -= packet.floor_height_robot_m
     relation = state.relations.update(
         CarryObservation(
             human_track.track_id,
@@ -311,6 +317,7 @@ def augment_carried_object(
             tuple(oxyz),
             hand_distance,
             proposed["wrist_confidence"],
+            hand_world_xyz=tuple(hand_world),
         )
     )
     detail["relationship"] = relation
@@ -320,6 +327,7 @@ def augment_carried_object(
         "human_mass": asdict(human.attributes.mass.mass_kg),
         "object_mass": asdict(prop.attributes.mass.mass_kg),
         "hand_distance_m": hand_distance,
+        "hand_world_xyz_proxy": hand_world.tolist(),
         "proposal_basis": proposed.get("basis", "non-person wrist-near component"),
     }
     if relation["confirmed"]:
