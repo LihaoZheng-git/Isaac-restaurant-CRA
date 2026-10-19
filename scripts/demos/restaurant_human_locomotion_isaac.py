@@ -33,7 +33,7 @@ parser.add_argument("--carry-facing-crossing", action="store_true",
 parser.add_argument("--sensor-simulation-rate", type=float, default=0.1)
 parser.add_argument("--human-cluster-radius", type=float, default=.12,
                     help="explicit 3D connected-cluster radius .12...20 m; all sensor occupancy retained")
-parser.add_argument("--robot-view", choices=("approach", "approach-forward", "close", "crossing-approach"), default="approach")
+parser.add_argument("--robot-view", choices=("approach", "approach-forward", "close", "crossing-approach", "carried-front"), default="approach")
 parser.add_argument("--camera-upward-degrees", type=float, default=0.)
 parser.add_argument("--camera-raise-metres", type=float, default=0.)
 parser.add_argument(
@@ -46,6 +46,8 @@ parser.add_argument(
 args = parser.parse_args()
 if args.carried_object_groups and not (args.carry_bowl and args.sensor_diagnostic and args.continuous_crossing):
     parser.error("carried-object grouping requires the continuous carry sensor component")
+if args.robot_view == "carried-front" and not args.carried_object_groups:
+    parser.error("the frontal parked pose is bounded to the carried-object sensor component")
 if not .12 <= args.human_cluster_radius <= .20 or (args.human_cluster_radius != .12 and not args.sensor_diagnostic):
     parser.error("3D radius .12...20 requires the native human sensor diagnostic")
 if args.carry_facing_crossing and not args.continuous_crossing:
@@ -151,6 +153,10 @@ def main():
     robot_yaw = math.pi / 2 if args.robot_view == "close" else SHORT_START_YAW
     if args.robot_view == "crossing-approach":
         robot_start, robot_yaw = (28.8, 7.4, SHORT_START_WORLD_XYZ[2]), math.pi / 2
+    if args.robot_view == "carried-front":
+        # Separate authored observation fixture only; not a navigation route,
+        # perception target, runtime mask, relationship or factor input.
+        robot_start, robot_yaw = (26.2, 9.3, SHORT_START_WORLD_XYZ[2]), 0.0
     if args.robot_view == "approach-forward":
         robot_yaw = math.pi / 2
     sources = {

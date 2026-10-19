@@ -113,3 +113,17 @@ def test_oracle_evaluation_epochs_cannot_be_duplicated():
     truth[2]["time"] = truth[1]["time"]
     with pytest.raises(ValueError, match="epochs"):
         summarize_human_sensor(records, truth)
+
+
+@pytest.mark.parametrize("second_human", [False, True])
+def test_nearby_carried_object_is_not_a_second_human_but_competing_humans_are_ambiguous(
+    second_human,
+):
+    records, truth = episode()
+    for row in records:
+        other = copy.deepcopy(row["objects"][0])
+        other["attributes"]["track_id"] = 5
+        if not second_human:
+            other["attributes"]["mass"]["mass_kg"]["source"] = "visual_mass_runtime"
+        row["objects"].append(other)
+    assert summarize_human_sensor(records, truth)["passed"] is not second_human
