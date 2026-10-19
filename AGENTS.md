@@ -752,3 +752,20 @@
   are cached across calls. Its 5.95x zero-wheel sampling benchmark and repeated
   virtual arrival are bounded numeric diagnostics, not native real-time or
   moving-human bypass acceptance. Keep all exact safety/freshness checks.
+- At 458a089 the primary 8 s crossing arrived/stopped with .299160 m monitored
+  clearance, 228 fields/226 translating, seven supported moving-human kinetic
+  rows and nine independently matched passing-policy rows. It passed behind
+  the actor but its .093633 m visible arc failed the fixed .20 m criterion;
+  aggregate experiment acceptance remains false. The 13 s repeat stopped on
+  unresolved fragment 474 (.5 s age, 1.024684 m distance) and did not arrive.
+  Close-view SAM masks touching the image boundary remain rejected. Both had
+  zero complete four-factor perception assessments despite 66/48 all-object
+  visual instances. First-track and synthetic-actor counters are not native
+  all-object/human counters. Field axes are rotated from the route; score
+  route-relative arcs independently. Preserve raw reports and main hold.
+- The user approved explicit Laplace-guidance tracking only as a separately
+  named MPC ablation. Keep the existing objective as the primary and lambda
+  1.25. Validate fixed-field/stationary behavior before new ablation motion;
+  no new objective may relax physical provenance, mask/identity gates,
+  occupancy continuity, optimizer age, exact DTCBF/dense geometry or analytical
+  CBF checks. Do not claim it solves unresolved moving-view perception.

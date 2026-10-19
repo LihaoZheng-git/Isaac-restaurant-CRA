@@ -83,3 +83,56 @@ seconds with exact geometry/CBF/DTCBF checks passing. Their excursions remain
 the earlier committed frozen audit. Native observed-person selection and
 moving bypass remain pending until the next frozen collection.
 The updated full unit suite passed 2,107 tests and repository Ruff passed.
+
+## Frozen native results at 458a089
+
+Both runs passed the 60-frame zero-wheel human component gate. Both kept
+the same prior policy, lambda 1.25, stationary checks and exact safety/freshness
+limits. The only change between these native collections was crossing delay.
+
+| Crossing delay | Arrival / stop | Fields / translating | Minimum monitored clearance | Visible passing acceptance |
+| --- | --- | --- | --- | --- |
+| 8 s | Goal at 23.25 s; .002284 m stopping drift | 228 / 226 | .299160 m | Failed only the 20 cm arc threshold; .093633 m encounter excursion |
+| 13 s | Stopped on unresolved nearby fragment; no arrival | 143 / 138 | .218221 m | Failed; no verified selection and incomplete route |
+
+The 8 s run passed every native-human validator check: seven supported moving
+kinetic rows, five simultaneous-motion rows, fresh fields, preserved mass source
+age and fixed-lambda numeric policies. Nine passing-policy rows selected track
+71 with a fresh person/SAM association; maximum independent centroid error was
+.142741 m. It passed behind the actor (-.228959 m closest-encounter projection)
+and rejoined the goal (.096529 m endpoint error). Full experiment `passed`
+remains **false** because the visible-arc threshold failed. The planner's maximum
+wall time was 4.252436 s and field build maximum 4.075792 s; long calls remain
+and the .05 simulation/wall pacing does not establish real-time control.
+
+The 13 s run stopped at 15.1667 navigation seconds. Fragment 474 was last seen
+at 22.6 s at (28.727693, 9.092441), then missing for .5 s at 1.024684 m from the
+robot. The unchanged continuity guard blocked; drift after stopping was
+.000207 m. A close human SAM proposal had quality .954913 and .889381 owned
+coverage but touched the image boundary. It correctly remained rejected, and
+geometry-only candidate 74 could not supply fresh visual person qualification.
+No supported moving human kinetic rows were accepted in that run. Neither
+observation age, mask gates nor fragment expiry were relaxed to complete it.
+
+Across all objects, the 8/13 s runs recorded 66/48 accepted visual instances
+but **zero complete four-factor perception assessments**. Numeric policies
+continued with labeled priors; potential/thermal were not freshly established.
+The legacy top-level `perception_evidence_counts` describes the first geometric
+track only. Its zero accepted-instance count is not the all-object count. The
+top-level `simultaneous_robot_actor_kinetic_updates` applies to the synthetic
+`--moving-actor` branch; native-human simultaneous rows are in the independent
+human validation. These counters must not be conflated. Both reports saved
+strictly and then intentionally raised their failed acceptance gate; launcher
+exit zero is not success.
+
+The native route is rotated relative to the field axes. Field-frame y is not
+lateral clearance or route-relative excursion. Use the independent route-frame
+validator; the plotted field-frame bend must not be called a large bypass.
+See `native-observed-8s-v1/navigation-review.png` and both saved raw reports.
+
+The user subsequently approved a **separate guidance-tracking MPC ablation**.
+Keep the current objective for the primary comparison. A guidance preference in
+a safety constraint does not require direction tracking when nominal motion is
+feasible. An explicit objective must therefore remain named, configurable and
+separate from the primary, and cannot bypass unresolved-occupancy stops or claim
+to fix the close-view perception failures above. Main/long-service holds remain.
