@@ -191,3 +191,18 @@ free-space inference and general body reconstruction remain outside this gate.
 The **75-trial replicated collection is implemented but has not been run**.
 Resolve the selected crossing's continuity/kinetic coverage before spending
 that collection. No long service mission was started, and main stays unchanged.
+
+### Explicit .18 m human connectivity recipe
+
+The bare-human parked crossing at `bare-cluster18-stationary-v1/` passed native
+arrival/stopping, articulated walking, independent layout clearance, current
+RGB/person/SAM and velocity checks, and the separately typed .10 body-contact
+prior validation. All robot wheel commands were zero. This gate permits testing
+the existing .18 m connected-cluster setting during navigation; it does not
+establish coupled navigation or repair any original failed trial.
+
+The next comparison recipe explicitly selects .18 m for **every human method**,
+standing and crossing. Static options and legacy demo defaults remain unchanged.
+All positive occupancy, association/freshness/track-loss checks, risk/confidence
+formulas, factor priors, field/controller budgets and lambda 1.25 remain intact.
+Use a new immutable output root and report its results separately from pilot-v3.

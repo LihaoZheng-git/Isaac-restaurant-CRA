@@ -50,6 +50,7 @@ def trial_options(trial):
                     "--restaurant-route", "human-service", "--restaurant-server",
                     "--sam-observed-context-box",
                     "--restaurant-human", mode, "--human-camera-upward-degrees", "15",
+                    "--human-cluster-radius", ".18",
                     "--human-body-contact-prior", ".10", "--stationary-frames", "60",
                     "--visual-reassessment-interval", ".2", "--live-visual-tracks", "2"]
         if mode == "crossing":
