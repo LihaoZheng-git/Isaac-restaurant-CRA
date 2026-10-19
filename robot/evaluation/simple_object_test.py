@@ -170,6 +170,41 @@ def build_assessed_object_field(
     return policy, field
 
 
+def sample_stopping_sweep(*, state_reader, step, clearance_reader, frame_count=60):
+    """Audit every braking pose; small translation alone cannot bound rear sweep.
+
+    The caller supplies the independent clearance monitor. These samples never
+    enter perception or control, and do not establish continuous-time clearance.
+    """
+    if (
+        isinstance(frame_count, bool)
+        or not isinstance(frame_count, int)
+        or frame_count < 1
+    ):
+        raise ValueError("frame_count must be a positive integer")
+    records = []
+    for index in range(frame_count + 1):
+        if index:
+            step()
+        state = np.array(state_reader(), dtype=float, copy=True)
+        if state.shape != (3,) or not np.isfinite(state).all():
+            raise ValueError("stopping state must be a finite three-vector")
+        clearance = float(clearance_reader(state))
+        if not math.isfinite(clearance):
+            raise ValueError("stopping clearance must be finite")
+        records.append(dict(frame=index, state=state.tolist(), clearance_m=clearance))
+    first, last = np.array(records[0]["state"]), np.array(records[-1]["state"])
+    return dict(
+        initial_state=first.tolist(),
+        final_state=last.tolist(),
+        translation_drift_m=float(np.linalg.norm(last[:2] - first[:2])),
+        yaw_drift_radians=float((last[2] - first[2] + math.pi) % math.tau - math.pi),
+        minimum_clearance_m=min(row["clearance_m"] for row in records),
+        records=records,
+        scope="independent sampled braking sweep; not controller input or continuous-time guarantee",
+    )
+
+
 def disk_footprint_clearance(state, *, center_xy, radius_m, footprint):
     """Independent disk-to-rectangle clearance, including the policy margin.
 

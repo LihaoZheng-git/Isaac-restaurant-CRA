@@ -331,7 +331,7 @@ from robot.evaluation.object_map_validation import summarize_fixture_assessments
 from robot.evaluation.restaurant_service_validation import (
     authored_raster_clearance, load_authored_layout_monitor, restaurant_asset_checks, restaurant_plume_checks,
 )
-from robot.evaluation.simple_object_test import disk_footprint_clearance
+from robot.evaluation.simple_object_test import disk_footprint_clearance, sample_stopping_sweep
 from robot.navigation.waypoint_controller import (
     RobotPose2D,
     Waypoint,
@@ -1548,6 +1548,36 @@ def main():
     arrived = False
     reason = "duration_limit"
     consecutive_failures = 0
+    def independent_clearance(current):
+        clearances = []
+        if human is not None:
+            xy = human.position()[:2] - [anchor.x, anchor.y]
+            c, s = math.cos(anchor.yaw), math.sin(anchor.yaw)
+            local = (c * xy[0] + s * xy[1], -s * xy[0] + c * xy[1])
+            clearances.append(disk_footprint_clearance(current, center_xy=local,
+                radius_m=human.setup["collision_radius_m"], footprint=footprint))
+            if human.carry is not None and human.carry.records:
+                bowl = human.carry.records[-1]
+                xy = np.array(bowl["bowl_center_xyz"][:2]) - [anchor.x, anchor.y]
+                local = (c*xy[0]+s*xy[1], -s*xy[0]+c*xy[1])
+                clearances.append(disk_footprint_clearance(current, center_xy=local,
+                    radius_m=float(np.linalg.norm(bowl["world_half_extents"][:2])), footprint=footprint))
+        for fixture in fixtures:
+            xy = np.array(fixture["center_world_xy"])
+            if args.moving_actor and fixture["name"] == "ground":
+                xy[1] += actor_offset_velocity(max(0, float(timeline.get_current_time()) - actor_start_time))[0]
+            delta = xy - [anchor.x, anchor.y]
+            c, s = math.cos(anchor.yaw), math.sin(anchor.yaw)
+            local = np.array([c * delta[0] + s * delta[1], -s * delta[0] + c * delta[1]])
+            clearances.append(disk_footprint_clearance(current, center_xy=local,
+                radius_m=fixture["monitor_radius_m"], footprint=footprint))
+        clearance = min(clearances)
+        if layout_monitor is not None:
+            pose = stationary.read_robot_pose(stage)
+            clearance = min(clearance, authored_raster_clearance(
+                layout_monitor[0], (pose.x,pose.y,pose.yaw), footprint, layout_monitor[1]))
+        return clearance
+
     best_goal_distance = math.inf
     last_goal_progress = start_sim
     try:
@@ -1560,33 +1590,7 @@ def main():
             elif args.progress_timeout_seconds and now - last_goal_progress > args.progress_timeout_seconds:
                 reason = "progress_timeout"
                 break
-            clearances = []
-            if human is not None:
-                xy = human.position()[:2] - [anchor.x, anchor.y]
-                c, s = math.cos(anchor.yaw), math.sin(anchor.yaw)
-                local = (c * xy[0] + s * xy[1], -s * xy[0] + c * xy[1])
-                clearances.append(disk_footprint_clearance(current, center_xy=local,
-                    radius_m=human.setup["collision_radius_m"], footprint=footprint))
-                if human.carry is not None and human.carry.records:
-                    bowl = human.carry.records[-1]
-                    xy = np.array(bowl["bowl_center_xyz"][:2]) - [anchor.x, anchor.y]
-                    local = (c*xy[0]+s*xy[1], -s*xy[0]+c*xy[1])
-                    clearances.append(disk_footprint_clearance(current, center_xy=local,
-                        radius_m=float(np.linalg.norm(bowl["world_half_extents"][:2])), footprint=footprint))
-            for fixture in fixtures:
-                xy = np.array(fixture["center_world_xy"])
-                if args.moving_actor and fixture["name"] == "ground":
-                    xy[1] += actor_offset_velocity(max(0, now - actor_start_time))[0]
-                delta = xy - [anchor.x, anchor.y]
-                c, s = math.cos(anchor.yaw), math.sin(anchor.yaw)
-                local = np.array([c * delta[0] + s * delta[1], -s * delta[0] + c * delta[1]])
-                clearances.append(disk_footprint_clearance(current, center_xy=local,
-                    radius_m=fixture["monitor_radius_m"], footprint=footprint))
-            clearance = min(clearances)
-            if layout_monitor is not None:
-                pose = stationary.read_robot_pose(stage)
-                clearance = min(clearance, authored_raster_clearance(
-                    layout_monitor[0], (pose.x,pose.y,pose.yaw), footprint, layout_monitor[1]))
+            clearance = independent_clearance(current)
             minimum_clearance = min(minimum_clearance, clearance)
             if clearance <= 0.02:
                 reason = "clearance_guard"
@@ -1866,11 +1870,13 @@ def main():
             human.abort()
         inference.close()
         planner.close()
-    arrival_state = state()
-    for _ in range(60):
-        step()
-    final_state = state()
-    stop_drift = float(np.linalg.norm(final_state[:2] - arrival_state[:2]))
+    minimum_clearance_before_stop = minimum_clearance
+    stopping_sweep = sample_stopping_sweep(state_reader=state, step=step,
+        clearance_reader=independent_clearance, frame_count=60)
+    save_json("stopping-sweep.json", stopping_sweep)
+    final_state = np.array(stopping_sweep["final_state"])
+    stop_drift = stopping_sweep["translation_drift_m"]
+    minimum_clearance = min(minimum_clearance, stopping_sweep["minimum_clearance_m"])
     if human is not None and human.carry is not None:
         minimum_clearance = min(minimum_clearance, min(
             r["independent_robot_clearance_m"] for r in human.records
@@ -1969,6 +1975,9 @@ def main():
         "completed": arrived,
         "reason": reason,
         "minimum_clearance_m": minimum_clearance,
+        "minimum_clearance_before_stop_m": minimum_clearance_before_stop,
+        "minimum_clearance_during_stop_m": stopping_sweep["minimum_clearance_m"],
+        "stop_yaw_drift_radians": stopping_sweep["yaw_drift_radians"],
         "minimum_cbf_margin": None
         if not math.isfinite(minimum_cbf_margin)
         else minimum_cbf_margin,

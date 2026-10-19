@@ -11,6 +11,7 @@ from robot.evaluation.simple_object_test import (
     build_assessed_object_field,
     controlled_object_adapter,
     disk_footprint_clearance,
+    sample_stopping_sweep,
     run_bounded_pass_by,
 )
 from robot.perception.physical_attributes import EstimateStatus, PhysicalAttributes
@@ -22,6 +23,38 @@ from robot.safety.safe_sage_configuration_space import RectangularRobotFootprint
 def policy(inputs):
     adapted = controlled_object_adapter(inputs, track_id=7, timestamp_seconds=1.0)
     return adapted, CRASafeSAGEPolicy().evaluate(adapted.profile)
+
+
+def test_stopping_sweep_detects_rotating_rear_overlap_with_safe_endpoints():
+    pose = np.zeros(3)
+    footprint = RectangularRobotFootprint(0.14, 0.6, 0.2, 0.2, 0.05)
+
+    def step():
+        pose[2] += np.pi / 2
+
+    result = sample_stopping_sweep(
+        state_reader=lambda: pose,
+        step=step,
+        frame_count=2,
+        clearance_reader=lambda state: disk_footprint_clearance(
+            state, center_xy=(0.0, -0.8), radius_m=0.3, footprint=footprint
+        ),
+    )
+    assert result["translation_drift_m"] == 0
+    assert result["records"][0]["clearance_m"] > 0
+    assert result["records"][-1]["clearance_m"] > 0
+    assert result["minimum_clearance_m"] < 0
+    assert len(result["records"]) == 3
+
+
+def test_stopping_sweep_rejects_unavailable_clearance():
+    with pytest.raises(ValueError, match="clearance must be finite"):
+        sample_stopping_sweep(
+            state_reader=lambda: np.zeros(3),
+            step=lambda: None,
+            clearance_reader=lambda _: np.nan,
+            frame_count=1,
+        )
 
 
 def test_low_oracle_profile_keeps_relative_approach_energy_and_provenance():

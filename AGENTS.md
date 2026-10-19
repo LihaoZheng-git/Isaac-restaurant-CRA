@@ -788,3 +788,17 @@
   The revision uses the request's active configured waypoint and blends only
   its auxiliary reference near that point. Do not infer physical evidence from
   configured goals or alter safety/uncertainty gates to rejoin.
+
+- The 7791a5a checked-path ablation passed clean command-only virtual arrival
+  on both sides, but its native 8 s crossing failed clearance_guard at 43.9 s
+  after 2/3 waypoints. Keep its .015525 m pre-braking human-envelope clearance,
+  .060795 m encounter arc, 435 fields/297 translating, zero complete factor
+  assessments and the generic-ABO-on-human mass-source failure explicit.
+  Positive sampled CBF margins did not establish independent envelope safety.
+  The raw report omitted bare-human braking clearance; a post-stop endpoint
+  check was -.002050 m against the padded .40 m monitor, not a proven contact
+  or full sweep minimum. Future reports sample every stopping frame and yaw.
+  The user approved a separate configurable human body-envelope occupancy
+  PRIOR gated on current LiDAR support/validated identity. Never read actor
+  truth into control or relax the independent monitor; validate stationary
+  before more motion. Keep mass/contact clocks and main/long-service holds.

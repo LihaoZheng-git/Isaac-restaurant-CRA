@@ -92,3 +92,47 @@ truncation, unresolved occupancy fragments or complete four-factor readiness.
 Paced prior-assisted navigation is not a real-time guarantee, exact paper
 equivalence, universal safety, or a causal CRA advantage. Main and long-service
 holds remain until the intended acceptance is sound.
+
+
+## Frozen/native results at 7791a5a
+
+The clean command-only three-waypoint repeat reproduced both ablation arrivals
+(35.6/31.7 s). Matched primary runs arrived in 30.15/24.75 s; the left primary
+run took the opposite side despite the soft field preference. Both controllers
+passed the exact virtual checks. This is not a CRA benefit or sensor result.
+The full unit suite passed 2,133 tests; repository Ruff passed.
+
+The native checked-path 8 s crossing passed the 60-frame stationary human gate
+but **failed**: clearance_guard at 43.9 navigation seconds after 2/3 waypoints.
+There were 435 live fields/297 translating, sampled CBF minimum .085788,
+reported pre-braking monitor clearance .015525 m, translation stop drift
+.005792 m and only .060795 m encounter-specific left arc (required .20 m).
+Human identity/selection and behind checks passed, but the human mass-source
+check failed: 30 kinetic-supported rows (source 9.0--11.9 s) used the generic
+ABO estimate/its retained prior, including a .738458 kg prediction, on the
+independently matched human track. Keep that failure; do not relabel those rows
+as valid adult-human mass. Planner median/max were .348142/4.335581 wall seconds.
+120 accepted visual instances and zero complete four-factor assessments were
+recorded; the run remains prior-assisted and paced, not real-time perception.
+
+The close monitor was the configured .40 m human capsule envelope. The raw
+report minimum did not include the bare-human braking interval. A separate
+post-stop endpoint calculation gives -.002050 m against that padded envelope
+(.05 m robot margin included). It is not a full braking-sweep minimum or a
+proven physical contact. The raw report/launcher exit are unchanged; see
+native-checked-path-8s-v2/review-summary.json and execution-review.json.
+
+The diagnostic now samples all 60 braking frames, including rotation, against
+the same independent monitor and reports pre-stop and stopping minima plus yaw
+drift separately. A regression has safe initial/final poses and zero translation
+but a colliding intermediate rear sweep. This monitor is never a runtime input.
+The revised sampling has unit coverage but no new wheel validation yet.
+
+The user approved a **separate labeled human body-envelope occupancy prior**
+with current LiDAR support and validated identity for the next bounded branch.
+Its implementation/acceptance is separate from this objective ablation. Do not
+supply actor truth to runtime, shrink the independent .40 m monitor, extend
+factor evidence clocks, or tune CRA priors/lambda to hide this failure. Further
+wheel trials require stationary envelope/identity validation and the corrected
+braking monitor. The generic mass domain guard also needs correction. PR141
+remains a draft; main and long-service are unchanged.
