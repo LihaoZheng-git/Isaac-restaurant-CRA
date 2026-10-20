@@ -40,3 +40,39 @@ mass and coverage tests and repository Ruff passed. The preceding full source
 baseline passed 2,251 unit tests. The camera-selection plumbing does not alter
 estimator mathematics or weaken failed image-boundary checks. Native results
 will be recorded separately; main/long-service remain held.
+
+## Parked close-crossing result at 0d6b485
+
+`outputs/guidance_progress/native-owl-parked-close-v2` passed both the native
+actor and human-sensor gates. The robot stayed parked throughout. The camera
+used its authored 1920x1200 polynomial calibration, acquired at 640x400,
+235-degree maximum FOV, zero additional pitch and zero raise.
+
+The independent sensor gate recorded **nine fresh idle and twelve fresh steady
+walking rows**, median stationary relative speed .01969 m/s and median moving
+velocity error .16170 m/s (unchanged .25 m/s limit). All four numeric-score and
+no-property-borrowing checks passed. Maximum completion age was .25 s. Eight
+capture/worker rejections remain in the output; the test never renewed them.
+The native actor arrived/stopped with .28395 m independent minimum clearance,
+and the robot received zero wheel commands. The useful visible-person frame
+is `robot-current.png`; actor motion is in `human-motion.mp4`.
+
+This is actual RGB/LiDAR component evidence with a configured adult mass prior
+and explicit contact/potential/thermal priors/proxies. It is not measured mass,
+physical sharpness, temperature, complete four-factor sensing or moving-robot
+acceptance. The old cropped moving view and this different parked fixture are
+not matched causal camera comparisons. A first v1 launcher was rejected for
+pre-creating the demo's required fresh output directory, before simulation;
+it remains separate from the accepted v2 run.
+
+The next bounded moving diagnostic uses the same 13 s encounter and 20 s
+partial-duration limit, existing front Owl with zero mount adjustment, and
+the user's separately approved .25 m centroid uncertainty prior. It must
+first pass its own 60-frame stationary component/envelope gates. Preserve
+fixed lambda, original factor/identity/selection clocks and all exact checks.
+
+After adding the explicit audited-Owl ray/scale regression, all **2,252 unit
+tests** passed in 75.79 s and repository Ruff passed. The parked component's
+median kinetic score was .12615 in idle and .20832 during steady walking;
+these are uncertainty-aware scores with adult mass and other-factor priors,
+not measured human energy or a causal navigation comparison.

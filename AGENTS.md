@@ -988,3 +988,14 @@
   Owl on a parked close-crossing component before moving robot experiments;
   use the separately approved .25 m centroid prior for any subsequent motion.
   See docs/native_camera_coverage.md and preserve earlier cropped-view failures.
+
+- At 0d6b485 the parked close-crossing Owl component passed native actor and
+  human sensor gates: nine fresh idle/twelve fresh steady walking rows, median
+  moving velocity error .16170 m/s, .28395 m independent actor clearance and
+  zero wheel commands. Keep eight capture/worker rejections and .25 s maximum
+  completion age explicit. The existing 235-degree lens used zero added pitch/
+  raise and correct native aspect; unchanged forward-depth projection still
+  excludes rearward LiDAR rays. This is not a matched camera ablation or moving
+  robot/complete-factor acceptance. The next 13 s/20 s diagnostic may use the
+  accepted Owl component with the user-approved .25 m centroid PRIOR, after
+  its own 60-frame stationary/envelope gate. Preserve all original checks.
