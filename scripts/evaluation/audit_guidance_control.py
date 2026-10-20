@@ -44,7 +44,7 @@ def main():
     parser.add_argument("--guidance-fade-distance", type=float, default=0.5)
     parser.add_argument("--guidance-minimum-reference-progress", type=float, default=.01)
     parser.add_argument("--guidance-turn-first-minimum-cap", type=float, default=.4)
-    parser.add_argument("--guidance-reference-mode", choices=("bounded_field_heading", "filtered_goal_velocity"),
+    parser.add_argument("--guidance-reference-mode", choices=("bounded_field_heading", "filtered_goal_velocity", "planar_forecast_velocity"),
                         default="bounded_field_heading")
     parser.add_argument("--active-goal-reference", action="store_true")
     parser.add_argument(

@@ -1,0 +1,50 @@
+"""Opt-in snapshots of trusted, locally generated numeric planner inputs.
+
+Pickle checkpoints are for offline diagnostics in the matching repository and
+environment, never runtime evidence or a format for loading external files.
+Keep the latest request in each five-second source-time bucket. Export work is
+inside worker timing; it cannot make a late plan usable or renew source clocks.
+"""
+
+import hashlib
+import json
+import math
+from pathlib import Path
+import pickle
+
+import numpy as np
+
+from robot.safety.safe_sage_runtime import SafeSAGEControlRuntime
+
+
+def save_planner_replay(directory, control, request, result):
+    if not isinstance(control, SafeSAGEControlRuntime) or len(request) != 5:
+        raise TypeError("planner replay requires the native runtime and five-part request")
+    field = request[2]
+    control._validate_field(field)
+    directory = Path(directory)
+    directory.mkdir(parents=True, exist_ok=True)
+    bucket = math.floor(field.sensor_timestamp_seconds / 5.)
+    stem = f"planner-{bucket:06d}"
+    payload = pickle.dumps(dict(format_version=1, control=control, request=request,
+        expected_result=result), protocol=pickle.HIGHEST_PROTOCOL)
+    path = directory / f"{stem}.pickle"
+    temporary = directory / f"{stem}.pickle.tmp"
+    temporary.write_bytes(payload)
+    temporary.replace(path)
+    nominal = np.asarray(request[1])
+    metadata = dict(format_version=1, file=path.name,
+        sha256=hashlib.sha256(payload).hexdigest(),
+        sensor_frame_id=field.sensor_frame_id,
+        sensor_timestamp_seconds=field.sensor_timestamp_seconds,
+        initial_chassis_state_grid=np.asarray(request[0]).tolist(),
+        nominal_first_command=(nominal[0] if nominal.ndim == 2 else nominal).tolist(),
+        nominal_goal_grid_xy=None if request[4] is None else np.asarray(request[4]).tolist(),
+        result_success=bool(result.success), result_status=result.status,
+        first_command=list(result.first_command),
+        source_time_bucket_seconds=5.,
+        scope="trusted local offline numeric replay only; original source epochs; no command execution or renewed evidence")
+    temporary = directory / f"{stem}.json.tmp"
+    temporary.write_text(json.dumps(metadata, indent=2, allow_nan=False), encoding="utf-8")
+    temporary.replace(directory / f"{stem}.json")
+    return metadata

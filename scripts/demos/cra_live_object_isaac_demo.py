@@ -40,7 +40,7 @@ parser.add_argument("--guidance-minimum-reference-progress", type=float, default
                     help="minimum checked-reference progress in metres: displacement in filtered mode, goal gain in legacy mode; zero disables this quality gate")
 parser.add_argument("--guidance-turn-first-minimum-cap", type=float, default=.4,
                     help="minimum turn-first reference pool cap in rad/s; .1 reproduces the legacy pool; never an executable lower bound")
-parser.add_argument("--guidance-reference-mode", choices=("bounded_field_heading", "filtered_goal_velocity"),
+parser.add_argument("--guidance-reference-mode", choices=("bounded_field_heading", "filtered_goal_velocity", "planar_forecast_velocity"),
                     default="bounded_field_heading", help="explicit reference ablation; filtered goal velocity uses v_sem as the CBF normal")
 parser.add_argument("--human-positive-fragment-extent", action="store_true",
                     help="bare-human recent-coobservation/current-positive-return fragment association; no free-space or factor transfer")
@@ -50,6 +50,8 @@ parser.add_argument("--human-passing-identity-prior-max-age", type=float, defaul
                     help="separate selection ablation: <=.5 s original person identity with current verified LiDAR envelope; zero keeps fresh-only")
 parser.add_argument("--profile-runtime", action="store_true",
                     help="diagnostic worker call profiles for jobs over 3 wall seconds; profiling timings are not performance acceptance")
+parser.add_argument("--save-planner-replay", action="store_true",
+                    help="trusted local offline numeric snapshots, latest request per five-second source-time bucket; export counts against worker age")
 parser.add_argument("--human-body-contact-prior", type=float,
                     help="opt-in fresh-person blunt-body contact PRIOR, e.g. .10; not measured sharpness")
 parser.add_argument("--human-body-envelope-radius", type=float,
@@ -1555,6 +1557,9 @@ def main():
             profile_path=args.output / "profiles" / f"planner-{data[2].sensor_frame_id}.pstats"
             if args.profile_runtime else None,
         )
+        if args.save_planner_replay:
+            from robot.evaluation.planner_replay import save_planner_replay
+            save_planner_replay(args.output / "planner-replays", control, data, result)
         elapsed = time.perf_counter() - started
         if elapsed > 3.0:
             print(json.dumps({"slow_planner_compute": {

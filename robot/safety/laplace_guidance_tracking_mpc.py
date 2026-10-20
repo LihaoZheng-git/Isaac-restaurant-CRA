@@ -11,6 +11,7 @@ from numbers import Real
 import numpy as np
 from scipy import sparse
 
+from robot.safety.safe_sage_cbf_filter import project_weighted_box_halfspace
 from robot.safety.safe_sage_unicycle_mpc import (
     SafeSAGEUnicycleMPC,
     SafeSAGEUnicycleMPCResult,
@@ -29,7 +30,9 @@ class LaplaceGuidanceTrackingConfig:
     reference_mode: str = "bounded_field_heading"
 
     def __post_init__(self):
-        if self.reference_mode not in {"bounded_field_heading", "filtered_goal_velocity"}:
+        if self.reference_mode not in {
+            "bounded_field_heading", "filtered_goal_velocity", "planar_forecast_velocity",
+        }:
             raise ValueError("unknown guidance reference mode")
         for name, value in vars(self).items():
             if name == "reference_mode":
@@ -83,6 +86,8 @@ class GuidanceTrackingDiagnostic:
     reference_mode: str
     reference_displacement_m: float | None
     reference_progress_basis: str
+    reference_uses_temporal_forecast: bool
+    reference_projection_fixed_angular_velocity: float | None
     nominal_unchanged: bool = True
 
 
@@ -176,7 +181,7 @@ class LaplaceGuidanceTrackingMPC(SafeSAGEUnicycleMPC):
             )
             ** 2
         )
-        projected = self.guidance_config.reference_mode == "filtered_goal_velocity"
+        projected = self.guidance_config.reference_mode != "bounded_field_heading"
         best, rank, checked = None, -math.inf if projected else 0.0, 0
         rejected_no_progress = 0
         selected = (None, None)
@@ -325,6 +330,9 @@ class LaplaceGuidanceTrackingMPC(SafeSAGEUnicycleMPC):
             reference_mode=self.guidance_config.reference_mode,
             reference_displacement_m=displacement,
             reference_progress_basis="endpoint_displacement" if projected else "waypoint_distance_gain",
+            reference_uses_temporal_forecast=self.guidance_config.reference_mode == "planar_forecast_velocity",
+            reference_projection_fixed_angular_velocity=0.
+            if self.guidance_config.reference_mode == "planar_forecast_velocity" else None,
         )
         return GuidanceTrackingMPCResult(
             **{
@@ -364,7 +372,7 @@ class LaplaceGuidanceTrackingMPC(SafeSAGEUnicycleMPC):
             )
         )
 
-    def _reference_preference(self, state, goal, speed, sample, field):
+    def _reference_preference(self, state, goal, speed, sample, field, *, elapsed_seconds=0.):
         if self.guidance_config.reference_mode == "bounded_field_heading":
             return self._desired_heading(state, goal, sample.sampled_guidance_grid_xy), speed
         # v_sem is the spatial CBF normal, not a stand-alone travel heading.
@@ -376,6 +384,36 @@ class LaplaceGuidanceTrackingMPC(SafeSAGEUnicycleMPC):
         if distance <= self.guidance_config.reference_goal_radius_m:
             return None
         safety = self._safety_states(state[None, :])[0]
+        if self.guidance_config.reference_mode == "planar_forecast_velocity":
+            constraint = self.paper_filter.evaluate_constraint(
+                query_position_grid_xy=safety[:2], query_yaw_radians=float(safety[2]),
+                configuration_space=field["configuration_space"], h_full=field["h_full"],
+                guidance_fields=field["guidance_fields"],
+                temporal_safety_derivative=field.get("temporal_safety_derivative", 0.))
+            # Use the same local first-order forecast as exact horizon
+            # evaluation. A reference cannot borrow feasibility from an angular
+            # QP output which this planar-direction builder does not apply.
+            forecast_h = (constraint.sampled_safety_value
+                + elapsed_seconds * constraint.scaled_temporal_safety_derivative)
+            if constraint.unsafe_reason is not None or forecast_h < -self.config.constraint_tolerance:
+                return None
+            c = self.paper_filter.config
+            velocity, feasible = project_weighted_box_halfspace(speed * delta / distance,
+                lower_bounds=np.full(2, c.minimum_planar_velocity),
+                upper_bounds=np.full(2, c.maximum_planar_velocity),
+                weights=np.full(2, c.planar_velocity_weight),
+                constraint_normal=np.array(constraint.sampled_guidance_grid_xy),
+                constraint_rhs=-self.config.gamma * max(0., forecast_h) - constraint.scaled_temporal_safety_derivative,
+                numerical_tolerance=c.numerical_tolerance)
+            magnitude = float(np.linalg.norm(velocity))
+            if not feasible or magnitude <= 1e-9:
+                return None
+            # An online safety intervention may request more than the nominal
+            # speed, still within the original actuator bound. Capping a
+            # required outward projection at a slow nominal can invalidate it.
+            # Conversion still has no safety authority: exact horizon and
+            # execution checks remain mandatory, including angular coupling.
+            return math.atan2(velocity[1], velocity[0]), min(self.config.maximum_linear_velocity, magnitude)
         result = self.paper_filter.filter_command(speed * delta / distance, 0.,
             query_position_grid_xy=safety[:2], query_yaw_radians=float(safety[2]),
             configuration_space=field["configuration_space"], h_full=field["h_full"],
@@ -413,7 +451,8 @@ class LaplaceGuidanceTrackingMPC(SafeSAGEUnicycleMPC):
                 or math.hypot(*sample.sampled_guidance_grid_xy) <= 1e-9
             ):
                 return None
-            preference = self._reference_preference(state, goal, speed, sample, field)
+            preference = self._reference_preference(state, goal, speed, sample, field,
+                elapsed_seconds=i * self.config.time_step)
             if preference is None:
                 return None
             desired, preferred_speed = preference

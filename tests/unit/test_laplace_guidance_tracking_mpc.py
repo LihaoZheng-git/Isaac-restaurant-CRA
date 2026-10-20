@@ -38,10 +38,12 @@ def test_invalid_activation_is_rejected(value):
         LaplaceGuidanceTrackingConfig(activation_safety_value=value)
 
 
-def test_zero_weight_is_identical_to_primary():
+@pytest.mark.parametrize("mode", ["bounded_field_heading", "filtered_goal_velocity", "planar_forecast_velocity"])
+def test_zero_weight_is_identical_to_primary(mode):
     c, paper = config(), make_filter()
     a = SafeSAGEUnicycleMPC(paper, c).plan(np.zeros(3), (0.2, 0), **field())
-    b = LaplaceGuidanceTrackingMPC(paper, c).plan(np.zeros(3), (0.2, 0), **field())
+    b = LaplaceGuidanceTrackingMPC(paper, c,
+        guidance_config=LaplaceGuidanceTrackingConfig(reference_mode=mode)).plan(np.zeros(3), (0.2, 0), **field())
     assert type(a) is type(b)
     for f in fields(a):
         x, y = getattr(a, f.name), getattr(b, f.name)
@@ -359,9 +361,10 @@ def test_weak_turn_first_candidates_are_excluded_without_forcing_executable_turn
     assert r.linear_velocity > .1 and abs(r.angular_velocity) < .01
 
 
-def test_constraint_normal_is_not_mistaken_for_a_direct_travel_heading():
+@pytest.mark.parametrize("mode", ["filtered_goal_velocity", "planar_forecast_velocity"])
+def test_constraint_normal_is_not_mistaken_for_a_direct_travel_heading(mode):
     m = LaplaceGuidanceTrackingMPC(make_filter(), replace(config(), horizon_steps=30),
-        guidance_config=LaplaceGuidanceTrackingConfig(weight=100, reference_mode="filtered_goal_velocity"))
+        guidance_config=LaplaceGuidanceTrackingConfig(weight=100, reference_mode=mode))
     # The goal velocity is already feasible even though the CBF normal points
     # backward. Following that normal as a heading would turn away needlessly.
     result = m.plan(np.zeros(3), (.2, 0.), nominal_goal_grid_xy=(2., 0.), **field(g=(-1., 0.)))
@@ -372,9 +375,10 @@ def test_constraint_normal_is_not_mistaken_for_a_direct_travel_heading():
     assert d.reference_progress_basis == "endpoint_displacement"
 
 
-def test_filtered_goal_reference_bends_only_when_the_spatial_constraint_requires_it():
+@pytest.mark.parametrize("mode", ["filtered_goal_velocity", "planar_forecast_velocity"])
+def test_filtered_goal_reference_bends_only_when_the_spatial_constraint_requires_it(mode):
     m = LaplaceGuidanceTrackingMPC(make_filter(), replace(config(), horizon_steps=30),
-        guidance_config=LaplaceGuidanceTrackingConfig(weight=100, reference_mode="filtered_goal_velocity"))
+        guidance_config=LaplaceGuidanceTrackingConfig(weight=100, reference_mode=mode))
     result = m.plan(np.zeros(3), (.2, 0.), nominal_goal_grid_xy=(2., 0.),
         **field(g=(-1., .6), h=.02))
     assert result.success and result.guidance_tracking.active
@@ -383,10 +387,11 @@ def test_filtered_goal_reference_bends_only_when_the_spatial_constraint_requires
     assert result.minimum_dtcbf_margin >= -m.config.constraint_tolerance
 
 
-def test_instantaneous_projection_never_bypasses_exact_temporal_horizon_checks():
+@pytest.mark.parametrize("mode", ["filtered_goal_velocity", "planar_forecast_velocity"])
+def test_instantaneous_projection_never_bypasses_exact_temporal_horizon_checks(mode):
     c = replace(config(), horizon_steps=30)
     m = LaplaceGuidanceTrackingMPC(make_filter(), c,
-        guidance_config=LaplaceGuidanceTrackingConfig(weight=100, reference_mode="filtered_goal_velocity"))
+        guidance_config=LaplaceGuidanceTrackingConfig(weight=100, reference_mode=mode))
     cs, h, g = make_fields(safety_value=.1, gradient=(.5, 0., 0.), guidance=(.5, 0.))
     kwargs = dict(configuration_space=cs, h_full=h, guidance_fields=g, temporal_safety_derivative=-.2)
     initial, goal = np.zeros(3), np.array([-2., 0.])
@@ -398,6 +403,46 @@ def test_instantaneous_projection_never_bypasses_exact_temporal_horizon_checks()
         **kwargs)
     assert not result.success and not result.guidance_tracking.active
     assert result.first_command == (0., 0.)
+
+
+def test_planar_reference_does_not_borrow_feasibility_from_an_omitted_angular_output():
+    initial, goal = np.zeros(3), np.array([2., 0.])
+    cs, h, g = make_fields(safety_value=.02, gradient=(.5, 0., 1.), guidance=(-1., .6))
+    kwargs = dict(configuration_space=cs, h_full=h, guidance_fields=g)
+    margins = []
+    for mode in ("filtered_goal_velocity", "planar_forecast_velocity"):
+        m = LaplaceGuidanceTrackingMPC(make_filter(), config(),
+            guidance_config=LaplaceGuidanceTrackingConfig(weight=100, reference_mode=mode))
+        heading, speed = m._reference_preference(initial, goal, .2, m._sample(initial, kwargs), kwargs)
+        velocity = speed * np.array([np.cos(heading), np.sin(heading)])
+        # Check the spatial inequality independently, with the omitted omega
+        # actually zero. The old free-angular projection can fail this check.
+        # The affine field at the .1 m lookahead is .02 + .5*.1 = .07.
+        margins.append(np.array([-1., .6]) @ velocity + .07)
+    assert margins[0] < -.01
+    assert margins[1] >= -1e-9
+
+
+def test_forecast_reference_increases_required_escape_speed_within_actuator_bound():
+    m = LaplaceGuidanceTrackingMPC(make_filter(), config(),
+        guidance_config=LaplaceGuidanceTrackingConfig(weight=100, reference_mode="planar_forecast_velocity"))
+    initial, goal = np.zeros(3), np.array([2., 0.])
+    cs, h, g = make_fields(safety_value=.1, gradient=(1., 0., 0.), guidance=(1., 0.))
+    before = h.values.copy()
+    kwargs = dict(configuration_space=cs, h_full=h, guidance_fields=g, temporal_safety_derivative=-.2)
+    constraint = m.paper_filter.evaluate_constraint(query_position_grid_xy=(.1, 0.),
+        query_yaw_radians=0., **kwargs)
+    assert constraint.sampled_safety_value == pytest.approx(.2)
+    remaining_time = (.2-.01) / -constraint.scaled_temporal_safety_derivative
+    now = m._reference_preference(initial, goal, .01, constraint, kwargs)
+    later = m._reference_preference(initial, goal, .01, constraint, kwargs, elapsed_seconds=remaining_time)
+    assert later[1] > now[1] >= .01
+    assert later[1] <= m.config.maximum_linear_velocity
+    assert abs(now[0]) < 1e-9 and abs(later[0]) < 1e-9
+    assert m._reference_preference(initial, goal, .01, constraint, kwargs,
+        elapsed_seconds=remaining_time*2) is None
+    # No forecast writes into the source field or renews a source epoch.
+    np.testing.assert_array_equal(h.values, before)
 
 
 @pytest.mark.parametrize("mode", [None, "normal_as_navigation", False])

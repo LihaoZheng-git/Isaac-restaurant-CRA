@@ -924,3 +924,16 @@
   accepted plans had no exact-safe auxiliary reference; an outputs-only
   forecast/zero-angular projection prototype is not integrated or validated
   native behavior. Preserve failed trials and main/long-service holds.
+
+- The separate opt-in `planar_forecast_velocity` reference projects only planar
+  goal velocity, with zero angular projection assumption and the same elapsed
+  first-order temporal forecast as exact MPC evaluation. Its subsequent
+  unicycle turns still need every original exact/geometry/actuator check;
+  instantaneous feasibility is not horizon acceptance. Required escape speed
+  may exceed the slow nominal only within existing actuator bounds. Keep the
+  nominal, primary defaults/cost, fixed lambda, all evidence/clocks and older
+  modes unchanged. Numeric replay export is diagnostic only, counts in worker
+  timing, keeps original epochs and captures latest trusted local inputs per
+  five-second source bucket. Static ORACLE arrival/unit parity is not native
+  proactive acceptance. See docs/forecast_guidance_reference.md and retain
+  parent failures/main holds.
