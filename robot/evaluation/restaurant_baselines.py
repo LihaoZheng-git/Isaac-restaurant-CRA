@@ -44,7 +44,7 @@ def fixed_class_comparison_policy():
     return policy
 
 
-def applied_field_policies(baseline, policies, objects):
+def applied_field_policies(baseline, policies, objects, *, envelope_origins=None):
     """Return field guidance and an audit without modifying physical evidence."""
     baseline = validate_baseline(baseline)
     class_policy = fixed_class_comparison_policy() if baseline is CRABaseline.FIXED_CLASS_SAFE_SAGE else None
@@ -58,7 +58,7 @@ def applied_field_policies(baseline, policies, objects):
             classes[item.attributes.track_id] = "person"
     guidance, audit = {}, []
     for key, value in policies.items():
-        semantic_class = classes.get(key, "unknown")
+        semantic_class = classes.get((envelope_origins or {}).get(key, key), "unknown")
         parameters = (
             class_policy.parameters_for(semantic_class)
             if baseline is CRABaseline.FIXED_CLASS_SAFE_SAGE
@@ -71,7 +71,8 @@ def applied_field_policies(baseline, policies, objects):
         audit.append({
             "track_or_group_id": key,
             "observed_class": semantic_class,
-            "class_basis": "fresh_person_sam_association" if semantic_class == "person" else "unavailable_class",
+            "class_basis": ("fresh_person_sam_association_via_geometry_prior_parent" if key in (envelope_origins or {}) else "fresh_person_sam_association") if semantic_class == "person" else "unavailable_class",
+            **({"geometry_prior_parent_track_id": envelope_origins[key]} if key in (envelope_origins or {}) else {}),
             "cra_phi": value.risk,
             "applied_field_risk": parameters.risk,
             "boundary_flux": parameters.boundary_flux,
@@ -108,7 +109,10 @@ def geometric_cbf_command(field, grid, current, nominal, footprint, now, *,
     ])
     velocities = np.zeros_like(points)
     supported = np.zeros(len(points), dtype=bool)
-    for track in field.tracking_result.tracked_obstacles:
+    from robot.perception.human_body_envelope import HUMAN_ENVELOPE_SOURCE
+    velocity_tracks = [*field.tracking_result.tracked_obstacles,
+        *(s.tracked_obstacle for s in getattr(getattr(field, "label_result", None), "semantic_obstacles", ()) if s.label_source == HUMAN_ENVELOPE_SOURCE)]
+    for track in velocity_tracks:
         selected = ids == track.track_id
         if track.observation_count >= 2:
             velocities[selected] = np.asarray(track.velocity_world_xy) @ world_to_anchor

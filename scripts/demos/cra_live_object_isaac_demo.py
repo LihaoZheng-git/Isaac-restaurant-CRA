@@ -44,6 +44,10 @@ parser.add_argument("--profile-runtime", action="store_true",
                     help="diagnostic worker call profiles for jobs over 3 wall seconds; profiling timings are not performance acceptance")
 parser.add_argument("--human-body-contact-prior", type=float,
                     help="opt-in fresh-person blunt-body contact PRIOR, e.g. .10; not measured sharpness")
+parser.add_argument("--human-body-envelope-radius", type=float,
+                    help="opt-in configured body-radius occupancy PRIOR; no actor geometry is read")
+parser.add_argument("--human-envelope-centroid-uncertainty", type=float, default=0.2)
+parser.add_argument("--human-envelope-identity-max-age", type=float, default=30.0)
 parser.add_argument("--restaurant-scene", type=Path,
                     help="separate dressed restaurant scene; bounded 2.2 m real-bowl component route")
 parser.add_argument("--restaurant-layout-survey", type=Path,
@@ -166,6 +170,16 @@ if not math.isfinite(args.guidance_fade_distance) or args.guidance_fade_distance
     parser.error("guidance fade distance must exceed the positive reference goal radius")
 if args.human_observed_passing_target and not (args.motion_aware_passing and args.restaurant_human and not args.human_carry_bowl):
     parser.error("observed-human passing requires the bare-human motion-aware component")
+if args.human_body_envelope_radius is not None:
+    from robot.perception.human_body_envelope import HumanBodyEnvelopeConfig
+    try:
+        HumanBodyEnvelopeConfig(body_radius_m=args.human_body_envelope_radius,
+            centroid_uncertainty_m=args.human_envelope_centroid_uncertainty,
+            maximum_identity_age_seconds=args.human_envelope_identity_max_age)
+    except ValueError as exc:
+        parser.error(str(exc))
+    if not (args.restaurant_human and args.human_mass_prior and args.persistent_object_risk_map) or args.human_carry_bowl or args.static_occupancy_memory_prior:
+        parser.error("human envelope requires standalone live human/person-prior object-map mode without static memory")
 if args.human_positive_fragment_extent and (args.restaurant_human is None or args.human_carry_bowl):
     parser.error("positive fragment extent requires the bounded bare native-human scenario")
 if not math.isfinite(args.progress_seed_fraction) or not 0 < args.progress_seed_fraction < 1:
@@ -794,6 +808,7 @@ def main():
     from robot.perception.object_height import ObjectHeightConfig
     from robot.perception.human_body_contact import HumanBodyContactPriorConfig
     from robot.safety.motion_aware_passing import MotionAwarePassingConfig
+    from robot.perception.human_body_envelope import HumanBodyEnvelopeConfig
 
     perception = LiveObjectPerception(
         segmenter=segmenter,
@@ -809,6 +824,9 @@ def main():
         ) if args.human_body_contact_prior is not None else None,
         experiment_baseline=args.experiment_baseline,
         motion_passing_config=MotionAwarePassingConfig(require_visual_person_selection=args.human_observed_passing_target) if args.motion_aware_passing else None,
+        human_body_envelope_config=HumanBodyEnvelopeConfig(body_radius_m=args.human_body_envelope_radius,
+            centroid_uncertainty_m=args.human_envelope_centroid_uncertainty,
+            maximum_identity_age_seconds=args.human_envelope_identity_max_age) if args.human_body_envelope_radius is not None else None,
         calibration=calibration,
         class_policy=class_policy,
         guidance_policy=guidance,
@@ -1236,6 +1254,13 @@ def main():
         if human is not None:
             from robot.evaluation.human_navigation_validation import human_stationary_checks
             gate["human_component_checks"] = human_stationary_checks(records)
+            if args.human_body_envelope_radius is not None:
+                from robot.evaluation.human_body_envelope_validation import validate_human_body_envelopes
+                envelope_validation = validate_human_body_envelopes(records, human.records,
+                    reference_radius_m=human.setup["collision_radius_m"])
+                save_json("stationary-human-envelope-validation.json", envelope_validation)
+                gate["human_body_envelope_checks"] = envelope_validation["checks"]
+                stationary_ready = stationary_ready and envelope_validation["passed"]
             gate["passed"] = stationary_ready = bool(stationary_ready
                 and all(gate["human_component_checks"].values()))
             gate["fixture_gate_scope"] = "fresh visually associated adult mass prior/current motion/contact proxy; potential and thermal priors; wheels still blocked until this gate passes"
@@ -1904,6 +1929,13 @@ def main():
             mode=args.restaurant_human, upper_continuation=args.human_upper_continuation,
             crossing_direction=args.human_crossing_direction)
         completed = completed and human_validation["passed"]
+        if args.human_body_envelope_radius is not None:
+            from robot.evaluation.human_body_envelope_validation import validate_human_body_envelopes
+            envelope_validation = validate_human_body_envelopes(live_fields, human.records,
+                reference_radius_m=human.setup["collision_radius_m"])
+            save_json("live-human-envelope-validation.json", envelope_validation)
+            human_validation["human_envelope_checks"] = envelope_validation["checks"]
+            completed = completed and envelope_validation["passed"]
         save_json("human-navigation-validation.json", human_validation)
         save_json("human-truth-evaluation-only.json", human.records)
         if args.motion_aware_passing:
@@ -1954,6 +1986,7 @@ def main():
         "passed": completed and scene_unchanged and root_unchanged_by_fixture,
         "experiment_baseline": args.experiment_baseline,
         "human_body_contact_prior_config": asdict(perception.human_body_contact_config) if perception.human_body_contact_config is not None else None,
+        "human_body_envelope_config": asdict(perception.human_body_envelope.config) if perception.human_body_envelope is not None else None,
         "human_navigation_validation": human_validation,
         "motion_passing_validation": passing_validation,
         "native_human_mode": args.restaurant_human,

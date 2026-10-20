@@ -76,6 +76,7 @@ def assess_all_objects(worker, packet):
     plume = copy.deepcopy(worker.plume)
     memory = copy.deepcopy(worker.persistent_properties)
     ownership = copy.deepcopy(getattr(worker, "object_ownership_bounds", {}))
+    envelope_memory = copy.deepcopy(getattr(worker, "human_body_envelope", None))
     tracking = tracker.update(
         packet.obstacle_xyz[:, :2],
         robot_position_world_xy=np.array(packet.robot_position_world_xy),
@@ -225,6 +226,7 @@ def assess_all_objects(worker, packet):
             image_is_set=True,
             candidate_persistent=memory,
             shared_contact_frame=contact_frame,
+            suppress_catalog_mass_for_human_identity=envelope_memory is not None and track.track_id in envelope_memory.identities,
         )
         contact_frame = assessment["contact_frame"]
         adapted = assessment["adapted"]
@@ -486,9 +488,29 @@ def assess_all_objects(worker, packet):
                     "retained_occupancy_factor_priors",
                 )
             )
+    envelope_audit, envelope_origins = [], {}
+    if envelope_memory is not None:
+        from robot.perception.human_body_envelope import HUMAN_ENVELOPE_SOURCE, envelope_grid_points
+        envelope_audit = envelope_memory.update(tracking,
+            fresh_person_selection_evidence(objects, packet.camera_timestamp_seconds, packet.camera_frame_id),
+            camera_timestamp_seconds=packet.camera_timestamp_seconds)
+        extra_points, extra_ids = envelope_grid_points(envelope_audit,
+            grid_config=worker.grid_config, anchor_xy=worker.anchor, anchor_yaw=worker.anchor_yaw)
+        points, point_ids = np.concatenate((points, extra_points)), np.concatenate((point_ids, extra_ids))
+        for item in envelope_audit:
+            key, original = item["envelope_track_id"], item["track_id"]
+            envelope_origins[key] = original
+            unknown = adapt_physical_factors(PhysicalAttributes.unknown(track_id=key,
+                timestamp_seconds=packet.camera_timestamp_seconds), timestamp_seconds=packet.camera_timestamp_seconds)
+            conservative, _ = evaluate_object_risk(unknown, worker.object_factor_prior_config)
+            policies[key] = max((policies[original], conservative), key=lambda value: value.risk)
+            item["applied_cra_phi"] = policies[key].risk
+            track = next(t for t in tracks if t.track_id == original)
+            semantics.append(SemanticObstacle(replace(track, track_id=key,
+                point_count=int(np.count_nonzero(extra_ids == key))), "unknown", 0., HUMAN_ENVELOPE_SOURCE))
     from robot.evaluation.restaurant_baselines import applied_field_policies
     applied_guidance, baseline_audit = applied_field_policies(
-        getattr(worker, "experiment_baseline", None), policies, objects,
+        getattr(worker, "experiment_baseline", None), policies, objects, envelope_origins=envelope_origins,
     )
     passing = copy.deepcopy(getattr(worker, "motion_passing", None))
     passing_audit = None
@@ -507,7 +529,7 @@ def assess_all_objects(worker, packet):
         # A side preference can cover this track's unmatched returns too, but
         # their own risk/flux/unknown provenance and occupancy stay unchanged.
         for key, parameters in tuple(applied_guidance.items()):
-            original = key if key in sides else key-1_000_000_000
+            original = envelope_origins.get(key, key if key in sides else key-1_000_000_000)
             if original in sides:
                 applied_guidance[key] = replace(parameters, passing_side=sides[original])
         for row in baseline_audit:
@@ -613,6 +635,8 @@ def assess_all_objects(worker, packet):
     worker.static_points, worker.object_ownership_bounds = static, ownership
     if passing is not None:
         worker.motion_passing = passing
+    if envelope_memory is not None:
+        worker.human_body_envelope = envelope_memory
     worker.temporal_recovery_baseline = None
     if carried_state is not None:
         worker.carried_runtime_state=carried_state
@@ -630,13 +654,14 @@ def assess_all_objects(worker, packet):
         "experiment_baseline": worker.experiment_baseline.value,
         "applied_field_policies": baseline_audit,
         "motion_aware_passing": passing_audit,
+        "human_body_envelope_priors": envelope_audit,
         "object_count": len(objects),
         "objects": [item.diagnostics for item in objects],
         "carried_object_groups":carried_detail,
         "occupancy_policies": [
             {
                 "track_or_group_id": key,
-                "basis": "current_object_track"
+                "basis": "human_body_envelope_geometry_prior" if key in envelope_origins else "current_object_track"
                 if key in active
                 else "unmatched_or_remembered_occupancy_group",
                 "phi": value.risk,

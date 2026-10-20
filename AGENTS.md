@@ -802,3 +802,15 @@
   PRIOR gated on current LiDAR support/validated identity. Never read actor
   truth into control or relax the independent monitor; validate stationary
   before more motion. Keep mass/contact clocks and main/long-service holds.
+
+- The approved human body-envelope branch uses a separate configured extent/
+  centroid PRIOR around current observed LiDAR centroids, seeded only by a fresh
+  accepted person/SAM association. Original identity clocks and duplicate camera
+  IDs remain explicit; current support, gap, motion-residual, competitor and
+  maximum identity-age gates apply. Unresolved known identity blocks field
+  publication instead of erasing the body. It reads no actor geometry/state.
+  Preserve original occupancy and at-least-unknown CRA on added prior cells.
+  The catalog human-domain guard does not renew mass: current accepted human
+  association, original 3 s retention, then factor prior remain the only paths.
+  Independent stationary/source-aligned envelope containment and full braking
+  sweep checks are required before more motion. See docs/human_body_envelope.md.

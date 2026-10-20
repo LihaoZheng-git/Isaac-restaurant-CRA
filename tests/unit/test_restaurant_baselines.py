@@ -106,6 +106,20 @@ def test_geometric_unknown_velocities_are_counted_as_priors():
     assert audit["current_velocity_cells"] == 0
 
 
+def test_geometry_prior_cells_use_their_current_parent_lidar_velocity():
+    from robot.perception.human_body_envelope import HUMAN_ENVELOPE_SOURCE
+    field,grid,footprint=geometric_fixture()
+    expected,_=geometric_cbf_command(field,grid,np.zeros(3),(.2,0.),footprint,1.1)
+    grid.cell_track_ids[:]=3_000_000_007
+    parent=field.tracking_result.tracked_obstacles[0]
+    field.label_result=NS(semantic_obstacles=(NS(label_source=HUMAN_ENVELOPE_SOURCE,
+        tracked_obstacle=NS(track_id=3_000_000_007,observation_count=parent.observation_count,
+            velocity_world_xy=parent.velocity_world_xy)),))
+    actual,audit=geometric_cbf_command(field,grid,np.zeros(3),(.2,0.),footprint,1.1)
+    np.testing.assert_allclose(actual,expected)
+    assert audit['current_velocity_cells']==1
+
+
 def test_exogenous_crossing_schedule_is_independent_of_robot_progress():
     for robot_y in (-100, 100):
         assert not crossing_due(now=17.9, robot_y=robot_y, trigger_y=7., delay_seconds=8., navigation_start=10.)

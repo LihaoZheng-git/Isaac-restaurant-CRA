@@ -232,6 +232,7 @@ class LiveObjectPerception:
         human_body_contact_config=None,
         experiment_baseline=None,
         motion_passing_config=None,
+        human_body_envelope_config=None,
     ):
         self.segmenter, self.mass_estimator, self.contact_detector = (
             segmenter,
@@ -272,6 +273,14 @@ class LiveObjectPerception:
         ):
             raise ValueError("human body contact prior requires fresh person association and object-map mode")
         self.human_body_contact_config = human_body_contact_config
+        from robot.perception.human_body_envelope import HumanBodyEnvelope, HumanBodyEnvelopeConfig
+        if human_body_envelope_config is not None and (
+            not isinstance(human_body_envelope_config, HumanBodyEnvelopeConfig)
+            or person_detector is None or persistent_property_config is None
+            or carried_object_config is not None or static_occupancy_memory_prior_scope is not None
+        ):
+            raise ValueError("human envelope requires standalone live person/object-map mode, without static memory")
+        self.human_body_envelope = HumanBodyEnvelope(human_body_envelope_config) if human_body_envelope_config is not None else None
         self._person_packet = self._person_frame = None
         from robot.perception.lidar_fall_surfaces import LidarFallSurfaceConfig
 
@@ -744,6 +753,7 @@ class LiveObjectPerception:
         candidate_persistent=None,
         shared_contact_frame=None,
         proposal_override=None,
+        suppress_catalog_mass_for_human_identity=False,
     ):
         timestamp = packet.camera_timestamp_seconds
         frame = SemanticDetectionFrame(
@@ -969,7 +979,10 @@ class LiveObjectPerception:
                 floor_height_robot_m=packet.floor_height_robot_m,
                 association=association,
             )
-            mass = self.mass_estimator.estimate_instance(
+            from robot.perception.physical_attributes import MassAttributes
+            mass = MassAttributes(ScalarEstimate.unavailable(unit="kg",
+                source="catalog_human_domain_guard", timestamp_seconds=timestamp,
+                evidence=("retained person identity is a domain guard, not a renewed mass estimate; original mass expiry remains",))) if suppress_catalog_mass_for_human_identity else self.mass_estimator.estimate_instance(
                 packet.rgb,
                 frame,
                 association,
@@ -977,6 +990,7 @@ class LiveObjectPerception:
                 track_id=target.track_id,
                 timestamp_seconds=timestamp,
             )
+            geometry_diagnostics["catalog_human_domain_guard"] = suppress_catalog_mass_for_human_identity
             if self.person_detector is not None:
                 from robot.perception.human_mass_prior import (
                     estimate_visual_human_mass_prior,

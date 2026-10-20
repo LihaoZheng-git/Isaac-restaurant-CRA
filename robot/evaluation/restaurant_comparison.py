@@ -180,7 +180,7 @@ def extract_trial(directory, trial):
             "simulation_rate_limit", "qp_iteration_limit", "nonlinear_rescue_iteration_limit",
             "progress_seed_linear_fraction", "mpc_configuration", "guidance_tracking_ablation",
             "planner_candidate_maximum_age_seconds", "human_crossing_delay_seconds",
-            "human_body_contact_prior_config", "experimental_camera_mount", "human_mass_prior_config",
+            "human_body_contact_prior_config", "human_body_envelope_config", "experimental_camera_mount", "human_mass_prior_config",
             "object_factor_prior_risk", "persistent_property_config", "temporal_evidence_config",
             "maximum_simulation_seconds", "human_lidar_cluster_radius_m", "native_human_mode",
             "human_requested_walking_speed_mps", "restaurant_route", "lidar_ego_motion_correction",
@@ -204,7 +204,7 @@ def comparison_summary(rows):
     matches = []
     common = ("fixed_lambda", "nominal_route_local_xy", "scene_source_sha256", "simulation_rate_limit",
               "qp_iteration_limit", "nonlinear_rescue_iteration_limit", "planner_candidate_maximum_age_seconds",
-              "human_crossing_delay_seconds", "human_body_contact_prior_config", "experimental_camera_mount",
+              "human_crossing_delay_seconds", "human_body_contact_prior_config", "human_body_envelope_config", "experimental_camera_mount",
               "human_mass_prior_config", "object_factor_prior_risk", "persistent_property_config",
               "temporal_evidence_config", "maximum_simulation_seconds", "human_lidar_cluster_radius_m",
               "native_human_mode", "human_requested_walking_speed_mps", "restaurant_route",

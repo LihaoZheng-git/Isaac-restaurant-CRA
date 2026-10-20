@@ -91,7 +91,11 @@ def test_missing_report_and_negative_clearance_are_retained(tmp_path):
         comparison_summary([row, row])
 
 
-def test_matched_configuration_rejects_changed_camera_and_keeps_failures(tmp_path):
+@pytest.mark.parametrize("changed_key, changed_value", [
+    ("experimental_camera_mount", {"upward_degrees": 20}),
+    ("human_body_envelope_config", {"body_radius_m": .4}),
+])
+def test_matched_configuration_rejects_changed_camera_and_keeps_failures(tmp_path, changed_key, changed_value):
     trials = comparison_plan()[:3]
     rows = []
     for trial in trials:
@@ -102,8 +106,8 @@ def test_matched_configuration_rejects_changed_camera_and_keeps_failures(tmp_pat
     summary = comparison_summary(rows)
     assert summary["matched_cells"][0]["matched_configuration"]
     assert all(s["passes"] == 0 and s["attempts"] == 1 for s in summary["summary"])
-    rows[0]["configuration"]["experimental_camera_mount"] = {"upward_degrees": 20}
-    assert comparison_summary(rows)["matched_cells"][0]["mismatches"] == ["experimental_camera_mount"]
+    rows[0]["configuration"][changed_key] = changed_value
+    assert comparison_summary(rows)["matched_cells"][0]["mismatches"] == [changed_key]
 
 
 def test_only_explicit_zero_wheel_gate_rejection_is_expected():
