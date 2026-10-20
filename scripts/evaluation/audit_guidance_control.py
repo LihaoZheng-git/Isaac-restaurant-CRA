@@ -47,6 +47,8 @@ def main():
     parser.add_argument("--guidance-reference-mode", choices=("bounded_field_heading", "filtered_goal_velocity", "planar_forecast_velocity"),
                         default="bounded_field_heading")
     parser.add_argument("--active-goal-reference", action="store_true")
+    parser.add_argument("--guidance-reference-search-width", type=int, choices=(0,4,8), default=0)
+    parser.add_argument("--guidance-reference-search-candidates", type=int, default=3600)
     parser.add_argument(
         "--intermediate-waypoints",
         action="store_true",
@@ -63,6 +65,8 @@ def main():
         args.guidance_minimum_reference_progress,
         args.guidance_turn_first_minimum_cap,
         args.guidance_reference_mode,
+        args.guidance_reference_search_width,
+        args.guidance_reference_search_candidates,
     )
     if (
         args.guidance_tracking_weight > 0 or args.track_nominal_states
@@ -113,6 +117,7 @@ def main():
                 ROOT / "robot/safety/safe_sage_unicycle_mpc.py",
                 ROOT / "robot/safety/safe_sage_planar_mpc.py",
                 ROOT / "robot/safety/laplace_guidance_tracking_mpc.py",
+                ROOT / "robot/safety/checked_guidance_reference_search.py",
                 ROOT / "robot/safety/safe_sage_cbf_filter.py",
             )
         },

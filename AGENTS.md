@@ -1013,3 +1013,16 @@
   Subsequent bounded reference-search work is part of the separate approved
   guidance-tracking ablation; never modify the primary nominal/objective,
   physical evidence, fixed lambda or any exact safety/freshness gate to pass.
+
+- The opt-in checked reference search is a fallback within the separate
+  guidance-tracking ablation, disabled by default and only in planar forecast
+  mode. It retains at most eight diverse prefixes, original actuator bounds,
+  original-length horizon and explicit 3,600-candidate default budget. Every
+  prefix passes exact temporal DTCBF/dense geometry and mapped analytical
+  guidance checks from the original epoch. Never execute partial paths, renew
+  clocks or relax primary/final checks; existing primary fallback remains.
+  Search ranking is a numerical goal/heading heuristic, not exact Laplace flow
+  or enforced side/global convergence. Trusted offline native replays found
+  full references with passed first-command analytical CBF, not wheel/arc or
+  real-time acceptance. See docs/checked_guidance_reference_search.md; retain
+  all older failures and main/long-service holds until native gates are sound.

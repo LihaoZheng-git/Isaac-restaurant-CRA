@@ -52,6 +52,9 @@ parser.add_argument("--profile-runtime", action="store_true",
                     help="diagnostic worker call profiles for jobs over 3 wall seconds; profiling timings are not performance acceptance")
 parser.add_argument("--save-planner-replay", action="store_true",
                     help="trusted local offline numeric snapshots, latest request per five-second source-time bucket; export counts against worker age")
+parser.add_argument("--guidance-reference-search-width", type=int, choices=(0,4,8), default=0,
+                    help="opt-in exact/guidance-checked local search only when greedy references fail; primary/default disabled")
+parser.add_argument("--guidance-reference-search-candidates", type=int, default=3600)
 parser.add_argument("--human-body-contact-prior", type=float,
                     help="opt-in fresh-person blunt-body contact PRIOR, e.g. .10; not measured sharpness")
 parser.add_argument("--human-body-envelope-radius", type=float,
@@ -188,6 +191,10 @@ if not math.isfinite(args.guidance_minimum_reference_progress) or args.guidance_
     parser.error("minimum guidance reference progress must be finite and nonnegative")
 if not math.isfinite(args.guidance_turn_first_minimum_cap) or not 0 < args.guidance_turn_first_minimum_cap <= .8:
     parser.error("turn-first reference pool cap must be finite and in (0,.8]")
+if (not 1 <= args.guidance_reference_search_candidates <= 3600
+    or args.guidance_reference_search_width > 0 and (
+        args.guidance_reference_mode != "planar_forecast_velocity" or args.guidance_tracking_weight <= 0)):
+    parser.error("bounded reference search requires forecast tracking mode and candidate budget 1..3600")
 if args.human_observed_passing_target and not (args.motion_aware_passing and args.restaurant_human and not args.human_carry_bowl):
     parser.error("observed-human passing requires the bare-human motion-aware component")
 if (not math.isfinite(args.human_passing_identity_prior_max_age)
@@ -1489,7 +1496,8 @@ def main():
             guidance_config=LaplaceGuidanceTrackingConfig(args.guidance_tracking_weight, args.guidance_activation_h,
                 math.radians(args.guidance_max_heading_bias_degrees), args.guidance_reference_goal_radius,
                 args.guidance_fade_distance, args.guidance_minimum_reference_progress,
-                args.guidance_turn_first_minimum_cap, args.guidance_reference_mode))
+                args.guidance_turn_first_minimum_cap, args.guidance_reference_mode,
+                args.guidance_reference_search_width, args.guidance_reference_search_candidates))
     control = SafeSAGEControlRuntime(mpc=mpc, backup_filter=backup)
     waypoint = WaypointController(
         [Waypoint(*point) for point in ROUTE],

@@ -28,6 +28,8 @@ class LaplaceGuidanceTrackingConfig:
     minimum_reference_progress_m: float = 0.01
     minimum_turn_first_rate_cap: float = 0.4
     reference_mode: str = "bounded_field_heading"
+    reference_search_width: int = 0
+    reference_search_maximum_candidates: int = 3600
 
     def __post_init__(self):
         if self.reference_mode not in {
@@ -57,6 +59,11 @@ class LaplaceGuidanceTrackingConfig:
             raise ValueError("maximum heading bias must be in (0, pi/2)")
         if not 0 < self.minimum_turn_first_rate_cap <= .8:
             raise ValueError("minimum turn-first pool cap must be in (0,.8]")
+        if (not isinstance(self.reference_search_width, int) or not 0 <= self.reference_search_width <= 8
+            or not isinstance(self.reference_search_maximum_candidates, int)
+            or self.reference_search_maximum_candidates <= 0
+            or self.reference_search_width > 0 and self.reference_mode != "planar_forecast_velocity"):
+            raise ValueError("bounded search requires width 0..8, positive integer candidate budget and planar forecast mode")
 
 
 @dataclass(frozen=True)
@@ -88,6 +95,7 @@ class GuidanceTrackingDiagnostic:
     reference_progress_basis: str
     reference_uses_temporal_forecast: bool
     reference_projection_fixed_angular_velocity: float | None
+    reference_search: dict | None = None
     nominal_unchanged: bool = True
 
 
@@ -188,6 +196,7 @@ class LaplaceGuidanceTrackingMPC(SafeSAGEUnicycleMPC):
         progress = None
         displacement = None
         reason = "inactive_field_preference"
+        search_audit = None
         if activation > 0 and speed > 0 and current.unsafe_reason is None:
             reason = "no_exact_safe_progress_reference"
             preference = self._reference_preference(initial, goal, speed, current, kwargs)
@@ -260,6 +269,19 @@ class LaplaceGuidanceTrackingMPC(SafeSAGEUnicycleMPC):
                     displacement = moved
             if best is not None:
                 reason = "exact_safe_local_guidance_reference"
+            elif self.guidance_config.reference_search_width > 0:
+                from robot.safety.checked_guidance_reference_search import search_checked_guidance_reference
+                search = search_checked_guidance_reference(self, initial, goal, speed,
+                    {k: kwargs[k] for k in ("configuration_space", "h_full", "guidance_fields")}
+                    | {"temporal_safety_derivative": kwargs.get("temporal_safety_derivative", 0.)},
+                    width=self.guidance_config.reference_search_width,
+                    candidate_limit=self.guidance_config.reference_search_maximum_candidates)
+                search_audit = search.diagnostics
+                best = search.trajectory
+                if best is not None:
+                    progress = distance - float(np.linalg.norm(goal-best.chassis_states[-1, :2]))
+                    displacement = float(np.linalg.norm(best.chassis_states[-1, :2]-initial[:2]))
+                    reason = "exact_safe_bounded_guidance_search_reference"
         effective = (
             self.guidance_config.weight * activation if best is not None else 0.0
         )
@@ -333,6 +355,7 @@ class LaplaceGuidanceTrackingMPC(SafeSAGEUnicycleMPC):
             reference_uses_temporal_forecast=self.guidance_config.reference_mode == "planar_forecast_velocity",
             reference_projection_fixed_angular_velocity=0.
             if self.guidance_config.reference_mode == "planar_forecast_velocity" else None,
+            reference_search=search_audit,
         )
         return GuidanceTrackingMPCResult(
             **{
