@@ -962,3 +962,18 @@
   guard independently checks positive history and every conservatively touched
   current source-grid cell; clipped, unoccupied or lower-risk coverage stops.
   See docs/human_fragment_coverage.md; unit checks are not native acceptance.
+
+- At 0ed0f3c the .20 m-centroid / .60 m-body coverage diagnostic passed 60
+  stationary frames but ended at its 20 s bound, 1/3 waypoints, 199 fields,
+  .170846 m clearance and .0000027 m stop drift. No loss stop occurred; seven
+  strict merges and one .1 s ten-cell prior-coverage proof do not establish
+  continuation beyond the .15 s strict guard or a causal fix of old fragment
+  490. Preserve zero supported moving-kinetic/simultaneous rows, failed passing
+  and arc gates, and zero complete factor assessments. One independent body
+  containment row failed by .0050068 m (center error .2050068 m). The user
+  explicitly approved a separately labeled .25 m centroid uncertainty PRIOR
+  (.65 m total radius) for the next test, with stationary validation before
+  further motion. Keep the failed .20 m record and all original freshness,
+  identity, mass, selection, exact-safety and fixed-lambda gates. High-quality
+  boundary-cropped human SAM proposals remain rejected; do not extend clocks
+  or relabel them as complete observations. Main/long-service remain held.

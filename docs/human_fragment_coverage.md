@@ -69,3 +69,39 @@ is claimed from these unit checks. Main and long-service remain held.
 
 All **2,251 unit tests** passed (76.96 s), including 125 focused policy,
 perception and guard tests. Repository Ruff and whitespace checks passed.
+
+### Native diagnostic at 0ed0f3c
+
+`outputs/guidance_progress/native-fragment-coverage-13s-v1` preserves the
+same 13 s encounter, 20 s diagnostic limit, .025 pacing and .20 m centroid
+uncertainty. All 60 stationary frames passed the component/envelope gates with
+zero wheel commands. Four stationary field updates used region-coverage priors.
+
+The moving run ended at the intentional 20 s duration limit: **not passed**,
+1/3 waypoints, 199 live fields (137 while translating), .170846 m full-sweep
+clearance, .0000027 m stop drift and minimum CBF margin .377741. It had no
+track-loss stop, seven strict observed fragment merges and ten worker field
+coverage rows. The independent guard accepted one complete ten-cell coverage
+proof for fragment 499 at source 22.9, original source 22.8. Its age was only
+.1 s: **no guard continuation beyond the strict .15 s loss threshold occurred**.
+Do not attribute the absence of a loss stop causally to this prior or describe
+the old fragment-490 failure as repaired. Main/long-service remain held.
+
+There were 58 fresh visual instances across 13,879 object assessments, zero
+complete four-factor assessments, zero supported moving-kinetic rows and zero
+simultaneous motion rows. The passing-selection and curved-arc gates failed.
+Fresh human SAM proposals during the crossing were cropped at image boundaries;
+high model quality and good LiDAR coverage did not override that rejection.
+The new positive-overlap domain guard was exercised on the known body, but this
+run did not establish a natural unknown-fragment mass-domain correction.
+The specific small-fragment correction remains unit-tested.
+
+One of the 199 independent moving body-envelope checks failed: at source 22.5,
+center error .2050068 m exceeded the .20 m uncertainty prior by .0050068 m.
+Preserve this failed .60 m-radius record. The user explicitly approved a
+separate **.25 m centroid uncertainty PRIOR / .65 m total radius** for the next
+test, with stationary validation before additional motion. This is a declared
+geometry policy change, not a tolerance change or retroactive pass. The
+configured 1 m/s point-speed bound remains uncalibrated. The 850.3 s navigation
+wall time, startup epoch rejection and renderer-history warning remain explicit;
+launcher exit zero again accompanied a full-acceptance exception.
