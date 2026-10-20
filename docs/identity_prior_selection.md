@@ -43,3 +43,56 @@ and adds the existing optional 12-second no-progress rejection; this only reject
 stalled trials and is not a relaxed success criterion. The original 90-second
 failed trial remains separate. Native outcomes will be recorded after execution.
 Main and long-service remain held.
+
+## Native result at 1b9bd2b
+
+The separate 8-second-delay crossing ran after both 60-frame stationary human/
+envelope gates passed. It **failed** `progress_timeout` at 52.166667 navigation
+seconds: only 1/3 waypoints, 1.511750 m endpoint goal error. The original 90-second
+limit was retained; the explicit 12-second optional progress watchdog ended this
+trial earlier. This is a rejected development trial, not proof of global
+nonconvergence or a matched causal CRA comparison.
+
+Minimum independent monitored clearance including the full sampled braking
+sweep was .514525 m (stopping-only minimum .567527 m). Minimum sampled CBF
+margin was .276074; translation stop drift .000360 m and yaw drift .013789 rad.
+All 519 live envelope containment rows passed, maximum centre error .165031 m,
+minimum containment margin .034969 m. There were 519 fields, 237 while translating.
+These are bounded independent monitor results, not universal geometry guarantees.
+
+Passing-policy identity and original eight-second expiry checks passed across
+79 held-policy rows. The single selection at LiDAR source 19.4 s used a **fresh**
+accepted person cue. There were **zero retained-identity selections**. Thus this
+trial exercises the enabled runtime path and its current-envelope checks, but
+does not establish natural native acceptance of the new prior-based selection.
+The .5-second path is covered by unit/field tests; the separate historical
+eligibility audit admitted the one .2-second gap and rejected all six .7--1.8 s
+gaps, without replaying a new controller trajectory.
+
+The visible left arc failed (-.094111 m maximum during the moving encounter);
+behind-passing passed. Human validation also failed its unchanged minimum of
+five supported moving-kinetic rows: only three were available, with one
+simultaneous-motion row. Adult mass-source, original mass-age and median world/
+relative velocity checks passed (.156372/.017524 m/s median errors). Retain this
+sparse positive-ownership/fresh-association limitation rather than changing
+the gate or retaining mass longer. The 34,132 object assessments had 144 visual
+instances, zero complete four-factor assessments and 135,823 configured factor-
+prior uses; this is still prior-assisted navigation development.
+
+An exact-time join found 74 accepted-plan/executed-command pairs after 40 s,
+with zero extra CBF command changes (1e-3 tolerance). Median planned and executed
+forward speeds both were .0001606 m/s; 67 pairs used an active guidance reference
+with zero horizon goal progress. These records locate late nonprogress in the
+planner/reference choice, not additional final-CBF clipping in those samples.
+They do not prove the cause of every stall or authorize relaxing exact safety
+checks. Further bounded work should inspect local-reference progress and
+fresh supported moving-kinetic coverage before another full-bypass claim.
+
+Artifacts are in outputs/identity_prior_selection/native-crossing-8s-v1:
+report.json, review-summary.json, motion-passing-validation.json,
+live-human-envelope-validation.json, stopping-sweep.json, control-join-audit.json,
+navigation-result.png and human-navigation.mp4. The complete field history is
+live-fields.jsonl; live-fields.json is only its latest-five checkpoint. The
+launcher returned zero despite the failed gate; execution.json and the saved
+validation reports preserve that distinction. PR #143 remains a separate draft;
+main and long-service remain unchanged.

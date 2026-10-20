@@ -838,3 +838,17 @@
   geometry identity lease is not selection eligibility. Reject this ablation
   from primary comparisons; retain all previous failed bypass trials and main/
   long-service holds. See docs/identity_prior_selection.md.
+
+- At 1b9bd2b, 2,183 unit tests/Ruff and both 60-frame stationary gates passed.
+  The identity-selection-enabled native trial failed progress_timeout at
+  52.166667 s, 1/3 waypoints; keep .514525 m full-sweep monitored clearance,
+  .000360 m stop drift and all 519 envelope-containment passes separate from
+  arrival. Its 79 policy rows came from one fresh selection, zero prior-based
+  selections; unit/field and historical eligibility checks are not natural
+  native identity-prior selection acceptance. Only three supported moving-
+  kinetic rows failed the unchanged minimum five, despite correct adult mass
+  sources and passing median velocity checks. Zero complete four-factor
+  assessments remain explicit. In 74 exact-time late plan/command pairs, CBF
+  added no clipping and 67 active references had zero goal progress. Review
+  planner/reference progress without relaxing safety, evidence or clocks;
+  preserve PR #143 as a draft and main/long-service holds. See its report.
