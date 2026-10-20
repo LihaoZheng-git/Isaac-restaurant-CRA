@@ -40,6 +40,8 @@ parser.add_argument("--human-cluster-radius", type=float, default=.12,
 parser.add_argument("--robot-view", choices=("approach", "approach-forward", "close", "crossing-approach", "carried-front", "carried-diagonal"), default="approach")
 parser.add_argument("--camera-upward-degrees", type=float, default=0.)
 parser.add_argument("--camera-raise-metres", type=float, default=0.)
+parser.add_argument("--rgb-camera", choices=("front_hawk_left", "front_hawk_right", "front_owl"),
+                    default="front_hawk_left", help="one existing authored camera; stationary sensor diagnostic only")
 parser.add_argument(
     "--human-mass-prior",
     nargs=3,
@@ -59,6 +61,8 @@ if args.carried_object_groups and not (args.carry_bowl and args.sensor_diagnosti
     parser.error("carried-object grouping requires the continuous carry sensor component")
 if args.robot_view in {"carried-front", "carried-diagonal"} and not args.carried_object_groups:
     parser.error("the frontal parked pose is bounded to the carried-object sensor component")
+if args.rgb_camera != "front_hawk_left" and not args.sensor_diagnostic:
+    parser.error("camera selection requires the zero-wheel sensor diagnostic")
 if not .12 <= args.human_cluster_radius <= .20 or (args.human_cluster_radius != .12 and not args.sensor_diagnostic):
     parser.error("3D radius .12...20 requires the native human sensor diagnostic")
 if args.carry_facing_crossing and not args.continuous_crossing:
@@ -331,14 +335,14 @@ def main():
         agent.idle(facing=carb.Float3(-1, 0, 0) if args.carry_facing_crossing else agent.get_facing_direction())
     sensor = None
     if args.sensor_diagnostic:
-        from robot.config import FRONT_HAWK_LEFT_CAMERA_PRIM_PATH
+        from robot.sensor.camera import CAMERA_PRIM_PATHS
         from robot.scene.camera_mount import apply_experimental_camera_pitch
         from robot.evaluation.restaurant_human_sensor import (
             RestaurantHumanSensorDiagnostic,
         )
 
         save("camera-mount-audit.json", apply_experimental_camera_pitch(
-            stage, FRONT_HAWK_LEFT_CAMERA_PRIM_PATH, args.camera_upward_degrees,
+            stage, CAMERA_PRIM_PATHS[args.rgb_camera], args.camera_upward_degrees,
             ROBOT_BASE_PRIM_PATH,
             raise_metres=args.camera_raise_metres,
         ))
@@ -353,6 +357,7 @@ def main():
             carried_object_groups=args.carried_object_groups,
             human_body_contact_prior_score=args.human_body_contact_prior,
             motion_aware_passing=args.motion_aware_passing,
+            camera_prim_path=CAMERA_PRIM_PATHS[args.rgb_camera],
         )
     phase = "idle_before"
     phase_start = timeline.get_current_time()

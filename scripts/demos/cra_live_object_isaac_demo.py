@@ -76,6 +76,8 @@ parser.add_argument("--human-camera-upward-degrees", type=float, default=0.,
                     help="explicit experimental left RGB mount pitch, 0..25 degrees; actual extrinsics re-read")
 parser.add_argument("--human-camera-raise-metres", type=float, default=0.,
                     help="explicit experimental RGB mount height increase, 0...6 m")
+parser.add_argument("--rgb-camera", choices=("front_hawk_left", "front_hawk_right", "front_owl"),
+                    default="front_hawk_left", help="one existing authored camera per trial; actual lens/extrinsics are read, no multi-camera fusion")
 parser.add_argument("--human-crossing-trigger-y", type=float, default=7.8,
                     help="explicit native actor-only trigger, world robot y 6.8..7.8; not a control/evidence input")
 parser.add_argument("--human-crossing-delay-seconds", type=float,
@@ -415,7 +417,7 @@ from robot.scene.restaurant_service_build import (
     RESTAURANT_OBSERVATIONS, SERVICE_ROOT, restaurant_route_local_xy, service_props,
 )
 from robot.scene.restaurant_server import SERVER_OBSERVATION, SERVER_PRIM_PATH
-from robot.sensor.camera import NovaCarterCamera
+from robot.sensor.camera import NovaCarterCamera, CAMERA_PRIM_PATHS
 from robot.sensor.lidar import NovaCarterLidar
 from robot.sensor.lidar_geometry import filter_valid_points, transform_points
 
@@ -776,14 +778,16 @@ def main():
         "anchor_world_xy_yaw": [anchor.x, anchor.y, anchor.yaw],
         "scope": "authored fixture and oracle anchor for independent evaluation/rendering only; never factor input"})
     from robot.scene.camera_mount import apply_experimental_camera_pitch
+    camera = NovaCarterCamera(camera_prim_path=CAMERA_PRIM_PATHS[args.rgb_camera],
+        resolution=(400,640) if args.restaurant_scene else (480,640))
     save_json("camera-mount-audit.json", apply_experimental_camera_pitch(
-        stage, NovaCarterCamera().camera_prim_path,
+        stage, camera.camera_prim_path,
         args.human_camera_upward_degrees, stationary.ROBOT_BASE_PRIM_PATH,
         raise_metres=args.human_camera_raise_metres,
     ))
     calibration = read_fisheye_polynomial_calibration(
         stage,
-        camera_prim_path=NovaCarterCamera().camera_prim_path,
+        camera_prim_path=camera.camera_prim_path,
         output_resolution=(400, 640) if args.restaurant_scene else (480, 640),
     )
     if args.restaurant_scene and (
@@ -792,10 +796,7 @@ def main():
     ):
         raise RuntimeError("restaurant RGB acquisition must match the authored calibration aspect ratio")
     save_json("camera-calibration.json", asdict(calibration))
-    camera, lidar = (
-        NovaCarterCamera(resolution=(400,640) if args.restaurant_scene else (480,640)),
-        NovaCarterLidar(lidar_prim_path=stationary.PANDAR_XT32_LIDAR_PRIM_PATH),
-    )
+    lidar = NovaCarterLidar(lidar_prim_path=stationary.PANDAR_XT32_LIDAR_PRIM_PATH)
     camera.initialize()
     lidar.initialize()
     robot_from_lidar = compute_relative_prim_transform(

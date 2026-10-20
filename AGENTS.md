@@ -977,3 +977,14 @@
   identity, mass, selection, exact-safety and fixed-lambda gates. High-quality
   boundary-cropped human SAM proposals remain rejected; do not extend clocks
   or relabel them as complete observations. Main/long-service remain held.
+
+- The camera-coverage branch selects one existing authored front Hawk or front
+  Owl camera per trial, keeping the legacy Hawk default and reading the chosen
+  lens/extrinsics/aspect. A zero-wheel Isaac USD inventory found the Owl's 235
+  degree maximum FOV versus Hawk's 150; this is not model/perception acceptance
+  or multi-camera fusion. Keep the projector's forward-depth gate, all SAM
+  boundary/quality/ownership gates and original evidence/selection clocks.
+  Rearward visible pixels are not validated LiDAR association. Validate the
+  Owl on a parked close-crossing component before moving robot experiments;
+  use the separately approved .25 m centroid prior for any subsequent motion.
+  See docs/native_camera_coverage.md and preserve earlier cropped-view failures.

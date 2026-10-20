@@ -89,6 +89,7 @@ class RestaurantHumanSensorDiagnostic:
         carried_object_groups=False,
         human_body_contact_prior_score=None,
         motion_aware_passing=False,
+        camera_prim_path=None,
     ):
         self.stage, self.output = stage, output
         from robot.safety.motion_aware_passing import MotionAwarePassingConfig
@@ -103,7 +104,8 @@ class RestaurantHumanSensorDiagnostic:
         from robot.perception.human_body_contact import HumanBodyContactPriorConfig
         body_contact_config = (None if human_body_contact_prior_score is None
             else HumanBodyContactPriorConfig(human_body_contact_prior_score))
-        self.camera = NovaCarterCamera(resolution=(400, 640))
+        self.camera = NovaCarterCamera(resolution=(400, 640),
+            **({"camera_prim_path": camera_prim_path} if camera_prim_path is not None else {}))
         self.lidar = NovaCarterLidar()
         self.camera.initialize()
         self.lidar.initialize()
@@ -122,6 +124,8 @@ class RestaurantHumanSensorDiagnostic:
             camera_prim_path=self.camera.camera_prim_path,
             output_resolution=(400, 640),
         )
+        if calibration.output_width * calibration.nominal_height != calibration.output_height * calibration.nominal_width:
+            raise ValueError("selected camera acquisition must match its authored aspect ratio")
         paths = {
             "sam": root / "outputs/sam2_integration/sam2.1_t.pt",
             "mass": root
@@ -146,6 +150,8 @@ class RestaurantHumanSensorDiagnostic:
                 "person_license": "Ultralytics AGPL-3.0; externally downloaded, not vendored",
                 "training_data": "COCO pretrained; no dataset downloaded or retraining",
                 "calibration": asdict(calibration),
+                "camera_prim_path": self.camera.camera_prim_path,
+                "camera_scope": "one actual authored camera per trial; no multi-camera fusion or synthetic wider image",
             },
         )
         person = YoloSegmentationDetector(
