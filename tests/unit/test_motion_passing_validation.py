@@ -76,3 +76,51 @@ def test_bypass_claim_rejects_wrong_ownership_prior_epoch_or_missing_data(failur
     assert not summarize_motion_passing(
         records, truth, moving_robot=True, nominal_goal_world_xy=(0, 4)
     )["passed"]
+
+
+def test_idle_root_animation_is_not_a_second_walking_encounter():
+    records, truth = example()
+    for row in truth:
+        row["phase"] = "move"
+    # After the real crossing, an idle root bob is closer to the robot and
+    # briefly exceeds .3 m/s in the opposite direction. It is not walking.
+    for time, x in ((4.1, .2), (4.15, .1), (4.2, .2)):
+        truth.append(dict(time=time, phase="stopped_after", actor_xyz=[x, 4, 0], robot_xy=[0, 4]))
+    corrected = summarize_motion_passing(records, truth, moving_robot=True, nominal_goal_world_xy=(0, 4))
+    assert corrected["passed"]
+    assert corrected["closest_moving_encounter_timestamp_seconds"] <= 4.
+    assert corrected["excluded_nonwalking_speed_threshold_rows"] > 0
+    assert "native walking phase AND" in corrected["encounter_evaluation_basis"]
+    for row in truth:
+        row.pop("phase")
+    legacy = summarize_motion_passing(records, truth, moving_robot=True, nominal_goal_world_xy=(0, 4))
+    assert not legacy["checks"]["passes_behind_moving_actor"]
+    assert legacy["closest_moving_encounter_timestamp_seconds"] > 4.
+
+
+def test_phase_metadata_cannot_invent_an_encounter_or_hide_a_wrong_side():
+    records, truth = example()
+    for row in truth:
+        row["phase"] = "idle_before"
+    no_encounter = summarize_motion_passing(records, truth, moving_robot=True, nominal_goal_world_xy=(0, 4))
+    assert not no_encounter["passed"]
+    assert not no_encounter["checks"]["passes_behind_moving_actor"]
+    for row in truth:
+        row["phase"] = "move"
+        row["robot_xy"][0] = -row["robot_xy"][0]
+    wrong_side = summarize_motion_passing(records, truth, moving_robot=True, nominal_goal_world_xy=(0, 4))
+    assert not wrong_side["passed"]
+    assert not wrong_side["checks"]["visible_trailing_side_arc"]
+
+
+@pytest.mark.parametrize("invalid", ["partial", "unknown"])
+def test_native_phase_metadata_must_be_complete_and_recognized(invalid):
+    records, truth = example()
+    for row in truth:
+        row["phase"] = "move"
+    if invalid == "partial":
+        truth[0].pop("phase")
+    else:
+        truth[0]["phase"] = "unrecognized"
+    with pytest.raises(ValueError, match="phase"):
+        summarize_motion_passing(records, truth, moving_robot=True, nominal_goal_world_xy=(0, 4))

@@ -131,3 +131,52 @@ feasible goal velocity away; a binding spatial constraint bends the reference;
 and a valid instantaneous projection cannot bypass an infeasible temporal
 horizon. Command-only virtual arrivals and the native retry are recorded
 separately below after validation. Main and long-service remain held.
+
+## Third native retry, 8fc7af6: progress improved, gate still failed
+
+All 2,201 unit tests and repository Ruff passed. Command-only virtual ORACLE
+routes arrived in 24.45/21.85 s. The filtered-reference native trial passed its
+60-frame stationary gates and reached two of three waypoints, but failed
+`repeated_inference_failure` at 67.933333 s, .170246 m from the final goal. The
+unchanged actual-arrival tolerance remains .10 m. Minimum full-sweep independent
+clearance was .335345 m and stopping drift .000319 m; neither establishes arrival.
+
+Human validation passed with 12 supported moving-kinetic/five simultaneous rows.
+All 640 source-aligned envelope containment rows passed (maximum centre error
+.165914 m). There were 76 independently validated identity-prior selection rows,
+with .3 s original visual age at selection. The visible encounter arc passed
+at .242512 m, while the behind-actor projection failed at +.671023 m. The full
+bypass experiment therefore remains unaccepted independently of the final stop.
+There were 640 live fields, 505 committed while translating, 147 accepted visual
+instances across 43,425 object assessments and zero complete four-factor
+assessments. Retained properties and factor priors remain explicit.
+
+At the endpoint a 5.12 s perception computation returned at .40 s source age,
+exceeding the unchanged .35 s field limit. The next captured LiDAR source was
+75.7 s after 75.4 s, exceeding the envelope's .25 s continuity limit; subsequent
+envelope failures blocked field publication. This is not permission to extend
+identity, factor, field or command clocks. Continuity errors now identify each
+failed gate and report source gap, original identity age and centroid residual
+without changing acceptance or committing rejected state. A separate slower-
+paced retry uses simulation rate .025 instead of .05, with all physical,
+uncertainty and arrival settings unchanged. It is a paced simulation diagnostic,
+not a latency fix or real-time claim. Preserve this failure and main holds.
+
+### Independent scoring correction
+
+The original passing report above remains untouched. Its nearest "moving"
+encounter at source 74.866667 s was actually `stopped_after`: idle root animation
+briefly crossed the .3 m/s speed threshold. The corrected evaluator requires
+both native `move` phase and the original speed threshold when complete phase
+metadata exists; partial/unknown phase metadata is rejected. Phase-free older
+fixtures retain explicitly labeled velocity-only scoring. This evaluation truth
+does not enter perception/control, and independent physical clearance still
+covers all phases.
+
+A separately saved `phase-corrected-passing-validation.json` re-evaluates the
+same unchanged third-trial records. Its real closest walking encounter was
+18.1 s, with behind projection -.180254 m (passes). However, its actual walking-
+window arc was -.004212 m (fails the unchanged .20 m threshold); the earlier
+.242512 m curve happened later. This is **not** a retroactive bypass pass. Both
+arrival and the pronounced curve during the crossing remain unmet. New native
+reports use the corrected evaluator and preserve its basis/excluded-row count.

@@ -142,6 +142,23 @@ def summarize_motion_passing(
         lateral = (robot - robot[0]) @ left
         velocity = np.gradient(actors, times, axis=0)
         moving = np.linalg.norm(velocity, axis=1) >= 0.3
+        phase_available = ["phase" in row for row in truth]
+        encounter_basis = "actor_root_velocity_only; walking phase unavailable"
+        excluded_nonwalking_rows = 0
+        if any(phase_available):
+            if not all(phase_available):
+                raise ValueError("crossing evaluation requires complete walking-phase metadata")
+            phases = np.array([row["phase"] for row in truth])
+            if not set(phases) <= {"pickup", "idle_before", "move", "stopped_after", "aborted"}:
+                raise ValueError("unknown native human evaluation phase")
+            # Idle skeletal animation can exceed the root-speed threshold.
+            # Authored task phase is independent scoring truth, never a runtime
+            # velocity input. It restricts the crossing window; the original
+            # observed-speed, distance, arc and behind thresholds still apply.
+            walking = phases == "move"
+            excluded_nonwalking_rows = int(np.count_nonzero(moving & ~walking))
+            moving &= walking
+            encounter_basis = "native walking phase AND actor root speed >= .3 m/s; evaluation truth only"
         separations = np.linalg.norm(robot - actors, axis=1)
         encounter = moving & (separations <= 2.0)
         if encounter.any():
@@ -168,6 +185,9 @@ def summarize_motion_passing(
             behind_projection_at_closest_encounter_m=behind,
             nominal_route_chord_m=distance,
             endpoint_goal_error_m=float(np.linalg.norm(robot[-1] - goal)),
+            encounter_evaluation_basis=encounter_basis,
+            excluded_nonwalking_speed_threshold_rows=excluded_nonwalking_rows,
+            closest_moving_encounter_timestamp_seconds=float(times[index]) if encounter.any() else None,
         )
     result["passed"] = all(checks.values())
     return result

@@ -93,6 +93,31 @@ def test_fresh_reassessment_may_renew_visual_identity_not_by_borrowing():
     assert b["identity_age_seconds"] == 0
 
 
+@pytest.mark.parametrize(
+    "time,center,count,matched,expected_gate",
+    [
+        (1.3, (1.03, 0.), 2, True, "lidar_source_gap"),
+        (1.1, (1.01, 0.), 2, False, "unmatched_track"),
+        (1.1, (1.01, 0.), 1, True, "nonincreasing_observation_count"),
+        (1.1, (1.5, 0.), 2, True, "centroid_prediction_residual"),
+        (1.2, (1.02, 0.), 2, True, "original_identity_age"),
+    ],
+)
+def test_continuity_rejection_reports_actual_gate_without_committing(
+    time, center, count, matched, expected_gate,
+):
+    memory = HumanBodyEnvelope(HumanBodyEnvelopeConfig(maximum_identity_age_seconds=.15))
+    memory.update(tracking(), cue(), camera_timestamp_seconds=1.)
+    original = memory.identities
+    with pytest.raises(ValueError, match=f"failed_gates=.*{expected_gate}") as error:
+        memory.update(tracking(time, center, count, matched=matched), {}, camera_timestamp_seconds=time)
+    assert "lidar_source_gap_seconds=" in str(error.value)
+    assert "original_identity_age_seconds=" in str(error.value)
+    assert "centroid_prediction_residual_m=" in str(error.value)
+    assert memory.identities is original
+    assert memory.identities[7]["lidar_timestamp"] == 1.
+
+
 def test_no_person_cue_does_not_invent_a_body_and_bad_epochs_are_rejected():
     m = HumanBodyEnvelope(HumanBodyEnvelopeConfig())
     assert m.update(tracking(), {}, camera_timestamp_seconds=1.0) == []

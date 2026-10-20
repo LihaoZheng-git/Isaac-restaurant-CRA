@@ -160,15 +160,22 @@ class HumanBodyEnvelope:
                 residual = np.linalg.norm(
                     center - previous["center"] - dt * previous["velocity"]
                 )
-                if (
-                    not track.matched_previous_track
-                    or track.observation_count <= previous["observation_count"]
-                    or not 0 < dt <= self.config.maximum_lidar_gap_seconds + 1e-9
-                    or not 0 <= age <= self.config.maximum_identity_age_seconds
-                    or residual > self.config.maximum_centroid_residual_m
-                ):
+                failed_gates = []
+                if not track.matched_previous_track:
+                    failed_gates.append("unmatched_track")
+                if track.observation_count <= previous["observation_count"]:
+                    failed_gates.append("nonincreasing_observation_count")
+                if not 0 < dt <= self.config.maximum_lidar_gap_seconds + 1e-9:
+                    failed_gates.append("lidar_source_gap")
+                if not 0 <= age <= self.config.maximum_identity_age_seconds:
+                    failed_gates.append("original_identity_age")
+                if residual > self.config.maximum_centroid_residual_m:
+                    failed_gates.append("centroid_prediction_residual")
+                if failed_gates:
                     raise ValueError(
-                        f"human envelope {key}: original identity prior expired or continuity unresolved"
+                        f"human envelope {key}: original identity prior expired or continuity unresolved; "
+                        f"failed_gates={','.join(failed_gates)}; lidar_source_gap_seconds={dt:.9g}; "
+                        f"original_identity_age_seconds={age:.9g}; centroid_prediction_residual_m={residual:.9g}"
                     )
                 source_time, source_frame = (
                     previous["camera_timestamp"],

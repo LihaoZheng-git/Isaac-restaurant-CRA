@@ -890,3 +890,23 @@
   distance decrease, gates translating references; turn-only references remain
   excluded. Legacy bounded_field_heading is retained for reproduction. Preserve
   physical evidence/clocks, fixed lambda, primary defaults and main holds.
+
+- The 8fc7af6 filtered-reference native retry reached 2/3 waypoints but failed
+  repeated inference at 67.933333 s, .170246 m from the unchanged .10 m arrival
+  gate. Preserve .335345 m full-sweep clearance, 640 fields/505 translating,
+  12 supported moving-kinetic rows, 76 identity-prior policy rows, the passed
+  .242512 m encounter arc, failed +.671023 m behind projection and zero complete
+  factor assessments. A late .40 s-old result was rejected; the following
+  .30 s source gap exceeded unchanged .25 s envelope continuity. Granular
+  rejection diagnostics never relax gates or commit rejected identity state.
+  Slower .025-rate simulation is a separately labeled diagnostic, not a latency
+  repair, real-time claim or retroactive pass. Main/long-service remain held.
+
+- Independent passing scoring now restricts complete native phase records to
+  `move` AND the original .3 m/s root-speed threshold. Idle root animation must
+  not become a second walking encounter; phase-free fixtures retain labeled
+  velocity-only scoring and partial/unknown phases fail. All-phase clearance
+  monitoring is unchanged. Preserve the original third native report and its
+  separate corrected evaluation: actual walking behind projection -.180254 m
+  passes, walking-window arc -.004212 m fails (the .242512 m curve was later).
+  This is not bypass acceptance or a source of runtime actor truth.
