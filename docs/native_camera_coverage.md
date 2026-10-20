@@ -76,3 +76,38 @@ tests** passed in 75.79 s and repository Ruff passed. The parked component's
 median kinetic score was .12615 in idle and .20832 during steady walking;
 these are uncertainty-aware scores with adult mass and other-factor priors,
 not measured human energy or a causal navigation comparison.
+
+## Moving Owl / wider-envelope diagnostic at 5b75a47
+
+`outputs/guidance_progress/native-owl-coverage-13s-v1` passed its own 60-frame
+stationary component/envelope gate before wheels. It used the existing Owl
+with zero added pitch/raise, approved .25 m centroid uncertainty (.65 m total
+body radius), fixed lambda and all original clocks/checks. This separate
+camera/geometry configuration is not a matched causal comparison.
+
+The 20 s partial-duration run ended at `duration_limit`, **not passed**, 1/3
+waypoints, 199 live fields/136 while translating, .158716 m full-sweep clearance,
+.0000138 m stop drift and .367957 minimum CBF margin. All 199 independent body
+containment rows passed; worst remaining margin .047759 m. Eight supported
+moving-kinetic rows passed their unchanged minimum-five gate, with .15212 m/s
+median world-velocity error and .00825 m/s relative-speed error. The observed
+selection/provenance/fixed-lambda checks passed across 64 identity-prior policy
+rows, with original side-policy age <=6.3 s. Fresh current image associations
+continued during the close crossing; no clock extensions were introduced.
+
+The robot still waited: **zero simultaneous robot/actor motion rows**, failed
+walking-window arc (-.118646 m against the .20 m gate), failed behind projection
+(-.004078 m), no route completion/rejoin. Thus overall human-navigation and
+passing gates remain failed. Across 13,850 object assessments there were 68
+fresh instances and zero complete four-factor assessments. The 848.5 navigation
+wall seconds are paced simulation, not real-time acceptance. Preserve the
+earlier Hawk and smaller-envelope failures and main/long-service holds.
+
+Saved numerical replay shows that the greedy projected references can hit an
+unsafe configuration within their horizon. Unintegrated, outputs-only turn-
+prefix prototypes were rejected; a bounded local beam prototype found complete
+exact-safe paths in the original 19.8 s trusted field, including the mapped
+analytical guidance condition. This is offline candidate-generation evidence,
+not integrated code, wheel/arc acceptance or paper equivalence. The next bounded
+controller work must retain the obstacle-unaware nominal, primary objective,
+original field/source/execution clocks and every exact safety check.

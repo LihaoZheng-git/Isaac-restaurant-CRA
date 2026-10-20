@@ -999,3 +999,17 @@
   robot/complete-factor acceptance. The next 13 s/20 s diagnostic may use the
   accepted Owl component with the user-approved .25 m centroid PRIOR, after
   its own 60-frame stationary/envelope gate. Preserve all original checks.
+
+- At 5b75a47 the Owl/.25 m-centroid diagnostic passed 60 stationary frames and
+  all 199 live independent body-containment rows (worst margin .047759 m).
+  Eight supported moving-kinetic rows and observed passing-selection/provenance
+  checks passed; .15212/.00825 m/s world/relative median velocity errors retain
+  original limits. Overall navigation/arc still failed: 20 s duration_limit,
+  1/3 waypoints, zero simultaneous rows, -.118646 m walking arc and -.004078 m
+  behind projection. Preserve .158716 m clearance/.0000138 m stop drift, 68
+  fresh instances, zero complete factor assessments and 848.5 navigation wall
+  seconds separately from arrival or real time. An outputs-only exact/guidance-
+  constrained beam-reference prototype is not integrated/native acceptance.
+  Subsequent bounded reference-search work is part of the separate approved
+  guidance-tracking ablation; never modify the primary nominal/objective,
+  physical evidence, fixed lambda or any exact safety/freshness gate to pass.
