@@ -67,3 +67,52 @@ translation drift alone is insufficient. Native results must be recorded here
 before claiming successful bypass or sensor-derived full-factor acceptance.
 The previous 7791a5a native failure had zero complete four-factor assessments;
 this geometry prior does not solve moving-camera plume or general perception.
+
+
+## c048777 native result
+
+All 2,156 unit tests and repository Ruff passed. The new native crossing passed
+both 60-frame stationary gates. Its minimum stationary containment margin was
+.008289 m; the completed moving audit then passed all 894 current envelopes,
+with maximum observed-centroid/reference-centre error .170730 m and minimum
+containment margin .029270 m. Earlier in-run concern about the moving centroid
+bound was provisional; the completed source-aligned audit passed. No correction
+to the centre model was needed or integrated.
+
+The human navigation/mass/motion checks passed, including six supported moving
+kinetic rows and two simultaneous-motion rows. No supported human kinetic row
+used catalog mass. Full-frame mass/contact/thermal estimation is still not
+established: there were 149 accepted visual instances, 59,454 object assessments,
+zero complete four-factor assessments and 236,864 configured factor-prior uses.
+
+**The full bypass failed**: duration_limit at 90 navigation seconds, 2/3
+waypoints, .896943 m endpoint goal error. Minimum independent clearance was
+.450916 m, including the braking audit (.556785 m stopping minimum); translation
+stop drift .00002496 m and yaw drift -.0002834 rad. There were 894 fields/349
+while translating. The .325369 m encounter-specific arc and behind test passed,
+but no passing-policy row was selected, so this is not a validated deliberate
+human bypass or an algorithmic improvement over the primary arrival.
+
+A source-history audit found qualifying left-side human candidates without a
+same-frame accepted person cue. Some had older identity ages .7--1.8 s; one had
+.2 s. The separate proposed <=.5 s identity-prior selection mode remains a user
+research decision, **not implemented**. Existing same-frame selection, original
+side-policy clocks and all physical evidence expiry rules remain unchanged.
+
+An exact-time join of accepted plans/commands found 305 valid rows after 40 s,
+with zero additional CBF command changes and median planned/executed forward
+speed .0001989 m/s. The planner itself selected near-zero progress. These data
+do not support blaming the final CBF projection or unicycle mapping alone.
+The strong beta=100 reference candidate requires further progress/policy review.
+
+A separate offline ORACLE-selected track replay of 21 saved 7791a5a source poses
+rejected a proposed uniform-semicircle centre correction: maximum error worsened
+from .156757 to .229682 m, with five corrected samples exceeding .20 m. It is
+not integrated. The runtime remains the explicitly named centroid-centred prior.
+
+Artifacts: outputs/human_body_envelope/native-crossing-8s-v1/report.json,
+review-summary.json, stopping-sweep.json, control-join-audit.json, and
+live-human-envelope-validation.json; native-development-traces.png compares
+engineering trials with changed settings, not a causal CRA baseline comparison.
+The launcher returned zero despite the failed gate; do not use it as acceptance.
+Main/long-service remain held and the experimental PRs remain drafts.

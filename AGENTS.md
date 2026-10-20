@@ -814,3 +814,17 @@
   association, original 3 s retention, then factor prior remain the only paths.
   Independent stationary/source-aligned envelope containment and full braking
   sweep checks are required before more motion. See docs/human_body_envelope.md.
+
+- At c048777 the body-envelope component passed both 60-frame stationary gates
+  and all 894 source-aligned live containment rows (max centre error .170730 m,
+  minimum containment margin .029270 m). Human mass/motion checks passed; no
+  catalog-mass human kinetic use remained. Full bypass still failed 90 s route
+  completion (2/3 waypoints), with zero selected passing-policy rows despite a
+  .325369 m observed arc. Keep .450916 m independent clearance, full braking
+  audit, and zero complete four-factor assessments separate from route success.
+  A proposed semicircle centre correction worsened offline source-pose errors
+  and was rejected. The <=.5 s identity-prior passing-selection proposal remains
+  unimplemented pending the user's research decision; primary same-frame gates
+  remain. Late exact-time plan/command joins found no CBF clipping: the planner
+  itself chose near-zero progress. Do not blame mapping alone or promote the
+  strong-tracking candidate as accepted navigation. Keep main/long-service held.
