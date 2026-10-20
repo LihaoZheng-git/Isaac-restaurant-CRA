@@ -910,3 +910,17 @@
   separate corrected evaluation: actual walking behind projection -.180254 m
   passes, walking-window arc -.004212 m fails (the .242512 m curve was later).
   This is not bypass acceptance or a source of runtime actor truth.
+
+- At c2952d5 the separate .025-rate native retry completed 3/3 waypoints at
+  76.216667 s, .385703 m full-sweep clearance and .001192 m stop drift. Keep
+  .10 m arrival, 90 s bound, 12 s watchdog, all evidence/identity/field clocks,
+  exact checks and fixed lambda unchanged. Its 761 fields/542 translating,
+  11 supported moving-kinetic rows, 80 identity-prior policy rows and complete
+  envelope checks establish bounded prior-assisted paced route completion.
+  Overall acceptance still fails: walking-window arc .005813 m < .20 m,
+  despite passed -.181119 m behind projection and goal rejoin. Zero complete
+  factor assessments, startup epoch rejection, 3,229.8 wall seconds and the
+  launcher's zero exit despite full-gate exception remain explicit. Most late
+  accepted plans had no exact-safe auxiliary reference; an outputs-only
+  forecast/zero-angular projection prototype is not integrated or validated
+  native behavior. Preserve failed trials and main/long-service holds.

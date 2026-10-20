@@ -180,3 +180,42 @@ window arc was -.004212 m (fails the unchanged .20 m threshold); the earlier
 .242512 m curve happened later. This is **not** a retroactive bypass pass. Both
 arrival and the pronounced curve during the crossing remain unmet. New native
 reports use the corrected evaluator and preserve its basis/excluded-row count.
+
+## Fourth native retry, c2952d5: route completion, proactive arc still fails
+
+The separate .025-rate retry completed all three waypoints at 76.216667 s and
+stopped, with .385703 m minimum full-sweep monitored clearance, .001192 m
+braking drift and .082242 minimum sampled CBF margin. The first two waypoint
+events were 15.066667/48.933333 s. It retained the .10 m arrival circle, 90 s
+bound, 12 s watchdog, identical scene/actor timing, all priors, solver budgets,
+lambda 1.25 and all original freshness/exact safety gates. All 60 stationary
+frames passed before motion. There were no live inference rejections; the
+startup camera/LiDAR epoch rejection remains in the report. This slower paced
+run took 3,229.8 wall seconds, so it is not real-time acceptance or a runtime
+latency repair.
+
+Human validation passed: 11 supported moving-kinetic/five simultaneous rows,
+.166314 m/s median steady world-velocity error and .016312 m/s median relative-
+speed error. All 761 source-aligned body-envelope rows passed. The original
+.3 s-old person identity selected the side policy across 80 independently
+matched rows, retaining its original eight-second expiry. Across 50,517 object
+assessments there were 175 accepted visual instances and zero complete
+four-factor assessments; 201,183 factor-prior and 675 persisted-property uses
+remain explicit. There were 761 live fields, 542 committed while translating.
+
+`completed=true` is actual route completion. Overall `passed=false` remains:
+the corrected walking-window arc was only .005813 m against the unchanged
+.20 m criterion. Behind projection -.181119 m, original identity/clock checks,
+goal rejoin and all other passing checks passed. Its late wide detour is not a
+pronounced proactive curve during the crossing. The launcher returned zero
+while the demo deliberately raised its failed full-gate exception; inspect the
+report, not launcher status. Main/long-service and the draft PR stay held.
+
+Reference diagnostics isolate the remaining weakness: only 4/134 accepted
+plans in 20--40 s, 11/126 in 40--60 s and 1/91 after 60 s had an exact-safe
+auxiliary reference; most used the primary fallback. A synthetic, explicitly
+unintegrated projection audit also shows that the free-angular planar QP can
+rely on rotation later omitted by the direction-only path builder. These
+findings motivate a separate bounded forecast-aware planar reference, not a
+higher tracking weight, relaxed checks, altered physical scores or a new
+primary objective. The outputs-only prototype is not runtime integration.
