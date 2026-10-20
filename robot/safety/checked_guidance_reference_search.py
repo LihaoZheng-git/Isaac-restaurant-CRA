@@ -38,10 +38,14 @@ def search_checked_guidance_reference(mpc, initial, goal, speed, field, *, width
         abs(mpc.config.minimum_angular_velocity), abs(mpc.config.maximum_angular_velocity)))
     speeds = np.unique(np.clip([0., speed/2, speed],
         mpc.config.minimum_linear_velocity, mpc.config.maximum_linear_velocity))
-    rates = np.unique([mpc.config.minimum_angular_velocity,
+    turn_rates = np.unique([mpc.config.minimum_angular_velocity,
         mpc.config.minimum_angular_velocity/2, 0., mpc.config.maximum_angular_velocity/2,
         mpc.config.maximum_angular_velocity])
-    pool = tuple(itertools.product(speeds, rates))
+    translating_rates = np.unique([*turn_rates,
+        -min(.1, abs(mpc.config.minimum_angular_velocity)/4),
+        min(.1, abs(mpc.config.maximum_angular_velocity)/4)])
+    pool = tuple((v, rate) for v in speeds for rate in
+                 (turn_rates if v == 0 else translating_rates))
     beams = [np.empty((0, 2))]
     distance = float(np.linalg.norm(goal-initial[:2]))
     tested = exact_feasible = semantic_rejections = depth_done = 0
@@ -82,8 +86,23 @@ def search_checked_guidance_reference(mpc, initial, goal, speed, field, *, width
         if not candidates:
             break
         depth_done = depth
+        # Preserve actually different left/right exploration even before its
+        # small lateral displacement exceeds one cell. Pure score pruning can
+        # otherwise keep only straight approaches ending at the same obstacle.
+        direction = np.array([-math.sin(initial[2]), math.cos(initial[2])])
+        def lateral_key(item):
+            yaw = math.atan2(math.sin(item[1][2]-initial[2]), math.cos(item[1][2]-initial[2]))
+            return float((item[1][:2]-initial[:2]) @ direction), yaw, item[0]
+        reserved = [candidates[0], max(candidates, key=lateral_key), min(candidates, key=lateral_key)]
         winners = []
+        for item in reserved:
+            if not any(np.allclose(item[1], other[1], rtol=0, atol=1e-12) for other in winners):
+                winners.append(item)
+            if len(winners) == width:
+                break
         for item in candidates:
+            if len(winners) == width:
+                break
             if all(np.linalg.norm(item[1][:2]-other[1][:2]) >= position_separation
                 or abs(math.atan2(math.sin(item[1][2]-other[1][2]),
                     math.cos(item[1][2]-other[1][2]))) >= yaw_separation for other in winners):
@@ -106,5 +125,6 @@ def search_checked_guidance_reference(mpc, initial, goal, speed, field, *, width
         completed_depth=depth_done, original_horizon_steps=mpc.config.horizon_steps,
         full_horizon_candidates=len(full_candidates), truncated=truncated,
         position_diversity_m=position_separation, yaw_diversity_radians=yaw_separation,
+        control_pool_size=len(pool), reserved_lateral_exploration=True,
         wall_seconds=time.perf_counter()-started,
         scope="candidate generation only; no global convergence, real-time or paper equivalence; no source-clock change"))

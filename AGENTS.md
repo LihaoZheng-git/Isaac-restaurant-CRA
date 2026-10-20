@@ -1017,7 +1017,8 @@
 - The opt-in checked reference search is a fallback within the separate
   guidance-tracking ablation, disabled by default and only in planar forecast
   mode. It retains at most eight diverse prefixes, original actuator bounds,
-  original-length horizon and explicit 3,600-candidate default budget. Every
+  original-length horizon and explicit candidate budget (initial 3,600; later
+  4,800). Every
   prefix passes exact temporal DTCBF/dense geometry and mapped analytical
   guidance checks from the original epoch. Never execute partial paths, renew
   clocks or relax primary/final checks; existing primary fallback remains.
@@ -1026,3 +1027,11 @@
   full references with passed first-command analytical CBF, not wheel/arc or
   real-time acceptance. See docs/checked_guidance_reference_search.md; retain
   all older failures and main/long-service holds until native gates are sound.
+
+- The 6e4c200 checked-search proposal passed 2,267 unit tests but both ORACLE
+  virtual arrivals failed at 9.75 s for the four-second stationary solution.
+  The gentle-translating/lateral-diversity revision passed 65 focused tests but
+  both virtual routes still failed at 10.95 s. Preserve both failures; positive
+  geometry/CBF/MPC checks and an initial curve are not arrival. No wheels were
+  enabled for these search variants. Correct move-then-stop reference quality
+  before native testing; never relax safety or report a source replay as native.

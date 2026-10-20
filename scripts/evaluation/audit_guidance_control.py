@@ -48,7 +48,7 @@ def main():
                         default="bounded_field_heading")
     parser.add_argument("--active-goal-reference", action="store_true")
     parser.add_argument("--guidance-reference-search-width", type=int, choices=(0,4,8), default=0)
-    parser.add_argument("--guidance-reference-search-candidates", type=int, default=3600)
+    parser.add_argument("--guidance-reference-search-candidates", type=int, default=4800)
     parser.add_argument(
         "--intermediate-waypoints",
         action="store_true",

@@ -29,7 +29,7 @@ class LaplaceGuidanceTrackingConfig:
     minimum_turn_first_rate_cap: float = 0.4
     reference_mode: str = "bounded_field_heading"
     reference_search_width: int = 0
-    reference_search_maximum_candidates: int = 3600
+    reference_search_maximum_candidates: int = 4800
 
     def __post_init__(self):
         if self.reference_mode not in {
