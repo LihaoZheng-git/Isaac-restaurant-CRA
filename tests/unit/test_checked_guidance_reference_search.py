@@ -5,7 +5,7 @@ import pytest
 from test_laplace_guidance_tracking_mpc import config, field
 from test_safe_sage_cbf_filter import make_filter
 
-from robot.safety.checked_guidance_reference_search import search_checked_guidance_reference
+from robot.safety.checked_guidance_reference_search import search_checked_guidance_reference, reference_motion_rejection
 from robot.safety.laplace_guidance_tracking_mpc import LaplaceGuidanceTrackingConfig, LaplaceGuidanceTrackingMPC
 from robot.safety.safe_sage_unicycle_mpc import SafeSAGEUnicycleMPC
 
@@ -112,3 +112,29 @@ def test_weight_zero_is_primary_even_with_search_enabled():
             np.testing.assert_array_equal(getattr(result,f.name),getattr(primary,f.name))
         else:
             assert getattr(result,f.name) == getattr(primary,f.name)
+
+
+@pytest.mark.parametrize("kind", ["wait_then_move", "move_then_stop", "turn_then_move", "stop_at_goal"])
+def test_geometrically_safe_reference_must_be_productive_or_have_arrived(kind):
+    mpc = planner()
+    commands = np.tile([.2,0.], (mpc.config.horizon_steps,1))
+    goal = np.array([2.,0.])
+    if kind == "wait_then_move":
+        commands[:4] = 0.
+    elif kind in {"move_then_stop", "stop_at_goal"}:
+        commands[4:] = 0.
+    else:
+        commands[:2] = [0.,.8]
+    value = mpc._evaluate_trajectory(np.zeros(3), commands, **field(g=(1.,0.)), temporal_safety_derivative=0.)
+    assert mpc._trajectory_is_safe(value)  # This is quality, never a safety waiver.
+    if kind == "stop_at_goal":
+        goal = value.chassis_states[-1,:2].copy()
+    rejections = []
+    for n in range(1,len(commands)+1):
+        partial = LaplaceGuidanceTrackingMPC(mpc.paper_filter, replace(mpc.config,horizon_steps=n),
+            guidance_config=mpc.guidance_config)
+        prefix = partial._evaluate_trajectory(np.zeros(3), commands[:n], **field(g=(1.,0.)), temporal_safety_derivative=0.)
+        reason = reference_motion_rejection(prefix, partial, goal, terminal=n==len(commands))
+        if reason:
+            rejections.append(reason)
+    assert bool(rejections) == (kind in {"wait_then_move", "move_then_stop"})

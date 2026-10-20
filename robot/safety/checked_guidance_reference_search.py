@@ -22,6 +22,35 @@ class CheckedGuidanceSearchResult:
     diagnostics: dict
 
 
+def reference_motion_rejection(value, mpc, goal, *, terminal=False):
+    """Reference quality only: safety waits remain available to the primary.
+
+    Turn-first references may rotate at the existing useful-turn cap, then
+    translate. A delayed idle interval or move-then-stop dead end must not
+    attract the receding-horizon objective. Stopping at the goal is valid.
+    """
+    minimum = mpc.guidance_config.minimum_reference_progress_m
+    if minimum <= 0:
+        return None
+    states = value.chassis_states
+    n = min(2, len(value.commands))
+    start, end = states[-n-1], states[-1]
+    radius = mpc.guidance_config.reference_goal_radius_m
+    at_goal = np.linalg.norm(end[:2]-goal) <= radius + 1e-9
+    if at_goal and np.linalg.norm(start[:2]-goal) <= radius + 1e-9:
+        return None
+    moved = float(np.linalg.norm(end[:2]-start[:2]))
+    if terminal and not at_goal and moved + 1e-9 < minimum:
+        return "stationary_terminal_reference_outside_goal"
+    turned = abs(math.atan2(math.sin(end[2]-start[2]), math.cos(end[2]-start[2])))
+    useful_turn = mpc.guidance_config.minimum_turn_first_rate_cap * n * mpc.config.time_step
+    # The first one-step window uses the same progress rate as the two-step
+    # window. Pure rotations retain the existing turn-first cap.
+    if moved + 1e-9 < minimum*n/2 and turned + 1e-9 < useful_turn:
+        return "postponed_reference_motion_outside_goal"
+    return None
+
+
 def search_checked_guidance_reference(mpc, initial, goal, speed, field, *, width, candidate_limit):
     if (isinstance(width, bool) or not isinstance(width, int) or not 1 <= width <= 8
         or isinstance(candidate_limit, bool) or not isinstance(candidate_limit, int)
@@ -48,7 +77,7 @@ def search_checked_guidance_reference(mpc, initial, goal, speed, field, *, width
                  (turn_rates if v == 0 else translating_rates))
     beams = [np.empty((0, 2))]
     distance = float(np.linalg.norm(goal-initial[:2]))
-    tested = exact_feasible = semantic_rejections = depth_done = 0
+    tested = exact_feasible = semantic_rejections = quality_rejections = depth_done = 0
     full_candidates = []
     truncated = False
     for depth in range(1, mpc.config.horizon_steps+1):
@@ -75,6 +104,10 @@ def search_checked_guidance_reference(mpc, initial, goal, speed, field, *, width
                 or normal @ commands[-1] < rhs - mpc.paper_filter.config.numerical_tolerance):
                 semantic_rejections += 1
                 continue
+            if reference_motion_rejection(value, mpc, goal,
+                terminal=depth == mpc.config.horizon_steps) is not None:
+                quality_rejections += 1
+                continue
             state = value.chassis_states[-1]
             error = math.atan2(goal[1]-state[1], goal[0]-state[0])-state[2]
             score = distance - np.linalg.norm(goal-state[:2]) - mpc.config.lookahead_distance * abs(
@@ -93,7 +126,10 @@ def search_checked_guidance_reference(mpc, initial, goal, speed, field, *, width
         def lateral_key(item):
             yaw = math.atan2(math.sin(item[1][2]-initial[2]), math.cos(item[1][2]-initial[2]))
             return float((item[1][:2]-initial[:2]) @ direction), yaw, item[0]
-        reserved = [candidates[0], max(candidates, key=lateral_key), min(candidates, key=lateral_key)]
+        def negative_lateral_key(item):
+            lateral, yaw, score = lateral_key(item)
+            return -lateral, -yaw, score
+        reserved = [candidates[0], max(candidates, key=lateral_key), max(candidates, key=negative_lateral_key)]
         winners = []
         for item in reserved:
             if not any(np.allclose(item[1], other[1], rtol=0, atol=1e-12) for other in winners):
@@ -122,6 +158,8 @@ def search_checked_guidance_reference(mpc, initial, goal, speed, field, *, width
         basis="bounded_exact_and_analytical_guidance_constrained_reference_search_ablation",
         width=width, candidate_limit=candidate_limit, tested_candidates=tested,
         exact_feasible_prefixes=exact_feasible, semantic_rejections=semantic_rejections,
+        quality_rejections=quality_rejections,
+        quality_basis="continuous_reference_activity_and_translating_tail_or_goal; primary may still wait",
         completed_depth=depth_done, original_horizon_steps=mpc.config.horizon_steps,
         full_horizon_candidates=len(full_candidates), truncated=truncated,
         position_diversity_m=position_separation, yaw_diversity_radians=yaw_separation,

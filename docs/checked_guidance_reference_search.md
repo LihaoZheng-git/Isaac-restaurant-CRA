@@ -68,3 +68,19 @@ The positive curve did not establish arrival. Preserve this second failure.
 Move-then-stop references can still lead into a local trap; reference quality
 needs correction before any new wheel trial. The primary controller and all
 legacy defaults remain unchanged; main/long-service remain held.
+
+## Productive-reference correction
+
+The next revision rejects idle gaps and stationary terminal references outside
+the goal region. Turn-first references may still use the existing turn cap
+before translating; stopping at the goal is valid. The primary may always
+wait safely. These are auxiliary-reference quality gates, never executable
+minimum-motion constraints, altered safety checks or changed waypoint arrival.
+
+69 focused tests and all **2,271 unit tests** passed (75.97 s), with Ruff.
+Both `virtual-v8-checked-search-quality` ORACLE routes arrived with geometry,
+CBF and MPC checks: 23.25/22.45 s. Their observed negative-y excursions were
+-.69736/-.66682 m for configured left/right fields. Thus arrival passed but
+the search selected the same flank in both cases; do not claim enforced side,
+native crossing or exact guidance-flow tracking. The soft guidance ranking
+needs review before wheel tests. Keep both earlier rejected variants.

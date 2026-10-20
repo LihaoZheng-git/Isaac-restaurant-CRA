@@ -1035,3 +1035,12 @@
   geometry/CBF/MPC checks and an initial curve are not arrival. No wheels were
   enabled for these search variants. Correct move-then-stop reference quality
   before native testing; never relax safety or report a source replay as native.
+
+- The productive-reference correction rejects idle gaps/stationary terminal
+  references outside the goal, retaining useful turn-first references, goal
+  stopping and every primary safety-wait path. It passed 2,271 unit tests/Ruff
+  and both ORACLE virtual arrivals (23.25/22.45 s). Both observed negative-y
+  flanks (-.69736/-.66682 m) remain explicit despite configured left/right
+  policies. This is not enforced passing side, native bypass or paper identity.
+  Review soft guidance ranking before new wheels; retain the two earlier
+  failed search variants, all native failures and main/long-service holds.
