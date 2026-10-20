@@ -937,3 +937,15 @@
   five-second source bucket. Static ORACLE arrival/unit parity is not native
   proactive acceptance. See docs/forecast_guidance_reference.md and retain
   parent failures/main holds.
+
+- At b2de591 the separate 13 s forecast diagnostic passed stationary gates but
+  stopped for missing fragment 490 at 14.833333 s, 1/3 waypoints, .208569 m
+  monitored clearance and .000047 m stop drift. Two fresh parent returns did
+  not meet the strict three-return merge gate. Retain this failure and zero
+  complete factor assessments. The user's later explicit decision permits a
+  separate bounded body-prior coverage option only with full stored-region,
+  motion, previous-risk, unique current-envelope and field-coverage checks.
+  Never renew original fragment/identity/factor clocks or weaken strict defaults.
+  Positive same-frame person-mask containment should conservatively block the
+  catalog-object mass network on fragments without assigning adult mass or
+  person identity; whole-person association remains independently mandatory.

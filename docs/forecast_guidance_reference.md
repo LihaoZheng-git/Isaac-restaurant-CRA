@@ -69,9 +69,28 @@ will be recorded separately. The parent 8 s case remains a failed proactive
 arc even though it arrived; a later differently timed encounter is a separate
 scenario, never a retroactive pass. Main/long-service remain held.
 
-The next native diagnostic uses the existing 13 s crossing delay, identical
+The native diagnostic used the existing 13 s crossing delay, identical
 route/physical scene/priors/limits, the explicit new reference mode and replay
 export, and .025 pacing. It intentionally ends at 20 simulation seconds after
 the same 60-frame stationary gates. It can diagnose crossing-time references
 and motion, but cannot establish endpoint acceptance. Preserve the older 13 s
 track-loss failure and parent 8 s results separately.
+
+At b2de591 both stationary gates passed, but this diagnostic stopped at
+14.833333 s, 1/3 waypoints, for `nearby_track_lost`. It recorded 147 live
+fields, .208569 m independently monitored clearance and .000047 m stop drift.
+The current validated body track 71 remained visible. Missing fragment 490
+had only two fresh parent returns within the unchanged .10 m merge radius
+(three required); its old centroid being inside the body disk is not proof
+that its entire region was covered. This strict rejection is preserved.
+Zero complete four-factor assessments and no passing-selection rows were
+recorded. The latest whole-person cue was already outside the separate .5 s
+selection lease; the longer geometry lease does not repair that eligibility.
+Trusted numeric planner snapshots were exported successfully. The launcher's
+zero exit again accompanied an acceptance exception; this was not a pass.
+
+The fragment also exposed a catalog-mass domain gap: a small accepted SAM
+piece overlapping a person could fail whole-person association and receive
+a .0247 kg catalog-network estimate. It is not credible human mass. A separate
+conservative domain guard and the user's newly approved bounded fragment-
+coverage PRIOR are next work, not validation of this failed record.
