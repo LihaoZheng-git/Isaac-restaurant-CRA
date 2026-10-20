@@ -26,9 +26,14 @@ class LaplaceGuidanceTrackingConfig:
     guidance_fade_distance_m: float = 0.5
     minimum_reference_progress_m: float = 0.01
     minimum_turn_first_rate_cap: float = 0.4
+    reference_mode: str = "bounded_field_heading"
 
     def __post_init__(self):
+        if self.reference_mode not in {"bounded_field_heading", "filtered_goal_velocity"}:
+            raise ValueError("unknown guidance reference mode")
         for name, value in vars(self).items():
+            if name == "reference_mode":
+                continue
             if (
                 isinstance(value, bool)
                 or not isinstance(value, Real)
@@ -75,6 +80,9 @@ class GuidanceTrackingDiagnostic:
     current_guidance_grid_xy: tuple[float, float]
     initial_chassis_state_grid: tuple[float, float, float]
     first_reference_translation_delay_seconds: float | None
+    reference_mode: str
+    reference_displacement_m: float | None
+    reference_progress_basis: str
     nominal_unchanged: bool = True
 
 
@@ -168,16 +176,17 @@ class LaplaceGuidanceTrackingMPC(SafeSAGEUnicycleMPC):
             )
             ** 2
         )
-        best, rank, checked = None, 0.0, 0
+        projected = self.guidance_config.reference_mode == "filtered_goal_velocity"
+        best, rank, checked = None, -math.inf if projected else 0.0, 0
         rejected_no_progress = 0
         selected = (None, None)
         progress = None
+        displacement = None
         reason = "inactive_field_preference"
         if activation > 0 and speed > 0 and current.unsafe_reason is None:
             reason = "no_exact_safe_progress_reference"
-            direction = self._desired_heading(
-                initial, goal, current.sampled_guidance_grid_xy
-            )
+            preference = self._reference_preference(initial, goal, speed, current, kwargs)
+            direction = initial[2] if preference is None else preference[0]
             initial_error = abs(_wrap(direction - initial[2]))
             distance = float(np.linalg.norm(goal - initial[:2]))
             for cap, turn_first in (
@@ -212,6 +221,7 @@ class LaplaceGuidanceTrackingMPC(SafeSAGEUnicycleMPC):
                 gain = distance - float(
                     np.linalg.norm(goal - candidate.chassis_states[-1, :2])
                 )
+                moved = float(np.linalg.norm(candidate.chassis_states[-1, :2] - initial[:2]))
                 turning = initial_error - abs(
                     _wrap(direction - candidate.chassis_states[-1, 2])
                 )
@@ -226,10 +236,13 @@ class LaplaceGuidanceTrackingMPC(SafeSAGEUnicycleMPC):
                 # This is an auxiliary-reference quality gate, never a new
                 # executable constraint: the primary can still turn or take
                 # a detour when no useful checked reference exists.
-                minimum_gain = min(self.guidance_config.minimum_reference_progress_m,
-                    max(0., distance - self.guidance_config.reference_goal_radius_m))
+                quality_progress = moved if projected else gain
+                minimum_gain = self.guidance_config.minimum_reference_progress_m
+                if not projected:
+                    minimum_gain = min(minimum_gain,
+                        max(0., distance - self.guidance_config.reference_goal_radius_m))
                 if (self.guidance_config.minimum_reference_progress_m > 0
-                    and not reached and gain + 1e-9 < minimum_gain):
+                    and not reached and quality_progress + 1e-9 < minimum_gain):
                     rejected_no_progress += 1
                     continue
                 if score > rank + 1e-6 or (best is None and reached):
@@ -239,6 +252,7 @@ class LaplaceGuidanceTrackingMPC(SafeSAGEUnicycleMPC):
                         (cap, turn_first),
                         gain,
                     )
+                    displacement = moved
             if best is not None:
                 reason = "exact_safe_local_guidance_reference"
         effective = (
@@ -308,6 +322,9 @@ class LaplaceGuidanceTrackingMPC(SafeSAGEUnicycleMPC):
             current_guidance_grid_xy=tuple(map(float, current.sampled_guidance_grid_xy)),
             initial_chassis_state_grid=tuple(map(float, initial)),
             first_reference_translation_delay_seconds=translation_delay,
+            reference_mode=self.guidance_config.reference_mode,
+            reference_displacement_m=displacement,
+            reference_progress_basis="endpoint_displacement" if projected else "waypoint_distance_gain",
         )
         return GuidanceTrackingMPCResult(
             **{
@@ -347,6 +364,29 @@ class LaplaceGuidanceTrackingMPC(SafeSAGEUnicycleMPC):
             )
         )
 
+    def _reference_preference(self, state, goal, speed, sample, field):
+        if self.guidance_config.reference_mode == "bounded_field_heading":
+            return self._desired_heading(state, goal, sample.sampled_guidance_grid_xy), speed
+        # v_sem is the spatial CBF normal, not a stand-alone travel heading.
+        # Filter a goal-directed holonomic velocity first, then track its
+        # direction with the unicycle. This projection is only a reference:
+        # every converted horizon still needs full exact unicycle validation.
+        delta = goal - state[:2]
+        distance = float(np.linalg.norm(delta))
+        if distance <= self.guidance_config.reference_goal_radius_m:
+            return None
+        safety = self._safety_states(state[None, :])[0]
+        result = self.paper_filter.filter_command(speed * delta / distance, 0.,
+            query_position_grid_xy=safety[:2], query_yaw_radians=float(safety[2]),
+            configuration_space=field["configuration_space"], h_full=field["h_full"],
+            guidance_fields=field["guidance_fields"],
+            temporal_safety_derivative=field.get("temporal_safety_derivative", 0.))
+        velocity = np.asarray(result.safe_planar_velocity_grid_xy)
+        magnitude = float(np.linalg.norm(velocity))
+        if result.emergency_stop_active or magnitude <= 1e-9:
+            return None
+        return math.atan2(velocity[1], velocity[0]), min(speed, magnitude)
+
     def _guidance_rollout(self, initial, goal, speed, cap, turn_first, field):
         state = initial.copy()
         commands = np.zeros((self.config.horizon_steps, 2))
@@ -373,19 +413,21 @@ class LaplaceGuidanceTrackingMPC(SafeSAGEUnicycleMPC):
                 or math.hypot(*sample.sampled_guidance_grid_xy) <= 1e-9
             ):
                 return None
-            desired = self._desired_heading(
-                state, goal, sample.sampled_guidance_grid_xy
-            )
+            preference = self._reference_preference(state, goal, speed, sample, field)
+            if preference is None:
+                return None
+            desired, preferred_speed = preference
             error = _wrap(desired - state[2])
             goal_bearing = math.atan2(goal[1] - state[1], goal[0] - state[0])
             radial_alignment = max(math.cos(_wrap(goal_bearing - state[2])), 0.0)
             # The reference may turn in place; reduce translation when the
             # current heading points away from the configured goal.
             # This is reference generation, not a new executable constraint.
-            forward = min(
-                speed * max(math.cos(error), 0.0),
-                distance * radial_alignment / self.config.time_step,
-            )
+            forward = preferred_speed * max(math.cos(error), 0.0)
+            if self.guidance_config.reference_mode == "bounded_field_heading":
+                forward = min(forward, distance * radial_alignment / self.config.time_step)
+            else:
+                forward = min(forward, distance / self.config.time_step)
             if turn_first and abs(error) > 0.1:
                 forward = 0.0
             commands[i] = (

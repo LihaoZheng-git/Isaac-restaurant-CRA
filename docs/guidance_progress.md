@@ -83,3 +83,51 @@ only virtual ORACLE routes arrived in 33.2/29.5 s with the same exact checks.
 Those virtual results do not validate physical turn response. The next native
 retry keeps the scene/route, .5 s identity option, all evidence/geometry settings,
 90 s total bound, 12 s watchdog and 60-frame stationary gates unchanged.
+
+## Second native retry, ed4fd7a: retained failure
+
+The stronger-pool trial also failed `progress_timeout` at 34.633333 s, 1/3
+waypoints, .597057 m full-sweep independent clearance and .000195 m stop drift.
+Human checks passed with five supported moving-kinetic rows. Near the final
+stall, accepted primary-fallback plans often requested zero commands rather
+than a useful maneuver. Current guidance was about (-.846,-.302), while the
+active goal was northeast of the robot. The bounded heading/radial cap prevented
+following an outward maneuver, while following the raw normal alone is also
+not a correct goal-directed navigation rule.
+
+A separate uncommitted direct-outward-heading prototype passed unit checks but
+failed **both** 45-second virtual arrivals. It was rejected before wheels. Its
+source/patch are archived in outputs/guidance_progress/archived-rejected-outward
+and its negative results in virtual-v3-outward; it is not an integrated mode.
+
+## Filtered goal-velocity reference
+
+The new explicit `--guidance-reference-mode filtered_goal_velocity` keeps
+`bounded_field_heading` available for historical reproduction. The local code
+uses v_sem as the spatial **CBF constraint normal**, not a stand-alone desired
+heading. The corrected reference therefore passes a waypoint-directed planar
+velocity and zero angular preference through the existing paper-space safety
+filter, then tracks the resulting planar direction/speed with a bounded
+unicycle rollout. The original waypoint nominal/cost remain unchanged; this is
+still the separately reported guidance-tracking ablation.
+
+The instantaneous projection is only an auxiliary reference: converted horizons
+and optimized outputs still require all original exact temporal DTCBF/dense
+geometry checks, and actual commands still require current-field revalidation
+and per-step analytical CBF. The planar projection's angular component is not
+directly applied to wheels. Preferred speed is bounded by both the original
+forward preference and projected planar speed. The legacy goal-heading cap and
+fade do not apply to this mode, since the goal-directed input and CBF projection
+already define the direction. No physical factor or missing evidence changes.
+
+Reference quality uses nonzero **endpoint displacement** in this mode, not a
+hard requirement to decrease waypoint distance. Candidate ranking retains goal
+gain/heading improvement, but accepts a checked translating reference even when
+all gains are negative. A turn-only reference remains excluded. This permits
+temporary detours without imposing a new executable progress constraint.
+
+Unit checks verify that an opposite-pointing normal does not turn an already
+feasible goal velocity away; a binding spatial constraint bends the reference;
+and a valid instantaneous projection cannot bypass an infeasible temporal
+horizon. Command-only virtual arrivals and the native retry are recorded
+separately below after validation. Main and long-service remain held.

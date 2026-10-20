@@ -876,3 +876,17 @@
   generation, never forces a minimum executable turn, changes wheel/physics
   parameters or relaxes exact checks. Keep the native failure, zero complete
   four-factor assessments and main/long-service holds. See its detailed report.
+
+- The ed4fd7a stronger-pool native retry still failed at 34.633333 s, 1/3
+  waypoints, with .597057 m full-sweep clearance and passing human checks (five
+  supported moving-kinetic rows). Preserve its stopped primary fallbacks.
+  A direct-outward raw-heading prototype failed both virtual arrivals and was
+  rejected before wheels; archived source is not an integrated mode. The new
+  explicit filtered_goal_velocity reference uses v_sem as a CBF constraint
+  normal: filter a goal-directed planar velocity, then roll out a bounded
+  unicycle reference and require every original exact acceptance check. It is
+  still a separate tracking ablation, not a new obstacle-aware nominal or
+  exact paper equivalence. Endpoint displacement, not compulsory waypoint-
+  distance decrease, gates translating references; turn-only references remain
+  excluded. Legacy bounded_field_heading is retained for reproduction. Preserve
+  physical evidence/clocks, fixed lambda, primary defaults and main holds.

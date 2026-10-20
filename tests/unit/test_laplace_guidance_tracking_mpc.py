@@ -357,3 +357,50 @@ def test_weak_turn_first_candidates_are_excluded_without_forcing_executable_turn
     # Near-zero requested turns remain possible in a genuinely aligned plan.
     r = m.plan(np.zeros(3), (.2, 0.), nominal_goal_grid_xy=(2., 0.), **field(g=(1., 0.)))
     assert r.linear_velocity > .1 and abs(r.angular_velocity) < .01
+
+
+def test_constraint_normal_is_not_mistaken_for_a_direct_travel_heading():
+    m = LaplaceGuidanceTrackingMPC(make_filter(), replace(config(), horizon_steps=30),
+        guidance_config=LaplaceGuidanceTrackingConfig(weight=100, reference_mode="filtered_goal_velocity"))
+    # The goal velocity is already feasible even though the CBF normal points
+    # backward. Following that normal as a heading would turn away needlessly.
+    result = m.plan(np.zeros(3), (.2, 0.), nominal_goal_grid_xy=(2., 0.), **field(g=(-1., 0.)))
+    d = result.guidance_tracking
+    assert result.success and d.active
+    assert result.linear_velocity > .15 and abs(result.angular_velocity) < .01
+    assert d.reference_displacement_m > .1 and d.reference_goal_progress_m > .1
+    assert d.reference_progress_basis == "endpoint_displacement"
+
+
+def test_filtered_goal_reference_bends_only_when_the_spatial_constraint_requires_it():
+    m = LaplaceGuidanceTrackingMPC(make_filter(), replace(config(), horizon_steps=30),
+        guidance_config=LaplaceGuidanceTrackingConfig(weight=100, reference_mode="filtered_goal_velocity"))
+    result = m.plan(np.zeros(3), (.2, 0.), nominal_goal_grid_xy=(2., 0.),
+        **field(g=(-1., .6), h=.02))
+    assert result.success and result.guidance_tracking.active
+    assert result.angular_velocity > .01
+    assert np.array(result.guidance_tracking.reference_chassis_states)[-1, 1] > .1
+    assert result.minimum_dtcbf_margin >= -m.config.constraint_tolerance
+
+
+def test_instantaneous_projection_never_bypasses_exact_temporal_horizon_checks():
+    c = replace(config(), horizon_steps=30)
+    m = LaplaceGuidanceTrackingMPC(make_filter(), c,
+        guidance_config=LaplaceGuidanceTrackingConfig(weight=100, reference_mode="filtered_goal_velocity"))
+    cs, h, g = make_fields(safety_value=.1, gradient=(.5, 0., 0.), guidance=(.5, 0.))
+    kwargs = dict(configuration_space=cs, h_full=h, guidance_fields=g, temporal_safety_derivative=-.2)
+    initial, goal = np.zeros(3), np.array([-2., 0.])
+    preference = m._reference_preference(initial, goal, .2, m._sample(initial, kwargs), kwargs)
+    assert abs(preference[0]) < 1e-9 and preference[1] > 0
+    # The instantaneous projection asks for outward motion, but its multi-step
+    # temporal forecast is infeasible. It remains a reference, never acceptance.
+    result = m.plan(np.zeros(3), (.2, 0.), nominal_goal_grid_xy=(-2., 0.),
+        **kwargs)
+    assert not result.success and not result.guidance_tracking.active
+    assert result.first_command == (0., 0.)
+
+
+@pytest.mark.parametrize("mode", [None, "normal_as_navigation", False])
+def test_unknown_reference_mode_rejected(mode):
+    with pytest.raises(ValueError):
+        LaplaceGuidanceTrackingConfig(reference_mode=mode)

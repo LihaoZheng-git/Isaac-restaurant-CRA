@@ -44,6 +44,8 @@ def main():
     parser.add_argument("--guidance-fade-distance", type=float, default=0.5)
     parser.add_argument("--guidance-minimum-reference-progress", type=float, default=.01)
     parser.add_argument("--guidance-turn-first-minimum-cap", type=float, default=.4)
+    parser.add_argument("--guidance-reference-mode", choices=("bounded_field_heading", "filtered_goal_velocity"),
+                        default="bounded_field_heading")
     parser.add_argument("--active-goal-reference", action="store_true")
     parser.add_argument(
         "--intermediate-waypoints",
@@ -60,6 +62,7 @@ def main():
         args.guidance_fade_distance,
         args.guidance_minimum_reference_progress,
         args.guidance_turn_first_minimum_cap,
+        args.guidance_reference_mode,
     )
     if (
         args.guidance_tracking_weight > 0 or args.track_nominal_states

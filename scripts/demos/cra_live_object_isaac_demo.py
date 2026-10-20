@@ -37,9 +37,11 @@ parser.add_argument("--guidance-reference-goal-radius", type=float, default=0.04
 parser.add_argument("--guidance-fade-distance", type=float, default=0.5,
                     help="fade local guidance bias toward the active waypoint inside this distance")
 parser.add_argument("--guidance-minimum-reference-progress", type=float, default=.01,
-                    help="minimum checked-reference horizon goal gain in metres; zero reproduces legacy heading-only eligibility")
+                    help="minimum checked-reference progress in metres: displacement in filtered mode, goal gain in legacy mode; zero disables this quality gate")
 parser.add_argument("--guidance-turn-first-minimum-cap", type=float, default=.4,
                     help="minimum turn-first reference pool cap in rad/s; .1 reproduces the legacy pool; never an executable lower bound")
+parser.add_argument("--guidance-reference-mode", choices=("bounded_field_heading", "filtered_goal_velocity"),
+                    default="bounded_field_heading", help="explicit reference ablation; filtered goal velocity uses v_sem as the CBF normal")
 parser.add_argument("--human-positive-fragment-extent", action="store_true",
                     help="bare-human recent-coobservation/current-positive-return fragment association; no free-space or factor transfer")
 parser.add_argument("--human-observed-passing-target", action="store_true",
@@ -1472,7 +1474,7 @@ def main():
             guidance_config=LaplaceGuidanceTrackingConfig(args.guidance_tracking_weight, args.guidance_activation_h,
                 math.radians(args.guidance_max_heading_bias_degrees), args.guidance_reference_goal_radius,
                 args.guidance_fade_distance, args.guidance_minimum_reference_progress,
-                args.guidance_turn_first_minimum_cap))
+                args.guidance_turn_first_minimum_cap, args.guidance_reference_mode))
     control = SafeSAGEControlRuntime(mpc=mpc, backup_filter=backup)
     waypoint = WaypointController(
         [Waypoint(*point) for point in ROUTE],
@@ -2123,6 +2125,7 @@ def main():
             "guidance_fade_distance_m": args.guidance_fade_distance,
             "minimum_reference_progress_m": args.guidance_minimum_reference_progress,
             "minimum_turn_first_rate_cap": args.guidance_turn_first_minimum_cap,
+            "reference_mode": args.guidance_reference_mode,
             "forward_speed_reference": "maximum forward speed in original obstacle-unaware nominal horizon, clipped to actuator bounds",
             "heading_reference_basis": "active_obstacle_unaware_waypoint; same field frame; request-time waypoint index",
             "scope": "separate checked local guidance-path tracking objective; primary nominal unchanged; not paper equivalence"},
