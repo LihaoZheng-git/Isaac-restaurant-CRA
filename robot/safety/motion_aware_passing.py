@@ -15,6 +15,7 @@ from robot.safety.safe_sage_guidance_policy import PassingSide
 @dataclass(frozen=True)
 class MotionAwarePassingConfig:
     require_visual_person_selection: bool = False
+    maximum_identity_prior_selection_age_seconds: float = 0.0
     minimum_speed_mps: float = 0.2
     maximum_speed_mps: float = 2.0
     maximum_source_gap_seconds: float = 0.35
@@ -32,8 +33,12 @@ class MotionAwarePassingConfig:
     def __post_init__(self):
         if not isinstance(self.require_visual_person_selection, bool):
             raise TypeError("visual-person selection opt-in must be boolean")
+        age = self.maximum_identity_prior_selection_age_seconds
+        if (isinstance(age, bool) or not math.isfinite(age) or not 0 <= age <= .5
+            or age > 0 and not self.require_visual_person_selection):
+            raise ValueError("identity-prior selection requires observed-person mode and age in [0,.5]")
         for name, value in asdict(self).items():
-            if name == "require_visual_person_selection":
+            if name in {"require_visual_person_selection", "maximum_identity_prior_selection_age_seconds"}:
                 continue
             if isinstance(value, bool) or not math.isfinite(value) or value <= 0:
                 raise ValueError(f"{name} must be finite and positive")
@@ -55,9 +60,11 @@ class MotionAwarePassing:
         self.history = {}
         self.encounter = None
         self.encounter_person_verified = False
+        self.encounter_identity_prior = None
         self.last_timestamp = None
 
-    def update(self, tracking, *, robot_xy, robot_velocity_xy, goal_xy, visual_person_track_ids=None):
+    def update(self, tracking, *, robot_xy, robot_velocity_xy, goal_xy, visual_person_track_ids=None,
+               identity_prior_selection_evidence=None):
         cfg = self.config
         t = float(tracking.timestamp_seconds)
         if (
@@ -92,6 +99,24 @@ class MotionAwarePassing:
             if visual_person_track_ids is not None:
                 raise ValueError("visual-person IDs require the explicit selection opt-in")
             eligible = set(tracks)
+        fresh = set(eligible)
+        prior_evidence = {}
+        if cfg.maximum_identity_prior_selection_age_seconds > 0:
+            from robot.perception.human_body_envelope import HumanIdentitySelectionPrior
+            if identity_prior_selection_evidence is None:
+                raise ValueError("explicit current envelope selection evidence required")
+            for key, evidence in identity_prior_selection_evidence.items():
+                if (not isinstance(evidence, HumanIdentitySelectionPrior)
+                    or key != evidence.track_id or key not in tracks
+                    or evidence.lidar_timestamp_seconds != t
+                    or evidence.age_seconds > cfg.maximum_identity_prior_selection_age_seconds + 1e-9
+                    or not tracks[key].matched_previous_track
+                    or tracks[key].observation_count < 2):
+                    raise ValueError("identity selection prior must match current supported track and original age")
+                prior_evidence[key] = evidence.diagnostic()
+            eligible |= prior_evidence.keys()
+        elif identity_prior_selection_evidence is not None:
+            raise ValueError("identity selection evidence requires its explicit ablation opt-in")
         candidates, history, rejected = [], {}, {}
         for key, track in tracks.items():
             p, v = (
@@ -209,7 +234,8 @@ class MotionAwarePassing:
         ):
             key, side, *_ = candidates[0]
             self.encounter = (key, side, t, np.array(tracks[key].velocity_world_xy))
-            self.encounter_person_verified = cfg.require_visual_person_selection
+            self.encounter_person_verified = cfg.require_visual_person_selection and key in fresh
+            self.encounter_identity_prior = None if key in fresh else prior_evidence.get(key)
             preferences[key] = side
             decision = "selected_trailing_tangent"
         elif self.encounter is None and len(candidates) > 1:
@@ -229,7 +255,10 @@ class MotionAwarePassing:
             "original_selection_visual_person_verified": (
                 self.encounter_person_verified if self.encounter is not None else None
             ),
-            "current_visual_person_track_ids": sorted(eligible) if cfg.require_visual_person_selection else None,
+            "current_visual_person_track_ids": sorted(fresh) if cfg.require_visual_person_selection else None,
+            "current_identity_prior_selection_evidence": prior_evidence,
+            "original_selection_identity_prior": (
+                self.encounter_identity_prior if self.encounter is not None else None),
             "preferences": {key: side.value for key, side in preferences.items()},
             "qualified_candidates": [
                 {

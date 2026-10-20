@@ -828,3 +828,13 @@
   remain. Late exact-time plan/command joins found no CBF clipping: the planner
   itself chose near-zero progress. Do not blame mapping alone or promote the
   strong-tracking candidate as accepted navigation. Keep main/long-service held.
+
+- The user's 2026-10-20 decision authorizes a separate opt-in <=.5 s person-
+  identity PRIOR for a new passing-side selection, only after successful current
+  body-envelope LiDAR continuity checks. Primary same-frame selection remains
+  unchanged. Preserve original image/frame and selection epochs, separate fresh
+  IDs from prior eligibility, and never renew the eight-second side-policy clock
+  or any physical-factor/field/command clock through retention. The longer body
+  geometry identity lease is not selection eligibility. Reject this ablation
+  from primary comparisons; retain all previous failed bypass trials and main/
+  long-service holds. See docs/identity_prior_selection.md.

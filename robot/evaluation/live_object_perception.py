@@ -281,6 +281,10 @@ class LiveObjectPerception:
         ):
             raise ValueError("human envelope requires standalone live person/object-map mode, without static memory")
         self.human_body_envelope = HumanBodyEnvelope(human_body_envelope_config) if human_body_envelope_config is not None else None
+        if (motion_passing_config is not None
+            and motion_passing_config.maximum_identity_prior_selection_age_seconds > 0
+            and self.human_body_envelope is None):
+            raise ValueError("identity-prior passing requires the current human body-envelope adapter")
         self._person_packet = self._person_frame = None
         from robot.perception.lidar_fall_surfaces import LidarFallSurfaceConfig
 

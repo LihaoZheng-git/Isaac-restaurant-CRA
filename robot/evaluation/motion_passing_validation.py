@@ -15,6 +15,7 @@ def summarize_motion_passing(
     actors = np.array([row["actor_xyz"][:2] for row in truth], dtype=float)
     selected, errors, ages, wrong = [], [], [], []
     policy_preserved = True
+    prior_rows, prior_provenance_valid, original_priors = 0, True, {}
     for record in records:
         detail = record.get("diagnostics", record)
         audit = detail.get("motion_aware_passing") or {}
@@ -23,6 +24,33 @@ def summarize_motion_passing(
             continue
         center = np.array([np.interp(t, times, actors[:, i]) for i in range(2)])
         for key, side in audit.get("preferences", {}).items():
+            prior = audit.get("original_selection_identity_prior")
+            if prior is not None:
+                from robot.perception.human_body_envelope import HumanIdentitySelectionPrior, HUMAN_ENVELOPE_SOURCE
+                try:
+                    evidence = HumanIdentitySelectionPrior(**{
+                        name: prior[name] for name in HumanIdentitySelectionPrior.__dataclass_fields__})
+                    cap = audit.get("configuration", {}).get("maximum_identity_prior_selection_age_seconds", 0.)
+                    signature = (int(key), audit["encounter_selected_timestamp"])
+                    original = original_priors.setdefault(signature, prior)
+                    current = [row for row in detail.get("human_body_envelope_priors", ())
+                               if row["track_id"] == int(key)]
+                    valid = (0 < cap <= .5 and evidence.age_seconds <= cap + 1e-9
+                        and evidence.track_id == int(key)
+                        and evidence.lidar_timestamp_seconds == audit["encounter_selected_timestamp"]
+                        and prior.get("source") == HUMAN_ENVELOPE_SOURCE and prior.get("status") == "prior"
+                        and audit.get("original_selection_visual_person_verified") is False
+                        and prior == original and len(current) == 1
+                        and current[0]["lidar_timestamp_seconds"] == t
+                        and current[0]["source"] == HUMAN_ENVELOPE_SOURCE
+                        and current[0]["status"] == "prior" and current[0]["current_support_count"] >= 3)
+                except (ValueError, TypeError, KeyError):
+                    valid = False
+                prior_rows += 1
+                prior_provenance_valid &= valid
+            elif (audit.get("configuration", {}).get("maximum_identity_prior_selection_age_seconds", 0.) > 0
+                  and audit.get("original_selection_visual_person_verified") is not True):
+                prior_provenance_valid = False
             objects = [
                 o
                 for o in record["objects"]
@@ -91,10 +119,12 @@ def summarize_motion_passing(
         and min(ages) >= -1e-8
         and max(ages) <= 8.0 + 1e-8,
         "fixed_lambda_and_flux_mapping": bool(records) and bool(policy_preserved),
+        "identity_prior_selection_provenance_bounded": bool(prior_provenance_valid),
     }
     result = {
         "checks": checks,
         "selected_rows": selected,
+        "identity_prior_selected_rows": prior_rows,
         "rejections": wrong,
         "maximum_selected_centroid_error_m": max(errors, default=None),
         "maximum_original_selection_age_seconds": max(ages, default=None),

@@ -40,6 +40,8 @@ parser.add_argument("--human-positive-fragment-extent", action="store_true",
                     help="bare-human recent-coobservation/current-positive-return fragment association; no free-space or factor transfer")
 parser.add_argument("--human-observed-passing-target", action="store_true",
                     help="require fresh person/SAM association for new human passing choices; all obstacles retain CRA/safety intervention")
+parser.add_argument("--human-passing-identity-prior-max-age", type=float, default=0.,
+                    help="separate selection ablation: <=.5 s original person identity with current verified LiDAR envelope; zero keeps fresh-only")
 parser.add_argument("--profile-runtime", action="store_true",
                     help="diagnostic worker call profiles for jobs over 3 wall seconds; profiling timings are not performance acceptance")
 parser.add_argument("--human-body-contact-prior", type=float,
@@ -170,6 +172,11 @@ if not math.isfinite(args.guidance_fade_distance) or args.guidance_fade_distance
     parser.error("guidance fade distance must exceed the positive reference goal radius")
 if args.human_observed_passing_target and not (args.motion_aware_passing and args.restaurant_human and not args.human_carry_bowl):
     parser.error("observed-human passing requires the bare-human motion-aware component")
+if (not math.isfinite(args.human_passing_identity_prior_max_age)
+    or not 0 <= args.human_passing_identity_prior_max_age <= .5
+    or args.human_passing_identity_prior_max_age > 0 and (
+        not args.human_observed_passing_target or args.human_body_envelope_radius is None)):
+    parser.error("identity-prior passing requires observed-human/envelope mode and age in [0,.5]")
 if args.human_body_envelope_radius is not None:
     from robot.perception.human_body_envelope import HumanBodyEnvelopeConfig
     try:
@@ -823,7 +830,8 @@ def main():
             score=args.human_body_contact_prior,
         ) if args.human_body_contact_prior is not None else None,
         experiment_baseline=args.experiment_baseline,
-        motion_passing_config=MotionAwarePassingConfig(require_visual_person_selection=args.human_observed_passing_target) if args.motion_aware_passing else None,
+        motion_passing_config=MotionAwarePassingConfig(require_visual_person_selection=args.human_observed_passing_target,
+            maximum_identity_prior_selection_age_seconds=args.human_passing_identity_prior_max_age) if args.motion_aware_passing else None,
         human_body_envelope_config=HumanBodyEnvelopeConfig(body_radius_m=args.human_body_envelope_radius,
             centroid_uncertainty_m=args.human_envelope_centroid_uncertainty,
             maximum_identity_age_seconds=args.human_envelope_identity_max_age) if args.human_body_envelope_radius is not None else None,

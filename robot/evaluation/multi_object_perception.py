@@ -522,6 +522,10 @@ def assess_all_objects(worker, packet):
             robot_velocity_xy=packet.measured_robot_velocity_world_xy,
             goal_xy=packet.waypoint_world_xy,
             visual_person_track_ids=None if visual is None else tuple(visual),
+            identity_prior_selection_evidence=envelope_memory.passing_selection_priors(
+                tracking, camera_timestamp_seconds=packet.camera_timestamp_seconds,
+                maximum_age_seconds=passing.config.maximum_identity_prior_selection_age_seconds)
+            if passing.config.maximum_identity_prior_selection_age_seconds > 0 else None,
         )
         passing_audit["current_visual_selection_evidence"] = visual
         passing_audit["ego_pose_reference"] = {"source":packet.pose_source,"status":packet.pose_status.value,

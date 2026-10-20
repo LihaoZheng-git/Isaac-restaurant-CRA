@@ -16,6 +16,42 @@ HUMAN_ENVELOPE_ID_OFFSET = 3_000_000_000
 
 
 @dataclass(frozen=True)
+class HumanIdentitySelectionPrior:
+    """Original visual identity plus a successfully verified current envelope."""
+
+    track_id: int
+    original_person_camera_timestamp: float
+    original_person_camera_frame_id: int
+    selection_camera_timestamp: float
+    lidar_timestamp_seconds: float
+    current_support_count: int
+
+    def __post_init__(self):
+        for value in (self.track_id, self.original_person_camera_frame_id,
+                      self.current_support_count):
+            if isinstance(value, (bool, np.bool_)) or not isinstance(value, (int, np.integer)) or value < 0:
+                raise ValueError("identity prior requires nonnegative integer IDs/count")
+        epochs = (self.original_person_camera_timestamp, self.selection_camera_timestamp,
+                  self.lidar_timestamp_seconds)
+        if any(isinstance(t, bool) or not isinstance(t, Real) or not math.isfinite(t) or t < 0 for t in epochs):
+            raise ValueError("identity prior requires finite nonnegative epochs")
+        if (not 0 <= self.age_seconds <= .5 + 1e-9
+            or not 0 <= self.selection_camera_timestamp - self.lidar_timestamp_seconds <= .25 + 1e-9
+            or self.current_support_count < 3):
+            raise ValueError("identity selection prior exceeds its bounded source/support contract")
+
+    @property
+    def age_seconds(self):
+        return self.selection_camera_timestamp - self.original_person_camera_timestamp
+
+    def diagnostic(self):
+        from dataclasses import asdict
+        return {**asdict(self), "identity_age_at_selection_seconds": self.age_seconds,
+                "source": HUMAN_ENVELOPE_SOURCE, "status": "prior",
+                "basis": "person_identity_prior_with_verified_current_LiDAR_envelope"}
+
+
+@dataclass(frozen=True)
 class HumanBodyEnvelopeConfig:
     body_radius_m: float = 0.4
     centroid_uncertainty_m: float = 0.2
@@ -171,6 +207,34 @@ class HumanBodyEnvelope:
                 )
             )
         self.identities = updated
+        return result
+
+    def passing_selection_priors(self, tracking, *, camera_timestamp_seconds, maximum_age_seconds):
+        """Only a successfully updated current envelope may authorize this ablation.
+
+        This reads retained identity, never supplies physical factors or mutates
+        any clock. The longer geometry-identity lease does not extend this cap.
+        """
+        if (isinstance(maximum_age_seconds, bool) or not math.isfinite(maximum_age_seconds)
+            or not 0 < maximum_age_seconds <= .5):
+            raise ValueError("selection identity age must be in (0,.5]")
+        result = {}
+        for track in tracking.tracked_obstacles:
+            entry = self.identities.get(track.track_id)
+            if entry is None:
+                continue
+            if (entry["lidar_timestamp"] != tracking.timestamp_seconds
+                or entry["observation_count"] != track.observation_count):
+                raise ValueError("selection requires the verified current envelope update")
+            age = camera_timestamp_seconds - entry["camera_timestamp"]
+            if age < 0:
+                raise ValueError("identity selection cannot use future visual evidence")
+            if not 0 < age <= maximum_age_seconds + 1e-9:
+                continue
+            result[track.track_id] = HumanIdentitySelectionPrior(
+                track.track_id, entry["camera_timestamp"], entry["camera_frame"],
+                camera_timestamp_seconds, tracking.timestamp_seconds,
+                int(np.count_nonzero(tracking.point_track_ids == track.track_id)))
         return result
 
 

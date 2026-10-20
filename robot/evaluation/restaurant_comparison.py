@@ -178,7 +178,7 @@ def extract_trial(directory, trial):
         "configuration": {key: report.get(key) for key in (
             "experiment_baseline", "fixed_lambda", "nominal_route_local_xy", "scene_source_sha256",
             "simulation_rate_limit", "qp_iteration_limit", "nonlinear_rescue_iteration_limit",
-            "progress_seed_linear_fraction", "mpc_configuration", "guidance_tracking_ablation",
+            "progress_seed_linear_fraction", "mpc_configuration", "guidance_tracking_ablation", "motion_aware_passing_config",
             "planner_candidate_maximum_age_seconds", "human_crossing_delay_seconds",
             "human_body_contact_prior_config", "human_body_envelope_config", "experimental_camera_mount", "human_mass_prior_config",
             "object_factor_prior_risk", "persistent_property_config", "temporal_evidence_config",
@@ -195,6 +195,8 @@ def comparison_summary(rows):
     for row in rows:
         if (row.get("configuration", {}).get("guidance_tracking_ablation") or {}).get("enabled"):
             raise ValueError("guidance-tracking ablations require a separate comparison, not the primary matrix")
+        if (row.get("configuration", {}).get("motion_aware_passing_config") or {}).get("maximum_identity_prior_selection_age_seconds", 0) > 0:
+            raise ValueError("identity-prior selection ablations require a separate comparison, not the primary matrix")
         key = (row["case"], row["repeat"])
         cell = cells.setdefault(key, {})
         if row["baseline"] in cell:
