@@ -7,6 +7,7 @@ from robot.perception.camera_lidar_fusion import TrackSemanticAssociation
 from robot.perception.human_mass_prior import (
     HumanMassPriorConfig,
     estimate_visual_human_mass_prior,
+    catalog_person_overlap_guard,
 )
 from robot.perception.physical_attributes import EstimateStatus
 from robot.perception.sam_instance_segmentation import SAM_INSTANCE_SOURCE
@@ -140,3 +141,48 @@ def test_prior_interval_is_configurable_and_never_promoted_to_measurement():
         HumanMassPriorConfig("", mass_kg=60)
     with pytest.raises(ValueError):
         HumanMassPriorConfig("scope", mass_kg=1)
+
+
+def test_small_contained_fragment_blocks_catalog_but_cannot_select_adult_mass():
+    frame, association, people = inputs()
+    mask = np.zeros((40, 40), bool)
+    mask[10:20, 15:25] = True
+    frame = replace(frame, detections=(replace(frame.detections[0], mask=mask),))
+    result = catalog_person_overlap_guard(frame, association, people, track_id=7,
+        timestamp_seconds=2., config=HumanMassPriorConfig("adult fixture"))
+    assert result["blocked"]
+    assert result["person_hits"][0]["instance_containment"] == 1.
+    assert result["source_timestamp_seconds"] == 2.
+    assert not estimate(frame, association, people).is_available
+
+
+@pytest.mark.parametrize("problem", ["stale", "future", "wrong_frame", "wrong_source", "weak", "no_overlap", "unmatched"])
+def test_domain_rejection_requires_current_positive_person_pixels(problem):
+    frame, association, people = inputs()
+    now = 2.
+    if problem == "stale":
+        now = 2.2
+    elif problem == "future":
+        now = 1.9
+    elif problem == "wrong_frame":
+        people = replace(people, source_frame_id=9)
+    elif problem == "wrong_source":
+        frame = replace(frame, model_name="authored")
+    elif problem == "weak":
+        people = replace(people, detections=(replace(people.detections[0], confidence=.4),))
+    elif problem == "no_overlap":
+        people = replace(people, detections=(replace(people.detections[0], mask=np.zeros((40,40), bool)),))
+    elif problem == "unmatched":
+        association = replace(association, status="ambiguous")
+    assert not catalog_person_overlap_guard(frame, association, people, track_id=7,
+        timestamp_seconds=now, config=HumanMassPriorConfig("adult fixture"))["blocked"]
+
+
+def test_truncated_or_ambiguous_positive_person_pixels_only_reject_domain():
+    frame, association, people = inputs()
+    mask = people.detections[0].mask.copy()
+    mask[0, 20] = True
+    people = replace(people, detections=(replace(people.detections[0], mask=mask),)*2)
+    assert catalog_person_overlap_guard(frame, association, people, track_id=7,
+        timestamp_seconds=2., config=HumanMassPriorConfig("adult fixture"))["blocked"]
+    assert not estimate(frame, association, people).is_available

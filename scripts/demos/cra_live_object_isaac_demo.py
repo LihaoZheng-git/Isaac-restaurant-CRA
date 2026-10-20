@@ -58,6 +58,10 @@ parser.add_argument("--human-body-envelope-radius", type=float,
                     help="opt-in configured body-radius occupancy PRIOR; no actor geometry is read")
 parser.add_argument("--human-envelope-centroid-uncertainty", type=float, default=0.2)
 parser.add_argument("--human-envelope-identity-max-age", type=float, default=30.0)
+parser.add_argument("--human-fragment-coverage-prior", action="store_true",
+                    help="opt-in full-region/motion/risk coverage by current verified body envelope; strict observed merges unchanged")
+parser.add_argument("--human-fragment-maximum-point-speed", type=float, default=1.,
+                    help="explicit uncalibrated point-motion PRIOR in m/s, used to expand the whole missing region")
 parser.add_argument("--restaurant-scene", type=Path,
                     help="separate dressed restaurant scene; bounded 2.2 m real-bowl component route")
 parser.add_argument("--restaurant-layout-survey", type=Path,
@@ -201,6 +205,13 @@ if args.human_body_envelope_radius is not None:
         parser.error("human envelope requires standalone live human/person-prior object-map mode without static memory")
 if args.human_positive_fragment_extent and (args.restaurant_human is None or args.human_carry_bowl):
     parser.error("positive fragment extent requires the bounded bare native-human scenario")
+from robot.perception.human_fragment_coverage import HumanFragmentCoverageConfig
+fragment_coverage_config = HumanFragmentCoverageConfig(
+    "bounded separated adult fixture; all points in a missing fragment assumed within configured speed bound; .35 s original-source expiry",
+    maximum_point_speed_mps=args.human_fragment_maximum_point_speed) if args.human_fragment_coverage_prior else None
+if args.human_fragment_coverage_prior and (args.human_body_envelope_radius is None
+    or args.experiment_baseline != "continuous_cra_safe_sage"):
+    parser.error("fragment coverage requires the validated human-envelope continuous-CRA mode")
 if not math.isfinite(args.progress_seed_fraction) or not 0 < args.progress_seed_fraction < 1:
     parser.error("progress seed fraction must be finite and in (0,1)")
 if args.human_crossing_direction == "left-to-right" and args.restaurant_human != "crossing":
@@ -847,6 +858,7 @@ def main():
         human_body_envelope_config=HumanBodyEnvelopeConfig(body_radius_m=args.human_body_envelope_radius,
             centroid_uncertainty_m=args.human_envelope_centroid_uncertainty,
             maximum_identity_age_seconds=args.human_envelope_identity_max_age) if args.human_body_envelope_radius is not None else None,
+        human_fragment_coverage_config=fragment_coverage_config,
         calibration=calibration,
         class_policy=class_policy,
         guidance_policy=guidance,
@@ -1510,7 +1522,8 @@ def main():
     coverage_guard = NearbyTrackLossGuard(NearbyTrackLossConfig(
         allow_observed_fragment_merges=human is not None,
         allow_positive_extent_merges=args.human_positive_fragment_extent,
-        use_observed_merge_velocity=human is not None)) if args.moving_actor or human is not None else None
+        use_observed_merge_velocity=human is not None),
+        fragment_coverage_config=fragment_coverage_config) if args.moving_actor or human is not None else None
     coverage_result = None
     coverage_events = []
     submitted_packet = None
@@ -1527,10 +1540,23 @@ def main():
             "current_point_track_ids": result.field.tracking_result.point_track_ids,
             "current_points_source_time": source_packet.sensor_timestamp_seconds}
 
+    def coverage_prior_inputs(result, source_packet):
+        if fragment_coverage_config is None:
+            return {}
+        return {
+            "current_track_risks": {row["track_or_group_id"]: row["applied_field_risk"]
+                for row in result.diagnostics["applied_field_policies"]},
+            "current_body_envelopes": result.diagnostics["human_body_envelope_priors"],
+            "current_occupancy_grid": result.source_occupancy_grid,
+            "current_grid_anchor_xy": result.field.anchor_position_world_xy,
+            "current_grid_anchor_yaw": result.field.anchor_yaw,
+            "current_camera_timestamp_seconds": source_packet.camera_timestamp_seconds,
+        }
+
     if coverage_guard is not None:
         coverage_result = coverage_guard.observe(latest.field.tracking_result.tracked_obstacles,
             source_time=latest.field.sensor_timestamp_seconds, robot_world_xy=(anchor.x, anchor.y),
-            **coverage_geometry(latest, packet))
+            **coverage_geometry(latest, packet), **coverage_prior_inputs(latest, packet))
     def infer_with_timing(packet):
         started = time.perf_counter()
         result = profile_call(perception, packet,
@@ -1662,8 +1688,8 @@ def main():
                         coverage_result = coverage_guard.observe(outcome.value.field.tracking_result.tracked_obstacles,
                             source_time=outcome.value.field.sensor_timestamp_seconds,
                             robot_world_xy=(anchor.x+c*current[0]-s*current[1], anchor.y+s*current[0]+c*current[1]),
-                            **coverage_geometry(outcome.value, submitted_packet))
-                        if coverage_result["observed_fragment_merges"] or coverage_result["blocked"]:
+                            **coverage_geometry(outcome.value, submitted_packet), **coverage_prior_inputs(outcome.value, submitted_packet))
+                        if coverage_result["observed_fragment_merges"] or coverage_result["blocked"] or coverage_result["prior_covered_missing_tracks"]:
                             if any(e.get("coexistence_basis") in {"retained_original_coobservation", "recent_original_coobservation_positive_extent"}
                                    for e in coverage_result["observed_fragment_merges"]):
                                 audit_name = f"coverage-merge-{outcome.value.field.sensor_frame_id}.npz"
@@ -2011,6 +2037,7 @@ def main():
         "experiment_baseline": args.experiment_baseline,
         "human_body_contact_prior_config": asdict(perception.human_body_contact_config) if perception.human_body_contact_config is not None else None,
         "human_body_envelope_config": asdict(perception.human_body_envelope.config) if perception.human_body_envelope is not None else None,
+        "human_fragment_coverage_config": asdict(fragment_coverage_config) if fragment_coverage_config is not None else None,
         "human_navigation_validation": human_validation,
         "motion_passing_validation": passing_validation,
         "native_human_mode": args.restaurant_human,

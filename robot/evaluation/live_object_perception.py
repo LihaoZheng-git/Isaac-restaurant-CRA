@@ -233,6 +233,7 @@ class LiveObjectPerception:
         experiment_baseline=None,
         motion_passing_config=None,
         human_body_envelope_config=None,
+        human_fragment_coverage_config=None,
     ):
         self.segmenter, self.mass_estimator, self.contact_detector = (
             segmenter,
@@ -281,6 +282,11 @@ class LiveObjectPerception:
         ):
             raise ValueError("human envelope requires standalone live person/object-map mode, without static memory")
         self.human_body_envelope = HumanBodyEnvelope(human_body_envelope_config) if human_body_envelope_config is not None else None
+        from robot.perception.human_fragment_coverage import HumanFragmentCoverage
+        if human_fragment_coverage_config is not None and (
+            self.human_body_envelope is None or self.experiment_baseline is not CRABaseline.CONTINUOUS_CRA_SAFE_SAGE):
+            raise ValueError("fragment coverage requires current human envelopes and continuous CRA mode")
+        self.human_fragment_coverage = HumanFragmentCoverage(human_fragment_coverage_config) if human_fragment_coverage_config is not None else None
         if (motion_passing_config is not None
             and motion_passing_config.maximum_identity_prior_selection_age_seconds > 0
             and self.human_body_envelope is None):
@@ -984,9 +990,18 @@ class LiveObjectPerception:
                 association=association,
             )
             from robot.perception.physical_attributes import MassAttributes
+            person_frame = self.visual_person_frame(packet) if self.person_detector is not None else None
+            domain_guard = None
+            if person_frame is not None:
+                from robot.perception.human_mass_prior import catalog_person_overlap_guard
+                domain_guard = catalog_person_overlap_guard(frame, association, person_frame,
+                    track_id=target.track_id, timestamp_seconds=timestamp,
+                    config=self.human_mass_prior_config)
+                geometry_diagnostics["catalog_person_overlap_guard"] = domain_guard
+            block_catalog = suppress_catalog_mass_for_human_identity or bool(domain_guard and domain_guard["blocked"])
             mass = MassAttributes(ScalarEstimate.unavailable(unit="kg",
                 source="catalog_human_domain_guard", timestamp_seconds=timestamp,
-                evidence=("retained person identity is a domain guard, not a renewed mass estimate; original mass expiry remains",))) if suppress_catalog_mass_for_human_identity else self.mass_estimator.estimate_instance(
+                evidence=("positive person domain cue blocks catalog-object inference; no adult mass/identity assigned or original expiry renewed",))) if block_catalog else self.mass_estimator.estimate_instance(
                 packet.rgb,
                 frame,
                 association,
@@ -994,7 +1009,7 @@ class LiveObjectPerception:
                 track_id=target.track_id,
                 timestamp_seconds=timestamp,
             )
-            geometry_diagnostics["catalog_human_domain_guard"] = suppress_catalog_mass_for_human_identity
+            geometry_diagnostics["catalog_human_domain_guard"] = block_catalog
             if self.person_detector is not None:
                 from robot.perception.human_mass_prior import (
                     estimate_visual_human_mass_prior,
@@ -1004,7 +1019,7 @@ class LiveObjectPerception:
                 prior = estimate_visual_human_mass_prior(
                     frame,
                     association,
-                    self.visual_person_frame(packet),
+                    person_frame,
                     track_id=target.track_id,
                     timestamp_seconds=timestamp,
                     config=self.human_mass_prior_config,
@@ -1018,7 +1033,7 @@ class LiveObjectPerception:
                 if self.human_body_contact_config is not None:
                     from robot.perception.human_body_contact import select_visual_human_body_contact_prior
                     human_body_contact_prior = select_visual_human_body_contact_prior(
-                        frame, association, self.visual_person_frame(packet),
+                        frame, association, person_frame,
                         track_id=target.track_id, timestamp_seconds=timestamp,
                         association_config=self.human_mass_prior_config,
                         config=self.human_body_contact_config,

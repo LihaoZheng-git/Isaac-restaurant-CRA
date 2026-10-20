@@ -339,7 +339,8 @@ def test_accepted_category_free_instance_uses_general_support_without_sphere_fit
     assert result.field.all_obstacle_point_count == len(obj)
 
 
-def test_explicit_human_identity_guard_never_calls_catalog_mass_network():
+@pytest.mark.parametrize("retained_identity", [True, False])
+def test_explicit_human_identity_guard_never_calls_catalog_mass_network(retained_identity):
     from functools import partial
     from robot.perception.semantic_detection import PixelBoundingBox, SemanticDetection
     obj = np.array([(1+x,y,z) for x in (-.08,0,.08)
@@ -349,8 +350,8 @@ def test_explicit_human_identity_guard_never_calls_catalog_mass_network():
     value = replace(packet(), obstacle_xyz=obj, scene_xyz=obj,
         camera_from_scan_robot=transform)
     mask = np.zeros((100,100),bool)
-    mask[10:90,10:90] = True
-    detection = SemanticDetection(0,"unknown",.5,PixelBoundingBox(10,10,90,90),mask)
+    mask[30:70,30:70] = True
+    detection = SemanticDetection(0,"unknown",.5,PixelBoundingBox(30,30,70,70),mask)
     runtime = worker()
     runtime.segmenter = SimpleNamespace(set_image=lambda rgb: None,
         propose=lambda *a,**kw: SimpleNamespace(detection=detection,model_quality=.95,
@@ -359,8 +360,23 @@ def test_explicit_human_identity_guard_never_calls_catalog_mass_network():
     def forbidden(*a,**kw):
         raise AssertionError('catalog model cannot estimate a retained person identity')
     runtime.mass_estimator=SimpleNamespace(estimate_instance=forbidden)
-    runtime._assess_track=partial(runtime._assess_track,suppress_catalog_mass_for_human_identity=True)
+    if retained_identity:
+        runtime._assess_track=partial(runtime._assess_track,suppress_catalog_mass_for_human_identity=True)
+    else:
+        from robot.perception.human_mass_prior import HumanMassPriorConfig
+        from robot.perception.semantic_detection import SemanticDetectionFrame
+        person_mask = np.zeros((100, 100), bool)
+        person_mask[5:95, 5:95] = True
+        person = replace(detection, semantic_class="person", confidence=.85,
+            bounding_box=PixelBoundingBox(5,5,95,95), mask=person_mask)
+        runtime.person_detector = SimpleNamespace(detect=lambda rgb, **kw:
+            SemanticDetectionFrame(kw["source_frame_id"], kw["source_timestamp_seconds"],
+                100, 100, (person,), "yolo11n-seg.pt", .01))
+        runtime.human_mass_prior_config = HumanMassPriorConfig("unit adult fixture")
     result=runtime(value)
     assert result.diagnostics['accepted_instance']
     assert not result.attributes.mass.mass_kg.is_available
     assert result.attributes.mass.mass_kg.source=='catalog_human_domain_guard'
+    if not retained_identity:
+        assert result.diagnostics["geometry_evidence"]["catalog_person_overlap_guard"]["blocked"]
+        assert result.diagnostics["geometry_evidence"]["human_mass_prior"]["value"] is None

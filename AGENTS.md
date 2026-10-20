@@ -949,3 +949,16 @@
   Positive same-frame person-mask containment should conservatively block the
   catalog-object mass network on fragments without assigning adult mass or
   person identity; whole-person association remains independently mandatory.
+
+- The opt-in human-fragment coverage policy uses the entire original positive
+  planar LiDAR bounds plus a configured 1 m/s point-motion PRIOR, <=.35 s
+  original expiry, >=4 observations/two recent bounded velocities, unique
+  co-observed/current validated body envelopes and <=.15 s parent gaps/.3 m/s
+  velocity change. This speed bound is assumed, not measured articulated motion.
+  Keep the strict raw-return path/defaults. Coverage retains the unresolved
+  fragment and its original clock; never transfer class/factors or renew them.
+  Apply an explicit previous-risk floor only to envelope field data, preserving
+  physical CRA diagnostics, readiness, flux mapping and lambda 1.25. The main
+  guard independently checks positive history and every conservatively touched
+  current source-grid cell; clipped, unoccupied or lower-risk coverage stops.
+  See docs/human_fragment_coverage.md; unit checks are not native acceptance.

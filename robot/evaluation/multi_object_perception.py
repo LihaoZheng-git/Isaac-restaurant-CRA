@@ -77,6 +77,7 @@ def assess_all_objects(worker, packet):
     memory = copy.deepcopy(worker.persistent_properties)
     ownership = copy.deepcopy(getattr(worker, "object_ownership_bounds", {}))
     envelope_memory = copy.deepcopy(getattr(worker, "human_body_envelope", None))
+    fragment_memory = copy.deepcopy(getattr(worker, "human_fragment_coverage", None))
     tracking = tracker.update(
         packet.obstacle_xyz[:, :2],
         robot_position_world_xy=np.array(packet.robot_position_world_xy),
@@ -512,6 +513,19 @@ def assess_all_objects(worker, packet):
     applied_guidance, baseline_audit = applied_field_policies(
         getattr(worker, "experiment_baseline", None), policies, objects, envelope_origins=envelope_origins,
     )
+    fragment_audit = None
+    if fragment_memory is not None:
+        from robot.perception.human_fragment_coverage import apply_coverage_risk_floors
+        fragment_audit = fragment_memory.update(tracks, world[:, :2], tracking.point_track_ids,
+            {t.track_id: applied_guidance[t.track_id].risk for t in tracks}, envelope_audit,
+            source_time=packet.sensor_timestamp_seconds, camera_timestamp_seconds=packet.camera_timestamp_seconds)
+        apply_coverage_risk_floors(applied_guidance, fragment_audit)
+        for row in baseline_audit:
+            key = row["track_or_group_id"]
+            if any(p["envelope_track_id"] == key for p in fragment_audit["covered"]):
+                row["fragment_coverage_risk_floor_prior"] = applied_guidance[key].risk
+                row["applied_field_risk"] = applied_guidance[key].risk
+                row["boundary_flux"] = applied_guidance[key].boundary_flux
     passing = copy.deepcopy(getattr(worker, "motion_passing", None))
     passing_audit = None
     if passing is not None:
@@ -641,6 +655,8 @@ def assess_all_objects(worker, packet):
         worker.motion_passing = passing
     if envelope_memory is not None:
         worker.human_body_envelope = envelope_memory
+    if fragment_memory is not None:
+        worker.human_fragment_coverage = fragment_memory
     worker.temporal_recovery_baseline = None
     if carried_state is not None:
         worker.carried_runtime_state=carried_state
@@ -659,6 +675,7 @@ def assess_all_objects(worker, packet):
         "applied_field_policies": baseline_audit,
         "motion_aware_passing": passing_audit,
         "human_body_envelope_priors": envelope_audit,
+        "human_fragment_coverage_prior": fragment_audit,
         "object_count": len(objects),
         "objects": [item.diagnostics for item in objects],
         "carried_object_groups":carried_detail,

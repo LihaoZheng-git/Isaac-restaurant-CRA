@@ -55,7 +55,7 @@ class NearbyTrackLossConfig:
 
 
 class NearbyTrackLossGuard:
-    def __init__(self, config=None):
+    def __init__(self, config=None, *, fragment_coverage_config=None):
         self.config = config if config is not None else NearbyTrackLossConfig()
         if not isinstance(self.config, NearbyTrackLossConfig):
             raise TypeError("expected NearbyTrackLossConfig")
@@ -63,6 +63,8 @@ class NearbyTrackLossGuard:
         self.last_source_time = None
         self.velocities = {}
         self.coobserved = {}
+        from robot.perception.human_fragment_coverage import HumanFragmentCoverage
+        self.fragment_coverage = HumanFragmentCoverage(fragment_coverage_config) if fragment_coverage_config is not None else None
 
     def observe(
         self,
@@ -73,6 +75,12 @@ class NearbyTrackLossGuard:
         current_points_world_xy=None,
         current_point_track_ids=None,
         current_points_source_time=None,
+        current_track_risks=None,
+        current_body_envelopes=None,
+        current_occupancy_grid=None,
+        current_grid_anchor_xy=None,
+        current_grid_anchor_yaw=None,
+        current_camera_timestamp_seconds=None,
     ):
         if (
             isinstance(source_time, bool)
@@ -141,6 +149,27 @@ class NearbyTrackLossGuard:
                     "fragment merge requires aligned current positive sensor geometry"
                 )
             geometry = (xyz, ids)
+        prior_coverage = {"covered": [], "rejected": []}
+        if self.fragment_coverage is not None:
+            import copy
+            from robot.perception.human_fragment_coverage import validate_coverage_grid
+            if (geometry is None or current_track_risks is None or current_body_envelopes is None
+                or current_occupancy_grid is None or current_grid_anchor_xy is None
+                or current_grid_anchor_yaw is None):
+                raise ValueError("prior coverage requires the current field, risks, geometry and envelopes")
+            fragment_memory = copy.deepcopy(self.fragment_coverage)
+            prior_coverage = fragment_memory.update(tracks, *geometry, current_track_risks,
+                current_body_envelopes, source_time=source_time,
+                camera_timestamp_seconds=current_camera_timestamp_seconds)
+            checked = []
+            for proof in prior_coverage["covered"]:
+                check = validate_coverage_grid(proof, current_occupancy_grid,
+                    current_grid_anchor_xy, current_grid_anchor_yaw)
+                if check["covered"]:
+                    checked.append({**proof, "field_coverage": check})
+                else:
+                    prior_coverage["rejected"].append({**proof, "reason": check["reason"]})
+            prior_coverage["covered"] = checked
         pending = dict(self.observed)
         coobserved = {
             pair: t
@@ -344,6 +373,8 @@ class NearbyTrackLossGuard:
                 or np.linalg.norm(point - robot) <= self.config.enrollment_distance_m
             ):
                 pending[key] = (point.copy(), float(source_time))
+        prior_coverage["covered"] = [p for p in prior_coverage["covered"]
+            if p["track_id"] in pending and p["track_id"] not in current]
         blocking = []
         for key, (point, last_seen) in pending.items():
             age = float(source_time - last_seen)
@@ -351,6 +382,7 @@ class NearbyTrackLossGuard:
             if (
                 age > self.config.maximum_missing_seconds + 1e-9
                 and distance <= self.config.stop_distance_m
+                and not any(p["track_id"] == key for p in prior_coverage["covered"])
             ):
                 blocking.append(
                     {
@@ -362,6 +394,8 @@ class NearbyTrackLossGuard:
                     }
                 )
         self.observed, self.last_source_time = pending, float(source_time)
+        if self.fragment_coverage is not None:
+            self.fragment_coverage = fragment_memory
         self.velocities = {
             key: (velocities[key].copy(), float(source_time))
             if key in current
@@ -387,5 +421,8 @@ class NearbyTrackLossGuard:
             "source_timestamp": source_time,
             "observed_fragment_merges": merged,
             "positive_extent_route_enabled": self.config.allow_positive_extent_merges,
+            "body_prior_coverage_enabled": self.fragment_coverage is not None,
+            "prior_covered_missing_tracks": prior_coverage["covered"],
+            "body_prior_coverage_rejections": prior_coverage["rejected"],
             "scope": "nearby positive LiDAR-track continuity watchdog; lost occupancy is unresolved, not free; bounded separated actors; not a dynamic belief map or general occlusion guarantee",
         }
