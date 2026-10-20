@@ -1044,3 +1044,13 @@
   policies. This is not enforced passing side, native bypass or paper identity.
   Review soft guidance ranking before new wheels; retain the two earlier
   failed search variants, all native failures and main/long-service holds.
+
+- The checked-search soft-ranking revision uses only the initial guidance's
+  normalized lateral component relative to the goal, scaled by existing
+  lookahead/travel lengths. It remains a numerical soft preference, never a
+  hard passing constraint or use of the entire CBF normal as a travel heading.
+  All 2,273 unit tests/Ruff and both ORACLE virtual waypoint routes passed
+  (22.85/+ .677047 m left; 23.05/-.696301 m right). Trusted offline native input
+  replays also passed exact/first-command checks, not wheel acceptance or real
+  time. Preserve the earlier failed and same-flank variants. Repeat stationary
+  gates before a new native Owl/.25 m-prior search trial; main stays held.

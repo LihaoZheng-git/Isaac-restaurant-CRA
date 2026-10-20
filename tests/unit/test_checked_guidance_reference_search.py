@@ -3,7 +3,7 @@ from dataclasses import fields, replace
 import numpy as np
 import pytest
 from test_laplace_guidance_tracking_mpc import config, field
-from test_safe_sage_cbf_filter import make_filter
+from test_safe_sage_cbf_filter import make_filter, make_fields, make_guidance_field
 
 from robot.safety.checked_guidance_reference_search import search_checked_guidance_reference, reference_motion_rejection
 from robot.safety.laplace_guidance_tracking_mpc import LaplaceGuidanceTrackingConfig, LaplaceGuidanceTrackingMPC
@@ -138,3 +138,36 @@ def test_geometrically_safe_reference_must_be_productive_or_have_arrived(kind):
         if reason:
             rejections.append(reason)
     assert bool(rejections) == (kind in {"wait_then_move", "move_then_stop"})
+
+
+@pytest.mark.parametrize("side", [-1.,1.])
+def test_symmetric_configuration_barrier_uses_the_guidance_preference(side):
+    from robot.safety.local_occupancy_grid import LocalOccupancyGrid, LocalOccupancyGridConfig
+    cfg = LocalOccupancyGridConfig(resolution=.1, minimum_x=-1, maximum_x=3, minimum_y=-2, maximum_y=2)
+    xs = cfg.minimum_x + (np.arange(cfg.column_count)+.5)*cfg.resolution
+    ys = cfg.minimum_y + (np.arange(cfg.row_count)+.5)*cfg.resolution
+    x,y = np.meshgrid(xs,ys)
+    occupied = (x>=.3-1e-9)&(x<=.6+1e-9)&(abs(y)<=.15+1e-9)
+    grid = LocalOccupancyGrid(cfg,occupied,np.full(cfg.shape,-1),occupied.astype(float),
+        -occupied.astype(float),int(occupied.sum()),int(occupied.sum()))
+    cs, values, _ = make_fields(guidance=(1.,side))
+    cs = replace(cs,occupancy_grids=(grid,)*4)
+    shape = (4,)+cfg.shape
+    boundaries = np.tile(occupied,(4,1,1))
+    boundaries[:,0,:] = boundaries[:,-1,:] = True
+    boundaries[:,:,0] = boundaries[:,:,-1] = True
+    h = np.full(shape,.3)
+    h[boundaries] = 0.
+    values = replace(values,values=h,spatial_gradients_robot_xy=np.zeros(shape+(2,)),
+        yaw_derivatives=np.zeros(shape),dirichlet_boundary_masks=boundaries,
+        guidance_divergence=np.zeros(shape),forcing_fields=np.full(shape,-1.),resolution=.1)
+    mpc = planner()
+    mpc.config = replace(mpc.config,horizon_steps=20,safety_substeps_per_interval=3,
+        integration_substeps_per_interval=3)
+    result = search_checked_guidance_reference(mpc,np.zeros(3),np.array([2.,0.]),.2,
+        dict(configuration_space=cs,h_full=values,guidance_fields=(make_guidance_field(grid,(1.,side)),)*4,
+            temporal_safety_derivative=0.),width=8,candidate_limit=4800)
+    assert result.trajectory is not None
+    assert mpc._trajectory_is_safe(result.trajectory)
+    assert side*result.trajectory.chassis_states[-1,1] > .1
+    assert side*result.diagnostics["initial_guidance_lateral_preference"] > 0.

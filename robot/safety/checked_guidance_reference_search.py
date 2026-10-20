@@ -77,6 +77,11 @@ def search_checked_guidance_reference(mpc, initial, goal, speed, field, *, width
                  (turn_rates if v == 0 else translating_rates))
     beams = [np.empty((0, 2))]
     distance = float(np.linalg.norm(goal-initial[:2]))
+    goal_direction = (goal-initial[:2]) / max(distance, 1e-12)
+    goal_lateral = np.array([-goal_direction[1], goal_direction[0]])
+    guidance = np.asarray(mpc._sample(initial, field).sampled_guidance_grid_xy)
+    lateral_preference = float(guidance @ goal_lateral / max(np.linalg.norm(guidance), 1e-12))
+    travel_scale = max(speed*mpc.config.horizon_steps*mpc.config.time_step, grid.resolution)
     tested = exact_feasible = semantic_rejections = quality_rejections = depth_done = 0
     full_candidates = []
     truncated = False
@@ -112,6 +117,11 @@ def search_checked_guidance_reference(mpc, initial, goal, speed, field, *, width
             error = math.atan2(goal[1]-state[1], goal[0]-state[0])-state[2]
             score = distance - np.linalg.norm(goal-state[:2]) - mpc.config.lookahead_distance * abs(
                 math.atan2(math.sin(error), math.cos(error)))
+            # Use only the field's lateral component relative to the goal;
+            # treating the complete CBF normal as a travel heading can flee
+            # backwards. This bounded SOFT ranking term is not a side constraint.
+            score += (mpc.config.lookahead_distance * lateral_preference
+                * float((state[:2]-initial[:2]) @ goal_lateral) / travel_scale)
             candidates.append((float(score), state, commands, value))
         candidates.sort(key=lambda item: item[0], reverse=True)
         if depth == mpc.config.horizon_steps:
@@ -164,5 +174,7 @@ def search_checked_guidance_reference(mpc, initial, goal, speed, field, *, width
         full_horizon_candidates=len(full_candidates), truncated=truncated,
         position_diversity_m=position_separation, yaw_diversity_radians=yaw_separation,
         control_pool_size=len(pool), reserved_lateral_exploration=True,
+        initial_guidance_lateral_preference=lateral_preference,
+        guidance_ranking_scale_m=mpc.config.lookahead_distance,
         wall_seconds=time.perf_counter()-started,
         scope="candidate generation only; no global convergence, real-time or paper equivalence; no source-clock change"))
