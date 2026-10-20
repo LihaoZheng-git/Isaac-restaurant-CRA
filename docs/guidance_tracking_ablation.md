@@ -21,8 +21,12 @@ nominal horizon, clipped to actuator bounds. Heading alignment and a radial
 speed cap reduce translation when facing away/near the goal. References stop
 inside .04 m; actual waypoint acceptance is unchanged (.10 m in the live demo).
 
-Six bounded rollouts use moving turn caps .4/.8 rad/s and turn-first caps
-.1/.2/.4/.8 rad/s, clipped to actuator limits. Every reference needs the original
+Four default rollouts use moving and turn-first caps .4/.8 rad/s, clipped to
+actuator limits. An explicit .1 minimum turn-first cap restores the historical
+six-candidate pool. The progress correction in docs/guidance_progress.md also
+requires .01 m horizon goal gain (or reaching the existing reference region).
+This is auxiliary-reference eligibility, not an executable progress/turn floor.
+Every reference needs the original
 full temporal DTCBF and dense geometry checks. Safe references are ranked by
 goal progress plus look-ahead-distance-scaled heading improvement. No usable
 reference means the original controller is called. Reference generation is

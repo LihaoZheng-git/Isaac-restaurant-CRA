@@ -115,7 +115,7 @@ def test_no_reference_keeps_primary_behavior(monkeypatch):
         guidance_config=LaplaceGuidanceTrackingConfig(weight=10),
     )
     r = m.plan(np.zeros(3), (0.2, 0.0), nominal_goal_grid_xy=(2.0, 0.0), **field())
-    assert len(calls) == 6 and not r.guidance_tracking.active
+    assert len(calls) == 4 and not r.guidance_tracking.active
     assert r.guidance_tracking.reason == "no_exact_safe_progress_reference"
     assert r.first_command == pytest.approx((0.2, 0.0))
 
@@ -300,13 +300,14 @@ def test_turn_only_reference_cannot_displace_a_safe_forward_primary_plan():
     values = dict(configuration_space=cs, h_full=h, guidance_fields=g)
     initial = np.zeros(3)
     legacy = LaplaceGuidanceTrackingMPC(make_filter(), c,
-        guidance_config=LaplaceGuidanceTrackingConfig(weight=100, minimum_reference_progress_m=0))
+        guidance_config=LaplaceGuidanceTrackingConfig(weight=100, minimum_reference_progress_m=0,
+            minimum_turn_first_rate_cap=.1))
     old = legacy.plan(initial, (.05, 0.), nominal_goal_grid_xy=(2., 0.), **values)
     assert old.success and old.guidance_tracking.active
     assert old.guidance_tracking.reference_goal_progress_m == pytest.approx(0.)
     assert old.linear_velocity < .001
     actual = LaplaceGuidanceTrackingMPC(make_filter(), c,
-        guidance_config=LaplaceGuidanceTrackingConfig(weight=100))
+        guidance_config=LaplaceGuidanceTrackingConfig(weight=100, minimum_turn_first_rate_cap=.1))
     result = actual.plan(initial, (.05, 0.), nominal_goal_grid_xy=(2., 0.), **values)
     primary = SafeSAGEUnicycleMPC(make_filter(), c).plan(initial, (.05, 0.), **values)
     assert result.success and not result.guidance_tracking.active
@@ -332,3 +333,27 @@ def test_turn_first_with_later_translation_remains_an_eligible_reference():
 def test_invalid_reference_progress_rejected(value):
     with pytest.raises(ValueError):
         LaplaceGuidanceTrackingConfig(minimum_reference_progress_m=value)
+
+
+@pytest.mark.parametrize("value", [0, -.1, .9, np.nan, True])
+def test_invalid_turn_first_pool_cap_rejected(value):
+    with pytest.raises(ValueError):
+        LaplaceGuidanceTrackingConfig(minimum_turn_first_rate_cap=value)
+
+
+def test_weak_turn_first_candidates_are_excluded_without_forcing_executable_turns(monkeypatch):
+    m = LaplaceGuidanceTrackingMPC(make_filter(), config(),
+        guidance_config=LaplaceGuidanceTrackingConfig(weight=100))
+    original = m._guidance_rollout
+    choices = []
+    def record(initial, goal, speed, cap, turn_first, field):
+        choices.append((cap, turn_first))
+        return original(initial, goal, speed, cap, turn_first, field)
+    monkeypatch.setattr(m, "_guidance_rollout", record)
+    r = m.plan(np.zeros(3), (.2, 0.), nominal_goal_grid_xy=(2., 0.), **field())
+    assert choices == [(.4, False), (.8, False), (.4, True), (.8, True)]
+    assert r.success
+    assert r.minimum_dtcbf_margin >= -m.config.constraint_tolerance
+    # Near-zero requested turns remain possible in a genuinely aligned plan.
+    r = m.plan(np.zeros(3), (.2, 0.), nominal_goal_grid_xy=(2., 0.), **field(g=(1., 0.)))
+    assert r.linear_velocity > .1 and abs(r.angular_velocity) < .01

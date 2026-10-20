@@ -39,3 +39,47 @@ SAM associations and temporarily unobservable views before the first accepted
 moving human instance. The .25 factor priors and original 3-second human mass
 expiry remain unchanged. Controller progress does not repair missing visual
 evidence or establish full four-factor perception.
+
+## First native retry, 38a9b27: retained failure
+
+The progress-only correction passed its stationary gates but failed
+`progress_timeout` at 35.016667 s, 1/3 waypoints. Minimum full-sweep independent
+clearance was .724725 m, stopping drift .000987 m. Human mass/motion checks now
+passed with six supported moving-kinetic/two simultaneous rows, while zero
+complete four-factor assessments remained. The first natural identity-prior
+selection occurred at LiDAR source 18.8 s with a .1 s original camera age;
+14 held-policy rows passed independent identity/provenance checks. Visible arc,
+behind and arrival still failed. This is component validation, not bypass success.
+
+Late references now had positive but small horizon gain (about .021 m), yet
+continued to request .10 rad/s before translation. The exact-time plan/command
+join found no final-CBF changes in 66 accepted rows after 24 s. In the stable
+27--33 s interval, requested yaw integrated to .598240 rad while observed yaw
+changed only .017182 rad (ratio .02872), with maximum requested forward speed
+.0000924 m/s. These are declared USD ego-pose observations in this simulator
+stack, not an identified tire-friction, motor-deadband or general actuator law.
+They expose the mismatch between an ideal predicted turn and actual feedback;
+positive planned progress does not establish realized progress.
+
+## Turn-first pool correction
+
+The experimental ablation's default turn-first pool now uses .4/.8 rad/s caps,
+retaining the moving .4/.8 candidates. The explicit
+`--guidance-turn-first-minimum-cap .1` restores the older .1/.2/.4/.8 turn-first
+pool. The .4 setting is a bounded search-pool choice motivated by this observed
+low-command under-response; it is **not a lower bound on executable angular
+velocity**, an actuator calibration, a compensation gain or a change to wheel
+mapping/drive/physics parameters. Candidates and optimized outputs still need
+all original exact checks and actuator limits; no useful reference delegates
+to the unchanged primary. Straight aligned commands may still have zero turn.
+
+Diagnostics additionally record current guidance, initial state and time to
+the reference's first translating interval. Preserve the progress-only native
+failure and its mass/identity component successes separately from the next
+frozen-source stationary and crossing retry. Main/long-service stay held.
+
+The revised pool passed all 2,195 unit tests and repository Ruff. Its command-
+only virtual ORACLE routes arrived in 33.2/29.5 s with the same exact checks.
+Those virtual results do not validate physical turn response. The next native
+retry keeps the scene/route, .5 s identity option, all evidence/geometry settings,
+90 s total bound, 12 s watchdog and 60-frame stationary gates unchanged.

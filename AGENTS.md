@@ -863,3 +863,16 @@
   weight-zero primary identity, all exact safety/freshness gates and factor
   clocks. Synthetic yaw-mask reproduction and ORACLE virtual arrival are not
   native acceptance. See docs/guidance_progress.md; retain all failed trials.
+
+- The 38a9b27 progress-only native retry failed at 35.016667 s, 1/3 waypoints,
+  despite .724725 m full-sweep clearance and passing human mass/motion checks
+  (six supported moving-kinetic rows). It naturally selected the .1 s-old
+  identity PRIOR across 14 validated policy rows; retain earlier zero-prior
+  trials separately. Small positive reference gain still postponed translation:
+  during 27--33 s, .598240 rad requested yaw produced .017182 rad observed yaw.
+  This is a bounded USD-feedback response audit, not identified friction/motor
+  calibration. The new ablation default removes .1/.2 turn-first pool caps in
+  favor of .4/.8; explicit .1 restores the legacy pool. This changes candidate
+  generation, never forces a minimum executable turn, changes wheel/physics
+  parameters or relaxes exact checks. Keep the native failure, zero complete
+  four-factor assessments and main/long-service holds. See its detailed report.

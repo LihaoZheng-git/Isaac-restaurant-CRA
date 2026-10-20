@@ -96,3 +96,10 @@ live-fields.jsonl; live-fields.json is only its latest-five checkpoint. The
 launcher returned zero despite the failed gate; execution.json and the saved
 validation reports preserve that distinction. PR #143 remains a separate draft;
 main and long-service remain unchanged.
+
+The later separate guidance-progress trial at 38a9b27 naturally exercised this
+selection path: source 18.8 s, original image age .1 s, 14 held-policy rows with
+passing independent identity/provenance checks (maximum centroid error .166837 m).
+That updates the component's native validation, without changing the earlier
+trial's zero-prior-selection result. The later trial still failed full bypass
+and route completion; see docs/guidance_progress.md.

@@ -25,6 +25,7 @@ class LaplaceGuidanceTrackingConfig:
     reference_goal_radius_m: float = 0.04
     guidance_fade_distance_m: float = 0.5
     minimum_reference_progress_m: float = 0.01
+    minimum_turn_first_rate_cap: float = 0.4
 
     def __post_init__(self):
         for name, value in vars(self).items():
@@ -46,6 +47,8 @@ class LaplaceGuidanceTrackingConfig:
             )
         if not 0 < self.maximum_heading_bias_radians < math.pi / 2:
             raise ValueError("maximum heading bias must be in (0, pi/2)")
+        if not 0 < self.minimum_turn_first_rate_cap <= .8:
+            raise ValueError("minimum turn-first pool cap must be in (0,.8]")
 
 
 @dataclass(frozen=True)
@@ -68,6 +71,10 @@ class GuidanceTrackingDiagnostic:
     reference_chassis_states: tuple[tuple[float, float, float], ...]
     minimum_reference_progress_m: float
     rejected_no_progress_reference_count: int
+    minimum_turn_first_rate_cap: float
+    current_guidance_grid_xy: tuple[float, float]
+    initial_chassis_state_grid: tuple[float, float, float]
+    first_reference_translation_delay_seconds: float | None
     nominal_unchanged: bool = True
 
 
@@ -181,6 +188,8 @@ class LaplaceGuidanceTrackingMPC(SafeSAGEUnicycleMPC):
                 (0.4, True),
                 (0.8, True),
             ):
+                if turn_first and cap < self.guidance_config.minimum_turn_first_rate_cap:
+                    continue
                 commands = self._guidance_rollout(
                     initial, goal, speed, cap, turn_first, kwargs
                 )
@@ -267,6 +276,11 @@ class LaplaceGuidanceTrackingMPC(SafeSAGEUnicycleMPC):
             kwargs["target_chassis_states_grid"] = best.chassis_states
             kwargs["initial_command_guess"] = best.commands
             result = worker.plan(initial, nominal, **kwargs)
+        translation_delay = None
+        if best is not None:
+            translating = np.flatnonzero(best.commands[:, 0] > self.config.intervention_tolerance)
+            if len(translating):
+                translation_delay = float(translating[0] * self.config.time_step)
         diagnostic = GuidanceTrackingDiagnostic(
             basis="checked_unicycle_laplace_local_path_reference_ablation",
             active=best is not None,
@@ -290,6 +304,10 @@ class LaplaceGuidanceTrackingMPC(SafeSAGEUnicycleMPC):
             else tuple(tuple(map(float, r)) for r in best.chassis_states),
             minimum_reference_progress_m=self.guidance_config.minimum_reference_progress_m,
             rejected_no_progress_reference_count=rejected_no_progress,
+            minimum_turn_first_rate_cap=self.guidance_config.minimum_turn_first_rate_cap,
+            current_guidance_grid_xy=tuple(map(float, current.sampled_guidance_grid_xy)),
+            initial_chassis_state_grid=tuple(map(float, initial)),
+            first_reference_translation_delay_seconds=translation_delay,
         )
         return GuidanceTrackingMPCResult(
             **{
