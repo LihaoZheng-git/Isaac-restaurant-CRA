@@ -115,3 +115,53 @@ The manifest records the tested helper hash before the documentation commit.
 This resolves the command-only same-flank result in that symmetric fixture;
 it is not enforced side or native human bypass acceptance. A new Owl/.25 m-prior
 trial must repeat 60 stationary frames before its bounded motion diagnostic.
+
+## Native 13 s encounter diagnostic (ff4f55b)
+
+`native-checked-search-13s-v1` passed its 60-frame zero-wheel human/envelope
+gate. All 199 live independent envelope rows passed the approved .25 m centroid
+uncertainty PRIOR (total radius .65 m); worst containment margin .069605 m.
+The original failed .20 m trial remains unchanged. This supports the wider
+prior in this bounded trajectory, not a general human uncertainty calibration.
+
+Overall acceptance **failed**: intentional 20 s duration limit, 1/3 waypoints,
+-.011057 m walking-window left arc, -.005773 m closest-encounter behind
+projection, 1.526290 m goal error and zero simultaneous robot/human kinetic
+updates. Monitored full-sweep clearance .434759 m, stop drift .000222 m and
+minimum analytical CBF margin .124087 do not establish arrival or bypass.
+The 199 fields/148 translating commits took 851.0 navigation wall seconds.
+Selection/provenance/fixed-lambda checks and nine supported moving-kinetic
+rows passed. Keep 67 accepted visual instances across 13,759 assessments,
+54,744 configured factor-prior uses, 208 property-prior uses and zero complete
+four-factor assessments separate from numeric control-policy completeness.
+
+The exact-safe fallback was exercised natively, but a late accepted reference
+alternated +turn/idle/-turn/idle for several intervals. The two-interval activity
+test considered these active despite near-zero net motion. Command auditing
+also retains 287 waiting-for-plan, 29 new-field-invalidated and 28 stale-field
+stop frames. The launcher exited zero despite the full acceptance exception;
+the report, not process exit, establishes failure. No main/long-service merge.
+
+## Rejected longer-window activity screening
+
+An unintegrated follow-up screened net translation/rotation over four- and eight-interval
+rolling windows as well as the original two-interval check. This rejects
+oscillating turn cycles while retaining sustained useful turn-first activity
+and goal stopping. It is solely auxiliary-reference quality; primary safety
+waits, exact constraints, source clocks and the nominal remain unchanged.
+Although 24 focused and 2,276 unit tests passed with Ruff, the left virtual
+route developed a receding-horizon turn reversal: unchanged position at
+6/8/10/12/14 s with alternating short turns. The zero-wheel diagnostic was
+terminated at this observed regression, before its 45 s bound; no completed
+route result is claimed. The patch is retained in
+`outputs/guidance_progress/rejected-cycle-screening.patch` and was removed
+from runtime. Source/tests exactly match ff4f55b again (2,273 passing unit
+tests); the 2,276 result belongs only to that rejected proposal.
+
+The next separately reported encounter brings the human crossing forward
+from 13 to 11 s, giving observed motion earlier in the approach. It uses the
+same restored controller, .25 m centroid PRIOR, .025 pacing, 60-frame
+stationary gate and all original exact/freshness checks. The original full
+90 s bound, 12 s progress watchdog, arrival and stop gates will be used.
+This is a changed encounter fixture, not a matched causal controller comparison
+or a retroactive pass of the original 13 s case.

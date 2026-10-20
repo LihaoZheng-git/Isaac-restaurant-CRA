@@ -1054,3 +1054,18 @@
   replays also passed exact/first-command checks, not wheel acceptance or real
   time. Preserve the earlier failed and same-flank variants. Repeat stationary
   gates before a new native Owl/.25 m-prior search trial; main stays held.
+
+- At ff4f55b the native checked-search diagnostic passed 60 stationary frames
+  and all 199 live .25 m-centroid envelope rows (worst margin .069605 m), but
+  failed overall: 20 s bound, 1/3 waypoints, -.011057 m walking arc, -.005773 m
+  behind projection and zero simultaneous kinetic rows. Preserve .434759 m
+  clearance/.000222 m stop drift, nine supported kinetic rows, 67 accepted
+  instances and zero complete-factor assessments as separate findings. An
+  accepted reference's alternating turns exposed a short-window quality gap.
+  An unintegrated longer-window screening proposal passed unit tests but
+  regressed to receding-horizon turn reversal without virtual translation;
+  preserve its terminated diagnostic/patch and restored ff4f55b runtime. A
+  separately reported 11 s encounter may test earlier observed motion with
+  identical controller/priors/checks and the original full 90 s/arrival bounds.
+  A changed fixture never repairs the 13 s failure or establishes causal
+  controller superiority. Keep main and long-service holds unchanged.
