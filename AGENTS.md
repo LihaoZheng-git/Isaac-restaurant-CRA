@@ -852,3 +852,14 @@
   added no clipping and 67 active references had zero goal progress. Review
   planner/reference progress without relaxing safety, evidence or clocks;
   preserve PR #143 as a draft and main/long-service holds. See its report.
+
+- The authorized guidance-progress correction rejects a zero/insufficient-
+  goal-gain auxiliary reference rather than attracting MPC to a turn-only
+  horizon. Default minimum is .01 m over the existing horizon (or reaching the
+  unchanged reference goal region); explicit zero preserves legacy eligibility.
+  This is a reference-quality rule, never a new executable progress constraint:
+  no useful exact-safe reference falls back to the unchanged primary, which may
+  still turn, wait or detour. Preserve turn-first references with later progress,
+  weight-zero primary identity, all exact safety/freshness gates and factor
+  clocks. Synthetic yaw-mask reproduction and ORACLE virtual arrival are not
+  native acceptance. See docs/guidance_progress.md; retain all failed trials.

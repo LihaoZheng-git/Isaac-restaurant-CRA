@@ -36,6 +36,8 @@ parser.add_argument("--guidance-reference-goal-radius", type=float, default=0.04
                     help="local reference stops inside this radius; actual waypoint acceptance is unchanged")
 parser.add_argument("--guidance-fade-distance", type=float, default=0.5,
                     help="fade local guidance bias toward the active waypoint inside this distance")
+parser.add_argument("--guidance-minimum-reference-progress", type=float, default=.01,
+                    help="minimum checked-reference horizon goal gain in metres; zero reproduces legacy heading-only eligibility")
 parser.add_argument("--human-positive-fragment-extent", action="store_true",
                     help="bare-human recent-coobservation/current-positive-return fragment association; no free-space or factor transfer")
 parser.add_argument("--human-observed-passing-target", action="store_true",
@@ -170,6 +172,8 @@ if not math.isfinite(args.guidance_reference_goal_radius) or args.guidance_refer
     parser.error("guidance reference goal radius must be finite and positive")
 if not math.isfinite(args.guidance_fade_distance) or args.guidance_fade_distance <= args.guidance_reference_goal_radius:
     parser.error("guidance fade distance must exceed the positive reference goal radius")
+if not math.isfinite(args.guidance_minimum_reference_progress) or args.guidance_minimum_reference_progress < 0:
+    parser.error("minimum guidance reference progress must be finite and nonnegative")
 if args.human_observed_passing_target and not (args.motion_aware_passing and args.restaurant_human and not args.human_carry_bowl):
     parser.error("observed-human passing requires the bare-human motion-aware component")
 if (not math.isfinite(args.human_passing_identity_prior_max_age)
@@ -1463,7 +1467,7 @@ def main():
         mpc = LaplaceGuidanceTrackingMPC(mpc.paper_filter, mpc.config,
             guidance_config=LaplaceGuidanceTrackingConfig(args.guidance_tracking_weight, args.guidance_activation_h,
                 math.radians(args.guidance_max_heading_bias_degrees), args.guidance_reference_goal_radius,
-                args.guidance_fade_distance))
+                args.guidance_fade_distance, args.guidance_minimum_reference_progress))
     control = SafeSAGEControlRuntime(mpc=mpc, backup_filter=backup)
     waypoint = WaypointController(
         [Waypoint(*point) for point in ROUTE],
@@ -2112,6 +2116,7 @@ def main():
             "maximum_heading_bias_radians": math.radians(args.guidance_max_heading_bias_degrees),
             "reference_goal_radius_m": args.guidance_reference_goal_radius,
             "guidance_fade_distance_m": args.guidance_fade_distance,
+            "minimum_reference_progress_m": args.guidance_minimum_reference_progress,
             "forward_speed_reference": "maximum forward speed in original obstacle-unaware nominal horizon, clipped to actuator bounds",
             "heading_reference_basis": "active_obstacle_unaware_waypoint; same field frame; request-time waypoint index",
             "scope": "separate checked local guidance-path tracking objective; primary nominal unchanged; not paper equivalence"},

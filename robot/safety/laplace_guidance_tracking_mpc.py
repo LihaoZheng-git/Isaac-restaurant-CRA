@@ -24,6 +24,7 @@ class LaplaceGuidanceTrackingConfig:
     maximum_heading_bias_radians: float = math.pi / 3
     reference_goal_radius_m: float = 0.04
     guidance_fade_distance_m: float = 0.5
+    minimum_reference_progress_m: float = 0.01
 
     def __post_init__(self):
         for name, value in vars(self).items():
@@ -38,6 +39,7 @@ class LaplaceGuidanceTrackingConfig:
             or self.activation_safety_value <= 0
             or self.reference_goal_radius_m <= 0
             or self.guidance_fade_distance_m <= self.reference_goal_radius_m
+            or self.minimum_reference_progress_m < 0
         ):
             raise ValueError(
                 "weight must be nonnegative; activation/goal radius positive; fade distance greater than goal radius"
@@ -64,6 +66,8 @@ class GuidanceTrackingDiagnostic:
     command_tracking_weights: tuple[float, float]
     reference_commands: tuple[tuple[float, float], ...]
     reference_chassis_states: tuple[tuple[float, float, float], ...]
+    minimum_reference_progress_m: float
+    rejected_no_progress_reference_count: int
     nominal_unchanged: bool = True
 
 
@@ -158,6 +162,7 @@ class LaplaceGuidanceTrackingMPC(SafeSAGEUnicycleMPC):
             ** 2
         )
         best, rank, checked = None, 0.0, 0
+        rejected_no_progress = 0
         selected = (None, None)
         progress = None
         reason = "inactive_field_preference"
@@ -206,6 +211,18 @@ class LaplaceGuidanceTrackingMPC(SafeSAGEUnicycleMPC):
                     np.linalg.norm(goal - candidate.chassis_states[-1, :2])
                     <= self.guidance_config.reference_goal_radius_m
                 )
+                # Heading improvement alone is not a useful path reference.
+                # A turn-only horizon with a large tracking weight repeatedly
+                # rewards postponing translation at each replanning step.
+                # This is an auxiliary-reference quality gate, never a new
+                # executable constraint: the primary can still turn or take
+                # a detour when no useful checked reference exists.
+                minimum_gain = min(self.guidance_config.minimum_reference_progress_m,
+                    max(0., distance - self.guidance_config.reference_goal_radius_m))
+                if (self.guidance_config.minimum_reference_progress_m > 0
+                    and not reached and gain + 1e-9 < minimum_gain):
+                    rejected_no_progress += 1
+                    continue
                 if score > rank + 1e-6 or (best is None and reached):
                     best, rank, selected, progress = (
                         candidate,
@@ -271,6 +288,8 @@ class LaplaceGuidanceTrackingMPC(SafeSAGEUnicycleMPC):
             reference_chassis_states=()
             if best is None
             else tuple(tuple(map(float, r)) for r in best.chassis_states),
+            minimum_reference_progress_m=self.guidance_config.minimum_reference_progress_m,
+            rejected_no_progress_reference_count=rejected_no_progress,
         )
         return GuidanceTrackingMPCResult(
             **{

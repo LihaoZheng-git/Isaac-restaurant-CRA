@@ -1,4 +1,4 @@
-from dataclasses import fields
+from dataclasses import fields, replace
 
 import numpy as np
 import pytest
@@ -290,3 +290,45 @@ def test_guidance_blends_to_active_goal_without_changing_physical_field():
     near = m._desired_heading(np.zeros(3), np.array([0.05, 0.0]), (0.0, 1.0))
     assert near == pytest.approx(far * 0.01)
     assert far == pytest.approx(np.pi / 3)
+
+
+def test_turn_only_reference_cannot_displace_a_safe_forward_primary_plan():
+    """Natural numeric reproduction: no monkeypatch or executable-gate changes."""
+    c = replace(config(), horizon_steps=30, time_step=.2)
+    cs, h, g = make_fields(guidance=(0., 1.), safety_value=.3, yaw_slice_count=16,
+        unsafe_yaw_indices=tuple(range(7)) + tuple(range(11, 16)))
+    values = dict(configuration_space=cs, h_full=h, guidance_fields=g)
+    initial = np.zeros(3)
+    legacy = LaplaceGuidanceTrackingMPC(make_filter(), c,
+        guidance_config=LaplaceGuidanceTrackingConfig(weight=100, minimum_reference_progress_m=0))
+    old = legacy.plan(initial, (.05, 0.), nominal_goal_grid_xy=(2., 0.), **values)
+    assert old.success and old.guidance_tracking.active
+    assert old.guidance_tracking.reference_goal_progress_m == pytest.approx(0.)
+    assert old.linear_velocity < .001
+    actual = LaplaceGuidanceTrackingMPC(make_filter(), c,
+        guidance_config=LaplaceGuidanceTrackingConfig(weight=100))
+    result = actual.plan(initial, (.05, 0.), nominal_goal_grid_xy=(2., 0.), **values)
+    primary = SafeSAGEUnicycleMPC(make_filter(), c).plan(initial, (.05, 0.), **values)
+    assert result.success and not result.guidance_tracking.active
+    assert result.guidance_tracking.rejected_no_progress_reference_count >= 1
+    assert result.first_command == pytest.approx(primary.first_command)
+    assert result.linear_velocity == pytest.approx(.05)
+    assert result.minimum_dtcbf_margin >= -c.constraint_tolerance
+
+
+def test_turn_first_with_later_translation_remains_an_eligible_reference():
+    m = LaplaceGuidanceTrackingMPC(make_filter(), replace(config(), horizon_steps=30),
+        guidance_config=LaplaceGuidanceTrackingConfig(weight=100))
+    initial, goal = np.zeros(3), np.array([2., 0.])
+    commands = m._guidance_rollout(initial, goal, .2, .8, True, field())
+    assert commands[0, 0] == 0.
+    states = m._rollout(initial, commands)
+    assert np.linalg.norm(goal) - np.linalg.norm(goal-states[-1, :2]) > .01
+    checked = m._evaluate_trajectory(initial, commands, temporal_safety_derivative=0., **field())
+    assert m._trajectory_is_safe(checked)
+
+
+@pytest.mark.parametrize("value", [-.01, np.nan, np.inf, True])
+def test_invalid_reference_progress_rejected(value):
+    with pytest.raises(ValueError):
+        LaplaceGuidanceTrackingConfig(minimum_reference_progress_m=value)
