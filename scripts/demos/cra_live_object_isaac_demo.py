@@ -28,6 +28,8 @@ parser.add_argument("--motion-aware-passing", action="store_true",
                     help="opt-in current LiDAR crossing-side preference; unchanged CRA scores/lambda/safety checks")
 parser.add_argument("--guidance-tracking-weight", type=float, default=0.0,
                     help="separate checked Laplace local-path MPC ablation; zero preserves primary")
+parser.add_argument("--mpc-horizon-steps", type=int,
+                    help="separate 6..30-step prediction-horizon ablation; omitted preserves the controller default and .2 s command interval")
 parser.add_argument("--guidance-activation-h", type=float, default=1.0,
                     help="ablation reference activates smoothly below this safety-field value")
 parser.add_argument("--guidance-max-heading-bias-degrees", type=float, default=45.0,
@@ -184,6 +186,8 @@ parser.add_argument(
     help="optimizer candidate age cap; every executed horizon still needs fresh exact validation",
 )
 args = parser.parse_args()
+if args.mpc_horizon_steps is not None and not 6 <= args.mpc_horizon_steps <= 30:
+    parser.error("explicit MPC horizon ablation must use 6..30 unchanged .2 s intervals")
 if (not math.isfinite(args.guidance_tracking_weight) or args.guidance_tracking_weight < 0
     or not math.isfinite(args.guidance_activation_h) or args.guidance_activation_h <= 0):
     parser.error("guidance tracking weight must be finite/nonnegative; activation h finite/positive")
@@ -1544,6 +1548,7 @@ def main():
         mpc.paper_filter,
         replace(
             mpc.config,
+            horizon_steps=mpc.config.horizon_steps if args.mpc_horizon_steps is None else args.mpc_horizon_steps,
             safety_substeps_per_interval=substeps,
             integration_substeps_per_interval=substeps,
             enable_progress_seeds=True,
@@ -2294,6 +2299,9 @@ def main():
             "scope": "separate checked local guidance-path tracking objective; primary nominal unchanged; not paper equivalence"},
         "immediate_replan_after_invalidations": args.immediate_replan,
         "verified_command_interval_seconds": mpc.config.time_step,
+        "mpc_prediction_horizon_steps": mpc.config.horizon_steps,
+        "mpc_prediction_horizon_seconds": mpc.config.horizon_steps * mpc.config.time_step,
+        "mpc_prediction_horizon_basis": "explicit separate horizon ablation" if args.mpc_horizon_steps is not None else "legacy controller default",
         "wall_seconds": time.perf_counter() - start_wall,
         "navigation_simulation_seconds": now - start_sim,
         "controller_scope": "circular_velocity_aware_cbf_nominal_omega_no_mpc; shadow_CRA_fields_for_matched_perception" if args.experiment_baseline == "geometric_velocity_cbf" else "checked_guidance_local_path_ablation_with_exact_DTCBF_geometry_and_analytical_CBF" if args.guidance_tracking_weight > 0 else "online_unicycle_MPC_exact_DTCBF_geometry_and_analytical_CBF",

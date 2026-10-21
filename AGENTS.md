@@ -1286,3 +1286,14 @@
   validates bounded continuity/navigation, not proactive guidance or main.
   Keep primary control unchanged; any direct guidance following belongs to the
   separately user-approved objective ablation and retains every exact check.
+
+- Trusted late-crossing replay admits forward commands at a separate six-step
+  (1.2 s) horizon where the legacy 30-step (6 s) local temporal forecast failed
+  or returned rotation only. The direct-tangent objective prototype did not
+  improve those snapshots and is parked on its own unmerged branch. The live
+  demo's optional 6..30 horizon selector preserves the .2 s execution interval,
+  all exact checks, fields/clocks, physical priors, lambda and actuator bounds.
+  Shorter prediction changes anticipation coverage: report it as an explicit
+  parameter ablation, preserve legacy outcomes and use matched horizons across
+  future comparisons. Own stationary/native acceptance remains mandatory. See
+  docs/short_horizon_ablation.md; no curved-bypass or main acceptance yet.
