@@ -1314,3 +1314,13 @@
   timing and preserve missed11/20 s trials. Match event policy and horizon
   across future comparisons; own stationary/arrival/clearance/moving-perception/
   curved/behind gates remain mandatory. See docs/approach_triggered_crossing.md.
+
+- At4481413 the approach/N6 fixture reached3/3 goals in21.566667 s and passed
+  moving-human perception (five supported/four simultaneous), with .061338 m
+  clearance/.002322 m drift,215 fields. Full bypass FAILED (.003206 m arc,
+  +.005886 m behind). Policy qualification began23.0 s but freshSAM eligibility
+  delayed selection to24.1. Exact23.2 RGB replay already has an untruncated
+  .918585 person mask covering all1,786 current parent foreground returns.
+  A separate fresh-detector policy association may address this delay; do not
+  renew physical evidence clocks, fakeSAM acceptance or change priors/geometry
+  to do so. Keep failed metrics and source provenance; native validation pending.

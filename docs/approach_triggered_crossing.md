@@ -42,3 +42,32 @@ checks passed. The new test accepts the standalone8.4 boundary before any native
 asset authoring, rejects out-of-range/invalid values, and preserves the stricter
 continuous-mode limit. These are parameter/component checks, not native encounter
 or moving-perception acceptance.
+
+## Native result at4481413
+
+`outputs/paper_flux/approach-human17-observed-N6-v1` passed the parked gate,
+reached3/3 waypoints in21.566667 s and passed moving-human perception: five
+supported kinetic/four simultaneous rows, median steady world-velocity error
+.176084 m/s and relative-speed error .010334 m/s. It retained215 fields,
+210 while translating, with .061338 m minimum independent clearance, .138637
+CBF margin, .002322 m stop drift and .096269 m endpoint error. No nearby-track
+loss blocked the run. These are bounded observed-occupancy/prior-assisted results.
+
+Full curved/behind passing still FAILED: left excursion .003206 m (required
+>=.20), behind projection +.005886 m (required<=-.10). Preserve this failure;
+arrival and a moving perception gate do not establish the requested bypass.
+
+The source policy audit first qualified moving-human track76 at23.0 s, but
+fresh SAM/person eligibility was absent; selection waited until24.1 s. This
+1.1 s delay is separate from velocity qualification. An exact original-image
+replay at23.2 s (RGB23.283333, frame212) with the already-audited person model
+detected one untruncated confident(.918585) person mask: all1,786 projected
+parent points passed both mask and foreground-depth coverage. The current
+identity was independently maintained by the existing LiDAR/domain guard.
+See `outputs/paper_flux/approach-fresh-person-frame-audit-v1.json`.
+
+This supports investigating a fresh detector-to-current-track policy cue,
+without renewing physical mass/contact/support/plume inputs or pretending a
+fresh SAM assessment occurred. It is not yet an integrated replacement or a
+granted change to physical uncertainty/geometry policy. Legacy source clocks,
+all factor priors and both failed passing metrics remain explicit.
