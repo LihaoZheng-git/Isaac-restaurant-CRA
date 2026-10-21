@@ -136,3 +136,43 @@ The user subsequently explicitly approved the prepared ONE guarded trial with
 observed-only experiment, not the underlying coverage-model limitation. The
 original failed active-circle records and all comparison holds remain. Record
 the frozen source, stationary gate and complete outcome below before any retry.
+
+## Approved observed-only wheel trial: failure preserved
+
+At c3f577d (runtime identical to 4964cf4), the single approved
+`isolated-human17-observed-motion-v1` passed its own 60-frame stationary gate
+and then **failed** at 14.133333 navigation sim seconds on
+`repeated_inference_failure`, with 1/3 waypoints. Minimum independent clearance
+including stopping was .519294 m, stopping drift .000011533 m, minimum analytical
+CBF margin .742242 and endpoint goal error 1.692267 m. It published 101 live
+fields, 100 while translating, in 598.259 navigation wall seconds. Total
+launch/stationary/navigation/shutdown time was 783.695 wall seconds. Launcher
+exit zero did not override the explicit failed acceptance exception.
+
+The log preserves 34 `Another profiling tool is already active` perception
+rejections, five temporal-gap rejections and one .4 s identity-continuity gap.
+The last five consecutive failures triggered the original stop condition.
+No expiry, continuity or safety threshold was relaxed to continue.
+
+An independent zero-wheel CPython 3.12.13 concurrency probe reproduced the
+exact cProfile error when the planner and perception profiling helpers overlap;
+the second wrapped function never ran. This confirms an optional diagnostic
+helper bug. The former 90 s failed trial had profiling disabled, so this finding
+does not explain or repair that historical navigation slowdown. This short
+profiling-contaminated attempt cannot establish whether higher human flux or
+removing circular control occupancy improves bypass.
+
+Human motion diagnostics retained 79 current matched rows, five supported
+moving-kinetic rows and four simultaneous rows; median steady world/relative
+velocity errors were .118267/.007988 m/s. The actual full crossing, selected
+passing policy, .20 m arc and route-arrival checks failed. The unused circle's
+101-field source/containment audit passed as a shadow result only. Keep 46
+all-track visual instances, 7,310 object assessments, 29,081 factor-prior uses,
+97 property-prior uses and zero complete four-factor assessments explicit.
+
+The simulator and wrapper exited; no automatic wheel retry was launched.
+Preserve the full report, launch log, JSONL, stopping sweep and native video.
+The next bounded software step fixes optional profiling without serializing
+workers, changing inputs/outputs, renewing clocks or suppressing real failures.
+Any additional wheel trial needs a new explicit decision because the one-trial
+geometry-hold exception has been consumed.

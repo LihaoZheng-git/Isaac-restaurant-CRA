@@ -1147,3 +1147,12 @@
   to run that bounded experiment, not validation of missing-body coverage,
   repaired historical failures, reverse motion, a wider prior or a main merge.
   Preserve its outcome before considering any additional wheel trial.
+  That c3f577d trial failed at 14.133333 sim seconds on repeated inference
+  failures, 1/3 waypoints, .519294 m monitored clearance, .000011533 m stop
+  drift and 101 fields. Preserve 34 profiling-conflict, five temporal-gap and
+  one .4 s identity-gap rejections, zero complete-factor assessments and all
+  failed arrival/passing gates. An isolated CPython 3.12 concurrent cProfile
+  probe reproduced the instrumentation error; the old 90 s trial had
+  profiling OFF, so this does not explain its slowdown. Fix the optional
+  profiler after the frozen run, retain real exceptions/source clocks, and
+  do not automatically retry wheels under the consumed one-trial exception.
