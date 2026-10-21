@@ -1297,3 +1297,11 @@
   parameter ablation, preserve legacy outcomes and use matched horizons across
   future comparisons. Own stationary/native acceptance remains mandatory. See
   docs/short_horizon_ablation.md; no curved-bypass or main acceptance yet.
+
+- The first 1dffc3f six-step native trial reached 3/3 waypoints in19.616667 s,
+  before the unchanged20 s actor start: 195fields/194translating, .146059 m
+  clearance, .502892 CBF margin and .002337 m drift. Full crossing/bypass FAILED
+  with zero supported moving-human/simultaneous rows. Retain this timing miss;
+  actor motion during braking is not live navigation acceptance. A separate
+  actor-only approach-position fixture must preserve the old case and cannot
+  supply actor truth, desired scores or commands to runtime estimation/control.

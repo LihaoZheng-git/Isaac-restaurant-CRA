@@ -48,3 +48,22 @@ The next trial keeps the same 20 s exogenous crossing, .5 m/s native human,
 prior, reverse motion or relaxed acceptance threshold is introduced. Native
 arrival, stopping, continuous motion and curved/behind passing acceptance are
 pending; offline feasible commands alone do not pass them.
+
+## First native result: encounter timing mismatch
+
+At `1dffc3f`, `outputs/paper_flux/short-horizon-human17-observed-motion-v1`
+passed 60 parked frames and reached all three waypoints in 19.616667 navigation
+seconds, **before the configured 20 s actor start**. It published 195 fields,
+194 while translating, with .146059 m minimum independent clearance including
+stopping, .502892 CBF margin, .002337 m stop drift and .097636 m endpoint error.
+There was no nearby-track-loss stop. Preserve this bounded arrival result.
+
+Overall crossing/bypass acceptance FAILED: zero supported moving-human kinetic
+and zero simultaneous rows during navigation, no valid selected-policy rows,
+-.000006 m walking arc and +.000375 m behind projection. Some actor motion during
+the stopping sweep does not establish a continuously navigating crossing test.
+The fixed 20 s schedule no longer creates the intended encounter for this faster
+closed-loop trajectory. Do not call this a passed bypass or compare the old/new
+timing cases as causal superiority. A separately declared approach-position
+trigger is needed to exercise the crossing before arrival, with the original
+20 s failure preserved and all controller/clearance gates unchanged.
