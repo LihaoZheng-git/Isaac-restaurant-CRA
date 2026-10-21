@@ -176,7 +176,7 @@ class NearbyTrackLossGuard:
                     or not 0 <= proof["camera_timestamp_seconds"] - source_time <= .15 + 1e-9
                     or proof["child_positive_count"] != np.count_nonzero(geometry[1] == child)
                     or proof["parent_positive_count"] != np.count_nonzero(geometry[1] == parent)
-                    or not 3 <= proof["child_positive_count"] <= min(32, .1 * proof["parent_positive_count"])
+                    or not 3 <= proof["child_positive_count"] <= .1 * proof["parent_positive_count"]
                     or not 0 <= proof["maximum_child_to_parent_3d_distance_m"] <= .3
                     or not .9 <= proof["parent_mask_coverage"] <= 1
                     or not .5 <= proof["person_confidence"] <= 1

@@ -19,7 +19,7 @@ def associate_visual_body_fragments(
 
     Scope: separated adult, no carried objects. Every child return must project
     inside the same current mask, be within .30 m in 3D of actual parent returns,
-    and belong to a small (3--32 return, <=10% parent) cluster. The parent must
+    and belong to a small (>=3 returns, <=10% parent) cluster. The parent must
     already have current validated LiDAR identity support and >=90% of its
     projected returns inside one untruncated person mask. No SAM/class/factor
     acceptance is created by this association.
@@ -58,7 +58,7 @@ def associate_visual_body_fragments(
             continue
         tree = cKDTree(points[ids == key])
         for child, track in tracks.items():
-            if child == key or not 3 <= track.point_count <= min(32, .1 * tracks[key].point_count):
+            if child == key or not 3 <= track.point_count <= .1 * tracks[key].point_count:
                 continue
             child_hits = projected_ids == child
             if (np.count_nonzero(child_hits) != track.point_count

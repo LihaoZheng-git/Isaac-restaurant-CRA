@@ -136,3 +136,33 @@ def test_parent_is_enrolled_when_only_child_is_inside_enrollment_radius():
     guard = NearbyTrackLossGuard(NearbyTrackLossConfig(allow_current_visual_part_associations=True))
     observe(guard, tracking, points, [proof])
     assert set(guard.observed) == {1}
+
+
+def dense_fixture(parent_count, child_count):
+    args = list(fixture())
+    tracking, _, projection, _, parents = args
+    parent = np.column_stack((np.ones(parent_count), np.linspace(-.05, .05, parent_count), np.ones(parent_count)))
+    child = np.column_stack((np.full(child_count, 1.2), np.linspace(-.02, .02, child_count), np.ones(child_count)))
+    args[1] = np.vstack((parent, child))
+    tracking.point_track_ids = np.r_[np.full(parent_count, 1), np.full(child_count, 2)]
+    tracking.tracked_obstacles = tuple(replace(t, point_count=parent_count if t.track_id == 1 else child_count)
+                                      for t in tracking.tracked_obstacles)
+    projection.source_indices = np.arange(parent_count + child_count)
+    projection.pixel_indices_xy = np.tile([20, 20], (parent_count + child_count, 1))
+    parents[0]["current_support_count"] = parent_count
+    return args
+
+
+def test_association_does_not_depend_on_absolute_sampling_density():
+    # Identical physical surfaces and support ratio, 20x denser sampling.
+    for parent_count, child_count in [(40, 3), (800, 60), (1006, 69)]:
+        args = dense_fixture(parent_count, child_count)
+        proof, = associate(args)
+        assert proof["child_positive_count"] == child_count
+        guard = NearbyTrackLossGuard(NearbyTrackLossConfig(allow_current_visual_part_associations=True))
+        observe(guard, args[0], args[1], [proof])
+        assert set(guard.observed) == {1}
+
+
+def test_large_relative_component_still_rejected():
+    assert not associate(dense_fixture(1000, 101))

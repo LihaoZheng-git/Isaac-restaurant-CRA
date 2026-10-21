@@ -36,7 +36,9 @@ Requirements:
 - Current verified parent LiDAR support; at least eight projected parent returns,
   >=90% inside one untruncated, confident person mask (confidence >=.5).
 - Every child return projects inside that same mask, no competing person mask;
-  3--32 distinct positive returns and <=10% of the parent's return count.
+  at least three distinct positive returns and <=10% of the parent's return count.
+  The first version also had an absolute 32-return cap; the native crossing
+  exposed that cap's dependence on sampling density (see result below).
 - Every child return is within .30 m in **3D** of actual current parent returns.
   This is a bounded association threshold, not body radius or clearance.
 - Same camera frame/epoch and <=.15 s camera-to-scan age; unique nonnested parent.
@@ -61,7 +63,51 @@ of old proofs. Exact sensor replay (`visual-parts-replay-v1.json`) associates
 losses. It preserves original capture timestamps via `captures.json`; no authored
 human geometry enters the replay.
 
-Native stationary/motion validation of this change is pending. No bypass or
-four-factor fresh-perception pass follows from these component results. Keep
-fixed lambda 1.25, .25 missing-factor priors, forward-only motion, original
-clearance/braking/freshness/exact checks, all previous failures and main holds.
+The initial complete unit run passed 2,324 tests; 104 focused checks passed on
+the final initial source, including its added enrollment/metadata checks. Ruff
+passed. A sandbox temporary-directory setup failure was resolved by using a new
+workspace-local test directory; no dependency/environment upgrade was needed.
+
+## Native result at 60bb923: initial cap failure preserved
+
+`outputs/paper_flux/visual-parts-human17-observed-motion-v1` passed 60 parked
+frames, then stopped on `nearby_track_lost` at 21.1 navigation seconds. It passed
+the earlier failure time and began the crossing, but did not complete the route:
+1/3 waypoints, 209 fields/192 translating, .117140 m independent clearance,
+.705905 minimum CBF margin, .000931 m stop drift. Human motion had two supported
+kinetic/one simultaneous row, below the full gate. Behind projection -.251958 m
+passed alone; walking arc -.012572 m and arrival failed. This is not bypass or
+fresh four-factor acceptance.
+
+The new blocker was 620, source 28.9 s, missing at 29.1 s. Its original 69 returns
+all project into one confident (.863202) fresh person mask; all 69 also pass the
+existing .5 m foreground-depth layer. Parent 71 has 1,006 returns, .999006 mask
+coverage, and the maximum actual child-to-parent 3D distance is .296001 m.
+Thus the child is only 6.86% of parent support and passes every association gate
+except the original absolute 32-return cap. Its original returns still have
+current positive neighbors within .070512 m, owned as unclustered occupancy;
+this is not observed free space or a measured disappearance of the body.
+
+## Density-independent follow-up
+
+Remove only the absolute 32-return cap, keeping >=3 distinct returns, <=10%
+relative size, fresh whole-mask membership, unique current validated parent,
+unchanged .30 m 3D point gap and all clock/ambiguity/occupancy rules. An absolute
+sample count should not change identity when the same physical surface is
+sampled more densely. A component exceeding 10% remains rejected. Controlled
+tests compare the same surfaces at 40/3 and 800/60 samples and the measured
+1,006/69 count case. No mask dilation, wider physical uncertainty, absent-hazard
+assumption or retrospective clearing is introduced. The exact failed original
+record remains separate; a new own stationary/native trial is required.
+
+The follow-up passed all 2,327 unit tests in 81.81 s, 65 focused continuity/
+association tests in 4.79 s and repository Ruff. An exact original-frame replay
+now accepts 620 -> 71 at the original 28.9 s LiDAR / 28.983333 s RGB clocks,
+preserving the parent's original 28.883333 s identity cue. This is a component
+replay result, not natural crossing acceptance. The initial native trial had
+16 accepted part-association rows across six child IDs, 78 all-track visual
+instances, 14,347 object assessments and zero complete four-factor assessments.
+
+No bypass or four-factor fresh-perception pass follows from component results.
+Keep fixed lambda 1.25, .25 factor priors, forward-only motion, original
+clearance/braking/freshness/exact checks, all failed attempts and main holds.

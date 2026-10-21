@@ -1266,3 +1266,13 @@
   identity prior and all unknown physical evidence explicit, reject ambiguity,
   and require its own stationary/native gate. See
   docs/visual_body_fragment_association.md; no arrival/bypass/main acceptance yet.
+
+- The initial 60bb923 visual-part trial passed stationary checks and the old
+  stale-leg failure point, but stopped at 21.1 s on walking fragment 620:
+  1/3 waypoints, .117140 m clearance/.000931 m drift, 209 fields. All 69 original
+  fragment points pass fresh person pixels/foreground depth, <=10% relative size
+  and .30 m 3D support, but exceeded the original absolute 32-return cap. The
+  follow-up removes only that density-dependent cap. Keep the relative size,
+  complete positive/mask/identity/source checks, unchanged raw occupancy/factors
+  and guard behavior for already missing parts. Preserve failed arc/arrival and
+  require a new own stationary/native trial; do not relabel this as a bypass.
