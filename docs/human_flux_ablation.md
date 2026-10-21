@@ -130,3 +130,9 @@ ablation while full body-coverage uncertainty remains unresolved. This would
 not repair or waive the old active-circle failures for their original scope,
 authorize reverse/wider bounds or establish universal safety. Main and
 long-service remain held. No new moving bypass is claimed by this branch.
+
+The user subsequently explicitly approved the prepared ONE guarded trial with
+"Sure, go ahead". That resolves the authorization question for this specific
+observed-only experiment, not the underlying coverage-model limitation. The
+original failed active-circle records and all comparison holds remain. Record
+the frozen source, stationary gate and complete outcome below before any retry.

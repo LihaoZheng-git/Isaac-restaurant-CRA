@@ -1137,3 +1137,13 @@
   commands in MPC, with no analytical changes in matched valid rows; it is
   not a new bypass or an identified global cause. Full units 2,291/Ruff pass;
   no wheel experiment or main merge was run by this step.
+
+- The user's subsequent explicit "Sure, go ahead" approves ONE prepared
+  observed-occupancy simulation crossing under the geometry hold exception.
+  Use human-only b=-1.7, no added circular control occupancy, the unchanged
+  independent .02 m body/footprint clearance abort including braking, strict
+  continuity/freshness/exact checks, its own 60-frame stationary gate, fixed
+  lambda 1.25 and original 90 sim-second bound/.025 pacing. This is permission
+  to run that bounded experiment, not validation of missing-body coverage,
+  repaired historical failures, reverse motion, a wider prior or a main merge.
+  Preserve its outcome before considering any additional wheel trial.
