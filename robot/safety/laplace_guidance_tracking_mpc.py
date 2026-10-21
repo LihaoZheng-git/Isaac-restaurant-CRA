@@ -11,6 +11,7 @@ from numbers import Real
 import numpy as np
 from scipy import sparse
 
+from robot.control.unicycle_model import lookahead_control_matrix
 from robot.safety.safe_sage_cbf_filter import project_weighted_box_halfspace
 from robot.safety.safe_sage_unicycle_mpc import (
     SafeSAGEUnicycleMPC,
@@ -30,6 +31,7 @@ class LaplaceGuidanceTrackingConfig:
     reference_mode: str = "bounded_field_heading"
     reference_search_width: int = 0
     reference_search_maximum_candidates: int = 4800
+    tangent_velocity_fraction: float = 0.0
 
     def __post_init__(self):
         if self.reference_mode not in {
@@ -64,6 +66,11 @@ class LaplaceGuidanceTrackingConfig:
             or self.reference_search_maximum_candidates <= 0
             or self.reference_search_width > 0 and self.reference_mode != "planar_forecast_velocity"):
             raise ValueError("bounded search requires width 0..8, positive integer candidate budget and planar forecast mode")
+        if not 0 <= self.tangent_velocity_fraction <= 1 or (
+            self.tangent_velocity_fraction > 0 and (self.weight <= 0
+            or self.reference_mode != "planar_forecast_velocity")
+        ):
+            raise ValueError("tangent fraction requires 0..1, positive tracking weight and planar forecast mode")
 
 
 @dataclass(frozen=True)
@@ -97,6 +104,9 @@ class GuidanceTrackingDiagnostic:
     reference_projection_fixed_angular_velocity: float | None
     reference_search: dict | None = None
     nominal_unchanged: bool = True
+    tangent_velocity_fraction: float = 0.0
+    tangent_reference_track_ids: tuple[int, ...] = ()
+    reference_projection_basis: str = "legacy_reference_projection"
 
 
 @dataclass(frozen=True)
@@ -354,8 +364,12 @@ class LaplaceGuidanceTrackingMPC(SafeSAGEUnicycleMPC):
             reference_progress_basis="endpoint_displacement" if projected else "waypoint_distance_gain",
             reference_uses_temporal_forecast=self.guidance_config.reference_mode == "planar_forecast_velocity",
             reference_projection_fixed_angular_velocity=0.
-            if self.guidance_config.reference_mode == "planar_forecast_velocity" else None,
+            if self.guidance_config.reference_mode == "planar_forecast_velocity"
+            and self.guidance_config.tangent_velocity_fraction == 0 else None,
             reference_search=search_audit,
+            tangent_velocity_fraction=self.guidance_config.tangent_velocity_fraction,
+            reference_projection_basis="lookahead_unicycle_affine_v_omega"
+            if self.guidance_config.tangent_velocity_fraction > 0 else "legacy_reference_projection",
         )
         return GuidanceTrackingMPCResult(
             **{
@@ -421,7 +435,36 @@ class LaplaceGuidanceTrackingMPC(SafeSAGEUnicycleMPC):
             if constraint.unsafe_reason is not None or forecast_h < -self.config.constraint_tolerance:
                 return None
             c = self.paper_filter.config
-            velocity, feasible = project_weighted_box_halfspace(speed * delta / distance,
+            preferred = speed * delta / distance
+            fraction = self.guidance_config.tangent_velocity_fraction
+            if fraction > 0:
+                # The semantic field is a CBF normal. Its component tangent to
+                # the actual planar safety gradient can also supply a separate
+                # proactive travel preference. Runtime gates this ablation by
+                # a current observed-motion passing selection. This vector has
+                # no execution authority: retain the projection and every
+                # inherited exact unicycle/geometry/analytical check.
+                gradient = np.asarray(constraint.interpolant_gradient[:2])
+                norm = float(np.linalg.norm(gradient))
+                if norm > 1e-9:
+                    normal = gradient / norm
+                    guide = np.asarray(constraint.sampled_guidance_grid_xy)
+                    tangent = guide - (guide @ normal) * normal
+                    tangent_norm = float(np.linalg.norm(tangent))
+                    if tangent_norm > 1e-9:
+                        activation = math.sqrt(float(np.clip(1 - constraint.sampled_safety_value
+                            / self.guidance_config.activation_safety_value, 0, 1)))
+                        fade = min(1., distance / self.guidance_config.guidance_fade_distance_m) ** 2
+                        preferred = preferred + speed * fraction * activation * fade * tangent / tangent_norm
+                        preferred *= min(1., speed / max(1e-9, float(np.linalg.norm(preferred))))
+                magnitude = float(np.linalg.norm(preferred))
+                if magnitude <= 1e-9:
+                    return None
+                # This is only a desired travel vector. The rollout projects
+                # the ACTUALLY REQUESTED (v,omega), including angular coupling,
+                # instead of discarding feasible turns at a fictitious omega=0.
+                return math.atan2(preferred[1], preferred[0]), min(speed, magnitude)
+            velocity, feasible = project_weighted_box_halfspace(preferred,
                 lower_bounds=np.full(2, c.minimum_planar_velocity),
                 upper_bounds=np.full(2, c.maximum_planar_velocity),
                 weights=np.full(2, c.planar_velocity_weight),
@@ -504,5 +547,25 @@ class LaplaceGuidanceTrackingMPC(SafeSAGEUnicycleMPC):
                     min(cap, self.config.maximum_angular_velocity),
                 ),
             )
+            if self.guidance_config.tangent_velocity_fraction > 0:
+                constraint = self.paper_filter.evaluate_constraint(
+                    query_position_grid_xy=safety[:2], query_yaw_radians=float(safety[2]),
+                    configuration_space=field["configuration_space"], h_full=field["h_full"],
+                    guidance_fields=field["guidance_fields"],
+                    temporal_safety_derivative=field.get("temporal_safety_derivative", 0.))
+                forecast_h = constraint.sampled_safety_value + i * self.config.time_step * constraint.scaled_temporal_safety_derivative
+                if constraint.unsafe_reason is not None or forecast_h < -self.config.constraint_tolerance:
+                    return None
+                normal = lookahead_control_matrix(float(safety[2]),
+                    lookahead_distance=self.config.lookahead_distance).T @ np.asarray(constraint.constraint_normal)
+                commands[i], feasible = project_weighted_box_halfspace(commands[i],
+                    lower_bounds=np.array([self.config.minimum_linear_velocity, max(-cap, self.config.minimum_angular_velocity)]),
+                    upper_bounds=np.array([self.config.maximum_linear_velocity, min(cap, self.config.maximum_angular_velocity)]),
+                    weights=np.array([self.paper_filter.config.planar_velocity_weight, self.paper_filter.config.angular_velocity_weight]),
+                    constraint_normal=normal,
+                    constraint_rhs=-self.config.gamma * max(0., forecast_h) - constraint.scaled_temporal_safety_derivative,
+                    numerical_tolerance=self.paper_filter.config.numerical_tolerance)
+                if not feasible:
+                    return None
             state, _, _ = self._interval_dynamics(state, commands[i])
         return commands

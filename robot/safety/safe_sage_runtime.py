@@ -18,7 +18,7 @@ import copy
 import math
 import time
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from numbers import Real
 from typing import Sequence
 
@@ -265,6 +265,7 @@ class SafeSAGERuntimeField:
     temporal_safety_derivative: TemporalSafetyDerivativeInput
     build_wall_seconds: float
     cra_policy_result: CRATrackPolicyResult | None = None
+    motion_passing_reference_track_ids: tuple[int, ...] = ()
 
     def __post_init__(self) -> None:
         frame_id = _nonnegative_integer(
@@ -294,6 +295,13 @@ class SafeSAGERuntimeField:
             )
         if not isinstance(self.tracking_result, ObstacleTrackingResult):
             raise TypeError("tracking_result must be an ObstacleTrackingResult.")
+        reference_ids = tuple(self.motion_passing_reference_track_ids)
+        current_ids = {t.track_id for t in self.tracking_result.tracked_obstacles if t.point_count >= 3}
+        if (any(isinstance(k, bool) or not isinstance(k, int) or k not in current_ids for k in reference_ids)
+            or len(set(reference_ids)) != len(reference_ids)
+            or reference_ids and self.tracking_result.timestamp_seconds != sensor_time):
+            raise ValueError("motion reference requires unique current positive track IDs at the field epoch")
+        object.__setattr__(self, "motion_passing_reference_track_ids", reference_ids)
         if not isinstance(self.label_result, SemanticLabelResult):
             raise TypeError("label_result must be a SemanticLabelResult.")
         if not isinstance(self.pipeline, SafeSAGEFieldPipelineResult):
@@ -1123,20 +1131,25 @@ class SafeSAGEControlRuntime:
         """Run predictive filtering against one accepted field snapshot."""
 
         self._validate_field(field)
+        mpc = self.mpc
+        from robot.safety.laplace_guidance_tracking_mpc import LaplaceGuidanceTrackingMPC
+        reference_ids = getattr(field, "motion_passing_reference_track_ids", ())
+        if (isinstance(mpc, LaplaceGuidanceTrackingMPC)
+            and mpc.guidance_config.tangent_velocity_fraction > 0 and not reference_ids):
+            # Own this request's configuration; never mutate the shared planner
+            # or enable a motion-specific objective from old/absent selection.
+            mpc = LaplaceGuidanceTrackingMPC(mpc.paper_filter, mpc.config,
+                guidance_config=replace(mpc.guidance_config, tangent_velocity_fraction=0.))
         extra = {}
         if nominal_goal_grid_xy is not None:
-            from robot.safety.laplace_guidance_tracking_mpc import (
-                LaplaceGuidanceTrackingMPC,
-            )
-
-            if not isinstance(self.mpc, LaplaceGuidanceTrackingMPC):
+            if not isinstance(mpc, LaplaceGuidanceTrackingMPC):
                 raise ValueError(
                     "nominal goal preference is only available in the explicit guidance ablation"
                 )
             extra["nominal_goal_grid_xy"] = _finite_vector(
                 nominal_goal_grid_xy, size=2, name="nominal_goal_grid_xy"
             )
-        return self.mpc.plan(
+        result = mpc.plan(
             chassis_state_grid,
             nominal_commands,
             initial_command_guess=initial_command_guess,
@@ -1147,6 +1160,10 @@ class SafeSAGEControlRuntime:
             preferred_lateral_direction_grid_y=(preferred_lateral_direction_grid_y),
             **extra,
         )
+        if isinstance(mpc, LaplaceGuidanceTrackingMPC) and hasattr(result, "guidance_tracking"):
+            result = replace(result, guidance_tracking=replace(result.guidance_tracking,
+                tangent_reference_track_ids=reference_ids))
+        return result
 
     def filter_command(
         self,

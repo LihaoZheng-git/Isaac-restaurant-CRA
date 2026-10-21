@@ -679,6 +679,7 @@ def assess_all_objects(worker, packet):
         pipeline,
         temporal,
         time.perf_counter() - started,
+        motion_passing_reference_track_ids=tuple(sorted(sides)) if passing is not None else (),
     )
     # Transaction commit only after the whole multi-obstacle field succeeds.
     worker.tracker, worker.plume, worker.persistent_properties, worker.previous = (
@@ -712,6 +713,7 @@ def assess_all_objects(worker, packet):
         "experiment_baseline": worker.experiment_baseline.value,
         "applied_field_policies": baseline_audit,
         "motion_aware_passing": passing_audit,
+        "motion_passing_reference_track_ids": field.motion_passing_reference_track_ids,
         "human_body_envelope_priors": envelope_audit,
         "current_visual_body_part_associations": visual_part_groups,
         "human_fragment_coverage_prior": fragment_audit,
