@@ -236,6 +236,7 @@ class LiveObjectPerception:
         human_fragment_coverage_config=None,
         human_observed_occupancy_only=False,
         human_boundary_flux=None,
+        human_visual_fragment_association=False,
     ):
         self.segmenter, self.mass_estimator, self.contact_detector = (
             segmenter,
@@ -296,6 +297,12 @@ class LiveObjectPerception:
         if human_observed_occupancy_only and human_fragment_coverage_config is not None:
             raise ValueError("observed-only geometry cannot cover fragments with an unoccupied prior disk")
         self.human_observed_occupancy_only = human_observed_occupancy_only
+        if not isinstance(human_visual_fragment_association, bool) or (
+            human_visual_fragment_association and (not human_observed_occupancy_only
+            or person_detector is None or carried_object_config is not None)
+        ):
+            raise ValueError("visual part association requires observed-only bare-human mode")
+        self.human_visual_fragment_association = human_visual_fragment_association
         from robot.perception.human_fragment_coverage import HumanFragmentCoverage
         if human_fragment_coverage_config is not None and (
             self.human_body_envelope is None or self.experiment_baseline is not CRABaseline.CONTINUOUS_CRA_SAFE_SAGE):

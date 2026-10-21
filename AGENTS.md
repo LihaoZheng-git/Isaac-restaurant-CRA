@@ -1254,3 +1254,15 @@
   trial disables optional concurrent call profiling while retaining wall timers
   and every original gate. See docs/source_ray_diagnostics.md; native source/ray
   validity, original failed results, oracle pose provenance and main holds remain.
+
+- The profiling-off df93d52 trial failed at 19.65 navigation seconds on old
+  lower-leg fragment 369 (17.6 s source), not a profiler collision. Exact RGB/
+  LiDAR replay supports a current positive small-body-part association. The
+  new opt-in requires fresh unambiguous person pixels, whole child projection,
+  3--32 returns <=10% of current parent, <=.30 m actual 3D parent-point gap and
+  current validated parent identity/support. It changes only continuity identity
+  while the child is STILL observed; no stale clearing, occupancy/factor/class
+  transfer, circle geometry or source-clock renewal. Keep the original parent
+  identity prior and all unknown physical evidence explicit, reject ambiguity,
+  and require its own stationary/native gate. See
+  docs/visual_body_fragment_association.md; no arrival/bypass/main acceptance yet.

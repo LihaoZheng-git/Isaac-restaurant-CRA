@@ -515,6 +515,16 @@ def assess_all_objects(worker, packet):
             semantics.append(SemanticObstacle(replace(track, track_id=key,
                 point_count=int(np.count_nonzero(extra_ids == key))), "unknown", 0., HUMAN_ENVELOPE_SOURCE))
     from robot.evaluation.restaurant_baselines import applied_field_policies
+    visual_part_groups = []
+    if getattr(worker, "human_visual_fragment_association", False):
+        from robot.perception.visual_body_fragments import associate_visual_body_fragments
+        visual_part_groups = associate_visual_body_fragments(
+            tracking, packet.obstacle_xyz,
+            project_fisheye_polynomial_points(packet.obstacle_xyz,
+                camera_from_source=packet.camera_from_scan_robot, calibration=worker.calibration),
+            worker.visual_person_frame(packet), envelope_audit,
+            camera_timestamp_seconds=packet.camera_timestamp_seconds,
+            camera_frame_id=packet.camera_frame_id)
     applied_guidance, baseline_audit = applied_field_policies(
         getattr(worker, "experiment_baseline", None), policies, objects, envelope_origins=envelope_origins,
         human_boundary_flux=worker.human_boundary_flux,
@@ -683,6 +693,7 @@ def assess_all_objects(worker, packet):
         "applied_field_policies": baseline_audit,
         "motion_aware_passing": passing_audit,
         "human_body_envelope_priors": envelope_audit,
+        "current_visual_body_part_associations": visual_part_groups,
         "human_fragment_coverage_prior": fragment_audit,
         "object_count": len(objects),
         "objects": [item.diagnostics for item in objects],

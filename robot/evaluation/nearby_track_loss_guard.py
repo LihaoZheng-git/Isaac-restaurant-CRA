@@ -23,6 +23,7 @@ class NearbyTrackLossConfig:
     use_observed_merge_velocity: bool = False
     allow_positive_extent_merges: bool = False
     allow_positive_surface_merges: bool = False
+    allow_current_visual_part_associations: bool = False
     maximum_merge_speed_mps: float = 2.0
     maximum_merge_translation_m: float = 0.25
     maximum_merge_velocity_change_mps: float = 0.3
@@ -33,6 +34,8 @@ class NearbyTrackLossConfig:
             self.use_observed_merge_velocity, bool
         ) or not isinstance(self.allow_positive_extent_merges, bool) or not isinstance(
             self.allow_positive_surface_merges, bool
+        ) or not isinstance(
+            self.allow_current_visual_part_associations, bool
         ):
             raise TypeError("fragment merge opt-in must be boolean")
         if self.allow_positive_extent_merges and not self.allow_observed_fragment_merges:
@@ -45,6 +48,7 @@ class NearbyTrackLossConfig:
                 "use_observed_merge_velocity",
                 "allow_positive_extent_merges",
                 "allow_positive_surface_merges",
+                "allow_current_visual_part_associations",
             }:
                 continue
             if isinstance(value, bool) or not math.isfinite(value) or value <= 0:
@@ -88,6 +92,7 @@ class NearbyTrackLossGuard:
         current_grid_anchor_xy=None,
         current_grid_anchor_yaw=None,
         current_camera_timestamp_seconds=None,
+        current_visual_part_associations=(),
     ):
         if (
             isinstance(source_time, bool)
@@ -158,6 +163,28 @@ class NearbyTrackLossGuard:
             geometry = (xyz, ids)
         if self.config.allow_positive_surface_merges and geometry is None:
             raise ValueError("positive surface association requires aligned current geometry")
+        part_children = set()
+        if current_visual_part_associations:
+            if not self.config.allow_current_visual_part_associations or geometry is None:
+                raise ValueError("current visual parts require explicit opt-in and positive geometry")
+            for proof in current_visual_part_associations:
+                child, parent = proof["child_track_id"], proof["parent_track_id"]
+                if (child == parent or child not in current or parent not in current
+                    or child in part_children
+                    or proof["basis"] != "fresh_person_mask_whole_positive_small_fragment"
+                    or proof["source_timestamp_seconds"] != source_time
+                    or not 0 <= proof["camera_timestamp_seconds"] - source_time <= .15 + 1e-9
+                    or proof["child_positive_count"] != np.count_nonzero(geometry[1] == child)
+                    or proof["parent_positive_count"] != np.count_nonzero(geometry[1] == parent)
+                    or not 3 <= proof["child_positive_count"] <= min(32, .1 * proof["parent_positive_count"])
+                    or not 0 <= proof["maximum_child_to_parent_3d_distance_m"] <= .3
+                    or not .9 <= proof["parent_mask_coverage"] <= 1
+                    or not .5 <= proof["person_confidence"] <= 1
+                    or proof["status"] != "inferred"):
+                    raise ValueError("invalid current positive visual-part proof")
+                part_children.add(child)
+            if any(p["parent_track_id"] in part_children for p in current_visual_part_associations):
+                raise ValueError("visual part associations cannot be nested")
         prior_coverage = {"covered": [], "rejected": []}
         if self.fragment_coverage is not None:
             import copy
@@ -180,6 +207,13 @@ class NearbyTrackLossGuard:
                     prior_coverage["rejected"].append({**proof, "reason": check["reason"]})
             prior_coverage["covered"] = checked
         pending = dict(self.observed)
+        part_parents = {p["parent_track_id"] for p in current_visual_part_associations
+                        if p["child_track_id"] in pending or np.linalg.norm(
+                            current[p["child_track_id"]] - robot) <= self.config.enrollment_distance_m}
+        # Resolve only STILL OBSERVED children with a fresh whole-positive proof.
+        # This cannot clear an already missing fragment or transfer its factors.
+        for child in part_children:
+            pending.pop(child, None)
         coobserved = {
             pair: t
             for pair, t in self.coobserved.items()
@@ -438,8 +472,11 @@ class NearbyTrackLossGuard:
                         }
                     )
         for key, point in current.items():
+            if key in part_children:
+                continue
             if (
                 key in pending
+                or key in part_parents
                 or key in reassociated
                 or np.linalg.norm(point - robot) <= self.config.enrollment_distance_m
             ):
@@ -502,6 +539,7 @@ class NearbyTrackLossGuard:
             "watched_tracks": len(pending),
             "source_timestamp": source_time,
             "observed_fragment_merges": merged,
+            "current_visual_part_associations": list(current_visual_part_associations),
             "positive_extent_route_enabled": self.config.allow_positive_extent_merges,
             "body_prior_coverage_enabled": self.fragment_coverage is not None,
             "prior_covered_missing_tracks": prior_coverage["covered"],
