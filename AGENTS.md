@@ -1192,3 +1192,11 @@
   original 11 s failure; a later separately declared encounter delay is a new
   fixture, not a retroactive pass or causal algorithm improvement. No reverse,
   wider bounds, primary objective change or main acceptance follows.
+
+- The next separately declared observed-only development fixture uses a fixed
+  20 s elapsed-navigation crossing delay, keeping all other 11 s trial
+  arguments, original stationary/arrival/arc/behind/clearance/freshness/exact
+  gates and validated functional source unchanged. It tests encounter timing,
+  never supplies actor state to control or retroactively passes the 11 s case.
+  See docs/observed_crossing_encounter.md; report its measured actual encounter
+  and every failed result separately from algorithm or causal improvements.
