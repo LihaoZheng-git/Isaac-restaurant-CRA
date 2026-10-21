@@ -59,3 +59,28 @@ software contracts, not natural native recovery or a completed bypass.
 The 20 s native fixture, all control/physical policies, fixed lambda 1.25 and
 all independent clearance, freshness, exact MPC/DTCBF/dense geometry, analytical
 CBF, arrival, stopping and passing checks remain. Main/long-service are held.
+
+## Native result at f087533: still failed
+
+`surface-human17-observed-motion-v1` passed 60 stationary frames, then stopped
+at 25.233333 navigation seconds on `nearby_track_lost`: 1/3 waypoints,
+.231092 m minimum independent clearance, .246328 minimum CBF margin and
+.004404 m stop drift. It published 249 fields (201 translating), with 91
+all-track visual instances and zero complete-factor assessments. Human motion
+passed with nine supported kinetic/two simultaneous rows, .156494/.013460 m/s
+median world/relative errors and actual crossing. Full arrival/arc/behind failed.
+
+There were three legacy merge events and **zero new surface-proof events**.
+Passing the former fragment-stop time does not establish natural fragment-617
+recovery. This run instead stopped on old fragment 350, last observed at source
+17.7 s near (27.752845,9.017058), missing for 15.6 s when source 33.3 s brought
+the robot within 1.190842 m. The nearest current positive return was .712571 m
+away. No positive overlap proof could clear it; absence is not observed free
+space. Its original surface history had expired, and no early rejection event
+was saved because the caller logged only merges/stops. Preserve that diagnostic
+gap rather than invent its old 3D shape or declare its location empty.
+
+The run froze source and preserved all guard/exact checks. It establishes neither
+a successful bypass nor a native exercise of the new proof. The next step
+captures exact source packets at first disappearance and checks the same fixture
+with optional call profiling off, leaving wall timers and all control gates on.

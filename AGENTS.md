@@ -1230,3 +1230,16 @@
   Controlled unit fixtures do not establish natural fragment 617 recovery;
   require the next own stationary gate and actual guarded native result. See
   docs/positive_surface_continuity.md; legacy defaults/main holds remain.
+
+- At f087533 the surface-enabled 20 s retry failed nearby_track_lost at
+  25.233333 s, 1/3 waypoints, .231092 m clearance/.004404 m drift and 249 fields.
+  Human motion passed (nine supported kinetic/two simultaneous), but arrival,
+  arc and behind failed. Preserve 91 visual instances/zero complete factors,
+  three legacy merges and ZERO surface-proof events; this is not natural 617
+  recovery. Old fragment 350 (source 17.7 s) blocked after 15.6 s at source
+  33.3 s; nearest current return was .712571 m away. Its original 3D shape and
+  early surface rejections were not archived. Do not infer free space or delete
+  this history by timeout. Capture exact original/current packets at first loss
+  before choosing visibility/association changes. Optional concurrent profiling
+  should be off for the next normal-control diagnostic; retain wall timers and
+  report the instrumentation change separately, never a causal controller fix.
