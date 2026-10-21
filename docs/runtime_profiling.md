@@ -85,3 +85,17 @@ diagnostic interruption from a poorly aligned curved-bypass encounter. It does
 not prove an unfiltered counterfactual safe or establish a causal CRA benefit.
 Preserve the failed arc/behind scores and the original 11 s fixture. A later
 declared crossing delay is a different development scenario, not its repair.
+
+## Additional profiling limitation
+
+A separate zero-wheel probe on the installed CPython 3.12.13 found a function
+executed in another thread inside the worker-triggered cProfile output
+(`outputs/paper_flux/foreign-thread-probe-v1.json`). Native perception-triggered
+files also contain planner calls. The collision correction prevents rejection
+of wrapped work, but does not make cProfile thread-local. These concurrent
+files cannot establish per-worker call attribution or reliable call-tree timing;
+some self/cumulative entries are inconsistent. Preserve them as failed
+instrumentation diagnostics, and use isolated trusted replays for call profiles.
+Outer worker/stage wall timers still measure elapsed time, including contention
+and diagnostic overhead, rather than pure algorithm throughput. Do not use the
+mixed profiles to assert a new perception/planning bottleneck.

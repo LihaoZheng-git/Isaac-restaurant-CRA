@@ -1200,3 +1200,21 @@
   never supplies actor state to control or retroactively passes the 11 s case.
   See docs/observed_crossing_encounter.md; report its measured actual encounter
   and every failed result separately from algorithm or causal improvements.
+
+- The 7313228 20 s observed-only fixture passed stationary checks but stopped
+  at 21.8 s on missing fragment 617 (original 29.6 s, current 29.8 s), with
+  .155888 m independent clearance/.000908 m drift, 1/3 waypoints and 212 fields.
+  Preserve four supported kinetic/one simultaneous row, failed arrival/arc/full
+  crossing and 80 visual instances/zero complete factors. Parent 75 remained
+  current, but both old/advected centroid queries had zero returns within the
+  unchanged .10 m gate. Original fragment surface points were not retained;
+  do not invent their coverage or widen gates to bypass this stop. Stronger
+  whole-observed-surface positive association must preserve original epochs,
+  raw occupancy, ambiguity/continuity gates and legacy behavior, with stationary
+  validation before new wheels. See docs/observed_crossing_encounter.md.
+- A separate CPython 3.12 probe found foreign-thread functions in worker-triggered
+  cProfile outputs. The collision fix prevents rejected work but does not make
+  these profiles thread-local or reliable per-worker call trees. Preserve the
+  mixed artifacts/limits, use isolated trusted replays for call profiling, and
+  retain outer wall timings with overhead/contention scope. See the profiling
+  report; this finding does not alter physical evidence or control acceptance.
