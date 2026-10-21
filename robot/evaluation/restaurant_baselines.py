@@ -7,7 +7,9 @@ low-risk generic object class merely because a mask exists.
 """
 
 import math
+from dataclasses import replace
 from functools import lru_cache
+from numbers import Real
 from pathlib import Path
 
 import numpy as np
@@ -44,9 +46,44 @@ def fixed_class_comparison_policy():
     return policy
 
 
-def applied_field_policies(baseline, policies, objects, *, envelope_origins=None):
+def validate_human_boundary_flux(value):
+    """Explicit bounded control-policy ablation; never a physical estimate."""
+    if value is None:
+        return None
+    if (isinstance(value, (bool, np.bool_)) or not isinstance(value, Real)
+            or not math.isfinite(value) or not -1.7 <= value <= -.5):
+        raise ValueError("human boundary-flux ablation must be finite in [-1.7, -.5]")
+    return float(value)
+
+
+def applied_field_policies(baseline, policies, objects, *, envelope_origins=None,
+                           human_boundary_flux=None, verified_human_identities=(),
+                           sensor_timestamp_seconds=None):
     """Return field guidance and an audit without modifying physical evidence."""
     baseline = validate_baseline(baseline)
+    human_boundary_flux = validate_human_boundary_flux(human_boundary_flux)
+    if human_boundary_flux is not None and baseline is not CRABaseline.CONTINUOUS_CRA_SAFE_SAGE:
+        raise ValueError("human-only flux ablation requires continuous CRA baseline")
+    identities = {}
+    if human_boundary_flux is not None:
+        from robot.perception.human_body_envelope import HUMAN_ENVELOPE_SOURCE
+        for row in verified_human_identities:
+            # Only rows from a successful CURRENT transactional identity update.
+            # Its original age, competitors and support gates ran in the adapter.
+            original = row.get("original_person_camera_timestamp", float("nan"))
+            age = row.get("identity_age_seconds", float("nan"))
+            finite_clock = all(isinstance(t, Real) and not isinstance(t, bool)
+                               and math.isfinite(t) and t >= 0 for t in (original, age))
+            if (sensor_timestamp_seconds is None or not finite_clock
+                    or row.get("lidar_timestamp_seconds") != sensor_timestamp_seconds
+                    or row.get("source") != HUMAN_ENVELOPE_SOURCE
+                    or row.get("status") != "prior"
+                    or row.get("current_support_count", 0) < 3
+                    or row["track_id"] in identities):
+                raise ValueError("human flux requires unique verified current LiDAR identities")
+            if not -1e-9 <= original + age - sensor_timestamp_seconds <= .25 + 1e-9:
+                raise ValueError("human flux identity clock differs from current RGB/LiDAR pair")
+            identities[row["track_id"]] = row
     class_policy = fixed_class_comparison_policy() if baseline is CRABaseline.FIXED_CLASS_SAFE_SAGE else None
     classes = {}
     for item in objects:
@@ -58,12 +95,30 @@ def applied_field_policies(baseline, policies, objects, *, envelope_origins=None
             classes[item.attributes.track_id] = "person"
     guidance, audit = {}, []
     for key, value in policies.items():
-        semantic_class = classes.get((envelope_origins or {}).get(key, key), "unknown")
+        parent = (envelope_origins or {}).get(key, key)
+        semantic_class = classes.get(parent, "unknown")
         parameters = (
             class_policy.parameters_for(semantic_class)
             if baseline is CRABaseline.FIXED_CLASS_SAFE_SAGE
             else value.guidance_parameters
         )
+        override = None
+        if human_boundary_flux is not None and parent in identities:
+            identity = identities[parent]
+            risk = max(parameters.risk, (-human_boundary_flux - .5) / 1.2)
+            parameters = replace(parameters, safety_parameters=replace(
+                parameters.safety_parameters, risk=risk,
+                boundary_flux_magnitude=.5 + 1.2 * risk))
+            override = dict(
+                basis="verified_human_boundary_flux_control_ablation",
+                requested_boundary_flux=human_boundary_flux,
+                identity_basis=identity["identity_basis"],
+                original_person_camera_timestamp=identity["original_person_camera_timestamp"],
+                original_person_camera_frame_id=identity["original_person_camera_frame_id"],
+                identity_age_seconds=identity["identity_age_seconds"],
+                lidar_timestamp_seconds=identity["lidar_timestamp_seconds"],
+                parent_track_id=parent,
+                scope="increase applied field repulsion only; physical CRA and factor clocks unchanged")
         guidance[key] = parameters
         if (not math.isclose(parameters.boundary_flux, -(.5 + 1.2 * parameters.risk), abs_tol=1e-12)
                 or parameters.tangential_strength != 1.25):
@@ -78,6 +133,7 @@ def applied_field_policies(baseline, policies, objects, *, envelope_origins=None
             "boundary_flux": parameters.boundary_flux,
             "lambda": parameters.tangential_strength,
             "field_used_for_control": baseline is not CRABaseline.GEOMETRIC_VELOCITY_CBF,
+            **({"human_flux_ablation": override} if override is not None else {}),
         })
     return guidance, audit
 

@@ -1108,3 +1108,17 @@
   prior containment; the observed-only run does not establish live body
   coverage. Preserve rejected source pairs and the unknown-class b=-1.7 scope.
   No new wheel trial, isolated human-flux override or rate change was integrated.
+
+- The user's subsequent approval authorizes the isolated human-flux and
+  observed-occupancy implementation, retaining the independent body-clearance
+  monitor. The opt-in applied flux may increase only a currently verified
+  human track (and its enabled auxiliary geometry), never all unknown tracks
+  or the stored CRA assessment. Observed-only mode suppresses added circular
+  cells while keeping the existing bounded identity/domain guards and every
+  raw return; the circle's audit is explicitly shadow-only in that mode.
+  Require strict missing-fragment continuity and fresh-only passing selection
+  in all matched variants, fixed lambda 1.25, stationary validation, independent
+  clearance including braking, actual arrival and safe stopping. A shadow
+  containment failure remains reported and never retroactively passes an old
+  active-circle trial. No reverse motion, wider prior, relaxed clock/check,
+  main merge or real-time claim follows. See docs/human_flux_ablation.md.

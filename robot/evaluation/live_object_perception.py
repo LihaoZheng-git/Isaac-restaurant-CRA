@@ -234,6 +234,8 @@ class LiveObjectPerception:
         motion_passing_config=None,
         human_body_envelope_config=None,
         human_fragment_coverage_config=None,
+        human_observed_occupancy_only=False,
+        human_boundary_flux=None,
     ):
         self.segmenter, self.mass_estimator, self.contact_detector = (
             segmenter,
@@ -282,6 +284,18 @@ class LiveObjectPerception:
         ):
             raise ValueError("human envelope requires standalone live person/object-map mode, without static memory")
         self.human_body_envelope = HumanBodyEnvelope(human_body_envelope_config) if human_body_envelope_config is not None else None
+        from robot.evaluation.restaurant_baselines import validate_human_boundary_flux
+        self.human_boundary_flux = validate_human_boundary_flux(human_boundary_flux)
+        if not isinstance(human_observed_occupancy_only, bool):
+            raise ValueError("human observed-occupancy mode must be boolean")
+        if (human_observed_occupancy_only or self.human_boundary_flux is not None) and (
+            self.human_body_envelope is None
+            or self.experiment_baseline is not CRABaseline.CONTINUOUS_CRA_SAFE_SAGE
+        ):
+            raise ValueError("human flux/observed-only ablation requires verified human identity and continuous CRA")
+        if human_observed_occupancy_only and human_fragment_coverage_config is not None:
+            raise ValueError("observed-only geometry cannot cover fragments with an unoccupied prior disk")
+        self.human_observed_occupancy_only = human_observed_occupancy_only
         from robot.perception.human_fragment_coverage import HumanFragmentCoverage
         if human_fragment_coverage_config is not None and (
             self.human_body_envelope is None or self.experiment_baseline is not CRABaseline.CONTINUOUS_CRA_SAFE_SAGE):
@@ -291,6 +305,9 @@ class LiveObjectPerception:
             and motion_passing_config.maximum_identity_prior_selection_age_seconds > 0
             and self.human_body_envelope is None):
             raise ValueError("identity-prior passing requires the current human body-envelope adapter")
+        if (human_observed_occupancy_only and motion_passing_config is not None
+                and motion_passing_config.maximum_identity_prior_selection_age_seconds > 0):
+            raise ValueError("observed-only ablation retains fresh-only passing selection")
         self._person_packet = self._person_frame = None
         from robot.perception.lidar_fall_surfaces import LidarFallSurfaceConfig
 

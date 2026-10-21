@@ -61,6 +61,10 @@ parser.add_argument("--human-body-envelope-radius", type=float,
                     help="opt-in configured body-radius occupancy PRIOR; no actor geometry is read")
 parser.add_argument("--human-envelope-centroid-uncertainty", type=float, default=0.2)
 parser.add_argument("--human-envelope-identity-max-age", type=float, default=30.0)
+parser.add_argument("--human-observed-occupancy-only", action="store_true",
+                    help="separate ablation: retain verified human identity/domain guards but add no circular prior occupancy")
+parser.add_argument("--human-boundary-flux", type=float,
+                    help="separate human-only applied flux ablation in [-1.7,-.5]; computed CRA and all nonhuman policies unchanged")
 parser.add_argument("--human-fragment-coverage-prior", action="store_true",
                     help="opt-in full-region/motion/risk coverage by current verified body envelope; strict observed merges unchanged")
 parser.add_argument("--human-fragment-maximum-point-speed", type=float, default=1.,
@@ -212,6 +216,19 @@ if args.human_body_envelope_radius is not None:
         parser.error(str(exc))
     if not (args.restaurant_human and args.human_mass_prior and args.persistent_object_risk_map) or args.human_carry_bowl or args.static_occupancy_memory_prior:
         parser.error("human envelope requires standalone live human/person-prior object-map mode without static memory")
+from robot.evaluation.restaurant_baselines import validate_human_boundary_flux
+try:
+    validate_human_boundary_flux(args.human_boundary_flux)
+except ValueError as exc:
+    parser.error(str(exc))
+if (args.human_observed_occupancy_only or args.human_boundary_flux is not None) and (
+    args.human_body_envelope_radius is None or args.experiment_baseline != "continuous_cra_safe_sage"
+):
+    parser.error("human-only ablations require verified body-identity configuration and continuous CRA")
+if args.human_observed_occupancy_only and (
+    args.human_fragment_coverage_prior or args.human_passing_identity_prior_max_age > 0
+):
+    parser.error("observed-only ablation requires strict fragment continuity and fresh-only passing selection")
 if args.human_positive_fragment_extent and (args.restaurant_human is None or args.human_carry_bowl):
     parser.error("positive fragment extent requires the bounded bare native-human scenario")
 from robot.perception.human_fragment_coverage import HumanFragmentCoverageConfig
@@ -866,6 +883,8 @@ def main():
         human_body_envelope_config=HumanBodyEnvelopeConfig(body_radius_m=args.human_body_envelope_radius,
             centroid_uncertainty_m=args.human_envelope_centroid_uncertainty,
             maximum_identity_age_seconds=args.human_envelope_identity_max_age) if args.human_body_envelope_radius is not None else None,
+        human_observed_occupancy_only=args.human_observed_occupancy_only,
+        human_boundary_flux=args.human_boundary_flux,
         human_fragment_coverage_config=fragment_coverage_config,
         calibration=calibration,
         class_policy=class_policy,
@@ -1298,9 +1317,14 @@ def main():
                 from robot.evaluation.human_body_envelope_validation import validate_human_body_envelopes
                 envelope_validation = validate_human_body_envelopes(records, human.records,
                     reference_radius_m=human.setup["collision_radius_m"])
+                envelope_validation["used_for_control"] = not args.human_observed_occupancy_only
+                envelope_validation["scope"] = ("shadow audit of an unused circular prior; independent human clearance remains required"
+                    if args.human_observed_occupancy_only else "active body-prior containment acceptance")
                 save_json("stationary-human-envelope-validation.json", envelope_validation)
                 gate["human_body_envelope_checks"] = envelope_validation["checks"]
-                stationary_ready = stationary_ready and envelope_validation["passed"]
+                gate["human_body_envelope_used_for_control"] = not args.human_observed_occupancy_only
+                if not args.human_observed_occupancy_only:
+                    stationary_ready = stationary_ready and envelope_validation["passed"]
             gate["passed"] = stationary_ready = bool(stationary_ready
                 and all(gate["human_component_checks"].values()))
             gate["fixture_gate_scope"] = "fresh visually associated adult mass prior/current motion/contact proxy; potential and thermal priors; wheels still blocked until this gate passes"
@@ -1992,9 +2016,14 @@ def main():
             from robot.evaluation.human_body_envelope_validation import validate_human_body_envelopes
             envelope_validation = validate_human_body_envelopes(live_fields, human.records,
                 reference_radius_m=human.setup["collision_radius_m"])
-            save_json("live-human-envelope-validation.json", envelope_validation)
             human_validation["human_envelope_checks"] = envelope_validation["checks"]
-            completed = completed and envelope_validation["passed"]
+            human_validation["human_envelope_used_for_control"] = not args.human_observed_occupancy_only
+            envelope_validation["used_for_control"] = not args.human_observed_occupancy_only
+            envelope_validation["scope"] = ("shadow audit of an unused circular prior; independent human clearance remains required"
+                if args.human_observed_occupancy_only else "active body-prior containment acceptance")
+            save_json("live-human-envelope-validation.json", envelope_validation)
+            if not args.human_observed_occupancy_only:
+                completed = completed and envelope_validation["passed"]
         save_json("human-navigation-validation.json", human_validation)
         save_json("human-truth-evaluation-only.json", human.records)
         if args.motion_aware_passing:
@@ -2045,6 +2074,12 @@ def main():
         "passed": completed and scene_unchanged and root_unchanged_by_fixture,
         "experiment_baseline": args.experiment_baseline,
         "human_body_contact_prior_config": asdict(perception.human_body_contact_config) if perception.human_body_contact_config is not None else None,
+        "human_control_policy_ablation": {
+            "enabled": args.human_observed_occupancy_only or args.human_boundary_flux is not None,
+            "observed_occupancy_only": args.human_observed_occupancy_only,
+            "requested_boundary_flux": args.human_boundary_flux,
+            "physical_cra_unchanged": True,
+            "scope": "separate geometry/flux ablation; not a primary CRA comparison"},
         "human_body_envelope_config": asdict(perception.human_body_envelope.config) if perception.human_body_envelope is not None else None,
         "human_fragment_coverage_config": asdict(fragment_coverage_config) if fragment_coverage_config is not None else None,
         "human_navigation_validation": human_validation,

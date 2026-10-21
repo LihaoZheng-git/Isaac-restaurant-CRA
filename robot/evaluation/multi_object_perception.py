@@ -495,10 +495,15 @@ def assess_all_objects(worker, packet):
         envelope_audit = envelope_memory.update(tracking,
             fresh_person_selection_evidence(objects, packet.camera_timestamp_seconds, packet.camera_frame_id),
             camera_timestamp_seconds=packet.camera_timestamp_seconds)
-        extra_points, extra_ids = envelope_grid_points(envelope_audit,
+        observed_only = worker.human_observed_occupancy_only
+        for item in envelope_audit:
+            item["applied_to_occupancy"] = not observed_only
+        extra_points, extra_ids = envelope_grid_points([] if observed_only else envelope_audit,
             grid_config=worker.grid_config, anchor_xy=worker.anchor, anchor_yaw=worker.anchor_yaw)
         points, point_ids = np.concatenate((points, extra_points)), np.concatenate((point_ids, extra_ids))
         for item in envelope_audit:
+            if observed_only:
+                continue
             key, original = item["envelope_track_id"], item["track_id"]
             envelope_origins[key] = original
             unknown = adapt_physical_factors(PhysicalAttributes.unknown(track_id=key,
@@ -512,6 +517,9 @@ def assess_all_objects(worker, packet):
     from robot.evaluation.restaurant_baselines import applied_field_policies
     applied_guidance, baseline_audit = applied_field_policies(
         getattr(worker, "experiment_baseline", None), policies, objects, envelope_origins=envelope_origins,
+        human_boundary_flux=worker.human_boundary_flux,
+        verified_human_identities=envelope_audit,
+        sensor_timestamp_seconds=packet.sensor_timestamp_seconds,
     )
     fragment_audit = None
     if fragment_memory is not None:
@@ -714,6 +722,11 @@ def assess_all_objects(worker, packet):
             {"timestamp": item[0], "sensor_frame_id": item[1]} for item in retained
         ],
         "fixed_lambda": 1.25,
+        "human_control_ablation": {
+            "observed_occupancy_only": worker.human_observed_occupancy_only,
+            "requested_boundary_flux": worker.human_boundary_flux,
+            "identity_scope": "unchanged bounded visual identity with current positive LiDAR; original factor clocks retained",
+        },
         "merge_equal_policy_regions": True,
         "temporal_gap_recovery": recovery,
         "occupancy_retention_scope": worker.static_scope,
