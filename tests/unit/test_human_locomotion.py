@@ -12,7 +12,7 @@ from robot.scene.restaurant_human_motion import (
 )
 
 
-@pytest.mark.parametrize("trigger", [6.7, 7.9, float("nan")])
+@pytest.mark.parametrize("trigger", [6.7, 8.5, float("nan")])
 def test_native_crossing_rejects_out_of_scope_trigger_before_authoring(trigger):
     from robot.scene.restaurant_human_episode import RestaurantHumanEpisode
 
@@ -20,6 +20,29 @@ def test_native_crossing_rejects_out_of_scope_trigger_before_authoring(trigger):
         RestaurantHumanEpisode(
             None, mode="crossing", output=None, trigger_robot_y=trigger
         )
+
+
+def test_standalone_crossing_accepts_approach_line_before_asset_authoring(monkeypatch):
+    from robot.scene import restaurant_human_episode as module
+
+    class ReachedAuthoring(Exception):
+        pass
+
+    def stop_authoring(*args, **kwargs):
+        raise ReachedAuthoring
+
+    monkeypatch.setattr(module, "prepare_native_restaurant_human", stop_authoring)
+    with pytest.raises(ReachedAuthoring):
+        module.RestaurantHumanEpisode(Usd.Stage.CreateInMemory(), mode="crossing",
+            output=None, trigger_robot_y=8.4)
+
+
+def test_continuous_crossing_keeps_legacy_trigger_scope():
+    from robot.scene.restaurant_human_episode import RestaurantHumanEpisode
+
+    with pytest.raises(ValueError, match="crossing trigger"):
+        RestaurantHumanEpisode(None, mode="continuous-crossing", speed_mps=.5,
+            output=None, trigger_robot_y=8.)
 
 
 @pytest.mark.parametrize("speed", [0.49, 1.01, float("nan")])

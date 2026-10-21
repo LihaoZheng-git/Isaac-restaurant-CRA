@@ -1305,3 +1305,12 @@
   actor motion during braking is not live navigation acceptance. A separate
   actor-only approach-position fixture must preserve the old case and cannot
   supply actor truth, desired scores or commands to runtime estimation/control.
+
+- The separate approach fixture starts the standalone bare human when the
+  robot reaches world y8.4, using the existing actor-only position trigger
+  without a time delay. Default7.8 and continuous/carried-mode max7.8 stay
+  unchanged; standalone range is6.8..8.4. This is scenario authoring, never
+  physical evidence/control input or a wider geometry prior. Record actual
+  timing and preserve missed11/20 s trials. Match event policy and horizon
+  across future comparisons; own stationary/arrival/clearance/moving-perception/
+  curved/behind gates remain mandatory. See docs/approach_triggered_crossing.md.

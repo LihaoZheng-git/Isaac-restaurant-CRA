@@ -92,7 +92,7 @@ parser.add_argument("--human-camera-raise-metres", type=float, default=0.,
 parser.add_argument("--rgb-camera", choices=("front_hawk_left", "front_hawk_right", "front_owl"),
                     default="front_hawk_left", help="one existing authored camera per trial; actual lens/extrinsics are read, no multi-camera fusion")
 parser.add_argument("--human-crossing-trigger-y", type=float, default=7.8,
-                    help="explicit native actor-only trigger, world robot y 6.8..7.8; not a control/evidence input")
+                    help="actor-only world-y trigger: 6.8..8.4 for standalone crossing, legacy max7.8 otherwise; not control/evidence input")
 parser.add_argument("--human-crossing-delay-seconds", type=float,
                     help="opt-in exogenous actor start after navigation begins; shared timing across baselines, independent of robot progress")
 parser.add_argument("--human-crossing-direction", choices=("right-to-left", "left-to-right"), default="right-to-left",
@@ -282,10 +282,11 @@ if not .5 <= args.human_walking_speed <= 1. or (
     args.human_walking_speed != .7 and args.restaurant_human not in {"crossing", "continuous-crossing"}
 ):
     parser.error("coupled walking-speed override requires crossing mode, .5..1 m/s")
-if not 6.8 <= args.human_crossing_trigger_y <= 7.8 or (
+maximum_crossing_trigger_y = 8.4 if args.restaurant_human == "crossing" and not args.human_carry_bowl else 7.8
+if not 6.8 <= args.human_crossing_trigger_y <= maximum_crossing_trigger_y or (
     args.human_crossing_trigger_y != 7.8 and args.restaurant_human not in {"crossing", "continuous-crossing"}
 ):
-    parser.error("crossing trigger override requires crossing mode, world y=6.8..7.8")
+    parser.error(f"crossing trigger override requires crossing mode, world y=6.8..{maximum_crossing_trigger_y}")
 if args.restaurant_human == "continuous-crossing" and args.human_walking_speed != .5:
     parser.error("bounded continuous crossing currently requires .5 m/s")
 if args.human_carry_bowl and args.restaurant_human != "continuous-crossing":

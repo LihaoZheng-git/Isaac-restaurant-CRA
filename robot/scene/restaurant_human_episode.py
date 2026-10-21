@@ -45,8 +45,9 @@ class RestaurantHumanEpisode:
         self.carry_facing_crossing = carry_facing_crossing
         if mode == "continuous-crossing" and speed_mps != 0.5:
             raise ValueError("bounded continuous circuit requires .5 m/s")
-        if not math.isfinite(trigger_robot_y) or not 6.8 <= trigger_robot_y <= 7.8:
-            raise ValueError("bounded native crossing trigger must be y=6.8..7.8")
+        maximum_trigger_y = 8.4 if mode == "crossing" and not carry_bowl else 7.8
+        if not math.isfinite(trigger_robot_y) or not 6.8 <= trigger_robot_y <= maximum_trigger_y:
+            raise ValueError(f"bounded native crossing trigger must be y=6.8..{maximum_trigger_y}")
         self.trigger_robot_y = trigger_robot_y
         if crossing_delay_seconds is not None and (
             mode == "standing" or not math.isfinite(crossing_delay_seconds)
