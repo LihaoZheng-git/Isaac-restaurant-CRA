@@ -1122,3 +1122,18 @@
   containment failure remains reported and never retroactively passes an old
   active-circle trial. No reverse motion, wider prior, relaxed clock/check,
   main merge or real-time claim follows. See docs/human_flux_ablation.md.
+  Automatic approval review rejected the combined launcher before execution
+  because it would automatically start wheels under the standing geometry
+  hold. The permitted alternative runs three stationary components only.
+  The prepared observed-only motion invocation is reviewable, unexecuted and
+  requires an explicit decision on conducting the bounded geometry ablation
+  while body-coverage uncertainty remains; do not silently lift that hold.
+  At 4964cf4 all three isolated stationary variants passed 60 frames with zero
+  wheels: computed CRA/circle, human-only -1.7/circle and human-only -1.7/
+  observed occupancy. Nonhuman policies and lambda stayed unchanged; observed
+  mode added no circle cells. Keep 79/84/79 all-track accepted instances and
+  zero complete-factor assessments separate from perception completeness.
+  The old-run exact source-time command audit locates late zero forward
+  commands in MPC, with no analytical changes in matched valid rows; it is
+  not a new bypass or an identified global cause. Full units 2,291/Ruff pass;
+  no wheel experiment or main merge was run by this step.

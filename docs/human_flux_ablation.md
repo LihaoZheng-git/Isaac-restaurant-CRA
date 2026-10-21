@@ -73,4 +73,60 @@ tests passed in 5.08 s and repository Ruff passed. The native source must be
 frozen after validation and all stationary
 components must finish before the bounded observed-only motion trial.
 
-Native results will be recorded below; unit tests do not establish bypass.
+## Completed stationary results at 4964cf4
+
+All three independent native components passed 60 stationary frames with zero
+nonzero wheel commands and no traceback. Their human association, current
+motion and contact-proxy/declared-body-prior checks passed. Both active-circle
+containment audits passed; the observed-only shadow audit also passed but is
+explicitly not used as control-geometry acceptance.
+
+| Variant | All-track accepted instances | Added-circle rows | Human override rows | Complete four-factor assessments |
+| --- | ---: | ---: | ---: | ---: |
+| Computed CRA, active circle | 79 | 23 | 0 | 0 |
+| Human-only b -1.7, active circle | 84 | 35 | 70 | 0 |
+| Human-only b -1.7, observed occupancy | 79 | 0 | 23 | 0 |
+
+Override rows include both parent and auxiliary circle policies when enabled;
+they are not counts of unique humans. Of the 70/23 overrides, 22/4 used retained
+original visual identity with current positive LiDAR. Computed human CRA stayed
+.557431--.683594 / .557440--.683594 while applied human field risk was 1.
+Every audited nonhuman field policy equaled its computed CRA, and every lambda
+was 1.25. All runs retained rejected future/stale RGB/LiDAR pairs, original
+identity/factor source epochs and unavailable inputs. The declared mass/contact
+and missing-factor priors are not complete visual physical estimation.
+
+Outputs are in `outputs/paper_flux/isolated-{cra-circle,human17-circle,human17-observed}-stationary-v1`.
+Compact audits are `isolated-stationary-v1.json` and
+`isolated-stationary-audit-v1.json`. These are independent stationary inputs,
+not bit-identical replay or a moving bypass/causal navigation comparison.
+The measured launch-to-shutdown times were 167.477/167.172/167.232 wall seconds;
+they do not measure navigation throughput or prove a timing improvement.
+
+The actual recorded-progress figure is
+`outputs/paper_flux/recorded-progress-v1.png`. It visualizes the old failed
+active-circle trial only; source-time-matched MPC and post-CBF commands overlap.
+It must not be presented as a new envelope-free motion result.
+
+## Motion hold and review-ready next trial
+
+Automatic approval review rejected the proposed combined stationary/motion
+launcher **before execution** because its automatic wheel trial would conflict
+with the standing geometry-failure hold. The safe alternative runs only the
+three zero-wheel components and cannot automatically promote to motion. The
+rejected launcher was not used through a workaround or indirect execution.
+
+`outputs/paper_flux/review-ready-observed-motion-v1.json` contains the concrete
+proposed invocation: one observed-only human crossing, b -1.7 on verified human
+tracks only, unchanged guidance ablation/budgets/priors, lambda 1.25, its own
+60-frame stationary gate, strict missing-fragment continuity, original exact
+and freshness checks, independent .02 m clearance abort including braking,
+90 sim seconds and actual three-waypoint arrival/stopping/passing evaluation.
+It was prepared without launching any simulator or wheels. The .025 pacing
+remains explicit; source/candidate ages are not renewed to improve progress.
+
+An explicit decision is needed to conduct that bounded observed-occupancy
+ablation while full body-coverage uncertainty remains unresolved. This would
+not repair or waive the old active-circle failures for their original scope,
+authorize reverse/wider bounds or establish universal safety. Main and
+long-service remain held. No new moving bypass is claimed by this branch.
