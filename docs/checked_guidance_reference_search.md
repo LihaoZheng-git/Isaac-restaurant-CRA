@@ -165,3 +165,71 @@ stationary gate and all original exact/freshness checks. The original full
 90 s bound, 12 s progress watchdog, arrival and stop gates will be used.
 This is a changed encounter fixture, not a matched causal controller comparison
 or a retroactive pass of the original 13 s case.
+
+## Full 11 s encounter: wider prior is not fully accepted
+
+At 95ea935 (runtime unchanged from ff4f55b), the separate
+`native-checked-search-11s-v1` again passed 60 stationary frames, but the full
+90 s run **failed**: 2/3 waypoints, .673009 m final goal error, .552181 m
+monitored clearance, .000829 m stop drift and .011082 minimum analytical CBF
+margin. It recorded 899 fields/336 translating commits in 3,824.3 navigation
+wall seconds. Positive clearance/stopping do not establish arrival or real time.
+
+Critically, **15 of 899 independent envelope rows failed the approved .25 m
+centroid bound**. Worst center error .255864 m exceeds it by .005864 m.
+Failures occurred at original sensor epochs 96.1--98.0 s on track 76, late
+in the trajectory. All prior/source-provenance checks passed; this is a
+coverage-model failure, not permission to renew clocks or discard bad rows.
+The shorter 199-row passing trial remains a separate bounded result. No
+further wheels until geometry is resolved and validated again. Do not silently
+increase the bound or report the .25 m policy as accepted for the full case.
+
+The human-motion component passed eleven supported moving-kinetic rows and
+two simultaneous rows (world/relative median errors .124976/.007370 m/s).
+The generic scripted-fixture counter stays zero because `--moving-actor` was
+disabled; native-human acceptance uses `human-navigation-validation.json`.
+Passing/arc still failed: -.002323 m walking arc, -.019524 m closest-encounter
+behind projection. This later route-recovery motion is not proactive bypass.
+There were 125 accepted visual instances across 60,467 object assessments,
+241,081 configured factor-prior uses, 624 property-prior uses and zero complete
+four-factor assessments. Scene hashes, factor priors and lambda 1.25 stayed
+unchanged. The launcher again exited zero despite the acceptance exception.
+
+An actual failed-view capture is `sensor-snapshots/005713.png` / `.npz`,
+LiDAR epoch 96.1 s and camera read time 96.183333 s. The visible actor is
+strongly leaned; audit both the point-derived center and actor-reference/pose
+contract before calling this solely a center-estimator defect. That snapshot
+is one failed row, not a substitute for the uncaptured worst epoch 97.5 s.
+
+## Read-only geometry and escape investigations
+
+Recorded-field sampling with the full unchanged MPC position/yaw padding
+found no free center yaw for the middle waypoint at epoch 35.2 s, but 190 of
+16,448 sampled poses in its .10 m arrival region were free. The final goal at
+58.3 s had seven free center yaws and 2,172 free arrival samples. These are
+geometry snapshots, not reachability proofs, temporal feasibility or a causal
+explanation of every stall. Preserve the narrow-goal finding and the eventual
+middle-waypoint arrival; neither justifies loosening arrival/geometry gates.
+
+The zero-wheel native drive-frame inventory found axle midpoint planar offset
+about 3e-9 m from `chassis_link` and wheel spacing .413199991 m versus configured
+.4132 m. Timeline stayed stopped. This excludes a large planar frame-offset
+or wheel-spacing mismatch in the authored asset; actuator dynamics remain
+uncalibrated. See `outputs/guidance_progress/native-drive-frame-inventory.json`.
+
+An **unintegrated offline** escape probe preserved source frame 4681/epoch
+78.9 s and its SHA-verified payload. In a limited matched candidate family,
+none of 24 forward-only profiles passed; two of 144 reverse-permitted profiles
+passed all exact geometry/DT and mapped guidance checks. The best backs at
+.1 m/s for 2 s, turns at .8 rad/s for 2 s, then advances, giving .195869 m
+goal-distance gain and .005860 minimum DT margin over the full horizon.
+This is neither an exhaustive impossibility result nor a native controller
+success. No reverse code/wheel behavior was integrated. Any reverse ablation
+changes actuator-domain/comparison scope, remains a pending explicit user
+choice, and must wait for geometry acceptance first.
+
+The separate offline .30 m bound audit covers these same recorded centers with
+.044136 m minimum margin (total radius .70 m); it is not held-out validation,
+a new control field or approval to apply it. The requested research choice is
+to improve/audit the center/pose model first (recommended) or separately test
+a wider .30 m prior. Keep PR #148 draft and main/long-service held.

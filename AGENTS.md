@@ -1069,3 +1069,21 @@
   identical controller/priors/checks and the original full 90 s/arrival bounds.
   A changed fixture never repairs the 13 s failure or establishes causal
   controller superiority. Keep main and long-service holds unchanged.
+
+- The 95ea935 full 11 s encounter passed stationary checks but failed at the
+  original 90 s bound: 2/3 waypoints, .673009 m goal error, .552181 m clearance
+  and .000829 m stop drift. Fifteen of 899 live envelope rows exceeded the
+  approved .25 m centroid prior (max error .255864 m); the earlier 199-row
+  pass is not full-case acceptance. Preserve all failures/source clocks and
+  HOLD further wheels pending resolved/revalidated geometry. A failed-view
+  raw snapshot at 96.1 s shows a strongly leaned actor; audit center/pose
+  contracts, not just scalar bounds. Human-motion component acceptance (11
+  supported kinetic/two simultaneous rows) and 125 accepted instances/zero
+  complete-factor assessments are separate from failed arrival/arc/coverage.
+  A zero-wheel drive-axis audit matched chassis planar origin/wheel spacing,
+  not actuator dynamics. Offline reverse/turn profiles are UNINTEGRATED and
+  do not grant reverse motion; its actuator-domain research question is pending
+  and subordinate to geometry. The separate current geometry question is
+  center/pose-model improvement (recommended) versus an explicitly wider .30 m
+  prior; neither answer has been received. Never silently widen priors, relax
+  checks, remove failed phases or treat these proposals as authorization.
