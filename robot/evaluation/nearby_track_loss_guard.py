@@ -22,6 +22,7 @@ class NearbyTrackLossConfig:
     minimum_positive_merge_returns: int = 3
     use_observed_merge_velocity: bool = False
     allow_positive_extent_merges: bool = False
+    allow_positive_surface_merges: bool = False
     maximum_merge_speed_mps: float = 2.0
     maximum_merge_translation_m: float = 0.25
     maximum_merge_velocity_change_mps: float = 0.3
@@ -30,15 +31,20 @@ class NearbyTrackLossConfig:
     def __post_init__(self):
         if not isinstance(self.allow_observed_fragment_merges, bool) or not isinstance(
             self.use_observed_merge_velocity, bool
-        ) or not isinstance(self.allow_positive_extent_merges, bool):
+        ) or not isinstance(self.allow_positive_extent_merges, bool) or not isinstance(
+            self.allow_positive_surface_merges, bool
+        ):
             raise TypeError("fragment merge opt-in must be boolean")
         if self.allow_positive_extent_merges and not self.allow_observed_fragment_merges:
             raise ValueError("positive extent association requires fragment merges")
+        if self.allow_positive_surface_merges and not self.allow_positive_extent_merges:
+            raise ValueError("positive surface association requires positive extent merges")
         for name, value in vars(self).items():
             if name in {
                 "allow_observed_fragment_merges",
                 "use_observed_merge_velocity",
                 "allow_positive_extent_merges",
+                "allow_positive_surface_merges",
             }:
                 continue
             if isinstance(value, bool) or not math.isfinite(value) or value <= 0:
@@ -63,6 +69,7 @@ class NearbyTrackLossGuard:
         self.last_source_time = None
         self.velocities = {}
         self.coobserved = {}
+        self.positive_surfaces = {}
         from robot.perception.human_fragment_coverage import HumanFragmentCoverage
         self.fragment_coverage = HumanFragmentCoverage(fragment_coverage_config) if fragment_coverage_config is not None else None
 
@@ -149,6 +156,8 @@ class NearbyTrackLossGuard:
                     "fragment merge requires aligned current positive sensor geometry"
                 )
             geometry = (xyz, ids)
+        if self.config.allow_positive_surface_merges and geometry is None:
+            raise ValueError("positive surface association requires aligned current geometry")
         prior_coverage = {"covered": [], "rejected": []}
         if self.fragment_coverage is not None:
             import copy
@@ -217,8 +226,10 @@ class NearbyTrackLossGuard:
         # latter is an explicit bounded kinematic association hypothesis.
         # No free-space, old body box, factor or semantic identity transfers.
         merged = []
+        surface_proofs, surface_rejections = {}, []
         if self.config.allow_observed_fragment_merges and geometry is not None:
             xyz, ids = geometry
+            surface_tree = None
 
             def stable_current_velocity(old_time, new):
                 dt = source_time - old_time
@@ -239,7 +250,8 @@ class NearbyTrackLossGuard:
                     <= self.config.maximum_merge_translation_m
                 )
 
-            def match_query(old_point, old_time, new, *, extent_pair=False):
+            def match_query(old_key, old_point, old_time, new, *, extent_pair=False):
+                nonlocal surface_tree
                 queries = [(old_point, "old_centroid_positive_returns", np.zeros(2))]
                 dt = source_time - old_time
                 v = velocities[new]
@@ -277,6 +289,61 @@ class NearbyTrackLossGuard:
                     ]
                     if supported == [new]:
                         return q, basis, shift
+                if self.config.allow_positive_surface_merges and extent_pair:
+                    original = self.positive_surfaces.get(old_key)
+                    reason = None
+                    maximum_distance = None
+                    if original is None or original[1] != old_time:
+                        reason = "no_original_surface_at_fragment_epoch"
+                    elif np.linalg.norm(current[new] - old_point) > self.config.reassociation_distance_m:
+                        reason = "original_centroid_distance_gate"
+                    else:
+                        from scipy.spatial import cKDTree
+
+                        old_surface = original[0]
+                        minimum = self.config.minimum_positive_merge_returns
+                        if len(np.unique(old_surface, axis=0)) < minimum:
+                            reason = "too_few_distinct_original_returns"
+                        else:
+                            parent_points = xyz[ids == new]
+                            distances, _ = cKDTree(parent_points).query(old_surface)
+                            maximum_distance = float(np.max(distances))
+                            if np.any(distances > self.config.positive_merge_distance_m):
+                                reason = "original_surface_not_fully_observed_now"
+                            else:
+                                if surface_tree is None:
+                                    surface_tree = cKDTree(xyz)
+                                neighborhoods = surface_tree.query_ball_point(
+                                    old_surface, self.config.positive_merge_distance_m
+                                )
+                                indices = np.unique(np.concatenate(neighborhoods)).astype(int)
+                                near_ids = ids[indices]
+                                supported = [int(k) for k in np.unique(near_ids)
+                                    if np.count_nonzero(near_ids == k) >= minimum]
+                                covering = xyz[indices[near_ids == new]]
+                                if supported != [new]:
+                                    reason = "ambiguous_surface_ownership"
+                                elif len(np.unique(covering, axis=0)) < minimum:
+                                    reason = "too_few_distinct_current_returns"
+                                else:
+                                    surface_proofs[old_key, new] = {
+                                        "original_surface_source_time": old_time,
+                                        "current_surface_source_time": source_time,
+                                        "original_positive_return_count": len(old_surface),
+                                        "current_covering_return_count": len(covering),
+                                        "maximum_original_to_current_distance_m": maximum_distance,
+                                        "all_original_positive_returns_covered": True,
+                                        "original_surface_points_world_xy": old_surface.tolist(),
+                                        "current_covering_points_world_xy": covering.tolist(),
+                                        "scope": "whole measured planar positive-surface association; no hidden-body coverage, motion/factor transfer or new occupancy",
+                                    }
+                                    return old_point, "coobserved_whole_positive_surface_returns", np.zeros(2)
+                    surface_rejections.append({"lost_track_id": int(old_key),
+                        "current_track_id": int(new), "original_source_time": old_time,
+                        "current_source_time": source_time, "reason": reason,
+                        "original_surface_points_world_xy": None
+                        if original is None else original[0].tolist(),
+                        "maximum_original_to_current_distance_m": maximum_distance})
                 return None
 
             proposals = {}
@@ -310,7 +377,7 @@ class NearbyTrackLossGuard:
                         and new != key
                         and (recent_parent or retained_pair or extent_pair)
                     ):
-                        found = match_query(old_point, old_time, new, extent_pair=extent_pair)
+                        found = match_query(key, old_point, old_time, new, extent_pair=extent_pair)
                         if found is not None:
                             choices.append(new)
                             matches[key, new] = found
@@ -318,6 +385,8 @@ class NearbyTrackLossGuard:
                                 pair_time,
                                 "recent_original_coobservation_positive_extent"
                                 if found[1] == "coobserved_cluster_extent_positive_returns"
+                                else "recent_original_coobservation_positive_surface"
+                                if found[1] == "coobserved_whole_positive_surface_returns"
                                 else "recent_parent_epoch"
                                 if recent_parent
                                 else "retained_original_coobservation",
@@ -364,6 +433,8 @@ class NearbyTrackLossGuard:
                                     )
                                 )
                             ),
+                            **({"positive_surface_proof": surface_proofs[key, new]}
+                               if (key, new) in surface_proofs else {}),
                         }
                     )
         for key, point in current.items():
@@ -414,6 +485,17 @@ class NearbyTrackLossGuard:
         self.coobserved = {
             pair: t for pair, t in coobserved.items() if all(k in pending for k in pair)
         }
+        if self.config.allow_positive_surface_merges:
+            # Association history only: never feed these old points to the field
+            # or renew their source epoch when only the parent is still visible.
+            self.positive_surfaces = {
+                key: (xyz[ids == key].copy(), float(source_time))
+                if key in current else self.positive_surfaces[key]
+                for key in pending
+                if key in current or key in self.positive_surfaces
+                and source_time - self.positive_surfaces[key][1]
+                <= self.config.maximum_merge_age_seconds + 1e-9
+            }
         return {
             "blocked": bool(blocking),
             "blocking_tracks": blocking,
@@ -424,5 +506,8 @@ class NearbyTrackLossGuard:
             "body_prior_coverage_enabled": self.fragment_coverage is not None,
             "prior_covered_missing_tracks": prior_coverage["covered"],
             "body_prior_coverage_rejections": prior_coverage["rejected"],
+            **({"positive_surface_route_enabled": True,
+                "positive_surface_merge_rejections": surface_rejections}
+               if self.config.allow_positive_surface_merges else {}),
             "scope": "nearby positive LiDAR-track continuity watchdog; lost occupancy is unresolved, not free; bounded separated actors; not a dynamic belief map or general occlusion guarantee",
         }

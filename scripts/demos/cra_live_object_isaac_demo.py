@@ -44,6 +44,8 @@ parser.add_argument("--guidance-reference-mode", choices=("bounded_field_heading
                     default="bounded_field_heading", help="explicit reference ablation; filtered goal velocity uses v_sem as the CBF normal")
 parser.add_argument("--human-positive-fragment-extent", action="store_true",
                     help="bare-human recent-coobservation/current-positive-return fragment association; no free-space or factor transfer")
+parser.add_argument("--human-positive-fragment-surface", action="store_true",
+                    help="require fresh complete coverage of retained positive fragment surface; unchanged distances/epochs; no body prior")
 parser.add_argument("--human-observed-passing-target", action="store_true",
                     help="require fresh person/SAM association for new human passing choices; all obstacles retain CRA/safety intervention")
 parser.add_argument("--human-passing-identity-prior-max-age", type=float, default=0.,
@@ -231,6 +233,8 @@ if args.human_observed_occupancy_only and (
     parser.error("observed-only ablation requires strict fragment continuity and fresh-only passing selection")
 if args.human_positive_fragment_extent and (args.restaurant_human is None or args.human_carry_bowl):
     parser.error("positive fragment extent requires the bounded bare native-human scenario")
+if args.human_positive_fragment_surface and not args.human_positive_fragment_extent:
+    parser.error("positive fragment surface requires the explicit bare-human extent mode")
 from robot.perception.human_fragment_coverage import HumanFragmentCoverageConfig
 fragment_coverage_config = HumanFragmentCoverageConfig(
     "bounded separated adult fixture; all points in a missing fragment assumed within configured speed bound; .35 s original-source expiry",
@@ -1555,11 +1559,13 @@ def main():
     coverage_guard = NearbyTrackLossGuard(NearbyTrackLossConfig(
         allow_observed_fragment_merges=human is not None,
         allow_positive_extent_merges=args.human_positive_fragment_extent,
+        allow_positive_surface_merges=args.human_positive_fragment_surface,
         use_observed_merge_velocity=human is not None),
         fragment_coverage_config=fragment_coverage_config) if args.moving_actor or human is not None else None
     coverage_result = None
     coverage_events = []
     submitted_packet = None
+    latest_source_packet = packet
 
     def coverage_geometry(result, source_packet):
         if human is None:
@@ -1572,6 +1578,13 @@ def main():
         return {"current_points_world_xy": world,
             "current_point_track_ids": result.field.tracking_result.point_track_ids,
             "current_points_source_time": source_packet.sensor_timestamp_seconds}
+
+    def coverage_archive_geometry(result, source_packet):
+        return {**coverage_geometry(result, source_packet),
+            "current_obstacle_xyz_in_packet_frame": source_packet.obstacle_xyz,
+            "packet_robot_position_world_xy": source_packet.robot_position_world_xy,
+            "packet_robot_yaw": source_packet.robot_yaw,
+            "packet_sensor_frame_id": source_packet.sensor_frame_id}
 
     def coverage_prior_inputs(result, source_packet):
         if fragment_coverage_config is None:
@@ -1724,10 +1737,11 @@ def main():
                             **coverage_geometry(outcome.value, submitted_packet), **coverage_prior_inputs(outcome.value, submitted_packet))
                         if coverage_result["observed_fragment_merges"] or coverage_result["blocked"] or coverage_result["prior_covered_missing_tracks"]:
                             if any(e.get("coexistence_basis") in {"retained_original_coobservation", "recent_original_coobservation_positive_extent"}
+                                   or e.get("coexistence_basis") == "recent_original_coobservation_positive_surface"
                                    for e in coverage_result["observed_fragment_merges"]):
                                 audit_name = f"coverage-merge-{outcome.value.field.sensor_frame_id}.npz"
                                 np.savez_compressed(args.output / audit_name,
-                                    **coverage_geometry(outcome.value, submitted_packet))
+                                    **coverage_archive_geometry(outcome.value, submitted_packet))
                                 coverage_result["current_positive_geometry_audit_file"] = audit_name
                             coverage_events.append(coverage_result)
                         if coverage_result["blocked"]:
@@ -1736,12 +1750,15 @@ def main():
                             save_json("unpublished-coverage-stop-field.json", field_record(outcome.value, now, current))
                             if human is not None:
                                 np.savez_compressed(args.output / "unpublished-coverage-source.npz",
-                                    **coverage_geometry(outcome.value, submitted_packet))
+                                    **coverage_archive_geometry(outcome.value, submitted_packet))
+                                np.savez_compressed(args.output / "previous-coverage-source.npz",
+                                    **coverage_archive_geometry(latest, latest_source_packet))
                             print(json.dumps({"coverage_stop": coverage_result, "sim_seconds": now-start_sim}), flush=True)
                             break
                     consecutive_failures = 0
                     commit(outcome.value, now)
                     latest = outcome.value
+                    latest_source_packet = submitted_packet
                     live_fields.append(field_record(latest, now, current))
                     if args.moving_actor:
                         elapsed = latest.field.sensor_timestamp_seconds - actor_start_time

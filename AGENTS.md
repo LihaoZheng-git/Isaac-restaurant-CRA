@@ -1218,3 +1218,15 @@
   mixed artifacts/limits, use isolated trusted replays for call profiling, and
   retain outer wall timings with overhead/contention scope. See the profiling
   report; this finding does not alter physical evidence or control acceptance.
+
+- The opt-in positive-surface continuity route retains original measured XY
+  samples for association only. Require every original sample covered within
+  unchanged .10 m by at least three distinct current parent returns, original
+  centroid within .25 m, recent original co-observation, .35 s age, unambiguous
+  ownership and existing one-to-one gates. Do not advect this new proof, add old
+  points to control occupancy, renew clocks, transfer factors/class or infer
+  hidden-body coverage. Missing/partial proofs still stop. Preserve source-point
+  rejection/acceptance diagnostics and original/current full packet archives.
+  Controlled unit fixtures do not establish natural fragment 617 recovery;
+  require the next own stationary gate and actual guarded native result. See
+  docs/positive_surface_continuity.md; legacy defaults/main holds remain.
