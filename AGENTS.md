@@ -1243,3 +1243,14 @@
   before choosing visibility/association changes. Optional concurrent profiling
   should be off for the next normal-control diagnostic; retain wall timers and
   report the instrumentation change separately, never a causal controller fix.
+
+- The source-ray diagnostic branch archives original/current packets at first
+  disappearance of an enrolled track under the existing snapshot opt-in, with
+  exact raw returns/offsets, header epochs, bracketing ego poses, transforms,
+  ownership and RGB. Keep the protected last-accepted/four-recent cache bounded;
+  missing archives remain explicitly unavailable. Save early surface rejections
+  before history expiry. These copies never enter control and do not grant free-
+  space clearing, timeout deletion or relaxed loss guards. The next same-20 s
+  trial disables optional concurrent call profiling while retaining wall timers
+  and every original gate. See docs/source_ray_diagnostics.md; native source/ray
+  validity, original failed results, oracle pose provenance and main holds remain.

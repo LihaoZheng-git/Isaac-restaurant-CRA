@@ -958,6 +958,8 @@ def main():
     captures, rejections, records = [], [], []
     last_sensor_id = -1
     copied_scan = None
+    latest_source_packet = None
+    sensor_archive_payloads = {}
     navigation_active = False
 
     def state():
@@ -1156,6 +1158,36 @@ def main():
                 "scan_metadata": scan_audit,
             }
         )
+        if args.save_sensor_snapshots and human is not None:
+            # Diagnostic copies only. Keep the last accepted source protected
+            # while at most one newer perception job is in flight.
+            pose_samples = list(history.samples)
+            pose_times = np.array([item.timestamp_seconds for item in pose_samples])
+            return_times = scan_time + metadata.point_time_offsets_nanoseconds * 1e-9
+            first = max(0, int(np.searchsorted(pose_times, return_times.min(), side="right")) - 1)
+            last = min(len(pose_times), int(np.searchsorted(pose_times, return_times.max(), side="left")) + 1)
+            sensor_archive_payloads[info.sensor_frame_id] = {
+                "raw_sensor_xyz": raw.copy(),
+                "scene_xyz": scene.copy(),
+                "obstacle_xyz": points.copy(),
+                "point_time_offsets_ns": metadata.point_time_offsets_nanoseconds.copy(),
+                "robot_from_lidar": robot_from_lidar.copy(),
+                "world_from_robot": pose.copy(),
+                "gravity_from_body": gravity_from_body.copy(),
+                "camera_from_scan_robot": packet.camera_from_scan_robot,
+                "source_lidar_timestamp_seconds": scan_time,
+                "source_lidar_timestamp_nanoseconds": info.sensor_timestamp_nanoseconds,
+                "pose_history_timestamps_seconds": pose_times[first:last],
+                "pose_history_world_from_robot": np.stack(
+                    [item.world_from_robot for item in pose_samples[first:last]]),
+                "scan_metadata_json": json.dumps(scan_audit, default=json_default),
+            }
+            keep = set(list(sensor_archive_payloads)[-4:])
+            if latest_source_packet is not None:
+                keep.add(latest_source_packet.sensor_frame_id)
+            for key in tuple(sensor_archive_payloads):
+                if key not in keep:
+                    del sensor_archive_payloads[key]
         if args.save_sensor_snapshots and (
             len(captures) <= 24 or len(captures) % 20 == 0
         ):
@@ -1580,11 +1612,15 @@ def main():
             "current_points_source_time": source_packet.sensor_timestamp_seconds}
 
     def coverage_archive_geometry(result, source_packet):
-        return {**coverage_geometry(result, source_packet),
+        payload = sensor_archive_payloads.get(source_packet.sensor_frame_id)
+        return {**coverage_geometry(result, source_packet), **(payload or {}),
+            "raw_ray_archive_available": payload is not None,
             "current_obstacle_xyz_in_packet_frame": source_packet.obstacle_xyz,
             "packet_robot_position_world_xy": source_packet.robot_position_world_xy,
             "packet_robot_yaw": source_packet.robot_yaw,
-            "packet_sensor_frame_id": source_packet.sensor_frame_id}
+            "packet_sensor_frame_id": source_packet.sensor_frame_id,
+            **({"packet_world_from_source_frame": source_packet.scan_pose_samples_world[0]}
+               if source_packet.scan_pose_samples_world is not None else {})}
 
     def coverage_prior_inputs(result, source_packet):
         if fragment_coverage_config is None:
@@ -1730,12 +1766,38 @@ def main():
             if outcome is not None:
                 if outcome.value is not None:
                     if coverage_guard is not None:
+                        if args.save_sensor_snapshots and human is not None:
+                            old_tracks = latest.field.tracking_result.tracked_obstacles
+                            new_tracks = outcome.value.field.tracking_result.tracked_obstacles
+                            lost_ids = (set(t.track_id for t in old_tracks)
+                                & set(coverage_guard.observed)
+                                - set(t.track_id for t in new_tracks))
+                            if lost_ids:
+                                stem = f"track-loss-{latest.field.sensor_frame_id}-{outcome.value.field.sensor_frame_id}"
+                                for label, value, source in (
+                                    ("previous", latest, latest_source_packet),
+                                    ("current", outcome.value, submitted_packet)):
+                                    np.savez_compressed(args.output / f"{stem}-{label}.npz",
+                                        **coverage_archive_geometry(value, source))
+                                    cv2.imwrite(str(args.output / f"{stem}-{label}.png"),
+                                        source.rgb[:, :, ::-1])
+                                save_json(f"{stem}.json", {
+                                    "lost_track_ids": sorted(lost_ids),
+                                    "original_source_time": latest.field.sensor_timestamp_seconds,
+                                    "current_source_time": outcome.value.field.sensor_timestamp_seconds,
+                                    "original_tracks": [asdict(t) for t in old_tracks],
+                                    "current_tracks": [asdict(t) for t in new_tracks],
+                                    "original_field_policies": latest.diagnostics["applied_field_policies"],
+                                    "current_field_policies": outcome.value.diagnostics["applied_field_policies"],
+                                    "scope": "diagnostic source copies before guard decision; current field not yet published; no inferred free space or control change"})
                         c, s = math.cos(anchor.yaw), math.sin(anchor.yaw)
                         coverage_result = coverage_guard.observe(outcome.value.field.tracking_result.tracked_obstacles,
                             source_time=outcome.value.field.sensor_timestamp_seconds,
                             robot_world_xy=(anchor.x+c*current[0]-s*current[1], anchor.y+s*current[0]+c*current[1]),
                             **coverage_geometry(outcome.value, submitted_packet), **coverage_prior_inputs(outcome.value, submitted_packet))
-                        if coverage_result["observed_fragment_merges"] or coverage_result["blocked"] or coverage_result["prior_covered_missing_tracks"]:
+                        if (coverage_result["observed_fragment_merges"] or coverage_result["blocked"]
+                            or coverage_result["prior_covered_missing_tracks"]
+                            or coverage_result.get("positive_surface_merge_rejections")):
                             if any(e.get("coexistence_basis") in {"retained_original_coobservation", "recent_original_coobservation_positive_extent"}
                                    or e.get("coexistence_basis") == "recent_original_coobservation_positive_surface"
                                    for e in coverage_result["observed_fragment_merges"]):
