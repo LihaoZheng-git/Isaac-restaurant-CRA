@@ -108,6 +108,26 @@ replay result, not natural crossing acceptance. The initial native trial had
 16 accepted part-association rows across six child IDs, 78 all-track visual
 instances, 14,347 object assessments and zero complete four-factor assessments.
 
+## Native density follow-up at c6fffac
+
+`outputs/paper_flux/density-parts-human17-observed-motion-v1` passed its own
+60-frame parked gate and reached all three waypoints in 28.866667 navigation
+seconds. Minimum independent clearance was .120804 m, minimum CBF margin
+.184436, stop drift .002236 m and endpoint error .096602 m. It published 288
+fields, 251 while translating, without a nearby-track-loss stop. Seventeen
+published current-part rows covered six child IDs; maximum 3D gap .284592 m,
+minimum parent mask coverage .920570, maximum camera/scan age .083334 s.
+
+**Overall bypass still failed.** Walking-window left excursion was -.000141 m
+(required >=.20 m), behind projection +.025921 m (required <=-.10 m). The human
+motion diagnostic had six supported kinetic but zero simultaneous robot/human
+rows: endpoint completion does not establish a proactive curved pass. Preserve
+89 all-track accepted visual instances, 19,030 assessments and ZERO complete
+four-factor assessments. Human mass/contact and missing potential/thermal
+remain explicitly labeled priors. The circle was shadow/identity information,
+not control occupancy. This is a bounded continuity/arrival result, not full
+bypass, real-time, calibrated physical estimation or main-merge acceptance.
+
 No bypass or four-factor fresh-perception pass follows from component results.
 Keep fixed lambda 1.25, .25 factor priors, forward-only motion, original
 clearance/braking/freshness/exact checks, all failed attempts and main holds.

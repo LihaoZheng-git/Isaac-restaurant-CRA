@@ -1276,3 +1276,13 @@
   complete positive/mask/identity/source checks, unchanged raw occupancy/factors
   and guard behavior for already missing parts. Preserve failed arc/arrival and
   require a new own stationary/native trial; do not relabel this as a bypass.
+
+- At c6fffac the density-cap follow-up passed its parked gate and reached all
+  three waypoints in 28.866667 s without a nearby-track-loss stop: .120804 m
+  independent clearance, .184436 CBF margin, .002236 m drift and 288 fields.
+  Preserve 17 accepted current-part rows, 89 visual instances and zero complete
+  factors. Full bypass FAILED: -.000141 m left arc, +.025921 m behind projection,
+  six supported human kinetic but zero simultaneous robot/human rows. Arrival
+  validates bounded continuity/navigation, not proactive guidance or main.
+  Keep primary control unchanged; any direct guidance following belongs to the
+  separately user-approved objective ablation and retains every exact check.
