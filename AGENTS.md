@@ -1179,3 +1179,16 @@
   grant reverse motion, wider priors, relaxed safety gates, environment upgrades
   or main/long-service acceptance. Escalate only consequential new choices or
   unresolved external blockers; a failed trial alone calls for diagnosis.
+
+- At 1082393 (functional 49f56f2), the observed-only 11 s retry completed three
+  waypoints in 29.216667 sim seconds with .365797 m independent clearance,
+  .318745 CBF margin, .002303 m stop drift and 285 fields/248 translating.
+  No motion inference/profiling rejection recurred; human motion passed with
+  12 supported kinetic/five simultaneous rows. Full bypass still FAILED:
+  -.028852 m walking arc and +.032850 m behind projection. Keep 83 all-track
+  visual instances/zero complete factor assessments and the unused-circle
+  shadow audit separate. During walking, the robot was at y=7.5336--7.6747 m
+  while the human crossed near 8.9 m (closest centers 1.300220 m). Preserve this
+  original 11 s failure; a later separately declared encounter delay is a new
+  fixture, not a retroactive pass or causal algorithm improvement. No reverse,
+  wider bounds, primary objective change or main acceptance follows.

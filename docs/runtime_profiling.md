@@ -53,3 +53,35 @@ That newer instruction supersedes the one-trial permission limit. Each trial
 still needs its own stationary gate, frozen validated runtime, independent
 clearance/braking monitor and all original freshness/exact checks. No reverse,
 wider uncertainty bound, safety relaxation or main acceptance follows.
+
+## Native retry at 1082393 (functional source 49f56f2)
+
+`outputs/paper_flux/isolated-human17-observed-motion-v2` passed its own 60-frame
+zero-wheel gate and completed all three waypoints in 29.216667 simulation
+seconds, with .365797 m minimum independent clearance, .318745 minimum CBF
+margin and .002303 m stopping drift. It published 285 fields (248 translating)
+without any inference-worker rejection or profiling collision during motion.
+The startup camera/LiDAR epoch rejection remains recorded. Navigation took
+1,243.759 wall seconds; the full launcher took 1,414.858 s. This is paced
+simulation, not real-time acceptance.
+
+Human-motion validation passed: 270 current matched rows, 12 supported moving
+kinetic rows, five simultaneous rows, .140783/.014298 m/s median world/relative
+speed errors and actual native crossing. There were 78 selected passing-policy
+rows, all based on a fresh original selection, and no identity-prior selections.
+Keep 83 all-track accepted visual instances, 19,200 object assessments, 76,411
+configured factor-prior uses, 290 property-prior uses and zero complete
+four-factor assessments separate from first-track counters.
+
+**Overall bypass acceptance still failed.** Walking-window lateral excursion
+was -.028852 m (required >=.20 m) and behind projection was +.032850 m (required
+<=-.10 m), although arrival/rejoin passed. The unused circle passed its shadow
+audit; it was not control geometry. No old active-circle failure is repaired.
+
+An independent actual-trace timing audit found the robot at world y=7.5336--
+7.6747 m during supported walking, while the human crossed near y=8.9 m. The
+closest moving center separation was 1.300220 m. This separates the repaired
+diagnostic interruption from a poorly aligned curved-bypass encounter. It does
+not prove an unfiltered counterfactual safe or establish a causal CRA benefit.
+Preserve the failed arc/behind scores and the original 11 s fixture. A later
+declared crossing delay is a different development scenario, not its repair.
