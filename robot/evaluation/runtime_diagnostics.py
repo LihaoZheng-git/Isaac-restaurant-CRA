@@ -5,27 +5,56 @@ import math
 import os
 from pathlib import Path
 import sys
+import threading
 import time
 import warnings
 
 
+_PROFILE_LOCK = threading.Lock()
+
+
 def profile_call(function, *args, profile_path=None, minimum_seconds=3.0, **kwargs):
+    """Profile at most one worker; overlapping/nested work runs without waiting.
+
+    CPython 3.12 can reject concurrent cProfile instances process-wide. Optional
+    instrumentation must not prevent planner/perception work from running.
+    """
     if profile_path is None:
         return function(*args, **kwargs)
     if not math.isfinite(minimum_seconds) or minimum_seconds < 0:
         raise ValueError("finite nonnegative profile threshold required")
-    profile = cProfile.Profile()
-    started = time.perf_counter()
+    if not _PROFILE_LOCK.acquire(blocking=False):
+        return function(*args, **kwargs)
     try:
-        return profile.runcall(function, *args, **kwargs)
+        # Older Python versions expose a same-thread external profiler here.
+        # Do not replace its hook, even if they permit nested cProfile calls.
+        if sys.getprofile() is not None:
+            return function(*args, **kwargs)
+        profile = cProfile.Profile()
+        started = time.perf_counter()
+        try:
+            profile.enable()
+        except ValueError as error:
+            # An external profiler is outside our lock. Catch only its known
+            # enable-time collision, never an exception from the worker itself.
+            if str(error) != "Another profiling tool is already active":
+                raise
+            return function(*args, **kwargs)
+        try:
+            return function(*args, **kwargs)
+        finally:
+            profile.disable()
+            if time.perf_counter() - started >= minimum_seconds:
+                path = Path(profile_path)
+                try:
+                    path.parent.mkdir(parents=True, exist_ok=True)
+                    profile.dump_stats(str(path))
+                except OSError as error:
+                    warnings.warn(
+                        f"runtime profile was not saved: {error}", RuntimeWarning
+                    )
     finally:
-        if time.perf_counter() - started >= minimum_seconds:
-            path = Path(profile_path)
-            try:
-                path.parent.mkdir(parents=True, exist_ok=True)
-                profile.dump_stats(str(path))
-            except OSError as error:
-                warnings.warn(f"runtime profile was not saved: {error}", RuntimeWarning)
+        _PROFILE_LOCK.release()
 
 
 def numeric_runtime_contract():

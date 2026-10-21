@@ -1156,3 +1156,14 @@
   profiling OFF, so this does not explain its slowdown. Fix the optional
   profiler after the frozen run, retain real exceptions/source clocks, and
   do not automatically retry wheels under the consumed one-trial exception.
+
+- Optional worker profiling now uses a nonblocking single-profiler slot:
+  overlapping/nested work runs normally without profiling. A known external
+  profiler enable collision skips only instrumentation; genuine worker errors
+  still propagate once and original epochs remain unchanged. Missing profile
+  files are not evidence of fast or absent computation. All 2,297 unit tests,
+  Ruff and trusted original-input planner sequence parity passed without wheels.
+  This fixes a diagnostic collision, not the historical profiling-off stall or
+  failed crossing. See docs/runtime_profiling.md; the consumed one-trial
+  geometry exception, main hold and need for a new explicit motion decision
+  remain unchanged.

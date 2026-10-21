@@ -176,3 +176,8 @@ The next bounded software step fixes optional profiling without serializing
 workers, changing inputs/outputs, renewing clocks or suppressing real failures.
 Any additional wheel trial needs a new explicit decision because the one-trial
 geometry-hold exception has been consumed.
+
+The subsequent [optional profiling fix](runtime_profiling.md) passes concurrent
+worker and original-input offline planner checks, 2,297 unit tests and Ruff.
+It skips profiling on overlap while running the worker normally; it changes no
+physical policy, geometry or safety gate. No second wheel trial has been run.
