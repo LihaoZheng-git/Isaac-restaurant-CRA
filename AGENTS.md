@@ -1087,3 +1087,24 @@
   center/pose-model improvement (recommended) versus an explicitly wider .30 m
   prior; neither answer has been received. Never silently widen priors, relax
   checks, remove failed phases or treat these proposals as authorization.
+
+- The user's later 2026-10-21 request approves investigating a separately
+  reported observed-occupancy / stronger-human-flux comparison. Removing the
+  added circular body PRIOR must never remove measured returns or the robot's
+  configuration-space geometry. Preserve computed CRA and label any applied
+  boundary override as an ablation; b=-1.7 corresponds to phi=1 in the current
+  mapping, not a measured distance. The existing fixed-class baseline assigns
+  b=-1.7 to unknown as well as person, so its preliminary stationary pair is
+  not an isolated human-only intervention or exact paper reproduction. This
+  decision grants neither reverse motion nor a wider .30 m prior, and a
+  stationary component pass does not resolve live geometry/arrival acceptance.
+  Our multirate loop already schedules MPC separately from per-step analytical
+  filtering; the .025 simulation pace intentionally costs 40 wall seconds per
+  sim second. Do not conflate that pacing with weak simulated goal progress
+  or claim the paper's 100 Hz MPC throughput. See docs/paper_flux_diagnostic.md.
+  The two preliminary fixed-class components passed 60 stationary frames each
+  with zero wheel commands (81/82 all-track visual instances, zero complete
+  four-factor assessments). Only the enabled-circle component audited its
+  prior containment; the observed-only run does not establish live body
+  coverage. Preserve rejected source pairs and the unknown-class b=-1.7 scope.
+  No new wheel trial, isolated human-flux override or rate change was integrated.
