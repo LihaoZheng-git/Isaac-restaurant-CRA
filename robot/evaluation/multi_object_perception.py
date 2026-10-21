@@ -546,9 +546,21 @@ def assess_all_objects(worker, packet):
                 row["boundary_flux"] = applied_guidance[key].boundary_flux
     passing = copy.deepcopy(getattr(worker, "motion_passing", None))
     passing_audit = None
+    passing_visual_evidence = copy.deepcopy(getattr(worker, "passing_visual_selection_evidence", None))
     if passing is not None:
         visual = fresh_person_selection_evidence(objects, packet.camera_timestamp_seconds,
             packet.camera_frame_id) if passing.config.require_visual_person_selection else None
+        legacy_visual_ids = tuple(visual or {})
+        direct = {}
+        if getattr(worker, "human_fresh_person_policy", False):
+            from robot.perception.person_policy_association import fresh_person_policy_associations
+            direct = fresh_person_policy_associations(tracking, projection,
+                worker.visual_person_frame(packet), envelope_audit,
+                camera_timestamp_seconds=packet.camera_timestamp_seconds,
+                camera_frame_id=packet.camera_frame_id, config=worker.human_mass_prior_config)
+            # A same-frame accepted SAM cue remains the stronger existing path.
+            # This alternative supplies class-policy evidence only.
+            visual = {**direct, **(visual or {})}
         sides, passing_audit = passing.update(
             tracking, robot_xy=packet.robot_position_world_xy,
             robot_velocity_xy=packet.measured_robot_velocity_world_xy,
@@ -560,6 +572,13 @@ def assess_all_objects(worker, packet):
             if passing.config.maximum_identity_prior_selection_age_seconds > 0 else None,
         )
         passing_audit["current_visual_selection_evidence"] = visual
+        passing_audit["current_legacy_SAM_person_track_ids"] = legacy_visual_ids
+        passing_audit["current_fresh_detector_person_track_ids"] = tuple(direct)
+        if passing.encounter is None:
+            passing_visual_evidence = None
+        elif passing_audit["decision"] == "selected_trailing_tangent":
+            passing_visual_evidence = copy.deepcopy((visual or {}).get(passing.encounter[0]))
+        passing_audit["original_selection_visual_evidence"] = passing_visual_evidence
         passing_audit["ego_pose_reference"] = {"source":packet.pose_source,"status":packet.pose_status.value,
                                               "robot_velocity_source":"derivative of the declared ego pose history"}
         # A side preference can cover this track's unmatched returns too, but
@@ -671,6 +690,7 @@ def assess_all_objects(worker, packet):
     worker.static_points, worker.object_ownership_bounds = static, ownership
     if passing is not None:
         worker.motion_passing = passing
+        worker.passing_visual_selection_evidence = passing_visual_evidence
     if envelope_memory is not None:
         worker.human_body_envelope = envelope_memory
     if fragment_memory is not None:

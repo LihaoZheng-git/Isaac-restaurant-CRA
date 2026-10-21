@@ -50,6 +50,8 @@ parser.add_argument("--human-positive-fragment-surface", action="store_true",
                     help="require fresh complete coverage of retained positive fragment surface; unchanged distances/epochs; no body prior")
 parser.add_argument("--human-visual-fragment-association", action="store_true",
                     help="fresh RGB/current-positive 3D small-body-part association in separated bare-human observed-only mode")
+parser.add_argument("--human-fresh-person-policy", action="store_true",
+                    help="fresh audited person-mask/current validated LiDAR identity cue for passing eligibility; no physical evidence refresh")
 parser.add_argument("--human-observed-passing-target", action="store_true",
                     help="require fresh person/SAM association for new human passing choices; all obstacles retain CRA/safety intervention")
 parser.add_argument("--human-passing-identity-prior-max-age", type=float, default=0.,
@@ -244,6 +246,10 @@ if args.human_positive_fragment_surface and not args.human_positive_fragment_ext
 if args.human_visual_fragment_association and (not args.human_observed_occupancy_only
     or args.restaurant_human is None or args.human_carry_bowl):
     parser.error("visual fragment association requires the separated bare-human observed-only fixture")
+if args.human_fresh_person_policy and (not args.human_observed_occupancy_only
+    or not args.human_observed_passing_target or not args.motion_aware_passing
+    or args.restaurant_human is None or args.human_carry_bowl):
+    parser.error("fresh person policy requires the bare-human observed-only person-selected passing fixture")
 from robot.perception.human_fragment_coverage import HumanFragmentCoverageConfig
 fragment_coverage_config = HumanFragmentCoverageConfig(
     "bounded separated adult fixture; all points in a missing fragment assumed within configured speed bound; .35 s original-source expiry",
@@ -900,6 +906,7 @@ def main():
         human_observed_occupancy_only=args.human_observed_occupancy_only,
         human_boundary_flux=args.human_boundary_flux,
         human_visual_fragment_association=args.human_visual_fragment_association,
+        human_fresh_person_policy=args.human_fresh_person_policy,
         human_fragment_coverage_config=fragment_coverage_config,
         calibration=calibration,
         class_policy=class_policy,

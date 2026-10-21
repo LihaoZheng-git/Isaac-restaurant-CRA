@@ -237,6 +237,7 @@ class LiveObjectPerception:
         human_observed_occupancy_only=False,
         human_boundary_flux=None,
         human_visual_fragment_association=False,
+        human_fresh_person_policy=False,
     ):
         self.segmenter, self.mass_estimator, self.contact_detector = (
             segmenter,
@@ -303,6 +304,13 @@ class LiveObjectPerception:
         ):
             raise ValueError("visual part association requires observed-only bare-human mode")
         self.human_visual_fragment_association = human_visual_fragment_association
+        if not isinstance(human_fresh_person_policy, bool) or (
+            human_fresh_person_policy and (not human_observed_occupancy_only
+                or person_detector is None or self.motion_passing is None
+                or not self.motion_passing.config.require_visual_person_selection)
+        ):
+            raise ValueError("fresh person policy requires observed-only current-identity/person-selected passing mode")
+        self.human_fresh_person_policy = human_fresh_person_policy
         from robot.perception.human_fragment_coverage import HumanFragmentCoverage
         if human_fragment_coverage_config is not None and (
             self.human_body_envelope is None or self.experiment_baseline is not CRABaseline.CONTINUOUS_CRA_SAFE_SAGE):

@@ -1324,3 +1324,13 @@
   A separate fresh-detector policy association may address this delay; do not
   renew physical evidence clocks, fakeSAM acceptance or change priors/geometry
   to do so. Keep failed metrics and source provenance; native validation pending.
+
+- The opt-in fresh-person policy cue reuses the audited current person detector
+  and current validated human LiDAR identity. Require same camera/scan epochs,
+  >=20 projected points, >=90% mask/foreground coverage, untruncated confident
+  person mask and unique parent/person ownership. Record the .5 m foreground
+  association hypothesis and original identity clocks. It is inferred fresh
+  CLASS/POLICY evidence only; never SAM/physical readiness, new geometry or a
+  mass/contact/support/plume renewal. Keep motion gates unchanged, prioritize
+  accepted same-frame SAM cues, and preserve original selected cue metadata
+  transactionally. See docs/fresh_person_policy.md; native acceptance pending.
