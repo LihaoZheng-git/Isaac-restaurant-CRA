@@ -1167,3 +1167,15 @@
   failed crossing. See docs/runtime_profiling.md; the consumed one-trial
   geometry exception, main hold and need for a new explicit motion decision
   remain unchanged.
+
+- The user's subsequent explicit request ("Just go ahead and work on it,
+  diagnose what cause the problem and then try to fix it, till it's fixed")
+  authorizes autonomous task-scoped diagnosis, fixes and bounded observed-only
+  crossing retries. This supersedes the one-trial permission limit above;
+  do not ask again for ordinary guarded retries. Keep each attempt separate,
+  preserve failures, freeze tested runtime source, require its own stationary
+  gate and retain all independent clearance/braking, source/freshness,
+  continuity, exact MPC/DTCBF/dense geometry and analytical checks. It does not
+  grant reverse motion, wider priors, relaxed safety gates, environment upgrades
+  or main/long-service acceptance. Escalate only consequential new choices or
+  unresolved external blockers; a failed trial alone calls for diagnosis.

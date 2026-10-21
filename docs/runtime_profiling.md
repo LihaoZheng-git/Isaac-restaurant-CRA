@@ -46,3 +46,10 @@ crossing, fresh sensor experiment, native real-time result or repair of the old
 exception has been consumed. No additional wheel trial or main merge follows
 from these software checks; another bounded motion trial requires a new explicit
 decision, with its own stationary gate and all original checks.
+
+The user subsequently authorized autonomous diagnosis, fixes and bounded
+guarded retries until this test works, without repeated approval questions.
+That newer instruction supersedes the one-trial permission limit. Each trial
+still needs its own stationary gate, frozen validated runtime, independent
+clearance/braking monitor and all original freshness/exact checks. No reverse,
+wider uncertainty bound, safety relaxation or main acceptance follows.
