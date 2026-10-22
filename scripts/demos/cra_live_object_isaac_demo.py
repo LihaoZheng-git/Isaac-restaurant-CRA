@@ -40,6 +40,8 @@ parser.add_argument("--guidance-fade-distance", type=float, default=0.5,
                     help="fade local guidance bias toward the active waypoint inside this distance")
 parser.add_argument("--guidance-minimum-reference-progress", type=float, default=.01,
                     help="minimum checked-reference progress in metres: displacement in filtered mode, goal gain in legacy mode; zero disables this quality gate")
+parser.add_argument("--guidance-reference-minimum-speed-fraction", type=float, choices=(.25, .5, .75, 1.), default=1.,
+                    help="explicit reduced-speed reference pool in the separate tracking ablation; 1 preserves the legacy single speed")
 parser.add_argument("--guidance-turn-first-minimum-cap", type=float, default=.4,
                     help="minimum turn-first reference pool cap in rad/s; .1 reproduces the legacy pool; never an executable lower bound")
 parser.add_argument("--guidance-reference-mode", choices=("bounded_field_heading", "filtered_goal_velocity", "planar_forecast_velocity"),
@@ -222,6 +224,8 @@ if not math.isfinite(args.guidance_reference_goal_radius) or args.guidance_refer
     parser.error("guidance reference goal radius must be finite and positive")
 if not math.isfinite(args.guidance_fade_distance) or args.guidance_fade_distance <= args.guidance_reference_goal_radius:
     parser.error("guidance fade distance must exceed the positive reference goal radius")
+if args.guidance_reference_minimum_speed_fraction < 1 and args.guidance_tracking_weight <= 0:
+    parser.error("reduced-speed references require explicit positive guidance tracking weight")
 if not math.isfinite(args.guidance_minimum_reference_progress) or args.guidance_minimum_reference_progress < 0:
     parser.error("minimum guidance reference progress must be finite and nonnegative")
 if not math.isfinite(args.guidance_turn_first_minimum_cap) or not 0 < args.guidance_turn_first_minimum_cap <= .8:
@@ -1612,7 +1616,8 @@ def main():
                 args.guidance_fade_distance, args.guidance_minimum_reference_progress,
                 args.guidance_turn_first_minimum_cap, args.guidance_reference_mode,
                 args.guidance_reference_search_width, args.guidance_reference_search_candidates,
-                args.guidance_tangent_velocity_fraction, args.guidance_tangent_basis))
+                args.guidance_tangent_velocity_fraction, args.guidance_tangent_basis,
+                minimum_reference_speed_fraction=args.guidance_reference_minimum_speed_fraction))
     control = SafeSAGEControlRuntime(mpc=mpc, backup_filter=backup)
     waypoint = WaypointController(
         [Waypoint(*point) for point in ROUTE],
@@ -2341,6 +2346,7 @@ def main():
             "reference_goal_radius_m": args.guidance_reference_goal_radius,
             "guidance_fade_distance_m": args.guidance_fade_distance,
             "minimum_reference_progress_m": args.guidance_minimum_reference_progress,
+            "minimum_reference_speed_fraction": args.guidance_reference_minimum_speed_fraction,
             "minimum_turn_first_rate_cap": args.guidance_turn_first_minimum_cap,
             "reference_mode": args.guidance_reference_mode,
             "tangent_velocity_fraction": args.guidance_tangent_velocity_fraction,

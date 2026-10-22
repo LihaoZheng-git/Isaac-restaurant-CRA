@@ -1475,3 +1475,14 @@
   different geometry/timing trial, not an isolated causal comparison or a pass
   for earlier8.4 m observed-only failures. Keep independent containment and all
   exact/clearance/arrival/passing gates; see docs/prior_geometry_association_scope.md.
+
+- The separate guidance ablation may explicitly try reduced-speed references
+  with minimum fraction.25 (pool1,.75,.5,.25); default1 preserves the original
+  single-speed candidate order. This changes candidate generation only, never
+  an executable minimum, nominal/physicalCRA/occupancy/lambda/source clocks or
+  exact acceptance. Original source19.7 s replay changes a no-reference/right-
+  turn fallback into a checked left reference at quarter speed, with unchanged
+  analytical first command. Keep numeric replay distinct from native acceptance;
+  retain turn-only rejection and primary fallback. All2,437 units/Ruff pass;
+  virtual/own-stationary/native gates are still pending. See
+  docs/reduced_speed_guidance_references.md; no main or long-service acceptance.

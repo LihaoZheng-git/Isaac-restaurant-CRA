@@ -33,6 +33,7 @@ class LaplaceGuidanceTrackingConfig:
     reference_search_maximum_candidates: int = 4800
     tangent_velocity_fraction: float = 0.0
     reference_tangent_basis: str = "planar_gradient"
+    minimum_reference_speed_fraction: float = 1.0
 
     def __post_init__(self):
         if self.reference_mode not in {
@@ -67,6 +68,8 @@ class LaplaceGuidanceTrackingConfig:
             or self.reference_search_maximum_candidates <= 0
             or self.reference_search_width > 0 and self.reference_mode != "planar_forecast_velocity"):
             raise ValueError("bounded search requires width 0..8, positive integer candidate budget and planar forecast mode")
+        if not .25 <= self.minimum_reference_speed_fraction <= 1:
+            raise ValueError("minimum reference speed fraction must be in [.25,1]")
         if not 0 <= self.tangent_velocity_fraction <= 1 or (
             self.tangent_velocity_fraction > 0 and (self.weight <= 0
             or self.reference_mode != "planar_forecast_velocity")
@@ -75,6 +78,11 @@ class LaplaceGuidanceTrackingConfig:
         if self.reference_tangent_basis not in {"planar_gradient", "selected_observed_obstacle"} or (
             self.reference_tangent_basis == "selected_observed_obstacle" and self.reference_search_width > 0):
             raise ValueError("selected observed tangent requires an explicit supported basis and no legacy reference search")
+
+    def reference_speed_fractions(self):
+        """At most four explicit candidate speeds; default retains one."""
+        return tuple(dict.fromkeys(max(self.minimum_reference_speed_fraction, value)
+            for value in (1., .75, .5, .25)))
 
 
 @dataclass(frozen=True)
@@ -112,6 +120,8 @@ class GuidanceTrackingDiagnostic:
     tangent_reference_track_ids: tuple[int, ...] = ()
     reference_projection_basis: str = "legacy_reference_projection"
     reference_tangent_basis: str = "planar_gradient"
+    minimum_reference_speed_fraction: float = 1.0
+    selected_reference_speed_fraction: float | None = None
 
 
 @dataclass(frozen=True)
@@ -221,81 +231,85 @@ class LaplaceGuidanceTrackingMPC(SafeSAGEUnicycleMPC):
         projected = self.guidance_config.reference_mode != "bounded_field_heading"
         best, rank, checked = None, -math.inf if projected else 0.0, 0
         rejected_no_progress = 0
-        selected = (None, None)
+        selected = (None, None, None)
         progress = None
         displacement = None
         reason = "inactive_field_preference"
         search_audit = None
         if activation > 0 and speed > 0 and current.unsafe_reason is None:
             reason = "no_exact_safe_progress_reference"
-            preference = self._reference_preference(initial, goal, speed, current, reference_kwargs)
-            direction = initial[2] if preference is None else preference[0]
-            initial_error = abs(_wrap(direction - initial[2]))
             distance = float(np.linalg.norm(goal - initial[:2]))
-            for cap, turn_first in (
-                (0.4, False),
-                (0.8, False),
-                (0.1, True),
-                (0.2, True),
-                (0.4, True),
-                (0.8, True),
-            ):
-                if turn_first and cap < self.guidance_config.minimum_turn_first_rate_cap:
-                    continue
-                commands = self._guidance_rollout(
-                    initial, goal, speed, cap, turn_first, reference_kwargs
-                )
-                if commands is None:
-                    continue
-                candidate = self._evaluate_trajectory(
-                    initial,
-                    commands,
-                    require_feasible=True,
-                    configuration_space=kwargs["configuration_space"],
-                    h_full=kwargs["h_full"],
-                    guidance_fields=kwargs["guidance_fields"],
-                    temporal_safety_derivative=kwargs.get(
-                        "temporal_safety_derivative", 0.0
-                    ),
-                )
-                checked += 1
-                if candidate is None or not self._trajectory_is_safe(candidate):
-                    continue
-                gain = distance - float(
-                    np.linalg.norm(goal - candidate.chassis_states[-1, :2])
-                )
-                moved = float(np.linalg.norm(candidate.chassis_states[-1, :2] - initial[:2]))
-                turning = initial_error - abs(
-                    _wrap(direction - candidate.chassis_states[-1, 2])
-                )
-                score = gain + self.config.lookahead_distance * turning
-                reached = (
-                    np.linalg.norm(goal - candidate.chassis_states[-1, :2])
-                    <= self.guidance_config.reference_goal_radius_m
-                )
-                # Heading improvement alone is not a useful path reference.
-                # A turn-only horizon with a large tracking weight repeatedly
-                # rewards postponing translation at each replanning step.
-                # This is an auxiliary-reference quality gate, never a new
-                # executable constraint: the primary can still turn or take
-                # a detour when no useful checked reference exists.
-                quality_progress = moved if projected else gain
-                minimum_gain = self.guidance_config.minimum_reference_progress_m
-                if not projected:
-                    minimum_gain = min(minimum_gain,
-                        max(0., distance - self.guidance_config.reference_goal_radius_m))
-                if (self.guidance_config.minimum_reference_progress_m > 0
-                    and not reached and quality_progress + 1e-9 < minimum_gain):
-                    rejected_no_progress += 1
-                    continue
-                if score > rank + 1e-6 or (best is None and reached):
-                    best, rank, selected, progress = (
-                        candidate,
-                        score,
-                        (cap, turn_first),
-                        gain,
+            # Candidate generation only: reduced speeds may fit a curved
+            # exact-safe horizon where full-speed guidance does not.
+            for speed_fraction in self.guidance_config.reference_speed_fractions():
+                candidate_speed = speed * speed_fraction
+                preference = self._reference_preference(initial, goal, candidate_speed, current, reference_kwargs)
+                direction = initial[2] if preference is None else preference[0]
+                initial_error = abs(_wrap(direction - initial[2]))
+                for cap, turn_first in (
+                    (0.4, False),
+                    (0.8, False),
+                    (0.1, True),
+                    (0.2, True),
+                    (0.4, True),
+                    (0.8, True),
+                ):
+                    if turn_first and cap < self.guidance_config.minimum_turn_first_rate_cap:
+                        continue
+                    commands = self._guidance_rollout(
+                        initial, goal, candidate_speed, cap, turn_first, reference_kwargs
                     )
-                    displacement = moved
+                    if commands is None:
+                        continue
+                    candidate = self._evaluate_trajectory(
+                        initial,
+                        commands,
+                        require_feasible=True,
+                        configuration_space=kwargs["configuration_space"],
+                        h_full=kwargs["h_full"],
+                        guidance_fields=kwargs["guidance_fields"],
+                        temporal_safety_derivative=kwargs.get(
+                            "temporal_safety_derivative", 0.0
+                        ),
+                    )
+                    checked += 1
+                    if candidate is None or not self._trajectory_is_safe(candidate):
+                        continue
+                    gain = distance - float(
+                        np.linalg.norm(goal - candidate.chassis_states[-1, :2])
+                    )
+                    moved = float(np.linalg.norm(candidate.chassis_states[-1, :2] - initial[:2]))
+                    turning = initial_error - abs(
+                        _wrap(direction - candidate.chassis_states[-1, 2])
+                    )
+                    score = gain + self.config.lookahead_distance * turning
+                    reached = (
+                        np.linalg.norm(goal - candidate.chassis_states[-1, :2])
+                        <= self.guidance_config.reference_goal_radius_m
+                    )
+                    # Heading improvement alone is not a useful path reference.
+                    # A turn-only horizon with a large tracking weight repeatedly
+                    # rewards postponing translation at each replanning step.
+                    # This is an auxiliary-reference quality gate, never a new
+                    # executable constraint: the primary can still turn or take
+                    # a detour when no useful checked reference exists.
+                    quality_progress = moved if projected else gain
+                    minimum_gain = self.guidance_config.minimum_reference_progress_m
+                    if not projected:
+                        minimum_gain = min(minimum_gain,
+                            max(0., distance - self.guidance_config.reference_goal_radius_m))
+                    if (self.guidance_config.minimum_reference_progress_m > 0
+                        and not reached and quality_progress + 1e-9 < minimum_gain):
+                        rejected_no_progress += 1
+                        continue
+                    if score > rank + 1e-6 or (best is None and reached):
+                        best, rank, selected, progress = (
+                            candidate,
+                            score,
+                            (cap, turn_first, speed_fraction),
+                            gain,
+                        )
+                        displacement = moved
             if best is not None:
                 reason = "exact_safe_local_guidance_reference"
             elif self.guidance_config.reference_search_width > 0:
@@ -390,6 +404,8 @@ class LaplaceGuidanceTrackingMPC(SafeSAGEUnicycleMPC):
             reference_projection_basis="lookahead_unicycle_affine_v_omega"
             if self.guidance_config.tangent_velocity_fraction > 0 else "legacy_reference_projection",
             reference_tangent_basis=self.guidance_config.reference_tangent_basis,
+            minimum_reference_speed_fraction=self.guidance_config.minimum_reference_speed_fraction,
+            selected_reference_speed_fraction=selected[2],
         )
         return GuidanceTrackingMPCResult(
             **{
