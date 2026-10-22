@@ -1370,3 +1370,13 @@
   the legacy combined-field reference search is disabled for this basis.
   Keep exact checks/independent .02 m guard and own stationary/native gates;
   see docs/selected_tangent_reference_prototype.md.
+
+- The a29c263 selected-obstacle reference trial stopped before any passing
+  selection on fragment415 continuity, not on its new objective:1/3 waypoints,
+  14.733333 navigation seconds,.216404 m braking-inclusive clearance/.004429 m
+  drift,146 fields. Raw source19.3/19.4 replay has all8 original fragment points
+  covered by current72 within.010429 m, but its centroid is.318279 m away and
+  nearby404 covers only part (worst.116863 m). Preserve the failed guard result.
+  Any separate unique whole-surface correspondence must retain actual current
+  positive geometry, source-age/co-observation/ownership gates and all occupancy/
+  physical factors; no missing-surface clearing or timeout repair is permitted.

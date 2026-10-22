@@ -108,3 +108,16 @@ Before native retry: all2,383 unit tests passed in81.39 s. After adding the
 original side/selection epoch to diagnostic metadata,38 focused tests passed
 in5.20 s; Ruff `robot tests scripts` and diff checks passed. Native acceptance
 remains independent of these component results.
+
+At a29c263, `selected-tangent-human17-observed-N6-v1` passed its own60-frame
+stationary gate but stopped on `nearby_track_lost` at14.733333 navigation seconds
+before any passing selection or proactive reference:1/3 waypoints,146 fields,
+.216404 m minimum independent clearance including braking/.004429 m drift.
+This is not a controller-reference pass or a test of its selected-side behavior.
+Fragment415 disappeared at19.4 s(source19.3,8 points). Exact raw replay finds all
+eight original points within.010429 m of current cluster72 (centroid .318279 m
+away); neighbor404 approaches part of that surface but its worst distance is
+.116863 m. The existing whole-surface route rejects first on its .25 m centroid
+gate; relaxing that alone would still encounter its nearby-cluster-count gate.
+Keep this failure while investigating a separately opted unique **whole-surface**
+correspondence. Do not erase a genuinely missing surface or transfer factors.
