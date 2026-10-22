@@ -598,6 +598,11 @@ def assess_all_objects(worker, packet):
             applied_guidance, baseline_audit, visual_part_groups, envelope_audit,
             sensor_timestamp_seconds=packet.sensor_timestamp_seconds,
             mask_boundary_prior_pixels=worker.human_fragment_mask_boundary_pixels)
+    field_guidance_policy = worker.guidance_policy
+    if getattr(worker, "zero_tangential_bias_ablation", False):
+        from robot.evaluation.crossing_strategy import zero_tangential_bias
+        field_guidance_policy, applied_guidance, baseline_audit = zero_tangential_bias(
+            field_guidance_policy, applied_guidance, baseline_audit)
     cells = np.floor(
         (points - [worker.grid_config.minimum_x, worker.grid_config.minimum_y])
         / worker.grid_config.resolution
@@ -617,7 +622,7 @@ def assess_all_objects(worker, packet):
     pipeline_started = time.perf_counter()
     pipeline = build_safe_sage_field_pipeline(
         grid,
-        guidance_policy=worker.guidance_policy,
+        guidance_policy=field_guidance_policy,
         config=replace(
             worker.field_config,
             guidance_field_config=replace(
@@ -763,7 +768,9 @@ def assess_all_objects(worker, packet):
         "retained_occupancy_epochs": [
             {"timestamp": item[0], "sensor_frame_id": item[1]} for item in retained
         ],
-        "fixed_lambda": 1.25,
+        "fixed_lambda": 0. if getattr(worker, "zero_tangential_bias_ablation", False) else 1.25,
+        "physical_CRA_lambda": 1.25,
+        "zero_tangential_bias_ablation": getattr(worker, "zero_tangential_bias_ablation", False),
         "human_control_ablation": {
             "observed_occupancy_only": worker.human_observed_occupancy_only,
             "requested_boundary_flux": worker.human_boundary_flux,

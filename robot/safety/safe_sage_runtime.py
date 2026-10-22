@@ -1120,6 +1120,7 @@ class SafeSAGEControlRuntime:
         *,
         mpc: SafeSAGEUnicycleMPC,
         backup_filter: SafeSAGEUnicycleCBFFilter,
+        crossing_strategy: str = "legacy",
     ) -> None:
         if not isinstance(mpc, SafeSAGEUnicycleMPC):
             raise TypeError("mpc must be a SafeSAGEUnicycleMPC.")
@@ -1129,6 +1130,9 @@ class SafeSAGEControlRuntime:
             )
         self.mpc = mpc
         self.backup_filter = backup_filter
+        if crossing_strategy not in {"legacy", "rear-pass-or-yield", "yield-then-go"}:
+            raise ValueError("unsupported crossing strategy")
+        self.crossing_strategy = crossing_strategy
 
     def plan(
         self,
@@ -1186,6 +1190,12 @@ class SafeSAGEControlRuntime:
         if isinstance(mpc, LaplaceGuidanceTrackingMPC) and hasattr(result, "guidance_tracking"):
             result = replace(result, guidance_tracking=replace(result.guidance_tracking,
                 tangent_reference_track_ids=reference_ids))
+        strategy = getattr(self, "crossing_strategy", "legacy")
+        if strategy != "legacy":
+            from robot.safety.crossing_maneuver import apply_crossing_maneuver
+            result = apply_crossing_maneuver(mpc, result, chassis_state_grid,
+                nominal_commands, field, strategy,
+                lambda: self.filter_command((0., 0.), chassis_state_grid, field))
         return result
 
     def filter_command(

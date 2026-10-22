@@ -241,6 +241,7 @@ class LiveObjectPerception:
         human_visual_part_field_policy=False,
         human_prior_geometry_associations=False,
         human_fresh_person_policy=False,
+        zero_tangential_bias_ablation=False,
     ):
         self.segmenter, self.mass_estimator, self.contact_detector = (
             segmenter,
@@ -333,6 +334,11 @@ class LiveObjectPerception:
         ):
             raise ValueError("fresh person policy requires observed-only current-identity/person-selected passing mode")
         self.human_fresh_person_policy = human_fresh_person_policy
+        if not isinstance(zero_tangential_bias_ablation, bool) or (
+            zero_tangential_bias_ablation and (self.motion_passing is None
+                or self.experiment_baseline is not CRABaseline.CONTINUOUS_CRA_SAFE_SAGE)):
+            raise ValueError("zero tangential bias requires the explicit continuous-CRA crossing ablation")
+        self.zero_tangential_bias_ablation = zero_tangential_bias_ablation
         from robot.perception.human_fragment_coverage import HumanFragmentCoverage
         if human_fragment_coverage_config is not None and (
             self.human_body_envelope is None or self.experiment_baseline is not CRABaseline.CONTINUOUS_CRA_SAFE_SAGE):

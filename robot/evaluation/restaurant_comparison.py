@@ -30,6 +30,8 @@ def planner_result_diagnostic(result):
         "solver_fallback_active": None if result is None else result.fallback_active,
         **({"guidance_tracking_ablation": asdict(result.guidance_tracking)}
            if result is not None and hasattr(result, "guidance_tracking") else {}),
+        **({"crossing_maneuver_ablation": result.crossing_maneuver}
+           if result is not None and hasattr(result, "crossing_maneuver") else {}),
     }
 
 

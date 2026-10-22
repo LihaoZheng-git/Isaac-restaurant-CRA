@@ -26,6 +26,10 @@ parser.add_argument("--experiment-baseline", choices=("geometric_velocity_cbf", 
                     default="continuous_cra_safe_sage", help="explicit matched restaurant comparison; physical assessments always retained")
 parser.add_argument("--motion-aware-passing", action="store_true",
                     help="opt-in current LiDAR crossing-side preference; unchanged CRA scores/lambda/safety checks")
+parser.add_argument("--crossing-strategy", choices=("legacy", "rear-pass-or-yield", "yield-then-go"), default="legacy",
+                    help="separate maneuver ablation; yielding requires exact predictive and analytical checks")
+parser.add_argument("--zero-tangential-bias-ablation", action="store_true",
+                    help="explicit wait-and-go field lambda=0; physical CRA and normal repulsion unchanged")
 parser.add_argument("--guidance-tracking-weight", type=float, default=0.0,
                     help="separate checked Laplace local-path MPC ablation; zero preserves primary")
 parser.add_argument("--mpc-horizon-steps", type=int,
@@ -216,6 +220,16 @@ if args.guidance_tangent_basis == "selected_observed_obstacle" and (
 if (not math.isfinite(args.guidance_tracking_weight) or args.guidance_tracking_weight < 0
     or not math.isfinite(args.guidance_activation_h) or args.guidance_activation_h <= 0):
     parser.error("guidance tracking weight must be finite/nonnegative; activation h finite/positive")
+if args.crossing_strategy != "legacy" and (not args.motion_aware_passing
+    or not args.human_observed_passing_target or args.restaurant_human != "crossing"
+    or args.human_carry_bowl or args.experiment_baseline != "continuous_cra_safe_sage"):
+    parser.error("crossing strategy requires current observed bare-human passing in continuous CRA")
+if args.crossing_strategy == "rear-pass-or-yield" and (args.guidance_tracking_weight <= 0
+    or args.guidance_tangent_basis != "selected_observed_obstacle" or args.guidance_tangent_velocity_fraction <= 0):
+    parser.error("rear passing requires the selected observed-obstacle reference ablation")
+if args.zero_tangential_bias_ablation and (args.crossing_strategy != "yield-then-go"
+    or args.guidance_tracking_weight != 0 or args.guidance_tangent_velocity_fraction != 0):
+    parser.error("zero tangential bias is a separate wait-and-go ablation with zero extra tracking weight/fraction")
 if args.guidance_tracking_weight > 0 and args.experiment_baseline == "geometric_velocity_cbf":
     parser.error("guidance tracking is a separate MPC ablation, unavailable for geometric CBF")
 if not math.isfinite(args.guidance_max_heading_bias_degrees) or not 0 < args.guidance_max_heading_bias_degrees < 90:
@@ -946,6 +960,7 @@ def main():
         human_visual_part_field_policy=args.human_visual_part_field_policy,
         human_prior_geometry_associations=args.human_prior_geometry_associations,
         human_fresh_person_policy=args.human_fresh_person_policy,
+        zero_tangential_bias_ablation=args.zero_tangential_bias_ablation,
         human_fragment_coverage_config=fragment_coverage_config,
         calibration=calibration,
         class_policy=class_policy,
@@ -1618,7 +1633,7 @@ def main():
                 args.guidance_reference_search_width, args.guidance_reference_search_candidates,
                 args.guidance_tangent_velocity_fraction, args.guidance_tangent_basis,
                 minimum_reference_speed_fraction=args.guidance_reference_minimum_speed_fraction))
-    control = SafeSAGEControlRuntime(mpc=mpc, backup_filter=backup)
+    control = SafeSAGEControlRuntime(mpc=mpc, backup_filter=backup, crossing_strategy=args.crossing_strategy)
     waypoint = WaypointController(
         [Waypoint(*point) for point in ROUTE],
         config=WaypointControllerConfig(
@@ -2154,7 +2169,17 @@ def main():
         human_validation = summarize_human_navigation(live_fields, human.records,
             mode=args.restaurant_human, upper_continuation=args.human_upper_continuation,
             crossing_direction=args.human_crossing_direction)
-        completed = completed and human_validation["passed"]
+        if args.crossing_strategy == "yield-then-go":
+            # Waiting deliberately need not include simultaneous translation.
+            # Keep the original motion benchmark and its result untouched.
+            wait_checks = {key: value for key, value in human_validation["checks"].items()
+                if key != "simultaneous_motion_observed"}
+            human_validation["wait_then_go_acceptance"] = dict(checks=wait_checks,
+                passed=all(wait_checks.values()),
+                scope="separate yield strategy; observed human velocity still required; simultaneous robot translation is not claimed")
+            completed = completed and all(wait_checks.values())
+        else:
+            completed = completed and human_validation["passed"]
         if args.human_body_envelope_radius is not None:
             from robot.evaluation.human_body_envelope_validation import validate_human_body_envelopes
             envelope_validation = validate_human_body_envelopes(live_fields, human.records,
@@ -2174,8 +2199,15 @@ def main():
             passing_goal = (anchor.x + math.cos(anchor.yaw)*ROUTE[-1][0] - math.sin(anchor.yaw)*ROUTE[-1][1],
                             anchor.y + math.sin(anchor.yaw)*ROUTE[-1][0] + math.cos(anchor.yaw)*ROUTE[-1][1])
             passing_validation = summarize_motion_passing(live_fields, human.records, moving_robot=True,
-                                                         nominal_goal_world_xy=passing_goal)
-            completed = completed and passing_validation["passed"]
+                nominal_goal_world_xy=passing_goal, expected_lambda=0. if args.zero_tangential_bias_ablation else 1.25)
+            if args.crossing_strategy == "legacy":
+                completed = completed and passing_validation["passed"]
+            else:
+                from robot.evaluation.crossing_strategy import summarize_crossing_strategy
+                strategy_validation = summarize_crossing_strategy(passing_validation, human.records,
+                    strategy=args.crossing_strategy, nominal_goal_world_xy=passing_goal)
+                completed = completed and strategy_validation["passed"]
+                save_json("crossing-strategy-validation.json", strategy_validation)
             save_json("motion-passing-validation.json", passing_validation)
         if human.carry is not None:
             from robot.scene.restaurant_human_carry import summarize_carry_records
@@ -2363,7 +2395,10 @@ def main():
         "wall_seconds": time.perf_counter() - start_wall,
         "navigation_simulation_seconds": now - start_sim,
         "controller_scope": "circular_velocity_aware_cbf_nominal_omega_no_mpc; shadow_CRA_fields_for_matched_perception" if args.experiment_baseline == "geometric_velocity_cbf" else "checked_guidance_local_path_ablation_with_exact_DTCBF_geometry_and_analytical_CBF" if args.guidance_tracking_weight > 0 else "online_unicycle_MPC_exact_DTCBF_geometry_and_analytical_CBF",
-        "fixed_lambda": 1.25,
+        "crossing_strategy_ablation": args.crossing_strategy,
+        "zero_tangential_bias_ablation": args.zero_tangential_bias_ablation,
+        "physical_CRA_lambda": 1.25,
+        "fixed_lambda": 0. if args.zero_tangential_bias_ablation else 1.25,
         "plume_control": args.plume_control,
         "restaurant_scene": str(SCENE_PATH) if args.restaurant_scene else None,
         "static_restaurant_server": args.restaurant_server,

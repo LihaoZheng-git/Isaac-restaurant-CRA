@@ -7,8 +7,10 @@ import numpy as np
 
 
 def summarize_motion_passing(
-    records, truth, *, moving_robot=False, nominal_goal_world_xy=None
+    records, truth, *, moving_robot=False, nominal_goal_world_xy=None, expected_lambda=1.25
 ):
+    if expected_lambda not in {0., 1.25}:
+        raise ValueError("only primary or explicit zero-bias ablation lambda supported")
     times = np.array([row["time"] for row in truth], dtype=float)
     if len(times) < 3 or np.any(np.diff(times) <= 0):
         raise ValueError("ordered independent actor trace required")
@@ -106,7 +108,7 @@ def summarize_motion_passing(
             )
         for row in detail.get("applied_field_policies", ()):
             policy_preserved &= (
-                row["lambda"] == 1.25
+                row["lambda"] == expected_lambda
                 and abs(row["boundary_flux"] + 0.5 + 1.2 * row["applied_field_risk"])
                 < 1e-9
             )
@@ -129,6 +131,7 @@ def summarize_motion_passing(
         "maximum_selected_centroid_error_m": max(errors, default=None),
         "maximum_original_selection_age_seconds": max(ages, default=None),
         "scope": "independent one-crossing scoring; not runtime actor truth or a prediction guarantee",
+        "expected_field_lambda": expected_lambda,
     }
     if moving_robot:
         robot = np.array([row["robot_xy"] for row in truth], dtype=float)

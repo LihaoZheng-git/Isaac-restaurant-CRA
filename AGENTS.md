@@ -1511,3 +1511,16 @@
   the approved tracking cost; the user has been asked to choose that research
   direction versus a crossing that continues away from the goal. Keep primary
   CRA/Safe-SAGE, all priors/clocks/geometry/exact checks and failed records.
+
+- The user's latest crossing decision authorizes a bounded rear-pass-or-yield
+  controller ablation, then a separately labeled wait-and-go fallback if needed.
+  Try a zero horizon only after the same full temporal DTCBF/dense geometry and
+  analytical stop checks; unsafe waiting retains the original safety response.
+  Current positive selection and its original eight-second expiry remain.
+  A separate wait-and-go lambda-zero ablation changes only applied field
+  tangential bias (including fallback policies); normal flux, physical CRA's
+  lambda1.25, occupancy and every safety/source gate stay unchanged. Retain the
+  original closest-encounter evaluation and failures. New strategy scoring uses
+  actual robot crossing of the walking plane; only wait-and-go omits the curved
+  arc/simultaneous-translation claim. Own stationary/native gates are required.
+  See docs/crossing_maneuver_strategy.md; main/long-service holds remain.
