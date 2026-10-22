@@ -54,7 +54,10 @@ def save_planner_replay(directory, control, request, result):
     if selected and not (directory / "first-selected.pickle").exists():
         selected_metadata = dict(metadata, file="first-selected.pickle",
             snapshot_basis="first planner request with current positive passing selection",
-            selected_track_ids=selected)
+            selected_track_ids=selected,
+            selected_sides=getattr(field, "motion_passing_reference_sides", ()),
+            original_selection_timestamp_seconds=getattr(field,
+                "motion_passing_reference_source_timestamp_seconds", None))
         (directory / "first-selected.pickle").write_bytes(payload)
         (directory / "first-selected.json").write_text(
             json.dumps(selected_metadata, indent=2, allow_nan=False), encoding="utf-8")

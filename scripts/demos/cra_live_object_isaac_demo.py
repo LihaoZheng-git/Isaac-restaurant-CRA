@@ -46,6 +46,8 @@ parser.add_argument("--guidance-reference-mode", choices=("bounded_field_heading
                     default="bounded_field_heading", help="explicit reference ablation; filtered goal velocity uses v_sem as the CBF normal")
 parser.add_argument("--guidance-tangent-velocity-fraction", type=float, default=0.,
                     help="separate proactive tangent-velocity reference, 0..1; runtime requires a current observed-motion passing selection")
+parser.add_argument("--guidance-tangent-basis", choices=("planar_gradient", "selected_observed_obstacle"),
+                    default="planar_gradient", help="explicit reference ablation; selected observed centroid/side avoids combined-gradient orientation ambiguity")
 parser.add_argument("--human-positive-fragment-extent", action="store_true",
                     help="bare-human recent-coobservation/current-positive-return fragment association; no free-space or factor transfer")
 parser.add_argument("--human-positive-fragment-surface", action="store_true",
@@ -197,6 +199,10 @@ if (not math.isfinite(args.guidance_tangent_velocity_fraction)
     or args.guidance_tangent_velocity_fraction > 0 and (not args.motion_aware_passing
         or args.guidance_tracking_weight <= 0 or args.guidance_reference_mode != "planar_forecast_velocity")):
     parser.error("tangent reference requires fraction 0..1, positive explicit tracking, forecast mode and motion-aware passing")
+if args.guidance_tangent_basis == "selected_observed_obstacle" and (
+    args.guidance_tangent_velocity_fraction <= 0 or not args.human_observed_passing_target
+    or args.guidance_reference_search_width > 0):
+    parser.error("selected observed tangent requires positive fraction, observed-person selection and zero legacy search width")
 if (not math.isfinite(args.guidance_tracking_weight) or args.guidance_tracking_weight < 0
     or not math.isfinite(args.guidance_activation_h) or args.guidance_activation_h <= 0):
     parser.error("guidance tracking weight must be finite/nonnegative; activation h finite/positive")
@@ -1584,7 +1590,7 @@ def main():
                 args.guidance_fade_distance, args.guidance_minimum_reference_progress,
                 args.guidance_turn_first_minimum_cap, args.guidance_reference_mode,
                 args.guidance_reference_search_width, args.guidance_reference_search_candidates,
-                args.guidance_tangent_velocity_fraction))
+                args.guidance_tangent_velocity_fraction, args.guidance_tangent_basis))
     control = SafeSAGEControlRuntime(mpc=mpc, backup_filter=backup)
     waypoint = WaypointController(
         [Waypoint(*point) for point in ROUTE],
@@ -2311,6 +2317,7 @@ def main():
             "minimum_turn_first_rate_cap": args.guidance_turn_first_minimum_cap,
             "reference_mode": args.guidance_reference_mode,
             "tangent_velocity_fraction": args.guidance_tangent_velocity_fraction,
+            "tangent_reference_basis": args.guidance_tangent_basis,
             "tangent_runtime_gate": "current positive tracks with an existing observed-motion passing selection; no actor truth",
             "forward_speed_reference": "maximum forward speed in original obstacle-unaware nominal horizon, clipped to actuator bounds",
             "heading_reference_basis": "active_obstacle_unaware_waypoint; same field frame; request-time waypoint index",

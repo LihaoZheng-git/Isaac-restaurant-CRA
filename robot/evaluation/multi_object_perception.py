@@ -680,6 +680,8 @@ def assess_all_objects(worker, packet):
         temporal,
         time.perf_counter() - started,
         motion_passing_reference_track_ids=tuple(sorted(sides)) if passing is not None else (),
+        motion_passing_reference_sides=tuple(sides[k].value for k in sorted(sides)) if passing is not None else (),
+        motion_passing_reference_source_timestamp_seconds=passing.encounter[2] if passing is not None and sides else None,
     )
     # Transaction commit only after the whole multi-obstacle field succeeds.
     worker.tracker, worker.plume, worker.persistent_properties, worker.previous = (

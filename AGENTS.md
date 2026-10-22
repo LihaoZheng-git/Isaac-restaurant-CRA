@@ -1357,3 +1357,16 @@
   the older negative late-state replays. First-selected SHA/source snapshots
   are diagnostic only. See docs/selected_tangent_reference_prototype.md; native
   curved/clearance/arrival acceptance remains pending.
+
+- The08ea845 combined-gradient tangent candidate was interrupted at parked
+  frame27 before navigation: its original23.8 s field audit has a tangent
+  opposite the selected trailing side. Preserve this incomplete trial. The
+  separate `selected_observed_obstacle` reference basis uses the original
+  passing side/epoch and current positive observed LiDAR centroid to construct
+  a soft boundary tangent, with original source age <=8 s. It is motion-policy
+  tracking, not exact following of the combined harmonic vector or paper
+  equivalence. No geometry/factor/source renewal or primary-objective change.
+  Require one current selection; missing side data disables it locally and
+  the legacy combined-field reference search is disabled for this basis.
+  Keep exact checks/independent .02 m guard and own stationary/native gates;
+  see docs/selected_tangent_reference_prototype.md.

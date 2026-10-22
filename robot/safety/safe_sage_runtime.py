@@ -266,6 +266,8 @@ class SafeSAGERuntimeField:
     build_wall_seconds: float
     cra_policy_result: CRATrackPolicyResult | None = None
     motion_passing_reference_track_ids: tuple[int, ...] = ()
+    motion_passing_reference_sides: tuple[str, ...] = ()
+    motion_passing_reference_source_timestamp_seconds: float | None = None
 
     def __post_init__(self) -> None:
         frame_id = _nonnegative_integer(
@@ -302,6 +304,16 @@ class SafeSAGERuntimeField:
             or reference_ids and self.tracking_result.timestamp_seconds != sensor_time):
             raise ValueError("motion reference requires unique current positive track IDs at the field epoch")
         object.__setattr__(self, "motion_passing_reference_track_ids", reference_ids)
+        sides = tuple(self.motion_passing_reference_sides)
+        source = self.motion_passing_reference_source_timestamp_seconds
+        if sides:
+            if (len(sides) != len(reference_ids) or any(s not in {"left", "right"} for s in sides)
+                or isinstance(source, bool) or not isinstance(source, Real)
+                or not math.isfinite(source) or not 0 <= sensor_time-source <= 8. + 1e-9):
+                raise ValueError("selected tangent sides require current positive identities and original bounded selection epoch")
+        elif source is not None:
+            raise ValueError("selected tangent epoch requires explicit sides")
+        object.__setattr__(self, "motion_passing_reference_sides", sides)
         if not isinstance(self.label_result, SemanticLabelResult):
             raise TypeError("label_result must be a SemanticLabelResult.")
         if not isinstance(self.pipeline, SafeSAGEFieldPipelineResult):
@@ -1134,13 +1146,24 @@ class SafeSAGEControlRuntime:
         mpc = self.mpc
         from robot.safety.laplace_guidance_tracking_mpc import LaplaceGuidanceTrackingMPC
         reference_ids = getattr(field, "motion_passing_reference_track_ids", ())
+        reference_sides = getattr(field, "motion_passing_reference_sides", ())
         if (isinstance(mpc, LaplaceGuidanceTrackingMPC)
-            and mpc.guidance_config.tangent_velocity_fraction > 0 and not reference_ids):
+            and mpc.guidance_config.tangent_velocity_fraction > 0 and (not reference_ids
+                or mpc.guidance_config.reference_tangent_basis == "selected_observed_obstacle" and not reference_sides)):
             # Own this request's configuration; never mutate the shared planner
             # or enable a motion-specific objective from old/absent selection.
             mpc = LaplaceGuidanceTrackingMPC(mpc.paper_filter, mpc.config,
                 guidance_config=replace(mpc.guidance_config, tangent_velocity_fraction=0.))
         extra = {}
+        if (isinstance(mpc, LaplaceGuidanceTrackingMPC)
+            and mpc.guidance_config.reference_tangent_basis == "selected_observed_obstacle"
+            and mpc.guidance_config.tangent_velocity_fraction > 0):
+            tracks = {t.track_id: t for t in field.tracking_result.tracked_obstacles}
+            c, s = math.cos(field.anchor_yaw), math.sin(field.anchor_yaw)
+            rotation = np.array([[c, -s], [s, c]])
+            extra["selected_passing_tangents"] = tuple((key, tuple(
+                (np.asarray(tracks[key].centroid_world_xy)-field.anchor_position_world_xy) @ rotation), side)
+                for key, side in zip(reference_ids, reference_sides))
         if nominal_goal_grid_xy is not None:
             if not isinstance(mpc, LaplaceGuidanceTrackingMPC):
                 raise ValueError(

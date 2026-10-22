@@ -32,6 +32,7 @@ class LaplaceGuidanceTrackingConfig:
     reference_search_width: int = 0
     reference_search_maximum_candidates: int = 4800
     tangent_velocity_fraction: float = 0.0
+    reference_tangent_basis: str = "planar_gradient"
 
     def __post_init__(self):
         if self.reference_mode not in {
@@ -39,7 +40,7 @@ class LaplaceGuidanceTrackingConfig:
         }:
             raise ValueError("unknown guidance reference mode")
         for name, value in vars(self).items():
-            if name == "reference_mode":
+            if name in {"reference_mode", "reference_tangent_basis"}:
                 continue
             if (
                 isinstance(value, bool)
@@ -71,6 +72,9 @@ class LaplaceGuidanceTrackingConfig:
             or self.reference_mode != "planar_forecast_velocity")
         ):
             raise ValueError("tangent fraction requires 0..1, positive tracking weight and planar forecast mode")
+        if self.reference_tangent_basis not in {"planar_gradient", "selected_observed_obstacle"} or (
+            self.reference_tangent_basis == "selected_observed_obstacle" and self.reference_search_width > 0):
+            raise ValueError("selected observed tangent requires an explicit supported basis and no legacy reference search")
 
 
 @dataclass(frozen=True)
@@ -107,6 +111,7 @@ class GuidanceTrackingDiagnostic:
     tangent_velocity_fraction: float = 0.0
     tangent_reference_track_ids: tuple[int, ...] = ()
     reference_projection_basis: str = "legacy_reference_projection"
+    reference_tangent_basis: str = "planar_gradient"
 
 
 @dataclass(frozen=True)
@@ -164,6 +169,7 @@ class LaplaceGuidanceTrackingMPC(SafeSAGEUnicycleMPC):
         nominal_command,
         *,
         nominal_goal_grid_xy=None,
+        selected_passing_tangents=(),
         **kwargs,
     ):
         if self.guidance_config.weight == 0:
@@ -179,7 +185,20 @@ class LaplaceGuidanceTrackingMPC(SafeSAGEUnicycleMPC):
                 "guidance path ablation cannot silently replace a separate state-path target"
             )
         kwargs = dict(kwargs)
+        references = tuple(selected_passing_tangents)
+        if references:
+            if (self.guidance_config.reference_tangent_basis != "selected_observed_obstacle"
+                or len(references) != 1):
+                raise ValueError("selected observed tangent requires one explicit current encounter")
+            key, center, side = references[0]
+            if (isinstance(key, bool) or not isinstance(key, int) or key < 0
+                or np.asarray(center).shape != (2,) or not np.isfinite(center).all()
+                or side not in {"left", "right"}):
+                raise ValueError("selected observed tangent requires finite current geometry and explicit side")
+        elif self.guidance_config.reference_tangent_basis == "selected_observed_obstacle" and self.guidance_config.tangent_velocity_fraction > 0:
+            raise ValueError("selected observed tangent requires one explicit current encounter")
         kwargs["guidance_fields"] = tuple(kwargs["guidance_fields"])
+        reference_kwargs = dict(kwargs, selected_passing_tangents=references)
         nominal = self._nominal_sequence(nominal_command)
         speed = float(
             np.clip(
@@ -209,7 +228,7 @@ class LaplaceGuidanceTrackingMPC(SafeSAGEUnicycleMPC):
         search_audit = None
         if activation > 0 and speed > 0 and current.unsafe_reason is None:
             reason = "no_exact_safe_progress_reference"
-            preference = self._reference_preference(initial, goal, speed, current, kwargs)
+            preference = self._reference_preference(initial, goal, speed, current, reference_kwargs)
             direction = initial[2] if preference is None else preference[0]
             initial_error = abs(_wrap(direction - initial[2]))
             distance = float(np.linalg.norm(goal - initial[:2]))
@@ -224,7 +243,7 @@ class LaplaceGuidanceTrackingMPC(SafeSAGEUnicycleMPC):
                 if turn_first and cap < self.guidance_config.minimum_turn_first_rate_cap:
                     continue
                 commands = self._guidance_rollout(
-                    initial, goal, speed, cap, turn_first, kwargs
+                    initial, goal, speed, cap, turn_first, reference_kwargs
                 )
                 if commands is None:
                     continue
@@ -370,6 +389,7 @@ class LaplaceGuidanceTrackingMPC(SafeSAGEUnicycleMPC):
             tangent_velocity_fraction=self.guidance_config.tangent_velocity_fraction,
             reference_projection_basis="lookahead_unicycle_affine_v_omega"
             if self.guidance_config.tangent_velocity_fraction > 0 else "legacy_reference_projection",
+            reference_tangent_basis=self.guidance_config.reference_tangent_basis,
         )
         return GuidanceTrackingMPCResult(
             **{
@@ -444,19 +464,27 @@ class LaplaceGuidanceTrackingMPC(SafeSAGEUnicycleMPC):
                 # a current observed-motion passing selection. This vector has
                 # no execution authority: retain the projection and every
                 # inherited exact unicycle/geometry/analytical check.
-                gradient = np.asarray(constraint.interpolant_gradient[:2])
-                norm = float(np.linalg.norm(gradient))
-                if norm > 1e-9:
-                    normal = gradient / norm
+                if self.guidance_config.reference_tangent_basis == "selected_observed_obstacle":
+                    _, center, side = field["selected_passing_tangents"][0]
+                    normal = np.asarray(center)-state[:2]
+                    norm = float(np.linalg.norm(normal))
+                    if norm <= 1e-9:
+                        return None
+                    normal = normal / norm
+                    tangent = np.array([-normal[1], normal[0]]) * (1 if side == "left" else -1)
+                else:
+                    gradient = np.asarray(constraint.interpolant_gradient[:2])
+                    norm = float(np.linalg.norm(gradient))
+                    normal = gradient / max(norm, 1e-9)
                     guide = np.asarray(constraint.sampled_guidance_grid_xy)
-                    tangent = guide - (guide @ normal) * normal
-                    tangent_norm = float(np.linalg.norm(tangent))
-                    if tangent_norm > 1e-9:
-                        activation = math.sqrt(float(np.clip(1 - constraint.sampled_safety_value
-                            / self.guidance_config.activation_safety_value, 0, 1)))
-                        fade = min(1., distance / self.guidance_config.guidance_fade_distance_m) ** 2
-                        preferred = preferred + speed * fraction * activation * fade * tangent / tangent_norm
-                        preferred *= min(1., speed / max(1e-9, float(np.linalg.norm(preferred))))
+                    tangent = guide - (guide @ normal) * normal if norm > 1e-9 else np.zeros(2)
+                tangent_norm = float(np.linalg.norm(tangent))
+                if tangent_norm > 1e-9:
+                    activation = math.sqrt(float(np.clip(1 - constraint.sampled_safety_value
+                        / self.guidance_config.activation_safety_value, 0, 1)))
+                    fade = min(1., distance / self.guidance_config.guidance_fade_distance_m) ** 2
+                    preferred = preferred + speed * fraction * activation * fade * tangent / tangent_norm
+                    preferred *= min(1., speed / max(1e-9, float(np.linalg.norm(preferred))))
                 magnitude = float(np.linalg.norm(preferred))
                 if magnitude <= 1e-9:
                     return None

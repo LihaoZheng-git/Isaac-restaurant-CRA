@@ -54,7 +54,9 @@ def test_first_selected_snapshot_retains_original_request_and_is_not_replaced(tm
         mpc=LaplaceGuidanceTrackingMPC(paper, config(),
             guidance_config=LaplaceGuidanceTrackingConfig(weight=10)),
         backup_filter=SafeSAGEUnicycleCBFFilter(paper))
-    f = replace(perception.field, motion_passing_reference_track_ids=(0,))
+    f = replace(perception.field, motion_passing_reference_track_ids=(0,),
+        motion_passing_reference_sides=("left",),
+        motion_passing_reference_source_timestamp_seconds=.9)
     request = (np.zeros(3), (.2, 0.), f, None, (1., 0.))
     result = control.plan(request[0], request[1], f, nominal_goal_grid_xy=request[4])
     save_planner_replay(tmp_path, control, request, result)
@@ -66,6 +68,8 @@ def test_first_selected_snapshot_retains_original_request_and_is_not_replaced(tm
     metadata = json.loads((tmp_path / "first-selected.json").read_text())
     assert hashlib.sha256(original).hexdigest() == metadata["sha256"]
     assert metadata["selected_track_ids"] == [0]
+    assert metadata["selected_sides"] == ["left"]
+    assert metadata["original_selection_timestamp_seconds"] == .9
     restored = pickle.loads(original)  # This test just generated the trusted file.
     np.testing.assert_array_equal(restored["request"][0], np.zeros(3))
     assert restored["request"][2].sensor_timestamp_seconds == 1.
