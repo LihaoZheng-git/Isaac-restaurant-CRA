@@ -60,6 +60,8 @@ parser.add_argument("--human-fragment-mask-boundary-pixels", type=int, choices=(
                     help="separate one-native-pixel mask-boundary association prior; >=95% original mask support, unchanged current 3D/clock/ambiguity gates")
 parser.add_argument("--human-visual-part-field-policy", action="store_true",
                     help="current positive associated parts share verified human control flux/side; physical child CRA, class, geometry and clocks stay unchanged")
+parser.add_argument("--human-prior-geometry-associations", action="store_true",
+                    help="explicit current raw-LiDAR/RGB helper scope with existing body-envelope PRIOR geometry; no wider bounds or new physical evidence")
 parser.add_argument("--human-fresh-person-policy", action="store_true",
                     help="fresh audited person-mask/current validated LiDAR identity cue for passing eligibility; no physical evidence refresh")
 parser.add_argument("--human-observed-passing-target", action="store_true",
@@ -264,7 +266,11 @@ if args.human_positive_fragment_surface and not args.human_positive_fragment_ext
     parser.error("positive fragment surface requires the explicit bare-human extent mode")
 if args.human_unique_full_surface and not args.human_positive_fragment_surface:
     parser.error("unique full surface correspondence requires positive surface association")
-if args.human_visual_fragment_association and (not args.human_observed_occupancy_only
+if args.human_prior_geometry_associations and (args.human_observed_occupancy_only
+    or args.human_body_envelope_radius is None or args.restaurant_human is None
+    or args.human_carry_bowl or not (args.human_visual_fragment_association or args.human_fresh_person_policy)):
+    parser.error("prior-geometry associations require explicit bare-human body-prior geometry and current helpers")
+if args.human_visual_fragment_association and (not (args.human_observed_occupancy_only or args.human_prior_geometry_associations)
     or args.restaurant_human is None or args.human_carry_bowl):
     parser.error("visual fragment association requires the separated bare-human observed-only fixture")
 if args.human_fragment_mask_boundary_pixels and not args.human_visual_fragment_association:
@@ -272,7 +278,7 @@ if args.human_fragment_mask_boundary_pixels and not args.human_visual_fragment_a
 if args.human_visual_part_field_policy and (not args.human_visual_fragment_association
     or args.human_boundary_flux is None or not args.motion_aware_passing):
     parser.error("human-part field policy requires visual parts, verified human flux and motion passing")
-if args.human_fresh_person_policy and (not args.human_observed_occupancy_only
+if args.human_fresh_person_policy and (not (args.human_observed_occupancy_only or args.human_prior_geometry_associations)
     or not args.human_observed_passing_target or not args.motion_aware_passing
     or args.restaurant_human is None or args.human_carry_bowl):
     parser.error("fresh person policy requires the bare-human observed-only person-selected passing fixture")
@@ -934,6 +940,7 @@ def main():
         human_visual_fragment_association=args.human_visual_fragment_association,
         human_fragment_mask_boundary_pixels=args.human_fragment_mask_boundary_pixels,
         human_visual_part_field_policy=args.human_visual_part_field_policy,
+        human_prior_geometry_associations=args.human_prior_geometry_associations,
         human_fresh_person_policy=args.human_fresh_person_policy,
         human_fragment_coverage_config=fragment_coverage_config,
         calibration=calibration,
@@ -2210,6 +2217,7 @@ def main():
             "observed_occupancy_only": args.human_observed_occupancy_only,
             "requested_boundary_flux": args.human_boundary_flux,
             "current_visual_part_field_policy_prior": args.human_visual_part_field_policy,
+            "body_prior_geometry_association_scope": args.human_prior_geometry_associations,
             "visual_part_mask_boundary_prior_pixels": args.human_fragment_mask_boundary_pixels,
             "physical_cra_unchanged": True,
             "scope": "separate geometry/flux ablation; not a primary CRA comparison"},

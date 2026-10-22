@@ -1463,3 +1463,15 @@
   substitute scalarphi for missing occupancy. Current association helpers may
   enter that mode only through explicit scope, still using actual raw returns,
   current RGB/identity gates and original source clocks.
+
+- A separate explicit prior-geometry association scope may run the current
+  raw-LiDAR/RGB person/part helpers with the earlier approved .40+.25 m body
+  PRIOR. Defaultoff preserves their observed-only scope; require actual current
+  raw returns and unchanged mask/3D/identity/source gates, never generated disk
+  cells as measurements. Do not widen .25 uncertainty or erase older containment
+  failures. The separate candidate uses7.8 m actor trigger to avoid requiring
+  entry into an unsafe late trigger region, with existing bounded fragment-
+  coverage PRIOR/.35 s original expiry/1 m/s point bound. This is an explicitly
+  different geometry/timing trial, not an isolated causal comparison or a pass
+  for earlier8.4 m observed-only failures. Keep independent containment and all
+  exact/clearance/arrival/passing gates; see docs/prior_geometry_association_scope.md.

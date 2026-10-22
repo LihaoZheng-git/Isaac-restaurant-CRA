@@ -239,6 +239,7 @@ class LiveObjectPerception:
         human_visual_fragment_association=False,
         human_fragment_mask_boundary_pixels=0,
         human_visual_part_field_policy=False,
+        human_prior_geometry_associations=False,
         human_fresh_person_policy=False,
     ):
         self.segmenter, self.mass_estimator, self.contact_detector = (
@@ -300,8 +301,16 @@ class LiveObjectPerception:
         if human_observed_occupancy_only and human_fragment_coverage_config is not None:
             raise ValueError("observed-only geometry cannot cover fragments with an unoccupied prior disk")
         self.human_observed_occupancy_only = human_observed_occupancy_only
+        if not isinstance(human_prior_geometry_associations, bool) or (
+            human_prior_geometry_associations and (human_observed_occupancy_only
+                or self.human_body_envelope is None or person_detector is None
+                or carried_object_config is not None
+                or not (human_visual_fragment_association or human_fresh_person_policy))):
+            raise ValueError("prior-geometry associations require explicit body-prior geometry and current bare-human helpers")
+        self.human_prior_geometry_associations = human_prior_geometry_associations
+        association_scope = human_observed_occupancy_only or human_prior_geometry_associations
         if not isinstance(human_visual_fragment_association, bool) or (
-            human_visual_fragment_association and (not human_observed_occupancy_only
+            human_visual_fragment_association and (not association_scope
             or person_detector is None or carried_object_config is not None)
         ):
             raise ValueError("visual part association requires observed-only bare-human mode")
@@ -318,7 +327,7 @@ class LiveObjectPerception:
             raise ValueError("human-part field policy requires current visual parts, verified human flux and passing mode")
         self.human_visual_part_field_policy = human_visual_part_field_policy
         if not isinstance(human_fresh_person_policy, bool) or (
-            human_fresh_person_policy and (not human_observed_occupancy_only
+            human_fresh_person_policy and (not association_scope
                 or person_detector is None or self.motion_passing is None
                 or not self.motion_passing.config.require_visual_person_selection)
         ):
