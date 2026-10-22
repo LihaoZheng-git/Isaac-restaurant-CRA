@@ -1524,3 +1524,16 @@
   actual robot crossing of the walking plane; only wait-and-go omits the curved
   arc/simultaneous-translation claim. Own stationary/native gates are required.
   See docs/crossing_maneuver_strategy.md; main/long-service holds remain.
+
+- The e385018 rear-pass native attempt failed progress_timeout at64.466667 s,
+  2/3 goals, despite .393890 m braking-inclusive clearance/.000956 m stop drift,
+  644 fields and passed human/containment checks. Walking arc was-.000734 m,
+  no walking-plane crossing,125 accepted visual instances and zero complete
+  factors. Five checked wait proposals were rejected because the new mode
+  wrongly marked them emergency fallbacks; correct only that result status,
+  keeping the caller's acceptance predicate and every exact/analytical gate.
+  Historical `checked_reference_executed` meant proposal selection, never
+  verified execution; the follow-up uses an explicit selected-for-plan name.
+  A separate zero-bias wait-go candidate must show accepted checked-yield plans
+  AND an observed walking-window wait, then actual arrival/safe stopping. Keep
+  the failed rear result, all priors/source clocks and main/long-service holds.

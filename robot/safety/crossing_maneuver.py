@@ -49,7 +49,7 @@ def apply_crossing_maneuver(mpc, result, initial, nominal, field, strategy, chec
         selected_track_ids=ids,
         original_selection_timestamp_seconds=field.motion_passing_reference_source_timestamp_seconds,
         original_planner_status=result.status, original_command=result.first_command,
-        checked_reference_executed=bool(detail is not None and detail.active),
+        checked_reference_selected_for_plan=bool(detail is not None and detail.active),
         wait_exact_checked=False, wait_analytical_checked=False,
         scope="controller preference only; current positive identity and original expiry; no physical evidence, occupancy or clock renewal")
     if want_wait:
@@ -77,10 +77,12 @@ def apply_crossing_maneuver(mpc, result, initial, nominal, field, strategy, chec
                 predicted_safety_values=frozen(value.safety_values),
                 dtcbf_margins=frozen(value.margins),
                 objective_value=mpc._objective_value(value.commands, sequence),
-                success=True, intervention_active=True, fallback_active=True,
+                # This is an intentional fully verified plan. fallback_active
+                # denotes an unusable emergency result in the live caller.
+                success=True, intervention_active=True, fallback_active=False,
                 status="crossing_strategy_exact_checked_yield")
             audit["action"] = "checked_yield"
-            audit["checked_reference_executed"] = False
+            audit["checked_reference_selected_for_plan"] = False
             if isinstance(result, GuidanceTrackingMPCResult):
                 result = replace(result, guidance_tracking=replace(result.guidance_tracking,
                     active=False, reason="crossing_strategy_checked_yield; reference retained for audit only"))

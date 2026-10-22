@@ -40,3 +40,34 @@ quarter-speed checked left reference when available. Exact/analytical checks pas
 with original epochs. This is numerical replay, not arrival acceptance. Each
 candidate's own stationary/native gates remain mandatory. No main or long-service
 acceptance follows.
+
+## First native rear-pass attempt: failed
+
+At e385018, the candidate passed its own 60-frame stationary gate and human
+motion/body-prior validation, but stopped on `progress_timeout` after 64.466667
+navigation seconds with 2/3 waypoints. Minimum independent clearance including
+braking was .393890 m, stopping drift .000956 m, minimum analytical margin
+.071547. It published 644 live fields (291 translating), 125 accepted all-object
+visual instances and zero complete fresh four-factor assessments. Human motion
+had twelve supported kinetic/two simultaneous rows. The walking arc was
+-.000734 m; the robot never crossed the walking plane or reached the final goal.
+Preserve this failed result in `outputs/paper_flux/crossing-rear-strategy-N6-v1`.
+
+The completed log exposed a new-mode status bug: five exact/analytical checked
+wait proposals had `fallback_active=True`, so the unchanged live acceptance
+predicate rejected all five. That flag denotes emergency/unusable results in
+the caller; an intentional fully verified wait now returns false, retaining
+`intervention_active=True` and its explicit audit. No acceptance predicate or
+safety check was relaxed. The historical `checked_reference_executed` audit
+name meant selected in a proposal; it is renamed `checked_reference_selected_for_plan`
+to avoid implying verified execution. The failed experiment is not repaired
+retroactively, and this correction alone has no rear-pass native acceptance.
+
+Before the separate wait-and-go retry, evaluation additionally requires three
+accepted checked-yield source frames during walking and at least .5 s of
+independently observed robot speed <=.02 m/s during walking. Failsafe waiting
+for missing plans is not claimed as successful execution of the new strategy.
+All original arrival, geometry, braking, source and perception gates still apply.
+The correction and execution audit passed all 2,452 unit tests and Ruff, plus
+trusted original-input exact/analytical replay. Wait-and-go native acceptance is
+pending its own new stationary/motion trial.

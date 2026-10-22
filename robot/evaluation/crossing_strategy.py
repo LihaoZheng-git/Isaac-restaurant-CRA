@@ -23,6 +23,42 @@ def zero_tangential_bias(policy, applied, audit):
     return copied, parameters, rows
 
 
+def summarize_wait_execution(plans, truth):
+    """Require accepted checked-yield plans and an independently observed wait."""
+    times = np.array([row["time"] for row in truth], dtype=float)
+    robot = np.array([row["robot_xy"] for row in truth], dtype=float)
+    actor = np.array([row["actor_xyz"][:2] for row in truth], dtype=float)
+    if len(times) < 3 or np.any(np.diff(times) <= 0) or not all(
+        np.isfinite(value).all() for value in (times, robot, actor)):
+        raise ValueError("finite ordered independent trace required")
+    phases = [row.get("phase") for row in truth]
+    walking = (np.array(phases) == "move") & (np.linalg.norm(np.gradient(actor, times, axis=0), axis=1) >= .3)
+    waiting = walking & (np.linalg.norm(np.gradient(robot, times, axis=0), axis=1) <= .02)
+    duration = longest = 0.
+    for i in range(1, len(times)):
+        duration = duration + times[i] - times[i-1] if waiting[i] and waiting[i-1] else 0.
+        longest = max(longest, duration)
+    sources = set()
+    for event in plans:
+        audit = event.get("crossing_maneuver_ablation") or {}
+        source = audit.get("sensor_timestamp_seconds")
+        selection = audit.get("original_selection_timestamp_seconds")
+        if (event.get("accepted") is not True or audit.get("action") != "checked_yield"
+            or not audit.get("wait_exact_checked") or not audit.get("wait_analytical_checked")
+            or source is None or selection is None or not 0 <= source - selection <= 8.
+            or not times[0] <= source <= times[-1]):
+            continue
+        i = min(int(np.searchsorted(times, source)), len(times)-1)
+        if walking[i]:
+            sources.add((audit.get("sensor_frame_id"), source))
+    checks = dict(three_accepted_checked_yield_sources_during_walking=len(sources) >= 3,
+        observed_half_second_wait_during_walking=longest >= .5 - 1e-9)
+    return dict(checks=checks, passed=all(checks.values()),
+        accepted_checked_yield_sources_during_walking=len(sources),
+        longest_observed_wait_during_walking_seconds=longest,
+        scope="accepted plans plus independent robot speed <=.02 m/s while actor walks; actor truth is evaluation only")
+
+
 def summarize_crossing_strategy(legacy, truth, *, strategy, nominal_goal_world_xy):
     """Score the first crossing of the human's walking plane, not closest wait.
 

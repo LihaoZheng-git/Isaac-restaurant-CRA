@@ -2206,6 +2206,11 @@ def main():
                 from robot.evaluation.crossing_strategy import summarize_crossing_strategy
                 strategy_validation = summarize_crossing_strategy(passing_validation, human.records,
                     strategy=args.crossing_strategy, nominal_goal_world_xy=passing_goal)
+                if args.crossing_strategy == "yield-then-go":
+                    from robot.evaluation.crossing_strategy import summarize_wait_execution
+                    execution = summarize_wait_execution(plan_events, human.records)
+                    strategy_validation["wait_execution"] = execution
+                    strategy_validation["passed"] &= execution["passed"]
                 completed = completed and strategy_validation["passed"]
                 save_json("crossing-strategy-validation.json", strategy_validation)
             save_json("motion-passing-validation.json", passing_validation)

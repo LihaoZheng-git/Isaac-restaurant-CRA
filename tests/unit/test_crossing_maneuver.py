@@ -7,7 +7,7 @@ from test_guidance_reference_speed_pool import fields, planner
 from test_motion_passing_validation import example
 from test_safe_sage_cbf_filter import make_fields
 
-from robot.evaluation.crossing_strategy import summarize_crossing_strategy, zero_tangential_bias
+from robot.evaluation.crossing_strategy import summarize_crossing_strategy, summarize_wait_execution, zero_tangential_bias
 from robot.evaluation.motion_passing_validation import summarize_motion_passing
 from robot.safety.crossing_maneuver import apply_crossing_maneuver
 from robot.safety.safe_sage_guidance_policy import SafeSAGEGuidanceParameters, SafeSAGEGuidancePolicy
@@ -33,9 +33,12 @@ def test_yield_horizon_is_exact_checked_serializable_and_does_not_mutate_referen
     nominal = np.tile([.2, 0.], (m.config.horizon_steps, 1))
     result = apply_crossing_maneuver(m, original, np.zeros(3), nominal, field, "yield-then-go", lambda: stop)
     assert result.success and result.first_command == (0., 0.)
+    assert not result.fallback_active  # live acceptance rejects emergency fallbacks
+    assert result.minimum_dtcbf_margin >= -m.config.constraint_tolerance
+    assert result.minimum_predicted_safety_value >= -m.config.constraint_tolerance
     assert result.crossing_maneuver["wait_exact_checked"]
     assert result.crossing_maneuver["wait_analytical_checked"]
-    assert not result.crossing_maneuver["checked_reference_executed"]
+    assert not result.crossing_maneuver["checked_reference_selected_for_plan"]
     assert not result.guidance_tracking.active
     assert result.crossing_maneuver["original_selection_timestamp_seconds"] == 1.
     np.testing.assert_array_equal(original.command_sequence, before)
@@ -81,7 +84,7 @@ def test_opposed_reference_uses_checked_wait_but_aligned_reference_is_preserved(
     aligned = replace(opposed, command_sequence=commands)
     kept = apply_crossing_maneuver(m, aligned, np.zeros(3), (.2, 0.), field, "rear-pass-or-yield", lambda: stop)
     np.testing.assert_array_equal(kept.command_sequence, commands)
-    assert kept.crossing_maneuver["checked_reference_executed"]
+    assert kept.crossing_maneuver["checked_reference_selected_for_plan"]
 
 
 def test_zero_bias_copies_all_class_and_track_policies_without_changing_normal_flux():
@@ -124,3 +127,18 @@ def test_wait_go_uses_actual_crossing_not_closest_wait_and_keeps_old_failure(mir
     truth[-1]["robot_xy"][1] = 3.
     failed = summarize_motion_passing(records, truth, moving_robot=True, nominal_goal_world_xy=(0., 4.))
     assert not summarize_crossing_strategy(failed, truth, strategy="yield-then-go", nominal_goal_world_xy=(0., 4.))["passed"]
+
+
+@pytest.mark.parametrize("failure", [None, "rejected", "expired", "not_waiting", "not_checked"])
+def test_wait_claim_requires_accepted_current_plans_and_observed_wait(failure):
+    _, truth = example(False)
+    for row in truth:
+        row["phase"] = "move"
+        row["robot_xy"][1] = min(row["time"], 1.) if failure != "not_waiting" else row["time"]
+    plans = [dict(accepted=failure != "rejected", crossing_maneuver_ablation=dict(
+        action="checked_yield", sensor_timestamp_seconds=t, sensor_frame_id=i,
+        original_selection_timestamp_seconds=-10. if failure == "expired" else 1.,
+        wait_exact_checked=failure != "not_checked", wait_analytical_checked=True))
+        for i,t in enumerate([2., 2.2, 2.4])]
+    result = summarize_wait_execution(plans, truth)
+    assert result["passed"] is (failure is None)
