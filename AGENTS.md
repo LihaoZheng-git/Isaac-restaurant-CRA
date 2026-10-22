@@ -1345,3 +1345,15 @@
   zero complete factor results. Flux strength does not fill hidden geometry;
   diagnose checked-reference feasibility before another motion retry. See
   docs/fresh_person_policy.md.
+
+- The selected-tangent prototype is available on a separate encounter-reference
+  development branch alongside the fresh class cue/N6 horizon. Fraction1 with
+  explicit .15 m auxiliary goal fade is an objective ablation, not a change to
+  waypoint nominal/acceptance, physical evidence, occupancy or exact safety.
+  It uses the semantic field component tangent to the actual planar h gradient,
+  projects the requested unicycle command including angular coupling and still
+  requires a checked full horizon. Current positive passing selection gates
+  each request; no selection disables the tangent preference locally. Preserve
+  the older negative late-state replays. First-selected SHA/source snapshots
+  are diagnostic only. See docs/selected_tangent_reference_prototype.md; native
+  curved/clearance/arrival acceptance remains pending.

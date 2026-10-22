@@ -1,6 +1,7 @@
 import hashlib
 import json
 import pickle
+from dataclasses import replace
 
 import numpy as np
 import pytest
@@ -43,3 +44,28 @@ def test_native_numeric_snapshot_replays_same_plan_without_renewing_field(tmp_pa
     np.testing.assert_array_equal(copied[2].pipeline.h_full.values, perception.field.pipeline.h_full.values)
     stored = json.loads((tmp_path / "planner-000000.json").read_text())
     assert stored == metadata and stored["sensor_timestamp_seconds"] == 1.
+
+
+def test_first_selected_snapshot_retains_original_request_and_is_not_replaced(tmp_path):
+    perception = make_runtime()
+    perception.initialize(make_observation(1, 1.), make_provider())
+    paper = make_filter()
+    control = SafeSAGEControlRuntime(
+        mpc=LaplaceGuidanceTrackingMPC(paper, config(),
+            guidance_config=LaplaceGuidanceTrackingConfig(weight=10)),
+        backup_filter=SafeSAGEUnicycleCBFFilter(paper))
+    f = replace(perception.field, motion_passing_reference_track_ids=(0,))
+    request = (np.zeros(3), (.2, 0.), f, None, (1., 0.))
+    result = control.plan(request[0], request[1], f, nominal_goal_grid_xy=request[4])
+    save_planner_replay(tmp_path, control, request, result)
+    path = tmp_path / "first-selected.pickle"
+    original = path.read_bytes()
+    request = (np.ones(3), (.1, 0.), f, None, (2., 0.))
+    save_planner_replay(tmp_path, control, request, result)
+    assert path.read_bytes() == original
+    metadata = json.loads((tmp_path / "first-selected.json").read_text())
+    assert hashlib.sha256(original).hexdigest() == metadata["sha256"]
+    assert metadata["selected_track_ids"] == [0]
+    restored = pickle.loads(original)  # This test just generated the trusted file.
+    np.testing.assert_array_equal(restored["request"][0], np.zeros(3))
+    assert restored["request"][2].sensor_timestamp_seconds == 1.

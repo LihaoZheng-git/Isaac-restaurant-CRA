@@ -32,3 +32,33 @@ original epochs, and found forward commands at six steps in both snapshots;
 it is not a native bypass or real-time result. Shorter horizons change prediction
 coverage and must be reported as a separate matched ablation. This prototype
 does not justify changing main or promising a curved human bypass.
+
+## Encounter-reference follow-up
+
+The separate `codex/cra-encounter-guidance-reference` development branch brings
+this option together with the tested fresh class-only cue and the explicit N6
+horizon. This is a bounded native candidate, **not accepted navigation**. The
+75f45ce cue-only trial selected the trailing side immediately at23.0 s but
+failed the independent .02 m clearance gate at.019088 m; earlier class eligibility
+alone did not produce proactive motion. Before selection, accepted planar
+references were nearly straight. Later references became infeasible near the
+intermediate waypoint. Preserve these observations and the original failures.
+
+The next isolated objective test uses fraction1, .15 m reference fade (legacy
+.5 m retained), N6 and the same8.4 m actor-only trigger/.5 m/s human, observed
+occupancy, priors, flux/lambda, actuator limits and safety checks. Positive
+fraction is still gated by the current published passing selection. It cannot
+make an unsafe current configuration or full horizon acceptable. The original
+nominal goal and waypoint acceptance are unchanged; .15 m changes only auxiliary
+reference fading, never obstacle geometry or clearance requirements.
+
+The first planner request carrying a current positive passing selection is now
+saved separately as `first-selected.pickle` with its SHA/source epochs. Later
+requests cannot overwrite it; the five-second bucket snapshots remain. These
+trusted local diagnostic files are never loaded by control.
+
+All2,365 collected unit tests passed in83.23 s, including the prototype and new
+snapshot test. An additional focused19-test run also covers N6 near a .2 m
+intermediate waypoint in both tangent directions. Ruff `robot tests scripts`
+passed. Own stationary/native validation is pending; no physical evidence,
+four-factor readiness, geometry uncertainty or paper-equivalence claim follows.

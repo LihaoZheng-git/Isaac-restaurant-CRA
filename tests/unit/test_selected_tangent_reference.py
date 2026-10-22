@@ -37,14 +37,19 @@ def test_tangent_requires_explicit_objective_and_forecast_reference():
 
 
 @pytest.mark.parametrize("side", [-1., 1.])
-def test_tangent_can_steer_before_halfspace_binds_but_retains_exact_horizon(side):
+@pytest.mark.parametrize("steps,goal_distance", [(8, 2.), (6, .2)])
+def test_tangent_can_steer_before_halfspace_binds_but_retains_exact_horizon(side, steps, goal_distance):
     initial = np.zeros(3)
     kwargs = field(side)
-    nominal = np.tile([.2, 0.], (config().horizon_steps, 1))
+    c = replace(config(), horizon_steps=steps)
+    nominal = np.tile([.2, 0.], (steps, 1))
     original = nominal.copy()
-    legacy = planner(0).plan(initial, nominal, nominal_goal_grid_xy=(2., 0.), **kwargs)
+    baseline = planner(0)
+    baseline.config = c
+    legacy = baseline.plan(initial, nominal, nominal_goal_grid_xy=(goal_distance, 0.), **kwargs)
     mpc = planner(1)
-    result = mpc.plan(initial, nominal, nominal_goal_grid_xy=(2., 0.), **kwargs)
+    mpc.config = c
+    result = mpc.plan(initial, nominal, nominal_goal_grid_xy=(goal_distance, 0.), **kwargs)
     assert result.success and result.guidance_tracking.active
     assert abs(legacy.angular_velocity) < 1e-6
     assert side * result.angular_velocity > .02

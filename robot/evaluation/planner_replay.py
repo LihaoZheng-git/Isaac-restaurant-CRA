@@ -47,4 +47,15 @@ def save_planner_replay(directory, control, request, result):
     temporary = directory / f"{stem}.json.tmp"
     temporary.write_text(json.dumps(metadata, indent=2, allow_nan=False), encoding="utf-8")
     temporary.replace(directory / f"{stem}.json")
+    # Keep the first actually requested passing-selection field too. The last
+    # request in a five-second bucket may already be an unrecoverable state.
+    # This diagnostic is never loaded by control and never changes source time.
+    selected = getattr(field, "motion_passing_reference_track_ids", ())
+    if selected and not (directory / "first-selected.pickle").exists():
+        selected_metadata = dict(metadata, file="first-selected.pickle",
+            snapshot_basis="first planner request with current positive passing selection",
+            selected_track_ids=selected)
+        (directory / "first-selected.pickle").write_bytes(payload)
+        (directory / "first-selected.json").write_text(
+            json.dumps(selected_metadata, indent=2, allow_nan=False), encoding="utf-8")
     return metadata
