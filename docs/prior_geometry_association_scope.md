@@ -32,3 +32,29 @@ audits and every rejection. Neither this mode nor a positive CBF margin proves
 universal safety, exact paper equivalence or real-time control. Stationary/native
 acceptance is pending.56 focused checks passed in4.86 s; all2,422 unit tests
 passed in81.28 s; Ruff/diff checks passed.
+
+## Executed bounded trial
+
+At7f1d5ad, `outputs/paper_flux/body-prior-human17-N6-v1` passed its own60-frame
+parked gate and every live containment check:705/705 rows, maximum center error
+.182025 m versus the unchanged.25 m uncertainty prior, minimum containment margin
+.067975 m. The earlier long trial's15/899 containment failures remain failed.
+The human-motion component passed with10 supported moving-kinetic/two
+simultaneous rows and median world/relative errors.152020/.005353 m/s.
+
+Overall navigation FAILED `progress_timeout` at70.616667 navigation seconds,
+2/3 waypoints, final goal error.779659 m. Minimum braking-inclusive independent
+clearance was.388746 m, minimum CBF margin.056112 and stopping drift.000911 m.
+The walking-window arc(-.000744 m) and behind projection(-.020304 m) also failed.
+There were705 live fields/287 while translating,144 accepted visual instances,
+48,420 object assessments and zero complete fresh four-factor assessments.
+The launcher returned0 despite the saved full-gate exception; the report is
+failed. Selected identity/original eight-second policy clocks passed.
+
+Recent stopped-state commands were exactly zero, and the saved native input at
+source56.3 s reproduces a zero-command plan despite a nonzero nominal. This is
+bounded evidence of planner nonprogress, not merely slow physical wheel response
+or a global infeasibility proof. First-selection source19.7 s has an exact-safe
+slower left-turn reference missed by the old single-speed generator; a separate
+reduced-speed candidate fix is being tested. Neither finding retroactively
+passes this trial, removes its priors or grants main/long-service acceptance.

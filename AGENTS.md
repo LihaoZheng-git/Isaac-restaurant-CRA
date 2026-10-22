@@ -1475,3 +1475,14 @@
   different geometry/timing trial, not an isolated causal comparison or a pass
   for earlier8.4 m observed-only failures. Keep independent containment and all
   exact/clearance/arrival/passing gates; see docs/prior_geometry_association_scope.md.
+
+- At7f1d5ad the separate body-prior/N6 native trial passed its own60-frame gate
+  and705/705 live containment rows (max center error.182025 m, unchanged.25 m
+  uncertainty; min containment margin.067975 m). Human motion passed10supported/
+  2simultaneous rows. Overall FAILED progress_timeout at70.616667 s,2/3 goals,
+  .388746 m clearance/.000911 m stop drift; arc/behind also failed. Preserve
+  705fields/144visual instances/zero complete factors and the old long-trial
+  containment failures. Exact stopped-state plans choose zero despite nonzero
+  nominal commands; first19.7 s replay admits slower left guidance missed by
+  the single-speed pool. Keep that separate candidate fix, numeric replay and
+  all native acceptance requirements explicit; no main/long-service pass.
