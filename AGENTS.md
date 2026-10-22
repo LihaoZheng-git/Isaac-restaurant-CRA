@@ -1567,3 +1567,19 @@
   wheels. Transverse walking-plane scoring excludes the departure leg; preserve
   older metrics and unmet fresh-four-factor/main holds. No broader kinematic
   planner is authorized by this choice. See docs/continuing_away_crossing.md.
+
+- At84e503d the continuing-away close parked component PASSED (nine stationary/
+  ten moving fresh rows, .149332 m/s moving velocity error, zero wheels). Preserve
+  the original distant-view failure: .022337 m parked drift, sparse fresh rows
+  and .127371 m/s stationary speed. The same-source original-route wait-go trial
+  PASSED3/3 goals in24.10 s, .470310 m braking-inclusive clearance/.002336 m drift,
+  240 fields and240/240 containment rows (max center error .179969, unchanged
+  .25 uncertainty). Human motion passed29 supported/19 simultaneous rows.
+  Three accepted yield sources and2.75 s observed wait passed; only .233333 s
+  was joined to actual checked-yield commands, with freshness stops retained.
+  Preserve applied lambda0/tracking0/b_human=-1.7 as a separate ablation,
+  physical CRA lambda1.25,15,830 assessments/84 visuals/ZERO complete factors,
+  and failed old curved/closest-encounter metrics. This is a different actor
+  fixture, not a repaired close-endpoint case or causal CRA comparison. Keep
+  main/long-service/PR117 holds. Subsequent edits correct report wording only;
+  see docs/continuing_away_crossing.md and original saved native reports.

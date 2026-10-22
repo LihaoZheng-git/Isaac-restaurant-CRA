@@ -2313,6 +2313,7 @@ def main():
         if args.stream_live_records else "full history in live-fields.json",
         "fields_committed_while_translating": moving_field_count,
         "simultaneous_robot_actor_kinetic_updates": simultaneous_kinetic_updates,
+        "simultaneous_robot_actor_kinetic_updates_scope": "scripted moving-actor fixture only; native human counts are in human_navigation_validation.simultaneous_rows",
         "live_relative_motion_validation": live_kinetic_validation,
         "nearby_track_loss_guard": coverage_result,
         "nearby_track_loss_guard_config": asdict(coverage_guard.config) if coverage_guard is not None else None,
@@ -2472,7 +2473,9 @@ def main():
             "oracle ego pose/extrinsics/gravity; RGB acquisition is read-time approximation; ego deskew does not correct moving articulated actors",
             ("geometric circular velocity-aware CBF reference; nominal omega retained, no MPC/DTCBF/h_full command; shadow fields retain lambda 1.25"
              if args.experiment_baseline == "geometric_velocity_cbf" else
-             "fixed lambda 1.25, unchanged nominal/exact MPC/DTCBF/analytical CBF; paced development, not real-time or causal CRA superiority"),
+             ("physical CRA lambda1.25; explicit wait-go applied field lambda0 ablation; unchanged nominal/exact MPC/DTCBF/analytical CBF; paced, not real-time or causal CRA superiority"
+              if args.zero_tangential_bias_ablation else
+              "fixed lambda 1.25, unchanged nominal/exact MPC/DTCBF/analytical CBF; paced development, not real-time or causal CRA superiority")),
             "renderer transform-history warning remains unresolved; separate carried-bowl physical assessment, calibrated load and moving-view plume remain unvalidated",
         ]
     save_json("report.json", report)
