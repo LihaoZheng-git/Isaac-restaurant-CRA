@@ -1537,3 +1537,20 @@
   A separate zero-bias wait-go candidate must show accepted checked-yield plans
   AND an observed walking-window wait, then actual arrival/safe stopping. Keep
   the failed rear result, all priors/source clocks and main/long-service holds.
+
+- At1c9b440 the separate lambda0/tracking0 wait-go trial passed its own stationary,
+  human-motion and610/610 containment checks (max center error.180198 m,
+  unchanged.25 uncertainty). Six accepted walking-window yield sources and
+  2.55 s observed waiting passed its wait component; a correct ORIGINAL
+  OPTIMIZER-REQUEST-clock command join verifies .666667 s of zero-command
+  execution. The v1 join wrongly used field epochs; retain its correction in v2.
+  Full route FAILED progress_timeout at61.116667 s,1/3 goals,.387492 m clearance,
+  .000257 m drift,610 fields/139 visual instances/zero complete factors. Keep
+  fixed1.25 primary output, all priors/geometry/clocks and failed reports.
+  The late77-profile constant-horizon audit admitted15 exact/analytical profiles
+  with at most1.710 mm goal gain; this is not global infeasibility. Independent
+  native root motion continued after `stopped_after` (.529530/.488163 m in the
+  rear/wait runs); do not claim a truly stationary actor or sole causal diagnosis.
+  A continuing-away fixture versus a broader kinematic reference is the next
+  consequential design choice, not an integrated fix. Main/long-service held;
+  see docs/crossing_maneuver_strategy.md and preserve all historical failures.

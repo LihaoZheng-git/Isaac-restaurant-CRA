@@ -71,3 +71,54 @@ All original arrival, geometry, braking, source and perception gates still apply
 The correction and execution audit passed all 2,452 unit tests and Ruff, plus
 trusted original-input exact/analytical replay. Wait-and-go native acceptance is
 pending its own new stationary/motion trial.
+
+## Separate zero-bias wait-and-go attempt: wait passed, route failed
+
+At 1c9b440, this candidate passed its own 60-frame stationary gate, human motion
+and all 610 source-aligned body-prior containment rows (maximum center error
+.180198 m, minimum margin .069802 m; uncertainty stays .25 m). Its field lambda
+was explicitly zero and extra tracking weight zero; physical CRA output lambda
+remained 1.25. Normal flux, occupancy and every exact/analytical gate remained.
+
+The waiting component passed: six accepted checked-yield source frames during
+walking and 2.55 s of observed low robot translation. A separate actual-command
+join found .666667 s of verified zero wheel-command intervals during walking;
+the rest of that physical wait must not all be called verified policy execution.
+The join uses ORIGINAL OPTIMIZER REQUEST epochs, reconstructed from plan receipt
+time/age, separately from the original field acquisition epoch. The initial
+`verified-wait-command-audit.json` incorrectly joined those two different clocks;
+use `verified-wait-command-audit-v2.json`, not its .166667 s undercount.
+
+Full navigation **failed** `progress_timeout` at 61.116667 s, 1/3 waypoints.
+Minimum independent clearance including braking was .387492 m, stopping drift
+.000257 m and minimum analytical margin .016481. There were 610 live fields,
+282 translating fields, 139 accepted all-object visual instances and zero
+complete fresh four-factor assessments. Human validation had twelve supported
+kinetic/one simultaneous row; all original checks passed, including the one
+omitted from the separately declared wait acceptance. Final-goal error was
+.873698 m; the late request was .109205 m from the middle waypoint against the
+unchanged .10 m tolerance. No walking-plane crossing or curved-bypass pass follows.
+Preserve `outputs/paper_flux/crossing-wait-strategy-N6-v1` and the old failed run.
+
+The same-source late numerical replay reproduced the command/cost. Of 77
+constant short-horizon profiles, fifteen passed exact and first-command
+analytical checks; their maximum middle-goal gain was only .001710 m over 1.2 s.
+The returned trajectory was cheaper than every audited constant profile.
+This bounded audit found no overlooked cheap constant manoeuvre, not proof of
+global infeasibility or rejection of every possible longer/variable trajectory.
+Changing boundary bias alone has not fixed the local unicycle/waypoint stall.
+
+Independent actor auditing also found .529530/.488163 m root displacement after
+the rear/wait trials entered native phase `stopped_after` (peak root speed about
+.32745 m/s). This is native root/collider reference motion, not physical COM;
+the task phase does **not** establish a stationary human endpoint. Preserve this
+fixture limitation before any paper claim about stopped pedestrians. The plotted
+comparison includes that post-walking motion explicitly. It is not established
+as the sole cause of the controller stall.
+
+All 2,452 unit tests/Ruff passed for the functional correction. The later report
+metadata also includes the separate strategy validation next to the preserved
+legacy metric. Both native reports remain failed; no main/long-service merge.
+Next design choice: a pedestrian continuing away for the practical wait-and-go
+scenario, or a broader kinematic reference method for the harder close-endpoint
+case. Preserve this failed stress case either way; neither is a silent repair.
