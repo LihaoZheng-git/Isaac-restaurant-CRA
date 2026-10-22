@@ -70,4 +70,29 @@ The next own stationary/native trial keeps N6, the8.4 m actor-only trigger,
 .5 m/s human, legacy planar-filtered reference mode and all physical/source/
 clearance checks unchanged, isolating this policy-cue path before any additional
 direct-guidance ablation. Native latency/selection/arrival/passing acceptance is
-pending. Preserve all old failed results and primary defaults.
+recorded below. Preserve all old failed results and primary defaults.
+
+### Native cue acceptance, navigation rejection at75f45ce
+
+`outputs/paper_flux/fresh-person-human17-observed-N6-v1` passed its own60-frame
+parked gate with zero wheel commands. It selected the current observed human's
+left/trailing preference at23.0 s, the **first qualified motion row**; legacy
+SAM person eligibility was empty. The selected .906449 detector cue covered
+99.1662% of1,799 projected parent returns and retained the original22.583333 s
+identity timestamp. There were142 current detector-cue rows and10 selected rows
+using this original cue. The previously observed class delay is resolved in
+this run, not established as a universal latency guarantee.
+
+**Navigation FAILED**: the independent clearance guard stopped at15.866667
+navigation seconds /1 of3 waypoints, .019087906 m minimum clearance (below the
+unchanged .02 m threshold), .000880452 m stopping drift,158 fields/154 translating.
+The human-motion gate and curved/behind gates also failed: -.000250 m left arc,
++.273273 m behind projection. All10,976 object assessments had zero complete
+four-factor sensor assessments;52 accepted visual instances do not change this.
+
+Planner diagnostics show near-straight checked references before the crossing,
+then infeasible horizons and an unsafe current configuration as the person
+approaches the nearly stopped robot. The passing choice is not an executable
+trajectory, and observed surface occupancy plus a stronger boundary flux does
+not reconstruct hidden human extent. Preserve this safety rejection rather
+than relax clearance, restore clocks, lower risk or call the run a bypass.

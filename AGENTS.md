@@ -1334,3 +1334,14 @@
   mass/contact/support/plume renewal. Keep motion gates unchanged, prioritize
   accepted same-frame SAM cues, and preserve original selected cue metadata
   transactionally. See docs/fresh_person_policy.md; native acceptance pending.
+
+- At75f45ce the fresh detector cue selected the human trailing policy on the
+  first qualified23.0 s motion row while freshSAM eligibility was empty; keep
+  the original22.583333 identity clock and class-only/no-physical-refresh scope.
+  The native trial FAILED the .02 m independent clearance gate at.019088 m,
+  1/3 waypoints and15.866667 navigation seconds (.000880 m stop drift,158 fields).
+  Earlier class eligibility is validated here, not curved avoidance or safety
+  of observed-only human occupancy. Preserve failed arc/behind/human-motion and
+  zero complete factor results. Flux strength does not fill hidden geometry;
+  diagnose checked-reference feasibility before another motion retry. See
+  docs/fresh_person_policy.md.
