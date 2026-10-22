@@ -1420,11 +1420,23 @@
 - Atbfe507d the selected-tangent/one-pixel-configured run reached3/3 goals in
   23.033333 navigation seconds,.028942 m clearance/.001771 m drift,229 fields.
   Moving-human component passed5supported/2simultaneous, but curved/behind
-  gates FAILED(-.000288/-.021533 m). It used zero boundary-prior proofs; direct
-  tolerance evidence remains the exact522 replay/tests, not causal native use.
+  gates FAILED(-.000288/-.021533 m). Corrected committed-field audit has one
+  boundary-prior proof519->72 at23.8 s among15 part rows. The earlier zero
+  event-only count was wrong (sparse events omit successful part-only records);
+  preserve this correction and avoid causal attribution from the single run.
   First22.9 s bounded exact search/left-turn probes found no accepted complete
   left reference; this is not global infeasibility. An explicitly separate8.0 m
   actor-start lead-time fixture may test the unchanged algorithm and gates;
   preserve the8.4 m failure and report the scenario change, fixed lambda,
   b=-1.7 override, original source clocks and zero complete human factor data.
   See docs/crossing_lead_time_evaluation.md.
+
+- The separate8.0 m lead-time trial reached3/3 in22.216667 navigation seconds,
+  .174573 m clearance/.002244 m drift,221 fields; moving-human passed7supported/
+  5simultaneous. Bypass still FAILED(.032518 m arc/-.048984 m behind). Timing
+  alone is not a curved-bypass fix. The original committed-field audit has
+  three accepted human-part policy conflicts:519at23.8 and567at25.9/26.3 retain
+  genericRIGHT/b-1.3203125 while parent72 isLEFT/b-1.7. Any control-only policy
+  consistency correction must preserve child physicalCRA/unknowns, all measured
+  occupancy, original identity/evidence clocks, fixed lambda and exact checks;
+  do not silently transfer physical factors or relabel freshSAM readiness.

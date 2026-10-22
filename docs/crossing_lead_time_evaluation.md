@@ -26,3 +26,15 @@ Own60-frame stationary acceptance is mandatory before wheels. Native lead-time
 acceptance is pending. Baseline comparisons must match the same start-event
 policy/horizon/controller options; a successful new scenario alone cannot prove
 CRA causality, broad robustness, exact paper equivalence or real time.
+
+## Recorded8.0 m result
+
+At e70d4cd (unchanged bfe507d runtime), `lead8-human17-observed-N6-v1` passed its
+parked/human-motion components and reached3/3 waypoints in22.216667 navigation
+seconds:221 fields/212 translating,.174573 m clearance,.002244 m drift,.204948
+CBF margin;7 supported/5 simultaneous human rows. Full bypass still FAILED:
+.032518 m left arc and-.048984 m behind projection. Earlier timing alone is not
+the required curved-bypass fix. Preserve this separate negative result and the
+original8.4 m result. The published original field audit also identifies three
+human-part/parent passing-policy conflicts; that implementation issue requires
+a separately validated correction before further controller tuning.

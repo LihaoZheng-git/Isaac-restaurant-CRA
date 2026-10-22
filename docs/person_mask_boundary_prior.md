@@ -42,9 +42,11 @@ At bfe507d the new native trial passed the parked and moving-human component
 gates and reached3/3 waypoints in23.033333 navigation seconds:229 fields/218
 translating,.028942 m minimum clearance,.001771 m drift and.032018 CBF margin.
 Full bypass FAILED: -.000288 m left arc and-.021533 m behind projection. There
-were25 active selected references, but no visible detour. There were **zero
-boundary-prior proofs**, so exact raw replay/tests remain this option's direct
-evidence; do not attribute the native arrival to an unused tolerance. All15,105
+were25 active selected references, but no visible detour. The committed-field
+audit contains **one boundary-prior proof**,519->72 at23.8 s, among15 current
+part rows. An earlier event-only tally incorrectly reported zero: the sparse
+coverage-event stream omits successful part-only associations. This establishes
+native use, not a causal attribution of arrival to the tolerance. All15,105
 object assessments had zero complete four-factor sensor assessments(65 accepted
 instances), while human motion had5 supported and2 simultaneous rows.
 
@@ -55,3 +57,10 @@ rotation among its tested patterns; no tested left pattern passes unchanged
 exact geometry/DTCBF. This is not a global infeasibility proof. Keep the tight
 case and evaluate any earlier lead-time fixture separately, without changing
 algorithm, safety thresholds or the failed result.
+
+The same field audit exposes three policy inconsistencies: accepted parts519
+(23.8 s) and567(25.9/26.3 s) retain generic right passing/b=-1.3203125 while their
+current human parent72 has selected left/b=-1.7. Part association currently
+affects only the continuity guard. A separate control-policy consistency option
+should preserve physical child CRA/unknowns and all source clocks rather than
+copy the parent's physical factors or add geometry.
