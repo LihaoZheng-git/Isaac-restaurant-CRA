@@ -238,6 +238,7 @@ class LiveObjectPerception:
         human_boundary_flux=None,
         human_visual_fragment_association=False,
         human_fragment_mask_boundary_pixels=0,
+        human_visual_part_field_policy=False,
         human_fresh_person_policy=False,
     ):
         self.segmenter, self.mass_estimator, self.contact_detector = (
@@ -311,6 +312,11 @@ class LiveObjectPerception:
             or human_fragment_mask_boundary_pixels and not human_visual_fragment_association):
             raise ValueError("one-pixel body-part boundary prior requires explicit visual part association")
         self.human_fragment_mask_boundary_pixels = human_fragment_mask_boundary_pixels
+        if not isinstance(human_visual_part_field_policy, bool) or (
+            human_visual_part_field_policy and (not human_visual_fragment_association
+                or human_boundary_flux is None or self.motion_passing is None)):
+            raise ValueError("human-part field policy requires current visual parts, verified human flux and passing mode")
+        self.human_visual_part_field_policy = human_visual_part_field_policy
         if not isinstance(human_fresh_person_policy, bool) or (
             human_fresh_person_policy and (not human_observed_occupancy_only
                 or person_detector is None or self.motion_passing is None

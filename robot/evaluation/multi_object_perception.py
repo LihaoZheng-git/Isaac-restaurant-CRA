@@ -592,6 +592,12 @@ def assess_all_objects(worker, packet):
             key = row["track_or_group_id"]
             row["cra_passing_side"] = policies[key].passing_side.value
             row["applied_passing_side"] = applied_guidance[key].passing_side.value
+    if getattr(worker, "human_visual_part_field_policy", False):
+        from robot.evaluation.human_part_field_policy import apply_human_part_field_policy
+        applied_guidance, baseline_audit = apply_human_part_field_policy(
+            applied_guidance, baseline_audit, visual_part_groups, envelope_audit,
+            sensor_timestamp_seconds=packet.sensor_timestamp_seconds,
+            mask_boundary_prior_pixels=worker.human_fragment_mask_boundary_pixels)
     cells = np.floor(
         (points - [worker.grid_config.minimum_x, worker.grid_config.minimum_y])
         / worker.grid_config.resolution

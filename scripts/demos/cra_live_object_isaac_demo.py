@@ -58,6 +58,8 @@ parser.add_argument("--human-visual-fragment-association", action="store_true",
                     help="fresh RGB/current-positive 3D small-body-part association in separated bare-human observed-only mode")
 parser.add_argument("--human-fragment-mask-boundary-pixels", type=int, choices=(0, 1), default=0,
                     help="separate one-native-pixel mask-boundary association prior; >=95% original mask support, unchanged current 3D/clock/ambiguity gates")
+parser.add_argument("--human-visual-part-field-policy", action="store_true",
+                    help="current positive associated parts share verified human control flux/side; physical child CRA, class, geometry and clocks stay unchanged")
 parser.add_argument("--human-fresh-person-policy", action="store_true",
                     help="fresh audited person-mask/current validated LiDAR identity cue for passing eligibility; no physical evidence refresh")
 parser.add_argument("--human-observed-passing-target", action="store_true",
@@ -267,6 +269,9 @@ if args.human_visual_fragment_association and (not args.human_observed_occupancy
     parser.error("visual fragment association requires the separated bare-human observed-only fixture")
 if args.human_fragment_mask_boundary_pixels and not args.human_visual_fragment_association:
     parser.error("mask boundary prior requires explicit visual fragment association")
+if args.human_visual_part_field_policy and (not args.human_visual_fragment_association
+    or args.human_boundary_flux is None or not args.motion_aware_passing):
+    parser.error("human-part field policy requires visual parts, verified human flux and motion passing")
 if args.human_fresh_person_policy and (not args.human_observed_occupancy_only
     or not args.human_observed_passing_target or not args.motion_aware_passing
     or args.restaurant_human is None or args.human_carry_bowl):
@@ -928,6 +933,7 @@ def main():
         human_boundary_flux=args.human_boundary_flux,
         human_visual_fragment_association=args.human_visual_fragment_association,
         human_fragment_mask_boundary_pixels=args.human_fragment_mask_boundary_pixels,
+        human_visual_part_field_policy=args.human_visual_part_field_policy,
         human_fresh_person_policy=args.human_fresh_person_policy,
         human_fragment_coverage_config=fragment_coverage_config,
         calibration=calibration,
@@ -2203,6 +2209,8 @@ def main():
             "enabled": args.human_observed_occupancy_only or args.human_boundary_flux is not None,
             "observed_occupancy_only": args.human_observed_occupancy_only,
             "requested_boundary_flux": args.human_boundary_flux,
+            "current_visual_part_field_policy_prior": args.human_visual_part_field_policy,
+            "visual_part_mask_boundary_prior_pixels": args.human_fragment_mask_boundary_pixels,
             "physical_cra_unchanged": True,
             "scope": "separate geometry/flux ablation; not a primary CRA comparison"},
         "human_body_envelope_config": asdict(perception.human_body_envelope.config) if perception.human_body_envelope is not None else None,

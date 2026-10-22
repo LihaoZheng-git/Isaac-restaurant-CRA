@@ -1440,3 +1440,15 @@
   consistency correction must preserve child physicalCRA/unknowns, all measured
   occupancy, original identity/evidence clocks, fixed lambda and exact checks;
   do not silently transfer physical factors or relabel freshSAM readiness.
+
+- The opt-in current-human-part field-policy PRIOR may give a currently
+  positively associated child the verified parent's passing side and the
+  larger existing applied child/parent risk under unchanged .5..1.7 flux and
+  lambda1.25. Require matching current source/support and original identity
+  frame/time, unique nonnested part proof and the existing mask/3D/size gates;
+  boundary proofs need their explicit pixel-prior scope. Keep physical child
+  CRA, unknowns, observed class/SAM readiness, source clocks and all raw
+  occupancy unchanged; record the association and parent control source.
+  Defaultoff preserves continuity-only association; missing proofs are not
+  retained. Original3conflicts replay consistently without changing physical
+  phi. See docs/human_part_field_policy.md; native acceptance is still pending.
