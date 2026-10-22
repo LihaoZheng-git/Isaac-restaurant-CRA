@@ -237,6 +237,7 @@ class LiveObjectPerception:
         human_observed_occupancy_only=False,
         human_boundary_flux=None,
         human_visual_fragment_association=False,
+        human_fragment_mask_boundary_pixels=0,
         human_fresh_person_policy=False,
     ):
         self.segmenter, self.mass_estimator, self.contact_detector = (
@@ -304,6 +305,12 @@ class LiveObjectPerception:
         ):
             raise ValueError("visual part association requires observed-only bare-human mode")
         self.human_visual_fragment_association = human_visual_fragment_association
+        if (isinstance(human_fragment_mask_boundary_pixels, bool)
+            or not isinstance(human_fragment_mask_boundary_pixels, int)
+            or human_fragment_mask_boundary_pixels not in (0, 1)
+            or human_fragment_mask_boundary_pixels and not human_visual_fragment_association):
+            raise ValueError("one-pixel body-part boundary prior requires explicit visual part association")
+        self.human_fragment_mask_boundary_pixels = human_fragment_mask_boundary_pixels
         if not isinstance(human_fresh_person_policy, bool) or (
             human_fresh_person_policy and (not human_observed_occupancy_only
                 or person_detector is None or self.motion_passing is None

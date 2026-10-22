@@ -25,6 +25,7 @@ class NearbyTrackLossConfig:
     allow_positive_surface_merges: bool = False
     allow_unique_full_surface_merges: bool = False
     allow_current_visual_part_associations: bool = False
+    maximum_visual_mask_boundary_pixels: int = 0
     maximum_merge_speed_mps: float = 2.0
     maximum_merge_translation_m: float = 0.25
     maximum_merge_velocity_change_mps: float = 0.3
@@ -47,6 +48,11 @@ class NearbyTrackLossConfig:
             raise ValueError("positive surface association requires positive extent merges")
         if self.allow_unique_full_surface_merges and not self.allow_positive_surface_merges:
             raise ValueError("unique full surface association requires positive surface merges")
+        if (isinstance(self.maximum_visual_mask_boundary_pixels, bool)
+            or not isinstance(self.maximum_visual_mask_boundary_pixels, int)
+            or self.maximum_visual_mask_boundary_pixels not in (0, 1)
+            or self.maximum_visual_mask_boundary_pixels and not self.allow_current_visual_part_associations):
+            raise ValueError("one-pixel mask boundary prior requires explicit current visual parts")
         for name, value in vars(self).items():
             if name in {
                 "allow_observed_fragment_merges",
@@ -55,6 +61,7 @@ class NearbyTrackLossConfig:
                 "allow_positive_surface_merges",
                 "allow_unique_full_surface_merges",
                 "allow_current_visual_part_associations",
+                "maximum_visual_mask_boundary_pixels",
             }:
                 continue
             if isinstance(value, bool) or not math.isfinite(value) or value <= 0:
@@ -175,9 +182,17 @@ class NearbyTrackLossGuard:
                 raise ValueError("current visual parts require explicit opt-in and positive geometry")
             for proof in current_visual_part_associations:
                 child, parent = proof["child_track_id"], proof["parent_track_id"]
+                strict_mask = (proof["basis"] == "fresh_person_mask_whole_positive_small_fragment"
+                    and proof["status"] == "inferred")
+                boundary_prior = (self.config.maximum_visual_mask_boundary_pixels == 1
+                    and proof["basis"] == "fresh_person_mask_boundary_prior_positive_small_fragment"
+                    and proof["status"] == "prior" and proof.get("mask_boundary_prior_pixels") == 1
+                    and .95 <= proof.get("child_original_mask_coverage", -1) < 1
+                    and 0 < proof.get("child_boundary_return_count", 0) <= .05*proof["child_positive_count"] + 1e-9
+                    and proof.get("all_child_returns_inside_bounded_mask") is True)
                 if (child == parent or child not in current or parent not in current
                     or child in part_children
-                    or proof["basis"] != "fresh_person_mask_whole_positive_small_fragment"
+                    or not (strict_mask or boundary_prior)
                     or proof["source_timestamp_seconds"] != source_time
                     or not 0 <= proof["camera_timestamp_seconds"] - source_time <= .15 + 1e-9
                     or proof["child_positive_count"] != np.count_nonzero(geometry[1] == child)
@@ -185,8 +200,7 @@ class NearbyTrackLossGuard:
                     or not 3 <= proof["child_positive_count"] <= .1 * proof["parent_positive_count"]
                     or not 0 <= proof["maximum_child_to_parent_3d_distance_m"] <= .3
                     or not .9 <= proof["parent_mask_coverage"] <= 1
-                    or not .5 <= proof["person_confidence"] <= 1
-                    or proof["status"] != "inferred"):
+                    or not .5 <= proof["person_confidence"] <= 1):
                     raise ValueError("invalid current positive visual-part proof")
                 part_children.add(child)
             if any(p["parent_track_id"] in part_children for p in current_visual_part_associations):

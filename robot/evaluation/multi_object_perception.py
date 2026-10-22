@@ -524,7 +524,8 @@ def assess_all_objects(worker, packet):
                 camera_from_source=packet.camera_from_scan_robot, calibration=worker.calibration),
             worker.visual_person_frame(packet), envelope_audit,
             camera_timestamp_seconds=packet.camera_timestamp_seconds,
-            camera_frame_id=packet.camera_frame_id)
+            camera_frame_id=packet.camera_frame_id,
+            mask_boundary_tolerance_pixels=getattr(worker, "human_fragment_mask_boundary_pixels", 0))
     applied_guidance, baseline_audit = applied_field_policies(
         getattr(worker, "experiment_baseline", None), policies, objects, envelope_origins=envelope_origins,
         human_boundary_flux=worker.human_boundary_flux,

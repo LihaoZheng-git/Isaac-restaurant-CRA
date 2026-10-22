@@ -1404,3 +1404,15 @@
   boundary-association tolerance must be an explicit bounded pixel PRIOR,
   retaining all current raw occupancy, parent identity clocks, 3D/source/
   ambiguity gates and physical factors; no stale fragment clearing.
+
+- The explicit one-source-image-pixel part-association PRIOR requires >=95%
+  original-mask child support, every other currently projected return in the
+  same mask's axial one-pixel neighborhood, unchanged .30 m 3D/current identity/
+  source/size gates and no expanded competing person overlap. Default0 keeps
+  strict masks. Label boundary proofs PRIOR with counts/coverage/original
+  epochs; matching guard opt-in is mandatory. It cannot clear already missing
+  parts, modify raw masks/occupancy/body extent, renew physical or identity
+  clocks, create SAM/factor readiness or establish calibrated image error.
+  Exact522 replay supports it; selected bare-adult native acceptance is still
+  required. See docs/person_mask_boundary_prior.md; touching-object/crowded
+  generalization remains outside this bounded association scope.

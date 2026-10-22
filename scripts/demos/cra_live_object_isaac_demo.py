@@ -56,6 +56,8 @@ parser.add_argument("--human-unique-full-surface", action="store_true",
                     help="unique full-surface positive correspondence despite distant parent centroid/partial neighboring patches; no hidden geometry or factor transfer")
 parser.add_argument("--human-visual-fragment-association", action="store_true",
                     help="fresh RGB/current-positive 3D small-body-part association in separated bare-human observed-only mode")
+parser.add_argument("--human-fragment-mask-boundary-pixels", type=int, choices=(0, 1), default=0,
+                    help="separate one-native-pixel mask-boundary association prior; >=95% original mask support, unchanged current 3D/clock/ambiguity gates")
 parser.add_argument("--human-fresh-person-policy", action="store_true",
                     help="fresh audited person-mask/current validated LiDAR identity cue for passing eligibility; no physical evidence refresh")
 parser.add_argument("--human-observed-passing-target", action="store_true",
@@ -263,6 +265,8 @@ if args.human_unique_full_surface and not args.human_positive_fragment_surface:
 if args.human_visual_fragment_association and (not args.human_observed_occupancy_only
     or args.restaurant_human is None or args.human_carry_bowl):
     parser.error("visual fragment association requires the separated bare-human observed-only fixture")
+if args.human_fragment_mask_boundary_pixels and not args.human_visual_fragment_association:
+    parser.error("mask boundary prior requires explicit visual fragment association")
 if args.human_fresh_person_policy and (not args.human_observed_occupancy_only
     or not args.human_observed_passing_target or not args.motion_aware_passing
     or args.restaurant_human is None or args.human_carry_bowl):
@@ -923,6 +927,7 @@ def main():
         human_observed_occupancy_only=args.human_observed_occupancy_only,
         human_boundary_flux=args.human_boundary_flux,
         human_visual_fragment_association=args.human_visual_fragment_association,
+        human_fragment_mask_boundary_pixels=args.human_fragment_mask_boundary_pixels,
         human_fresh_person_policy=args.human_fresh_person_policy,
         human_fragment_coverage_config=fragment_coverage_config,
         calibration=calibration,
@@ -1630,6 +1635,7 @@ def main():
         allow_positive_extent_merges=args.human_positive_fragment_extent,
         allow_positive_surface_merges=args.human_positive_fragment_surface,
         allow_unique_full_surface_merges=args.human_unique_full_surface,
+        maximum_visual_mask_boundary_pixels=args.human_fragment_mask_boundary_pixels,
         allow_current_visual_part_associations=args.human_visual_fragment_association,
         use_observed_merge_velocity=human is not None),
         fragment_coverage_config=fragment_coverage_config) if args.moving_actor or human is not None else None

@@ -14,6 +14,7 @@ from scipy.spatial import cKDTree
 def associate_visual_body_fragments(
     tracking, points_xyz, projection, person_frame, parent_records, *,
     camera_timestamp_seconds, camera_frame_id,
+    mask_boundary_tolerance_pixels=0,
 ):
     """Return bounded inferred associations, never hidden-body/free-space evidence.
 
@@ -23,8 +24,17 @@ def associate_visual_body_fragments(
     already have current validated LiDAR identity support and >=90% of its
     projected returns inside one untruncated person mask. No SAM/class/factor
     acceptance is created by this association.
+
+    An explicit one-native-pixel boundary PRIOR may retain >=95% original-mask
+    support when every remaining projected return is an axial neighbor of that
+    same mask. Expanded competing masks still reject. This does not change the
+    strict default or infer any unobserved physical surface.
     """
     now = tracking.timestamp_seconds
+    if (isinstance(mask_boundary_tolerance_pixels, bool)
+        or not isinstance(mask_boundary_tolerance_pixels, int)
+        or mask_boundary_tolerance_pixels not in (0, 1)):
+        raise ValueError("visual part mask boundary prior must be zero or one native pixel")
     points = np.asarray(points_xyz)
     ids = tracking.point_track_ids
     if (points.shape != (len(ids), 3) or not np.isfinite(points).all()
@@ -39,6 +49,18 @@ def associate_visual_body_fragments(
     people = [d for d in person_frame.detections
               if d.semantic_class == "person" and d.confidence >= .5]
     mask_hits = [d.mask[pixels[:, 1], pixels[:, 0]] for d in people]
+    expanded_hits = mask_hits
+    if mask_boundary_tolerance_pixels:
+        expanded_hits = []
+        for person in people:
+            mask = person.mask
+            expanded = mask.copy()
+            # One Euclidean pixel: axial neighbors only, no diagonal growth.
+            expanded[1:] |= mask[:-1]
+            expanded[:-1] |= mask[1:]
+            expanded[:, 1:] |= mask[:, :-1]
+            expanded[:, :-1] |= mask[:, 1:]
+            expanded_hits.append(expanded[pixels[:, 1], pixels[:, 0]])
     proofs = []
     for parent in parent_records:
         key = parent["track_id"]
@@ -62,8 +84,12 @@ def associate_visual_body_fragments(
                 continue
             child_hits = projected_ids == child
             if (np.count_nonzero(child_hits) != track.point_count
-                or not np.all(hit[child_hits])
-                or any(np.any(other[child_hits]) for i, other in enumerate(mask_hits) if i != index)):
+                or any(np.any(other[child_hits]) for i, other in enumerate(expanded_hits) if i != index)):
+                continue
+            boundary_count = int(np.count_nonzero(~hit[child_hits]))
+            coverage = float(np.mean(hit[child_hits]))
+            if boundary_count and (not mask_boundary_tolerance_pixels or coverage < .95
+                or not np.all(expanded_hits[index][child_hits])):
                 continue
             child_points = points[ids == child]
             if len(np.unique(child_points, axis=0)) < 3:
@@ -84,8 +110,15 @@ def associate_visual_body_fragments(
                 "parent_identity_basis": parent["identity_basis"],
                 "original_person_camera_timestamp": parent["original_person_camera_timestamp"],
                 "original_person_camera_frame_id": parent["original_person_camera_frame_id"],
-                "status": "inferred",
-                "basis": "fresh_person_mask_whole_positive_small_fragment",
+                "status": "prior" if boundary_count else "inferred",
+                "basis": "fresh_person_mask_boundary_prior_positive_small_fragment"
+                    if boundary_count else "fresh_person_mask_whole_positive_small_fragment",
+                **({"mask_boundary_prior_pixels": 1,
+                    "child_original_mask_coverage": coverage,
+                    "child_boundary_return_count": boundary_count,
+                    "all_child_returns_inside_bounded_mask": True,
+                    "mask_boundary_prior_scope": "one native-image axial pixel; >=95% original person-mask membership; positive 3D association only, no physical factor/geometry renewal"}
+                   if boundary_count else {}),
                 "scope": "separated bare adult; current positive part association only; raw occupancy/factors/identity clocks unchanged",
             })
     # A child fitting multiple parents has no unique identity. Reject every
