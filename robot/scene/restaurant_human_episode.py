@@ -28,6 +28,7 @@ class RestaurantHumanEpisode:
         carry_bowl=False,
         carry_facing_crossing=False,
         upper_continuation=False,
+        continuing_away=False,
     ):
         if mode not in {"standing", "crossing", "continuous-crossing"}:
             raise ValueError("unknown human episode")
@@ -36,6 +37,11 @@ class RestaurantHumanEpisode:
         ):
             raise ValueError("mirrored crossing is bounded to standalone walking")
         self.crossing_direction = crossing_direction
+        if continuing_away and (mode != "crossing" or crossing_direction != "left-to-right"
+                                or carry_bowl or speed_mps != .5):
+            raise ValueError("departure requires bare left-to-right crossing at .5 m/s")
+        from robot.scene.restaurant_departing_pedestrian import DepartingPedestrianRoute
+        self.departure = DepartingPedestrianRoute() if continuing_away else None
         if carry_bowl and mode != "continuous-crossing":
             raise ValueError("carried server requires explicit continuous crossing")
         if upper_continuation and mode != "continuous-crossing":
@@ -192,7 +198,7 @@ class RestaurantHumanEpisode:
             self.agent.set_speed(self.speed)
             self.task = self.agent.move_to(
                 self.circuit.goal if self.circuit else self.goal,
-                auto_brake=self.circuit is None,
+                auto_brake=self.circuit is None and self.departure is None,
             )
             if self.task == bh.BEHAVIOR_TASK_ID_INVALID:
                 raise RuntimeError("native crossing task rejected")
@@ -205,7 +211,12 @@ class RestaurantHumanEpisode:
             status = self.agent.get_task_status(self.task)
             if status == bh.BehaviorTaskStatus.FAILED:
                 raise RuntimeError("native crossing task failed")
-            if self.circuit is not None:
+            if self.departure is not None and self.departure.advance(self.position(), now):
+                self.task = self.agent.move_to(self.departure.goal, auto_brake=True)
+                if self.task == bh.BEHAVIOR_TASK_ID_INVALID:
+                    raise RuntimeError("native departure task rejected")
+                self.phase = "walk_away"
+            elif self.circuit is not None:
                 if self.circuit.advance(self.position(), now):
                     self.task = self.agent.move_to(self.circuit.goal, auto_brake=False)
                     if self.task == bh.BEHAVIOR_TASK_ID_INVALID:
@@ -217,7 +228,7 @@ class RestaurantHumanEpisode:
             elif status == bh.BehaviorTaskStatus.SUCCEEDED:
                 self.task_succeeded = True
                 self.agent.idle()
-                self.phase = "stopped_after"
+                self.phase = "away_endpoint" if self.departure is not None else "stopped_after"
         xyz = self.position()
         feet = {}
         for side, i in self.feet.items():

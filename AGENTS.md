@@ -1554,3 +1554,16 @@
   A continuing-away fixture versus a broader kinematic reference is the next
   consequential design choice, not an integrated fix. Main/long-service held;
   see docs/crossing_maneuver_strategy.md and preserve all historical failures.
+
+- The user's latest choice authorizes a SEPARATE continuing-away bare pedestrian
+  fixture for practical wait-and-go, retaining both PR167 close-endpoint failures
+  as stress tests. Use explicit left-to-right/.5 m/s crossing then upper-aisle
+  departure, with actual-position handoff and no loop/teleport/frozen human.
+  `away_endpoint` is not an actor-stop claim. Authored route/speed stay outside
+  CRA; preserve robot waypoints, .40+.25 body prior, all factors/source clocks,
+  exact/analytical/independent safety and arrival checks. The applied lambda0
+  wait strategy remains a separate ablation, primary physical CRA lambda1.25.
+  Require parked actor/perception/geometry validation and own60-frame gate before
+  wheels. Transverse walking-plane scoring excludes the departure leg; preserve
+  older metrics and unmet fresh-four-factor/main holds. No broader kinematic
+  planner is authorized by this choice. See docs/continuing_away_crossing.md.

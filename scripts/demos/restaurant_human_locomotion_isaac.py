@@ -21,6 +21,8 @@ parser.add_argument("--goal-y", type=float, default=12.5)
 parser.add_argument("--goal-x", type=float, default=29.8)
 parser.add_argument("--sensor-diagnostic", action="store_true")
 parser.add_argument("--crossing-direction", choices=("right-to-left", "left-to-right"), default="right-to-left")
+parser.add_argument("--continuing-away-crossing", action="store_true",
+                    help="separate bare crossing then upper-aisle departure; parked robot, no actor endpoint-stop claim")
 parser.add_argument("--motion-aware-passing", action="store_true")
 parser.add_argument("--human-body-contact-prior", type=float, default=None, metavar="SCORE",
                     help="explicit low nonzero human-body contact policy prior; legacy outline mode if omitted")
@@ -50,6 +52,10 @@ parser.add_argument(
     metavar=("KG", "LOWER", "UPPER"),
 )
 args = parser.parse_args()
+if args.continuing_away_crossing and (args.crossing_direction != "left-to-right"
+    or args.speed != .5 or args.carry_bowl or args.continuous_crossing
+    or args.goal_x != 29.8 or args.goal_y != 8.9):
+    parser.error("departure fixture requires bare left-to-right goal (29.8,8.9), speed .5")
 if args.motion_aware_passing and (not args.sensor_diagnostic or args.carry_bowl):
     parser.error("motion-aware stationary component requires standalone sensor mode")
 if args.human_body_contact_prior is not None and (
@@ -167,6 +173,8 @@ def main():
     })
     from robot.scene.restaurant_continuous_server import ContinuousServerRoute
     circuit = ContinuousServerRoute(upper_continuation=args.continuous_upper_continuation) if args.continuous_crossing else None
+    from robot.scene.restaurant_departing_pedestrian import DepartingPedestrianRoute
+    departure = DepartingPedestrianRoute() if args.continuing_away_crossing else None
     goal = circuit.goal if circuit else (args.goal_x, args.goal_y, 0.0)
     robot_start = (28.8, 7.9, SHORT_START_WORLD_XYZ[2]) if args.robot_view == "close" else SHORT_START_WORLD_XYZ
     robot_yaw = math.pi / 2 if args.robot_view == "close" else SHORT_START_YAW
@@ -405,16 +413,21 @@ def main():
                 and (sensor is None or sensor.stationary_ready)
             ):
                 agent.set_speed(args.speed / UsdGeom.GetStageMetersPerUnit(stage))
-                task = agent.move_to(goal, auto_brake=circuit is None)
+                task = agent.move_to(goal, auto_brake=circuit is None and departure is None)
                 if task == bh.BEHAVIOR_TASK_ID_INVALID:
                     raise RuntimeError("native move task rejected")
                 phase = "move"
                 phase_start = now
-            elif phase == "move":
+            elif phase in {"move", "walk_away"}:
                 status = agent.get_task_status(task)
                 if status == bh.BehaviorTaskStatus.FAILED:
                     raise RuntimeError("native move task failed")
-                if circuit is not None:
+                if departure is not None and departure.advance(xyz, now):
+                    task = agent.move_to(departure.goal, auto_brake=True)
+                    if task == bh.BEHAVIOR_TASK_ID_INVALID:
+                        raise RuntimeError("native departure task rejected")
+                    phase = "walk_away"
+                elif circuit is not None:
                     if circuit.advance(xyz, now):
                         task = agent.move_to(circuit.goal, auto_brake=False)
                         if task == bh.BEHAVIOR_TASK_ID_INVALID:
@@ -430,7 +443,7 @@ def main():
                         agent.set_speed(0.)
                     else:
                         agent.idle()
-                    phase = "stopped_after"
+                    phase = "away_endpoint" if departure is not None else "stopped_after"
                     phase_start = now
                 elif now - phase_start > 20:
                     raise RuntimeError("native human endpoint timeout")
@@ -456,6 +469,12 @@ def main():
                 - setup["collision_radius_m"]
                 - pixel_allowance
             )
+            if departure is not None:
+                # Match the navigation episode's stricter square actor audit.
+                clearance = authored_raster_clearance(points, (*xyz[:2], 0.),
+                    RectangularRobotFootprint(.4, .4, .4, .4, 0.), pixel_allowance)
+                if error > .03 or abs(xyz[2]) > .05:
+                    raise RuntimeError("independent departure grounding/collider guard")
             if clearance <= 0.02:
                 raise RuntimeError("independent human layout-clearance guard")
             robot = get_prim_planar_pose(stage, ROBOT_BASE_PRIM_PATH)
@@ -504,7 +523,7 @@ def main():
                 )
             if index >= 60 and not frame_epochs:
                 raise RuntimeError("no RTX RGB frames during the initial idle window")
-            if phase == "stopped_after" and now - phase_start >= (3. if carry is not None else 1.5):
+            if phase in {"stopped_after", "away_endpoint"} and now - phase_start >= (3. if carry is not None else 1.5):
                 break
             if circuit is not None and phase == "move" and now - phase_start >= 14.:
                 break
@@ -543,6 +562,10 @@ def main():
         report = summarize_continuous_server(records, requested_speed_mps=args.speed, parked_robot=True,
                                             upper_continuation=args.continuous_upper_continuation)
         report["actor_circuit_events"] = circuit.events
+    if departure is not None:
+        from robot.evaluation.departing_pedestrian_validation import summarize_departing_pedestrian
+        report = summarize_departing_pedestrian(records, parked_robot=True)
+        report["actor_departure_events"] = departure.events
     report.update(
         {
             "requested_speed_mps": args.speed,

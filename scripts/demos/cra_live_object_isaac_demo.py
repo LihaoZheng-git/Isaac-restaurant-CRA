@@ -117,6 +117,8 @@ parser.add_argument("--human-crossing-delay-seconds", type=float,
                     help="opt-in exogenous actor start after navigation begins; shared timing across baselines, independent of robot progress")
 parser.add_argument("--human-crossing-direction", choices=("right-to-left", "left-to-right"), default="right-to-left",
                     help="authored standalone actor fixture only; never supplies estimator velocity or passing direction")
+parser.add_argument("--human-continuing-away", action="store_true",
+                    help="separate bare left-to-right crossing then upper-aisle departure at .5 m/s; actor fixture only")
 parser.add_argument("--human-walking-speed", type=float, default=.7,
                     help="explicit native actor speed .5..1 m/s; never estimator input")
 parser.add_argument("--human-cluster-radius", type=float, default=.12,
@@ -311,6 +313,10 @@ if not math.isfinite(args.progress_seed_fraction) or not 0 < args.progress_seed_
     parser.error("progress seed fraction must be finite and in (0,1)")
 if args.human_crossing_direction == "left-to-right" and args.restaurant_human != "crossing":
     parser.error("mirrored actor direction requires standalone crossing mode")
+if args.human_continuing_away and (args.restaurant_human != "crossing"
+    or args.human_crossing_direction != "left-to-right" or args.human_carry_bowl
+    or args.human_walking_speed != .5):
+    parser.error("continuing-away fixture requires bare left-to-right crossing at .5 m/s")
 if args.motion_aware_passing and not (args.restaurant_human == "crossing" and args.persistent_object_risk_map
                                     and args.experiment_baseline != "geometric_velocity_cbf"):
     parser.error("bounded motion-aware passing requires the standalone crossing object-map scenario")
@@ -685,7 +691,8 @@ def main():
                                        crossing_delay_seconds=args.human_crossing_delay_seconds,
                                        carry_bowl=args.human_carry_bowl,
                                        carry_facing_crossing=args.human_carry_facing_crossing,
-                                       upper_continuation=args.human_upper_continuation)
+                                       upper_continuation=args.human_upper_continuation,
+                                       continuing_away=args.human_continuing_away)
         ACTIVE_HUMAN = human
         save_json("human-native-setup.json", human.setup)
         for _ in range(20):
@@ -2169,7 +2176,7 @@ def main():
         from robot.evaluation.human_navigation_validation import summarize_human_navigation
         human_validation = summarize_human_navigation(live_fields, human.records,
             mode=args.restaurant_human, upper_continuation=args.human_upper_continuation,
-            crossing_direction=args.human_crossing_direction)
+            crossing_direction=args.human_crossing_direction, continuing_away=args.human_continuing_away)
         if args.crossing_strategy == "yield-then-go":
             # Waiting deliberately need not include simultaneous translation.
             # Keep the original motion benchmark and its result untouched.
@@ -2194,19 +2201,23 @@ def main():
             if not args.human_observed_occupancy_only:
                 completed = completed and envelope_validation["passed"]
         save_json("human-navigation-validation.json", human_validation)
+        if human.departure is not None:
+            save_json("human-departure-events.json", human.departure.events)
         save_json("human-truth-evaluation-only.json", human.records)
         if args.motion_aware_passing:
             from robot.evaluation.motion_passing_validation import summarize_motion_passing
             passing_goal = (anchor.x + math.cos(anchor.yaw)*ROUTE[-1][0] - math.sin(anchor.yaw)*ROUTE[-1][1],
                             anchor.y + math.sin(anchor.yaw)*ROUTE[-1][0] + math.cos(anchor.yaw)*ROUTE[-1][1])
             passing_validation = summarize_motion_passing(live_fields, human.records, moving_robot=True,
-                nominal_goal_world_xy=passing_goal, expected_lambda=0. if args.zero_tangential_bias_ablation else 1.25)
+                nominal_goal_world_xy=passing_goal, expected_lambda=0. if args.zero_tangential_bias_ablation else 1.25,
+                continuing_away=args.human_continuing_away)
             if args.crossing_strategy == "legacy":
                 completed = completed and passing_validation["passed"]
             else:
                 from robot.evaluation.crossing_strategy import summarize_crossing_strategy
                 strategy_validation = summarize_crossing_strategy(passing_validation, human.records,
-                    strategy=args.crossing_strategy, nominal_goal_world_xy=passing_goal)
+                    strategy=args.crossing_strategy, nominal_goal_world_xy=passing_goal,
+                    continuing_away=args.human_continuing_away)
                 if args.crossing_strategy == "yield-then-go":
                     from robot.evaluation.crossing_strategy import summarize_wait_execution
                     execution = summarize_wait_execution(plan_events, human.records)
@@ -2276,6 +2287,7 @@ def main():
         "human_crossing_trigger_robot_world_y": args.human_crossing_trigger_y,
         "human_crossing_delay_seconds": args.human_crossing_delay_seconds,
         "human_crossing_direction": args.human_crossing_direction,
+        "human_continuing_away_fixture": args.human_continuing_away,
         "motion_aware_passing_config": asdict(perception.motion_passing.config) if perception.motion_passing is not None else None,
         "actor_trigger_basis": "exogenous_navigation_elapsed_time" if args.human_crossing_delay_seconds is not None else "robot_world_y",
         "human_requested_walking_speed_mps": args.human_walking_speed,

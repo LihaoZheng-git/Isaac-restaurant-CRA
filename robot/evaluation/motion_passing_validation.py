@@ -7,7 +7,8 @@ import numpy as np
 
 
 def summarize_motion_passing(
-    records, truth, *, moving_robot=False, nominal_goal_world_xy=None, expected_lambda=1.25
+    records, truth, *, moving_robot=False, nominal_goal_world_xy=None, expected_lambda=1.25,
+    continuing_away=False
 ):
     if expected_lambda not in {0., 1.25}:
         raise ValueError("only primary or explicit zero-bias ablation lambda supported")
@@ -152,7 +153,10 @@ def summarize_motion_passing(
             if not all(phase_available):
                 raise ValueError("crossing evaluation requires complete walking-phase metadata")
             phases = np.array([row["phase"] for row in truth])
-            if not set(phases) <= {"pickup", "idle_before", "move", "stopped_after", "aborted"}:
+            recognized = {"pickup", "idle_before", "move", "stopped_after", "aborted"}
+            if continuing_away:
+                recognized |= {"walk_away", "away_endpoint"}
+            if not set(phases) <= recognized:
                 raise ValueError("unknown native human evaluation phase")
             # Idle skeletal animation can exceed the root-speed threshold.
             # Authored task phase is independent scoring truth, never a runtime

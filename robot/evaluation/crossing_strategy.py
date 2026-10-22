@@ -59,7 +59,7 @@ def summarize_wait_execution(plans, truth):
         scope="accepted plans plus independent robot speed <=.02 m/s while actor walks; actor truth is evaluation only")
 
 
-def summarize_crossing_strategy(legacy, truth, *, strategy, nominal_goal_world_xy):
+def summarize_crossing_strategy(legacy, truth, *, strategy, nominal_goal_world_xy, continuing_away=False):
     """Score the first crossing of the human's walking plane, not closest wait.
 
     Actor positions/phase are evaluation-only. No metric changes old results.
@@ -84,8 +84,12 @@ def summarize_crossing_strategy(legacy, truth, *, strategy, nominal_goal_world_x
         raise ValueError("nonzero route chord required")
     forward /= distance
     phases = np.array([row.get("phase") for row in truth])
-    if not set(phases) <= {"pickup", "idle_before", "move", "stopped_after", "aborted"}:
+    recognized = {"pickup", "idle_before", "move", "stopped_after", "aborted"}
+    if continuing_away:
+        recognized |= {"walk_away", "away_endpoint"}
+    if not set(phases) <= recognized:
         raise ValueError("complete recognized walking-phase metadata required")
+    # The separate departure leg is not part of the transverse walking plane.
     walking = phases == "move"
     velocity = np.gradient(actors, times, axis=0)
     walking &= np.linalg.norm(velocity, axis=1) >= .3

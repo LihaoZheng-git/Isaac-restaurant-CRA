@@ -142,3 +142,23 @@ def test_wait_claim_requires_accepted_current_plans_and_observed_wait(failure):
         for i,t in enumerate([2., 2.2, 2.4])]
     result = summarize_wait_execution(plans, truth)
     assert result["passed"] is (failure is None)
+
+
+def test_departure_leg_needs_explicit_scope_and_does_not_rotate_crossing_plane():
+    records, truth = example(False)
+    for row in truth:
+        row["phase"] = "move"
+        row["robot_xy"][1] = min(row["time"], 1.5)
+    for t in np.linspace(4.05, 10., 120):
+        truth.append(dict(time=float(t), phase="walk_away", actor_xyz=[1., 2.+(t-4.)*.5, 0.],
+            robot_xy=[0., min(4., 1.5+(t-4.))]))
+    with pytest.raises(ValueError):
+        summarize_motion_passing(records, truth, moving_robot=True, nominal_goal_world_xy=(0., 4.))
+    legacy = summarize_motion_passing(records, truth, moving_robot=True,
+        nominal_goal_world_xy=(0., 4.), continuing_away=True)
+    with pytest.raises(ValueError):
+        summarize_crossing_strategy(legacy, truth, strategy="yield-then-go", nominal_goal_world_xy=(0., 4.))
+    report = summarize_crossing_strategy(legacy, truth, strategy="yield-then-go",
+        nominal_goal_world_xy=(0., 4.), continuing_away=True)
+    assert report["passed"]
+    assert report["behind_projection_at_route_crossing_m"] == pytest.approx(-1.)
