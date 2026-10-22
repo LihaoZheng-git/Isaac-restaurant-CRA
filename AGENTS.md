@@ -1452,3 +1452,14 @@
   Defaultoff preserves continuity-only association; missing proofs are not
   retained. Original3conflicts replay consistently without changing physical
   phi. See docs/human_part_field_policy.md; native acceptance is still pending.
+
+- Ateddea5c native16current part rows had zero side conflicts; selected child538
+  at23.8 sharesparent72LEFT/b-1.7 with physicalphi.683594 unchanged. The observed-
+  only trial nevertheless FAILED independent clearance at.019091 m,1/3 goals,
+  17.366667 navigation seconds,173 fields,.002810 m drift despite positive
+  .026646 CBF margin. Preserve this geometry-model limitation. A separate return
+  to the earlier approved .40+.25 m body PRIOR may test short-horizon control;
+  do not widen .25 uncertainty, erase older long-trial containment failures or
+  substitute scalarphi for missing occupancy. Current association helpers may
+  enter that mode only through explicit scope, still using actual raw returns,
+  current RGB/identity gates and original source clocks.

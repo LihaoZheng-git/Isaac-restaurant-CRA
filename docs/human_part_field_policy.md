@@ -35,3 +35,19 @@ retained.44 focused tests passed in5.01 s; all2,416 unit tests passed in83.29 s;
 Ruff/diff checks passed. This adapter replay does not rebuild a field or prove
 native causality. The next own stationary/native trial returns to the original
 8.4 m trigger and keeps all bfe507d settings/gates, adding only this option.
+
+Ateddea5c the own stationary gate passed. Native16part-policy rows include one
+selected-parent row at23.8 s(child538): both child/parentLEFT,b=-1.7, physical
+childphi unchanged at.683594; **zero conflicting side rows**. This validates the
+policy path in this bounded run. Overall navigation FAILED the independent
+clearance guard at17.366667 navigation seconds:1/3 waypoints,173 fields/161
+translating,.019091 m clearance/.002810 m drift,.026646 CBF margin. Curved/behind
+gates also failed. Policy consistency and positive CBF margins do not repair
+unobserved human extent. Keep this rejection and the older observed-only cases.
+
+The next geometry trial must be separately labeled PRIOR-assisted, using the
+previously user-approved .40 m body radius plus **unchanged .25 m centroid
+uncertainty**. Do not widen that bound, erase its older long-trial failures or
+claim scalar flux replaces occupancy. Current RGB/raw-LiDAR class/part helpers
+need an explicit compatible prior-geometry scope; they must still consume only
+actual current returns and preserve original identity/factor clocks.
