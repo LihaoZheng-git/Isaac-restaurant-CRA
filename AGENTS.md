@@ -1476,6 +1476,17 @@
   for earlier8.4 m observed-only failures. Keep independent containment and all
   exact/clearance/arrival/passing gates; see docs/prior_geometry_association_scope.md.
 
+- At7f1d5ad the separate body-prior/N6 native trial passed its own60-frame gate
+  and705/705 live containment rows (max center error.182025 m, unchanged.25 m
+  uncertainty; min containment margin.067975 m). Human motion passed10supported/
+  2simultaneous rows. Overall FAILED progress_timeout at70.616667 s,2/3 goals,
+  .388746 m clearance/.000911 m stop drift; arc/behind also failed. Preserve
+  705fields/144visual instances/zero complete factors and the old long-trial
+  containment failures. Exact stopped-state plans choose zero despite nonzero
+  nominal commands; first19.7 s replay admits slower left guidance missed by
+  the single-speed pool. Keep that separate candidate fix, numeric replay and
+  all native acceptance requirements explicit; no main/long-service pass.
+
 - The separate guidance ablation may explicitly try reduced-speed references
   with minimum fraction.25 (pool1,.75,.5,.25); default1 preserves the original
   single-speed candidate order. This changes candidate generation only, never
@@ -1486,3 +1497,17 @@
   retain turn-only rejection and primary fallback. All2,437 units/Ruff pass;
   virtual/own-stationary/native gates are still pending. See
   docs/reduced_speed_guidance_references.md; no main or long-service acceptance.
+
+- At2c71d0e, the reduced-speed selected-tangent virtual N6 pair still failed
+  arrival despite .252099/-.253806 m arcs. At N30, legacy single-speed pairs
+  failed; reduced-speed pairs arrived35.55/34.0 s with exact checks. Mixed
+  opposite flanks remain explicit: soft guidance is not enforced side. These
+  ORACLE virtual results do not establish moving-human acceptance. Original
+  moving-field N30 parameter probing failed while N6 passed, so longer static
+  validation never grants a longer dynamic forecast. The selected-search and
+  static-long-reference/short-prefix prototypes also stalled and remain
+  UNINTEGRATED in outputs. No new wheels/main/long-service acceptance follows.
+  A longer-range kinematic reference would be a new controller ablation beyond
+  the approved tracking cost; the user has been asked to choose that research
+  direction versus a crossing that continues away from the goal. Keep primary
+  CRA/Safe-SAGE, all priors/clocks/geometry/exact checks and failed records.

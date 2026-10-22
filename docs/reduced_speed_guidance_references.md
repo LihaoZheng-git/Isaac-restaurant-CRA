@@ -33,7 +33,42 @@ Validation:84 focused tests passed in6.40 s, all2,437 unit tests passed in85.33 
 Ruff and whitespace checks passed. New numeric tests reproduce a case where
 full-speed reference horizons fail and a slower one passes the same checks;
 stationary/unsafe/zero-weight behavior and nominal immutability remain checked.
-Virtual route and a new own-stationary/native trial remain pending. The earlier
+A new own-stationary/native trial has not been enabled; virtual results follow. The earlier
 frozen native attempt is retained independently; this change cannot repair it
 retroactively. No main, long-service, real-time or complete fresh four-factor
 perception acceptance follows.
+
+## Full route diagnostics and remaining decision
+
+All inputs below are authored ORACLE geometry/side, without physical wheel
+commands or sensor/motion-selector acceptance. The selected-tangent mode's
+matched N6 single/reduced-speed pairs both failed stationary-solution rejection.
+Reduced-speed arcs were+.252099/-.253806 m, but arrival still failed. The
+forecast-only reference pair also stalled. These failures remain recorded.
+
+At N30, both legacy single-speed selected-tangent routes failed. Both reduced-
+speed routes arrived (left35.55 s/right34.0 s), with passed exact geometry/CBF/
+MPC checks. Their main flanks were+.682294/-.683540 m, but opposite excursions
+-.210126/+.212026 m remain explicit. This is soft guidance, not enforced side.
+Output: `outputs/paper_flux/virtual-selected-speed-N30-v1`.
+
+The original native19.7 s field/state parameter diagnostic still rejects a full
+N30 dynamic forecast while N6 succeeds. Its N30 nominal repeats the original
+first command, so it is not an exact new native nominal-horizon replay. Failed
+margin is explicitly unavailable/null. Do not combine the static N30 arrivals
+with this moving-field probe into native acceptance.
+
+An unintegrated selected-tangent bounded-search prototype passed52 focused tests
+but both N6 virtual routes stalled. Its exact patch is archived in
+`outputs/paper_flux/selected-search-rejected-N6-v1.patch`; the runtime was restored
+to2c71d0e. Two outputs-only longer-static-reference/short-prefix prototypes also
+stalled: v2 arcs+.210604/-.216257 m; v3+.310529/-.322571 m. v1 was a harness
+TypeError, not a completed controller result. These are not integrated modes.
+
+The current bounded changes do not complete the native curved-bypass task.
+A longer-range kinematic path-reference mechanism would be a new controller
+ablation beyond the already approved guidance-tracking cost. The user has been
+asked to choose that direction versus an explicitly different crossing route
+that continues away from the final-goal corridor. Keep the primary CRA/Safe-
+SAGE comparison unchanged and this PR in draft; do not relax safety, geometry,
+source clocks or arrival criteria to convert these failures into passes.
