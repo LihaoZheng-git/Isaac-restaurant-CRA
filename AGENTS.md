@@ -1416,3 +1416,15 @@
   Exact522 replay supports it; selected bare-adult native acceptance is still
   required. See docs/person_mask_boundary_prior.md; touching-object/crowded
   generalization remains outside this bounded association scope.
+
+- Atbfe507d the selected-tangent/one-pixel-configured run reached3/3 goals in
+  23.033333 navigation seconds,.028942 m clearance/.001771 m drift,229 fields.
+  Moving-human component passed5supported/2simultaneous, but curved/behind
+  gates FAILED(-.000288/-.021533 m). It used zero boundary-prior proofs; direct
+  tolerance evidence remains the exact522 replay/tests, not causal native use.
+  First22.9 s bounded exact search/left-turn probes found no accepted complete
+  left reference; this is not global infeasibility. An explicitly separate8.0 m
+  actor-start lead-time fixture may test the unchanged algorithm and gates;
+  preserve the8.4 m failure and report the scenario change, fixed lambda,
+  b=-1.7 override, original source clocks and zero complete human factor data.
+  See docs/crossing_lead_time_evaluation.md.

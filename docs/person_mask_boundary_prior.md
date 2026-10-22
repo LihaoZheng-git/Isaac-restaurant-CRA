@@ -37,3 +37,21 @@ epochs.84 focused tests passed in4.49 s; all2,402 unit tests passed in81.19 s;
 Ruff and diff checks passed. New stationary/native acceptance is pending, with
 the same N6 selected-tangent controller,8.4 m actor-only event,.5 m/s human,
 all physical/flux/lambda policies, observed occupancy and .02 m clearance guard.
+
+At bfe507d the new native trial passed the parked and moving-human component
+gates and reached3/3 waypoints in23.033333 navigation seconds:229 fields/218
+translating,.028942 m minimum clearance,.001771 m drift and.032018 CBF margin.
+Full bypass FAILED: -.000288 m left arc and-.021533 m behind projection. There
+were25 active selected references, but no visible detour. There were **zero
+boundary-prior proofs**, so exact raw replay/tests remain this option's direct
+evidence; do not attribute the native arrival to an unused tolerance. All15,105
+object assessments had zero complete four-factor sensor assessments(65 accepted
+instances), while human motion had5 supported and2 simultaneous rows.
+
+The first selected22.9 s SHA-checked snapshot admits no full reference from
+the bounded4800-candidate search (both original and selected-tangent soft
+rankings). The offline fixed turn-pattern probe admits only rightward-.4 rad/s
+rotation among its tested patterns; no tested left pattern passes unchanged
+exact geometry/DTCBF. This is not a global infeasibility proof. Keep the tight
+case and evaluate any earlier lead-time fixture separately, without changing
+algorithm, safety thresholds or the failed result.
