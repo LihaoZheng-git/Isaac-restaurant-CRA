@@ -35,3 +35,19 @@ passed in80.34 s. Ruff `robot tests scripts` and diff checks passed. A new own
 stationary/native trial is required, keeping the selected-obstacle reference,
 N6,8.4 m event,.5 m/s human, all physical policies/geometry, source clocks,
 exact MPC/CBF and independent .02 m clearance gate unchanged.
+
+At6d0254a, the own stationary gate passed, but the native retry FAILED on a
+different walking fragment522 at15.933333 navigation seconds:1/3 waypoints,
+158 fields,.045588 m clearance/.001012 m drift. No new unique-full-surface proof
+was used in that run; native continuation past the previous region is **not**
+causal validation of this option. Its exact original415 replay remains the
+acceptance evidence. Preserve both failed native cases.
+
+The first selected22.9 s planner snapshot has no feasible complete proactive
+reference, despite a valid left selection; exact recovery supplied a small
+right turn. Overall arc/arrival failed, though the behind projection passed.
+Fragment522 was still fully LiDAR-observed at23.8 s:37 points,36 inside the fresh
+.831622 person mask, one exactly1 pixel outside; parent coverage1 and max3D
+part-to-parent gap.277696 m. The current strict visual-part helper rejects the
+whole association. A separate pixel-boundary PRIOR may address that source
+misalignment; no stale clearing or physical factor/geometry change is justified.

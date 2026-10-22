@@ -1392,3 +1392,15 @@
   Actual415 replay resolves to72 with19.3/19.4 clocks retained; the older failed
   trial stays failed. See docs/unique_full_surface_continuity.md; own new
   stationary/native acceptance remains required.
+
+- The6d0254a retry passed its stationary gate but failed on walking fragment522
+  at15.933333 navigation seconds,1/3 goals,.045588 m clearance/.001012 m drift,
+  158 fields. It used zero unique-full-surface proofs; do not call passage past
+  the previous region natural validation of that option. First22.9 s selection
+  had no feasible complete proactive reference and used exact recovery; arc/
+  arrival failed. At original23.8 s,522 has37 LiDAR points,36 inside the fresh
+  .831622 person mask and one exactly1 native pixel outside; parent coverage1,
+  all projected and max3Dgap.277696 m. Preserve strict rejection. Any separate
+  boundary-association tolerance must be an explicit bounded pixel PRIOR,
+  retaining all current raw occupancy, parent identity clocks, 3D/source/
+  ambiguity gates and physical factors; no stale fragment clearing.
