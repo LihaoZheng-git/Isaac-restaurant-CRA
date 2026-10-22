@@ -52,6 +52,8 @@ parser.add_argument("--human-positive-fragment-extent", action="store_true",
                     help="bare-human recent-coobservation/current-positive-return fragment association; no free-space or factor transfer")
 parser.add_argument("--human-positive-fragment-surface", action="store_true",
                     help="require fresh complete coverage of retained positive fragment surface; unchanged distances/epochs; no body prior")
+parser.add_argument("--human-unique-full-surface", action="store_true",
+                    help="unique full-surface positive correspondence despite distant parent centroid/partial neighboring patches; no hidden geometry or factor transfer")
 parser.add_argument("--human-visual-fragment-association", action="store_true",
                     help="fresh RGB/current-positive 3D small-body-part association in separated bare-human observed-only mode")
 parser.add_argument("--human-fresh-person-policy", action="store_true",
@@ -256,6 +258,8 @@ if args.human_positive_fragment_extent and (args.restaurant_human is None or arg
     parser.error("positive fragment extent requires the bounded bare native-human scenario")
 if args.human_positive_fragment_surface and not args.human_positive_fragment_extent:
     parser.error("positive fragment surface requires the explicit bare-human extent mode")
+if args.human_unique_full_surface and not args.human_positive_fragment_surface:
+    parser.error("unique full surface correspondence requires positive surface association")
 if args.human_visual_fragment_association and (not args.human_observed_occupancy_only
     or args.restaurant_human is None or args.human_carry_bowl):
     parser.error("visual fragment association requires the separated bare-human observed-only fixture")
@@ -1625,6 +1629,7 @@ def main():
         allow_observed_fragment_merges=human is not None,
         allow_positive_extent_merges=args.human_positive_fragment_extent,
         allow_positive_surface_merges=args.human_positive_fragment_surface,
+        allow_unique_full_surface_merges=args.human_unique_full_surface,
         allow_current_visual_part_associations=args.human_visual_fragment_association,
         use_observed_merge_velocity=human is not None),
         fragment_coverage_config=fragment_coverage_config) if args.moving_actor or human is not None else None

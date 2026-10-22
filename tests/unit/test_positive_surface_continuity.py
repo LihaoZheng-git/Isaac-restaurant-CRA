@@ -36,11 +36,12 @@ def observe(guard, groups, now, *, extra=(), centers=None):
     return result
 
 
-def prepared(*, enabled=True, coobserved=True):
+def prepared(*, enabled=True, coobserved=True, unique=False):
     guard = NearbyTrackLossGuard(NearbyTrackLossConfig(
         allow_observed_fragment_merges=True,
         allow_positive_extent_merges=True,
-        allow_positive_surface_merges=enabled))
+        allow_positive_surface_merges=enabled,
+        allow_unique_full_surface_merges=unique))
     observe(guard, {1: SURFACE, 2: BODY} if coobserved else {1: SURFACE}, 1.)
     if not coobserved:
         observe(guard, {2: BODY}, 1.1)
@@ -144,3 +145,51 @@ def test_two_missing_surfaces_cannot_both_claim_one_current_parent():
     assert result["blocked"]
     assert {row["track_id"] for row in result["blocking_tracks"]} == {1, 3}
     assert not result["observed_fragment_merges"]
+
+
+def test_unique_whole_surface_can_cover_a_far_centroid_with_a_partial_neighbor():
+    body = np.column_stack((np.linspace(1.75, 1.85, 30), np.zeros(30)))
+    patch = np.array([[.95, 0.], [.95, .01], [.95, -.01]])
+    guards = [NearbyTrackLossGuard(NearbyTrackLossConfig(
+        allow_observed_fragment_merges=True, allow_positive_extent_merges=True,
+        allow_positive_surface_merges=True, allow_unique_full_surface_merges=enabled))
+        for enabled in (False, True)]
+    for guard in guards:
+        observe(guard, {1: SURFACE, 2: body, 3: patch}, 1.)
+    groups = {2: np.vstack([SURFACE, body]), 3: patch}
+    assert observe(guards[0], groups, 1.2)["blocked"]
+    result = observe(guards[1], groups, 1.2)
+    assert not result["blocked"]
+    event, = result["observed_fragment_merges"]
+    proof = event["positive_surface_proof"]
+    assert proof["correspondence_basis"] == "unique_whole_surface_positive_coverage"
+    assert proof["parent_centroid_distance_m"] > .25
+    assert proof["neighborhood_supported_track_ids"] == [2, 3]
+    assert proof["whole_surface_supported_track_ids"] == [2]
+    assert event["original_last_seen_time"] == event["coobservation_source_time"] == 1.
+    assert event["translation_world_xy"] == [0., 0.]
+    assert set(guards[1].observed) == {2, 3}
+
+
+@pytest.mark.parametrize("problem", ["one_missing", "two_whole_parents", "unclustered", "no_pair", "expired"])
+def test_unique_whole_surface_keeps_incomplete_ambiguous_or_expired_stops(problem):
+    guard = prepared(unique=True, coobserved=problem != "no_pair")
+    groups = {2: np.vstack([SURFACE, BODY])}
+    extra = ()
+    if problem == "one_missing":
+        groups[2] = np.vstack([SURFACE[1:], BODY])
+    elif problem == "two_whole_parents":
+        groups[3] = SURFACE + .01
+    elif problem == "unclustered":
+        extra = ((-1, np.array([[.95, 0.], [.95, .01], [.95, -.01]])),)
+    result = observe(guard, groups, 1.4 if problem == "expired" else 1.2, extra=extra)
+    assert result["blocked"]
+    assert result["blocking_tracks"][0]["original_last_seen_time"] == 1.
+    assert not result["observed_fragment_merges"]
+
+
+def test_unique_whole_surface_opt_in_requires_original_surface_scope():
+    with pytest.raises(TypeError):
+        NearbyTrackLossConfig(allow_unique_full_surface_merges=1)
+    with pytest.raises(ValueError, match="requires positive surface"):
+        NearbyTrackLossConfig(allow_unique_full_surface_merges=True)

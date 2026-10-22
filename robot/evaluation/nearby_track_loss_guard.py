@@ -23,6 +23,7 @@ class NearbyTrackLossConfig:
     use_observed_merge_velocity: bool = False
     allow_positive_extent_merges: bool = False
     allow_positive_surface_merges: bool = False
+    allow_unique_full_surface_merges: bool = False
     allow_current_visual_part_associations: bool = False
     maximum_merge_speed_mps: float = 2.0
     maximum_merge_translation_m: float = 0.25
@@ -36,18 +37,23 @@ class NearbyTrackLossConfig:
             self.allow_positive_surface_merges, bool
         ) or not isinstance(
             self.allow_current_visual_part_associations, bool
+        ) or not isinstance(
+            self.allow_unique_full_surface_merges, bool
         ):
             raise TypeError("fragment merge opt-in must be boolean")
         if self.allow_positive_extent_merges and not self.allow_observed_fragment_merges:
             raise ValueError("positive extent association requires fragment merges")
         if self.allow_positive_surface_merges and not self.allow_positive_extent_merges:
             raise ValueError("positive surface association requires positive extent merges")
+        if self.allow_unique_full_surface_merges and not self.allow_positive_surface_merges:
+            raise ValueError("unique full surface association requires positive surface merges")
         for name, value in vars(self).items():
             if name in {
                 "allow_observed_fragment_merges",
                 "use_observed_merge_velocity",
                 "allow_positive_extent_merges",
                 "allow_positive_surface_merges",
+                "allow_unique_full_surface_merges",
                 "allow_current_visual_part_associations",
             }:
                 continue
@@ -329,7 +335,8 @@ class NearbyTrackLossGuard:
                     maximum_distance = None
                     if original is None or original[1] != old_time:
                         reason = "no_original_surface_at_fragment_epoch"
-                    elif np.linalg.norm(current[new] - old_point) > self.config.reassociation_distance_m:
+                    elif (not self.config.allow_unique_full_surface_merges
+                        and np.linalg.norm(current[new] - old_point) > self.config.reassociation_distance_m):
                         reason = "original_centroid_distance_gate"
                     else:
                         from scipy.spatial import cKDTree
@@ -354,6 +361,15 @@ class NearbyTrackLossGuard:
                                 near_ids = ids[indices]
                                 supported = [int(k) for k in np.unique(near_ids)
                                     if np.count_nonzero(near_ids == k) >= minimum]
+                                neighborhood_supported = supported.copy()
+                                if self.config.allow_unique_full_surface_merges and -1 not in supported:
+                                    # A nearby patch is not a competing WHOLE
+                                    # surface correspondence. Keep ambiguity if
+                                    # two clusters cover the entire old surface;
+                                    # unclustered support remains unresolved.
+                                    supported = [k for k in supported if np.all(
+                                        cKDTree(xyz[ids == k]).query(old_surface)[0]
+                                        <= self.config.positive_merge_distance_m)]
                                 covering = xyz[indices[near_ids == new]]
                                 if supported != [new]:
                                     reason = "ambiguous_surface_ownership"
@@ -367,6 +383,11 @@ class NearbyTrackLossGuard:
                                         "current_covering_return_count": len(covering),
                                         "maximum_original_to_current_distance_m": maximum_distance,
                                         "all_original_positive_returns_covered": True,
+                                        **({"correspondence_basis": "unique_whole_surface_positive_coverage",
+                                            "neighborhood_supported_track_ids": neighborhood_supported,
+                                            "whole_surface_supported_track_ids": supported,
+                                            "parent_centroid_distance_m": float(np.linalg.norm(current[new]-old_point))}
+                                           if self.config.allow_unique_full_surface_merges else {}),
                                         "original_surface_points_world_xy": old_surface.tolist(),
                                         "current_covering_points_world_xy": covering.tolist(),
                                         "scope": "whole measured planar positive-surface association; no hidden-body coverage, motion/factor transfer or new occupancy",
@@ -545,7 +566,8 @@ class NearbyTrackLossGuard:
             "prior_covered_missing_tracks": prior_coverage["covered"],
             "body_prior_coverage_rejections": prior_coverage["rejected"],
             **({"positive_surface_route_enabled": True,
-                "positive_surface_merge_rejections": surface_rejections}
+                "positive_surface_merge_rejections": surface_rejections,
+                "unique_full_surface_route_enabled": self.config.allow_unique_full_surface_merges}
                if self.config.allow_positive_surface_merges else {}),
             "scope": "nearby positive LiDAR-track continuity watchdog; lost occupancy is unresolved, not free; bounded separated actors; not a dynamic belief map or general occlusion guarantee",
         }

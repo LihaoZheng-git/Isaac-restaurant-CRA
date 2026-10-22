@@ -1380,3 +1380,15 @@
   Any separate unique whole-surface correspondence must retain actual current
   positive geometry, source-age/co-observation/ownership gates and all occupancy/
   physical factors; no missing-surface clearing or timeout repair is permitted.
+
+- The explicit unique-full-surface continuity alternative may bypass the
+  centroid criterion only after every original measured surface sample is
+  covered by one current positive parent within the unchanged.10 m bound.
+  Preserve >=3 distinct old/current returns, original <=.35 s source age,
+  recent true co-observation and one-to-one complete correspondence. Nearby
+  partial patches are not complete competitors; two full parents, unclustered
+  support, missing points, expiry or unresolved identity still stop. No physical
+  occupancy/class/factor/source transfer or free-space inference follows.
+  Actual415 replay resolves to72 with19.3/19.4 clocks retained; the older failed
+  trial stays failed. See docs/unique_full_surface_continuity.md; own new
+  stationary/native acceptance remains required.
