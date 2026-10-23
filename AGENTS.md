@@ -1721,3 +1721,31 @@
   native rear-reference integration or acceptance. All2,590 units/Ruff/compile
   and CLI smoke checks passed. See docs/route_guide_navigation.md; keep native
   priors and main/long-service/PR117 holds.
+
+- The user approved the next bounded late-crossing correction. The reproduced
+  analytical failure followed publication of a zero-lambda field even though
+  its stopped horizon had already failed exact acceptance. The new opt-in
+  checked-wait FIELD gate needs a unique current positively supported crossing,
+  original selection/tracker epochs and full stopped exact/dense/forecast-
+  analytical/first-CBF checks. If rejected, rebuild a real current normal-
+  guidance field against the SAME previous accepted h/temporal pair; never
+  commit the rejected candidate as the baseline, reset derivatives or renew
+  source clocks. Its normal alternative still needs original MPC/analytical
+  acceptance and may fail. Rejected waits are not intentional yields.
+  Appliedlambda1.25 may remain during a perpendicular encounter with unavailable
+  zero-bias waiting; report this separate control-policy ablation explicitly,
+  retaining the old strict variant and fixedlambda1.25 primary. The first
+  isolated right-mirror guard probe arrived26.6s with .330843m clearance and
+  analytical acceptance, but had the old late-release inefficiency. This is
+  ORACLE-only integration; no native rear-reference/guard mode or wheel result
+  follows. Physical risk/flux/occupancy/nominal and priors stay intact. See
+  docs/late_crossing_wait.md; keep old failures and main/long-service/PR117 holds.
+  Final33-run ORACLE matrix: guarded hybrid11/11 navigation/analytical passes,
+  fixed primary11/11, original uncorrected wait10/11 with the old late mirror
+  failure reproduced. Guarded early curves remain3/3; medium/late cases use
+  checked waiting or normal guidance, not invented curved acceptance. Late
+  mirror arrival23.2s/.330843m clearance versus primary22.6s; no speed or causal
+  CRA advantage. All15 unchanged historical comparisons retain exact state
+  arrays/flags. Original-source record audits and actual virtual zero-yield
+  state checks pass. All2,606 units/Ruff/compile passed. This remains ORACLE-only
+  integration with no new Isaac wheels, physical braking or live sensor claim.

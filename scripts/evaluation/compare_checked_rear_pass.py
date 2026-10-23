@@ -34,6 +34,7 @@ def main():
     )
     parser.add_argument("--rear-minimum-lead", type=float, default=1.4)
     parser.add_argument("--rear-existing-turn-heading", type=float)
+    parser.add_argument("--checked-wait-transition", action="store_true")
     parser.add_argument(
         "--controller",
         nargs="+",
@@ -57,6 +58,7 @@ def main():
         "robot/evaluation/checked_rear_pass_benchmark.py",
         "robot/evaluation/encounter_control_benchmark.py",
         "robot/navigation/waypoint_controller.py",
+        "robot/safety/checked_wait_transition.py",
         "scripts/evaluation/compare_checked_rear_pass.py",
     )
     manifest = dict(
@@ -70,6 +72,7 @@ def main():
         waypoint_layout=args.waypoint_layout,
         waypoint_mode=args.waypoint_mode,
         rear_pass_configuration=asdict(rear_config),
+        checked_wait_transition=args.checked_wait_transition,
         controllers=args.controller,
         zero_wheels=True,
         scope=__doc__,
@@ -101,6 +104,8 @@ def main():
                 actor_onset_seconds=args.actor_onset_seconds,
                 waypoint_layout=args.waypoint_layout,
                 waypoint_mode=args.waypoint_mode,
+                checked_wait_transition=args.checked_wait_transition
+                and controller != "primary",
                 **extra,
             )
             result["experimental_controller"] = controller

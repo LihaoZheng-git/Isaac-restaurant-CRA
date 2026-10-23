@@ -86,14 +86,37 @@ def test_alternative_waypoint_fixture_preserves_goal_and_explicitly_changes_anch
 
 def test_guide_mode_records_original_anchors_and_pose_only_lookahead_without_arrival():
     result = run_encounter_control_case(
-        "cross-left-right", "encounter", maximum_seconds=.2, waypoint_mode="guides"
+        "cross-left-right", "encounter", maximum_seconds=0.2, waypoint_mode="guides"
     )
     assert result["waypoint_mode"] == "guides"
     assert result["nominal_waypoints_local_xy"] == [[2.2, 0.0], [3.1, 0.0], [3.9, 0.0]]
     assert result["rows"][0]["nominal_target_xy"] == [1.0, 0.0]
-    assert not result["passed"] and result["final_goal_tolerance_m"] == .1
+    assert not result["passed"] and result["final_goal_tolerance_m"] == 0.1
     with pytest.raises(ValueError):
-        run_encounter_control_case("cross-left-right", "encounter", waypoint_mode="skip-final")
+        run_encounter_control_case(
+            "cross-left-right", "encounter", waypoint_mode="skip-final"
+        )
+
+
+def test_checked_wait_transition_is_opt_in_and_cannot_change_unselected_fields():
+    ordinary = run_encounter_control_case(
+        "cross-left-right", "encounter", maximum_seconds=0.2
+    )
+    guarded = run_encounter_control_case(
+        "cross-left-right",
+        "encounter",
+        maximum_seconds=0.2,
+        checked_wait_transition=True,
+    )
+    assert not ordinary["checked_wait_transition_enabled"]
+    assert guarded["checked_wait_transition_enabled"]
+    assert guarded["rows"][0]["checked_wait_transition"] is None
+    np.testing.assert_array_equal(ordinary["endpoint_state"], guarded["endpoint_state"])
+    assert ordinary["rows"][0]["lambdas"] == guarded["rows"][0]["lambdas"]
+    with pytest.raises(ValueError):
+        run_encounter_control_case(
+            "cross-left-right", "fixed", checked_wait_transition=True
+        )
 
 
 def rear_trace(case="cross-left-right", *, amplitude=0.3, peak_time=14.0):

@@ -207,6 +207,7 @@ def run_encounter_control_case(
     waypoint_mode="checkpoints",
     control_factory=None,
     encounter_policy_adapter=None,
+    checked_wait_transition=False,
 ):
     if case not in CASES or variant not in VARIANTS or not 0 < maximum_seconds <= 90:
         raise ValueError("bounded known comparison required")
@@ -216,6 +217,14 @@ def run_encounter_control_case(
         raise ValueError("known explicitly declared waypoint fixture required")
     if waypoint_mode not in {"checkpoints", "guides"}:
         raise ValueError("known waypoint completion policy required")
+    if (
+        not isinstance(checked_wait_transition, bool)
+        or checked_wait_transition
+        and variant != "encounter"
+    ):
+        raise ValueError(
+            "checked waiting fields require the separate encounter variant"
+        )
     route_x = (2.2, 3.1, 3.9) if waypoint_layout == "legacy" else (1.0, 1.5, 3.9)
     # Reuse the audited yaw/footprint/solver setup, not its static oracle geometry.
     grid_config = LocalOccupancyGridConfig(
@@ -477,6 +486,76 @@ def run_encounter_control_case(
             else None,
             crossing_yield_track_ids=yield_ids,
         )
+        transition_audit = None
+        if (
+            checked_wait_transition
+            and yield_ids
+            and any(v.tangential_strength == 0.0 for v in guidance.values())
+        ):
+            from robot.safety.checked_wait_transition import (
+                assess_checked_wait_transition,
+            )
+
+            transition_audit = assess_checked_wait_transition(
+                mpc,
+                state,
+                field,
+                lambda: control.filter_command((0.0, 0.0), state, field),
+            )
+            probe = control.filter_command((0.0, 0.0), state, field)
+            transition_audit["candidate_stopped_constraint"] = dict(
+                h=probe.sampled_safety_value,
+                scaled_temporal=probe.scaled_temporal_safety_derivative,
+                rhs=probe.constraint.constraint_right_hand_side,
+                feasible=probe.constraint_feasible,
+            )
+            transition_audit["previous_accepted_source_timestamp_seconds"] = (
+                previous.sensor_timestamp_seconds if previous else None
+            )
+            if not transition_audit["accepted"]:
+                # Rebuild a real current normal-guidance field against the same
+                # previous ACCEPTED field/derivative. Never reset or zero the
+                # rejected policy transition, reuse its h, or advance source time.
+                guidance = {
+                    k: replace(v, tangential_strength=1.25) for k, v in guidance.items()
+                }
+                pipeline = build_safe_sage_field_pipeline(
+                    grid,
+                    guidance_policy=fallback,
+                    config=field_config,
+                    semantic_obstacles=semantics,
+                    track_guidance_parameters=guidance,
+                )
+                derivative = (
+                    0.0
+                    if previous is None
+                    else estimator.estimate(
+                        previous_h_full=previous.pipeline.h_full,
+                        current_h_full=pipeline.h_full,
+                        grid_config=grid_config,
+                        time_delta_seconds=0.2,
+                        egomotion_translation_grid_xy=(0.0, 0.0),
+                        previous_estimate=None
+                        if isinstance(previous.temporal_safety_derivative, float)
+                        else previous.temporal_safety_derivative,
+                    )
+                )
+                field = replace(
+                    field,
+                    pipeline=pipeline,
+                    temporal_safety_derivative=derivative,
+                    crossing_yield_track_ids=(),
+                )
+                transition_audit["selected_policy"] = "normal_guidance_current_field"
+                selected_probe = control.filter_command((0.0, 0.0), state, field)
+                transition_audit["selected_stopped_constraint"] = dict(
+                    h=selected_probe.sampled_safety_value,
+                    scaled_temporal=selected_probe.scaled_temporal_safety_derivative,
+                    rhs=selected_probe.constraint.constraint_right_hand_side,
+                    feasible=selected_probe.constraint_feasible,
+                )
+            else:
+                transition_audit["selected_policy"] = "checked_zero_bias_wait_field"
         previous = field
         nominal_sequence, _ = nominal_sequences(state, waypoint, 6)
         plan = (
@@ -539,6 +618,11 @@ def run_encounter_control_case(
                 route_guide_index=nominal.target_waypoint_index,
                 route_advanced=nominal.waypoint_advanced,
                 nominal_route_complete=nominal.route_complete,
+                field_source_timestamp_seconds=field.sensor_timestamp_seconds,
+                field_frame_id=field.sensor_frame_id,
+                original_selection_timestamp_seconds=field.motion_passing_reference_source_timestamp_seconds,
+                checked_wait_transition=transition_audit,
+                crossing_maneuver=getattr(plan, "crossing_maneuver", None),
             )
         )
         if progress and step % 10 == 0:
@@ -562,6 +646,7 @@ def run_encounter_control_case(
         fixture_waypoint_layout=waypoint_layout,
         waypoint_mode=waypoint_mode,
         final_goal_tolerance_m=waypoint.config.position_tolerance,
+        checked_wait_transition_enabled=checked_wait_transition,
         nominal_waypoints_local_xy=[[x, 0.0] for x in route_x],
         passed=bool(passed),
         reason=reason,

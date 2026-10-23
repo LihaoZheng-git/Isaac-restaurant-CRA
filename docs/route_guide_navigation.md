@@ -5,6 +5,10 @@ mandatory final-goal arrival and stopping. This is an opt-in navigation
 variant. The strict checkpoint controller, existing accepted native stop-and-go
 result and fixed-lambda primary remain available and unchanged by default.
 
+Subsequent follow-up: `late_crossing_wait.md` describes a separate checked-field
+correction for the analytical waiting failure. All failures below remain the
+original recorded outcomes; the correction is not native motion acceptance.
+
 ## Nominal contract
 
 `WaypointControllerConfig.intermediate_waypoints_as_guides=True` enables the
