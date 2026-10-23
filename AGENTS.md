@@ -1668,3 +1668,31 @@
   docs/rear_pass_development.md and retain full ignored probe sources/results.
   The evaluation-only branch passed102 focused and2,537 full unit tests/Ruff/
   compilation; it grants no native rear-pass or main-merge acceptance.
+
+- The user then authorized further rear-pass diagnosis. The new checked
+  reference component/evaluation adapter is separate from native control and
+  primary MPC selection. Full original-horizon exact DTCBF/dense geometry,
+  future mapped analytical inequalities, unchanged first-command analytical
+  acceptance and >=.01m translating references remain mandatory. Preserve the
+  productive-v2 late analytical-emergency failures and all earlier failed arcs.
+  The adaptive behavior thresholds (1.4m lead/.15m existing lateral offset,
+  1.2m outgoing release, .7m target offset/1m carrot/.8m fade) are explicit
+  engineering behavior assumptions, never physical factors or enlarged body
+  geometry. Physical risk/flux, unrelated occupancy and source clocks stay intact.
+  A DIFFERENT ORACLE fixture (onset8s; mandatory checkpoints1.0/1.5/3.9 rather
+  than2.2/3.1/3.9) passed3/3 curved criteria and20s arrivals, with .343852/.348371/
+  .343852m walking arcs and >=.703986m clearance. Keep the original late/dense-
+  checkpoint failures; onset8 alone did not fix them. Plane crossing occurred
+  after the transverse window, so do not claim close timed rear passing, native
+  wheels, fresh four-factor perception, real time or causal CRA superiority.
+  The user was asked whether intermediate waypoints are route guides or strict
+  .10m checkpoints; this consequential navigation choice remains PENDING.
+  Do not change waypoint acceptance/native route until answered. Nominal must
+  remain obstacle-unaware; final goal/stopping and all safety gates remain.
+  Historical virtual crossing keys have mirrored robot-frame wording; use
+  actual observed velocity vectors in labels and preserve the old keys/results.
+  See docs/rear_pass_feasibility.md; native priors and main/PR117 holds persist.
+  All2,573 unit tests passed; after the diagnostic-reason correction,52 focused
+  component/adapter/benchmark tests passed. Ruff and compilation passed. Matched
+  fixed-lambda primary also arrived3/3 in20.2s without a curve; a single .2s
+  difference does not establish a meaningful speed or causal CRA advantage.

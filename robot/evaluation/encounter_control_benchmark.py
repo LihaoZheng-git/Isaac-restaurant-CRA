@@ -71,12 +71,19 @@ CASES = (
 VARIANTS = ("fixed", "always-zero", "encounter")
 
 
-def oracle_actor(case, now):
-    """Common exogenous11.5 s onset; authored geometry/velocity, ORACLE only."""
-    if case not in CASES or not math.isfinite(now) or now < 0:
+def oracle_actor(case, now, *, onset_seconds=11.5):
+    """Declared exogenous onset (legacy11.5s); authored ORACLE geometry/velocity."""
+    if (
+        case not in CASES
+        or not math.isfinite(now)
+        or now < 0
+        or isinstance(onset_seconds, bool)
+        or not math.isfinite(onset_seconds)
+        or not 0 <= onset_seconds <= 30
+    ):
         raise ValueError("known case and finite nonnegative time required")
-    elapsed = max(0.0, now - 11.5)
-    active = now >= 11.5
+    elapsed = max(0.0, now - onset_seconds)
+    active = now >= onset_seconds
     if case.startswith("cross"):
         sign = -1 if case == "cross-right-left" else 1
         if elapsed < 4.0:
@@ -136,17 +143,18 @@ def summarize_oracle_rear_pass(result):
         or not np.allclose(np.diff(times), 0.2, rtol=0, atol=1e-8)
     ):
         raise ValueError("finite ordered fixed-fixture endpoint trace required")
-    actor = np.array([oracle_actor(case, t)[0] for t in times])
-    motion = oracle_actor(case, 12.5)[1]
+    onset = result.get("fixture_actor_onset_seconds", 11.5)
+    actor = np.array([oracle_actor(case, t, onset_seconds=onset)[0] for t in times])
+    motion = oracle_actor(case, onset + 1.0, onset_seconds=onset)[1]
     motion /= np.linalg.norm(motion)
     walking = (
-        (times >= 11.5)
-        & (times < 15.5)
+        (times >= onset)
+        & (times < onset + 4.0)
         & (np.linalg.norm(robot - actor, axis=1) <= 2.0)
     )
     excursion = float(np.max(-robot[walking] @ motion)) if walking.any() else 0.0
     # Preserve the initial transverse plane even when the actor later turns.
-    plane = oracle_actor(case, 11.5)[0][0]
+    plane = oracle_actor(case, onset, onset_seconds=onset)[0][0]
     earlier = np.vstack((np.zeros(2), robot[:-1]))
     earlier_times = np.concatenate(([0.0], times[:-1]))
     indices = np.flatnonzero((earlier[:, 0] < plane) & (robot[:, 0] >= plane))
@@ -156,7 +164,10 @@ def summarize_oracle_rear_pass(result):
         f = (plane - earlier[i, 0]) / (robot[i, 0] - earlier[i, 0])
         crossing_time = float(earlier_times[i] + f * (times[i] - earlier_times[i]))
         position = earlier[i] + f * (robot[i] - earlier[i])
-        behind = float((position - oracle_actor(case, crossing_time)[0]) @ motion)
+        behind = float(
+            (position - oracle_actor(case, crossing_time, onset_seconds=onset)[0])
+            @ motion
+        )
     checks = dict(
         original_route_acceptance=bool(
             result.get("passed") is True
@@ -180,14 +191,29 @@ def summarize_oracle_rear_pass(result):
         maximum_trailing_excursion_during_walking_m=excursion,
         behind_projection_at_route_crossing_m=behind,
         route_crossing_time_seconds=crossing_time,
+        fixture_actor_onset_seconds=onset,
         scope="ORACLE fixed .2s virtual endpoint scoring only; authored actor phase/route used solely for evaluation; not sensors, physical braking or native rear-pass acceptance",
     )
 
 
-def run_encounter_control_case(case, variant, *, maximum_seconds=40.0, progress=None):
+def run_encounter_control_case(
+    case,
+    variant,
+    *,
+    maximum_seconds=40.0,
+    progress=None,
+    actor_onset_seconds=11.5,
+    waypoint_layout="legacy",
+    control_factory=None,
+    encounter_policy_adapter=None,
+):
     if case not in CASES or variant not in VARIANTS or not 0 < maximum_seconds <= 90:
         raise ValueError("bounded known comparison required")
     started = time.perf_counter()
+    oracle_actor(case, 0.0, onset_seconds=actor_onset_seconds)
+    if waypoint_layout not in {"legacy", "before-crossing"}:
+        raise ValueError("known explicitly declared waypoint fixture required")
+    route_x = (2.2, 3.1, 3.9) if waypoint_layout == "legacy" else (1.0, 1.5, 3.9)
     # Reuse the audited yaw/footprint/solver setup, not its static oracle geometry.
     grid_config = LocalOccupancyGridConfig(
         resolution=0.1,
@@ -242,7 +268,7 @@ def run_encounter_control_case(case, variant, *, maximum_seconds=40.0, progress=
             configuration_padding_initial_fraction=0.1,
         ),
     )
-    control = SafeSAGEControlRuntime(
+    control = (control_factory or SafeSAGEControlRuntime)(
         mpc=mpc,
         backup_filter=SafeSAGEUnicycleCBFFilter(paper),
         crossing_strategy="legacy" if variant == "fixed" else "yield-then-go",
@@ -253,7 +279,7 @@ def run_encounter_control_case(case, variant, *, maximum_seconds=40.0, progress=
     classifier = EncounterMotionClassifier()
     estimator = SafeSAGETemporalDerivativeEstimator()
     waypoint = WaypointController(
-        [Waypoint(2.2, 0.0), Waypoint(3.1, 0.0), Waypoint(3.9, 0.0)],
+        [Waypoint(x, 0.0) for x in route_x],
         config=WaypointControllerConfig(
             rotate_in_place_threshold_radians=np.deg2rad(100)
         ),
@@ -270,7 +296,7 @@ def run_encounter_control_case(case, variant, *, maximum_seconds=40.0, progress=
             break
         if route_completed is not None and now - route_completed >= 1.0 - 1e-9:
             break
-        center, velocity = oracle_actor(case, now)
+        center, velocity = oracle_actor(case, now, onset_seconds=actor_onset_seconds)
         # Geometry beyond this fixed oracle field is omitted only after it is
         # >3 m from the robot. This is a declared test fixture, not free-space evidence.
         present = np.linalg.norm(center - state[:2]) <= 3.0 or (
@@ -367,8 +393,22 @@ def run_encounter_control_case(case, variant, *, maximum_seconds=40.0, progress=
         }
         yield_ids = None
         if variant == "encounter":
-            guidance, audit, yield_ids = apply_encounter_guidance(
-                guidance, audit, classification, passing_audit, source_time=1.0 + now
+            extra = (
+                {}
+                if encounter_policy_adapter is None
+                else dict(
+                    context=dict(state=state.copy(), goal=goal, tracking=tracking)
+                )
+            )
+            guidance, audit, yield_ids = (
+                encounter_policy_adapter or apply_encounter_guidance
+            )(
+                guidance,
+                audit,
+                classification,
+                passing_audit,
+                source_time=1.0 + now,
+                **extra,
             )
         elif variant == "always-zero":
             guidance = {
@@ -437,7 +477,16 @@ def run_encounter_control_case(case, variant, *, maximum_seconds=40.0, progress=
         plan = (
             None
             if route_completed is not None
-            else control.plan(state, nominal_sequence, field)
+            else control.plan(
+                state,
+                nominal_sequence,
+                field,
+                **(
+                    dict(nominal_goal_grid_xy=goal)
+                    if getattr(control, "requires_nominal_goal_context", False)
+                    else {}
+                ),
+            )
         )
         command = (
             np.zeros(2)
@@ -454,7 +503,9 @@ def run_encounter_control_case(case, variant, *, maximum_seconds=40.0, progress=
             minimum_margin = min(minimum_margin, filtered.cbf_margin)
             emergency |= filtered.emergency_stop_active
             state = integrate_unicycle_euler(state, executed, time_step=1.0 / 60.0)
-            actual_center, _ = oracle_actor(case, now + (sub + 1) / 60.0)
+            actual_center, _ = oracle_actor(
+                case, now + (sub + 1) / 60.0, onset_seconds=actor_onset_seconds
+            )
             minimum_clearance = min(
                 minimum_clearance,
                 _clearance(state, actual_center, 0.4),
@@ -478,6 +529,7 @@ def run_encounter_control_case(case, variant, *, maximum_seconds=40.0, progress=
                 plan_success=None if plan is None else plan.success,
                 checked_yield=getattr(plan, "crossing_maneuver", {}).get("action")
                 == "checked_yield",
+                rear_pass_reference=getattr(plan, "rear_pass_reference", None),
             )
         )
         if progress and step % 10 == 0:
@@ -497,6 +549,9 @@ def run_encounter_control_case(case, variant, *, maximum_seconds=40.0, progress=
     return dict(
         case=case,
         variant=variant,
+        fixture_actor_onset_seconds=actor_onset_seconds,
+        fixture_waypoint_layout=waypoint_layout,
+        nominal_waypoints_local_xy=[[x, 0.0] for x in route_x],
         passed=bool(passed),
         reason=reason,
         rows=rows,

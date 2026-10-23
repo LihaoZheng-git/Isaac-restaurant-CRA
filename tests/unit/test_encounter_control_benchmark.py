@@ -32,6 +32,27 @@ def test_oracle_fixtures_share_exogenous_onset_and_keep_mirrors_parallel_distinc
     np.testing.assert_array_equal(velocity, [0.5, 0.0])
 
 
+def test_explicit_earlier_actor_onset_is_a_different_declared_fixture():
+    assert (
+        np.linalg.norm(oracle_actor("cross-left-right", 7.9, onset_seconds=8.0)[1]) == 0
+    )
+    np.testing.assert_array_equal(
+        oracle_actor("cross-left-right", 9.0, onset_seconds=8.0)[0],
+        oracle_actor("cross-left-right", 12.5)[0],
+    )
+    # Timing must never leak into the controller; old defaults stay identical.
+    np.testing.assert_array_equal(
+        oracle_actor("cross-left-right", 12.5)[0],
+        oracle_actor("cross-left-right", 12.5, onset_seconds=11.5)[0],
+    )
+
+
+@pytest.mark.parametrize("onset", [True, -1.0, 31.0, np.nan, np.inf])
+def test_invalid_actor_onset_cannot_create_a_fixture(onset):
+    with pytest.raises(ValueError):
+        oracle_actor("cross-left-right", 0.0, onset_seconds=onset)
+
+
 def test_short_bound_cannot_claim_arrival_and_preserves_other_obstacle_guidance():
     result = run_encounter_control_case(
         "cross-then-parallel", "encounter", maximum_seconds=0.2
@@ -40,8 +61,27 @@ def test_short_bound_cannot_claim_arrival_and_preserves_other_obstacle_guidance(
     assert len(result["rows"]) == 1
     assert result["rows"][0]["lambdas"] == {7: 1.25, 9: 1.25}
     assert result["minimum_clearance_m"] > 0.02
+    assert result["nominal_waypoints_local_xy"] == [[2.2, 0.0], [3.1, 0.0], [3.9, 0.0]]
     with pytest.raises(ValueError):
         run_encounter_control_case("unknown", "encounter")
+
+
+def test_alternative_waypoint_fixture_preserves_goal_and_explicitly_changes_anchors():
+    result = run_encounter_control_case(
+        "cross-left-right",
+        "encounter",
+        maximum_seconds=0.2,
+        waypoint_layout="before-crossing",
+        actor_onset_seconds=8.0,
+    )
+    assert result["fixture_waypoint_layout"] == "before-crossing"
+    assert result["fixture_actor_onset_seconds"] == 8.0
+    assert result["nominal_waypoints_local_xy"] == [[1.0, 0.0], [1.5, 0.0], [3.9, 0.0]]
+    assert not result["passed"]
+    with pytest.raises(ValueError):
+        run_encounter_control_case(
+            "cross-left-right", "encounter", waypoint_layout="invented"
+        )
 
 
 def rear_trace(case="cross-left-right", *, amplitude=0.3, peak_time=14.0):
@@ -83,6 +123,14 @@ def test_rear_pass_scoring_accepts_trailing_arc_and_plane_crossing_in_both_direc
     assert result["behind_projection_at_route_crossing_m"] < -0.1
     assert trial == before
     json.dumps(result)  # Diagnostics must remain serializable numeric evidence.
+
+
+def test_declared_earlier_fixture_uses_its_own_walking_window_without_changing_old_defaults():
+    early = rear_trace(peak_time=10.5)
+    early["fixture_actor_onset_seconds"] = 8.0
+    assert summarize_oracle_rear_pass(early)["passed"]
+    del early["fixture_actor_onset_seconds"]
+    assert not summarize_oracle_rear_pass(early)["passed"]
 
 
 @pytest.mark.parametrize(

@@ -1,5 +1,10 @@
 # Rear-pass attempt and selected stop-and-go fallback
 
+Follow-up: the user subsequently authorized further diagnosis. See
+`rear_pass_feasibility.md` for a conditional virtual result under a separately
+declared fixture and the pending waypoint-semantics decision. All original
+failed results below remain unchanged.
+
 The user authorized step4 as a bounded attempt at a curved pass behind a crossing
 pedestrian, with the validated stop-and-go strategy retained if it did not work.
 The outcome is **rear-pass acceptance failed; retain stop-and-go**. No new Isaac
