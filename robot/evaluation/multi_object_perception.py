@@ -599,6 +599,15 @@ def assess_all_objects(worker, packet):
             sensor_timestamp_seconds=packet.sensor_timestamp_seconds,
             mask_boundary_prior_pixels=worker.human_fragment_mask_boundary_pixels)
     field_guidance_policy = worker.guidance_policy
+    encounter = copy.deepcopy(getattr(worker, 'encounter_motion', None))
+    encounter_audit, yield_ids = None, None
+    if encounter is not None:
+        from robot.evaluation.encounter_guidance import apply_encounter_guidance
+        encounter_audit = encounter.update(tracking, robot_xy=packet.robot_position_world_xy,
+            goal_xy=packet.waypoint_world_xy, human_track_ids=tuple(r['track_id'] for r in envelope_audit))
+        applied_guidance, baseline_audit, yield_ids = apply_encounter_guidance(
+            applied_guidance, baseline_audit, encounter_audit, passing_audit,
+            source_time=packet.sensor_timestamp_seconds)
     if getattr(worker, "zero_tangential_bias_ablation", False):
         from robot.evaluation.crossing_strategy import zero_tangential_bias
         field_guidance_policy, applied_guidance, baseline_audit = zero_tangential_bias(
@@ -694,6 +703,7 @@ def assess_all_objects(worker, packet):
         motion_passing_reference_track_ids=tuple(sorted(sides)) if passing is not None else (),
         motion_passing_reference_sides=tuple(sides[k].value for k in sorted(sides)) if passing is not None else (),
         motion_passing_reference_source_timestamp_seconds=passing.encounter[2] if passing is not None and sides else None,
+        crossing_yield_track_ids=yield_ids,
     )
     # Transaction commit only after the whole multi-obstacle field succeeds.
     worker.tracker, worker.plume, worker.persistent_properties, worker.previous = (
@@ -706,6 +716,8 @@ def assess_all_objects(worker, packet):
     if passing is not None:
         worker.motion_passing = passing
         worker.passing_visual_selection_evidence = passing_visual_evidence
+    if encounter is not None:
+        worker.encounter_motion = encounter
     if envelope_memory is not None:
         worker.human_body_envelope = envelope_memory
     if fragment_memory is not None:
@@ -727,6 +739,8 @@ def assess_all_objects(worker, packet):
         "experiment_baseline": worker.experiment_baseline.value,
         "applied_field_policies": baseline_audit,
         "motion_aware_passing": passing_audit,
+        "encounter_motion_classification": encounter_audit,
+        "crossing_yield_track_ids": yield_ids,
         "motion_passing_reference_track_ids": field.motion_passing_reference_track_ids,
         "human_body_envelope_priors": envelope_audit,
         "current_visual_body_part_associations": visual_part_groups,
@@ -768,7 +782,8 @@ def assess_all_objects(worker, packet):
         "retained_occupancy_epochs": [
             {"timestamp": item[0], "sensor_frame_id": item[1]} for item in retained
         ],
-        "fixed_lambda": 0. if getattr(worker, "zero_tangential_bias_ablation", False) else 1.25,
+        "fixed_lambda": None if encounter is not None else 0. if getattr(worker, "zero_tangential_bias_ablation", False) else 1.25,
+        "encounter_guidance_ablation": encounter is not None,
         "physical_CRA_lambda": 1.25,
         "zero_tangential_bias_ablation": getattr(worker, "zero_tangential_bias_ablation", False),
         "human_control_ablation": {

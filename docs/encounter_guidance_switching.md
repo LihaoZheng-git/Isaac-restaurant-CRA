@@ -30,3 +30,28 @@ stationary actors, rotated world frames, angular hysteresis/turns, source gaps,
 missing/replaced identities, sparse returns, excessive speeds, changed waypoint
 bearings and invalid inputs. Runtime integration and navigation results are
 pending on subsequent bounded branches.
+
+## Step 2: per-human field integration
+
+The opt-in `--encounter-guidance-ablation` requires the verified bare-human
+object-map/passing path, explicit body prior and yield strategy, without extra
+guidance-tracking cost or the global-zero option. Every current verified human
+is classified; lambda0 eligibility additionally requires the original current
+qualified passing selection (including its original eight-second expiry).
+Thus the new classifier does not bypass the existing selection/identity gates.
+
+Only the selected stable crossing parent, its body-prior cells and positively
+proven current visual fragments get lambda0. Unmatched support/environment,
+unverified auxiliary returns, unrelated tracks and all fallback class policies
+retain lambda1.25. Parallel, stationary or uncertain classification restores
+normal guidance and disables intentional yielding even if an older passing-side
+preference is still latched. It does not force unsafe waiting: original exact
+temporal DTCBF, dense geometry and analytical zero-command checks still apply.
+
+The classifier is copied with the other worker state and committed only after a
+complete field succeeds. A temporal gap cannot advance its accepted history.
+The applied per-row audit retains classification and selection epochs; physical
+CRA/lambda1.25, risk/flux/side, all raw occupancy and factor provenance are intact.
+`fixed_lambda=null` explicitly identifies the mixed per-obstacle field; it is
+never reported as the primary fixed-lambda experiment. Legacy defaults and the
+always-zero ablation remain separate.

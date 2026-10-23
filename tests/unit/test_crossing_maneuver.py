@@ -72,6 +72,16 @@ def test_no_current_selection_cannot_create_wait_or_renew_original_epoch():
     assert result.crossing_maneuver["original_selection_timestamp_seconds"] is None
 
 
+def test_parallel_encounter_disables_wait_despite_latched_crossing_reference():
+    m, original, field, _ = setup()
+    field.crossing_yield_track_ids = ()
+    result = apply_crossing_maneuver(m, original, np.zeros(3), (.2, 0.), field,
+        'yield-then-go', lambda: pytest.fail('parallel encounter must not request a yield'))
+    np.testing.assert_array_equal(result.command_sequence, original.command_sequence)
+    assert result.crossing_maneuver['encounter_guidance_ablation']
+    assert result.crossing_maneuver['action'] == 'planner'
+
+
 def test_opposed_reference_uses_checked_wait_but_aligned_reference_is_preserved():
     m, original, field, stop = setup()
     detail = replace(original.guidance_tracking, active=True, reference_commands=((.1, .4),))

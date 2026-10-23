@@ -8,7 +8,7 @@ import numpy as np
 
 def summarize_motion_passing(
     records, truth, *, moving_robot=False, nominal_goal_world_xy=None, expected_lambda=1.25,
-    continuing_away=False
+    continuing_away=False, encounter_guidance=False
 ):
     if expected_lambda not in {0., 1.25}:
         raise ValueError("only primary or explicit zero-bias ablation lambda supported")
@@ -108,8 +108,17 @@ def summarize_motion_passing(
                 }
             )
         for row in detail.get("applied_field_policies", ()):
+            expected = expected_lambda
+            if encounter_guidance:
+                cue = row.get('encounter_guidance_ablation', {})
+                expected = 0. if cue.get('lambda_suppressed') else 1.25
+                policy_preserved &= (cue.get('source_timestamp_seconds') == t
+                    and row.get('physical_CRA_lambda') == 1.25
+                    and (not cue.get('lambda_suppressed') or (
+                        cue.get('classification') == 'crossing'
+                        and cue.get('parent_track_id') in detail.get('crossing_yield_track_ids', ()))))
             policy_preserved &= (
-                row["lambda"] == expected_lambda
+                row["lambda"] == expected
                 and abs(row["boundary_flux"] + 0.5 + 1.2 * row["applied_field_risk"])
                 < 1e-9
             )
@@ -132,7 +141,7 @@ def summarize_motion_passing(
         "maximum_selected_centroid_error_m": max(errors, default=None),
         "maximum_original_selection_age_seconds": max(ages, default=None),
         "scope": "independent one-crossing scoring; not runtime actor truth or a prediction guarantee",
-        "expected_field_lambda": expected_lambda,
+        "expected_field_lambda": 'encounter-dependent 0/1.25' if encounter_guidance else expected_lambda,
     }
     if moving_robot:
         robot = np.array([row["robot_xy"] for row in truth], dtype=float)

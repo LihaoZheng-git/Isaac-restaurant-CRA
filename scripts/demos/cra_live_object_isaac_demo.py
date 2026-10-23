@@ -30,6 +30,8 @@ parser.add_argument("--crossing-strategy", choices=("legacy", "rear-pass-or-yiel
                     help="separate maneuver ablation; yielding requires exact predictive and analytical checks")
 parser.add_argument("--zero-tangential-bias-ablation", action="store_true",
                     help="explicit wait-and-go field lambda=0; physical CRA and normal repulsion unchanged")
+parser.add_argument('--encounter-guidance-ablation', action='store_true',
+                    help='selected observed crossing human lambda0, normal lambda1.25 for parallel/other occupancy; separate from primary')
 parser.add_argument("--guidance-tracking-weight", type=float, default=0.0,
                     help="separate checked Laplace local-path MPC ablation; zero preserves primary")
 parser.add_argument("--mpc-horizon-steps", type=int,
@@ -232,6 +234,11 @@ if args.crossing_strategy == "rear-pass-or-yield" and (args.guidance_tracking_we
 if args.zero_tangential_bias_ablation and (args.crossing_strategy != "yield-then-go"
     or args.guidance_tracking_weight != 0 or args.guidance_tangent_velocity_fraction != 0):
     parser.error("zero tangential bias is a separate wait-and-go ablation with zero extra tracking weight/fraction")
+if args.encounter_guidance_ablation and (args.zero_tangential_bias_ablation
+    or args.crossing_strategy != 'yield-then-go' or not args.human_observed_passing_target
+    or args.human_body_envelope_radius is None or args.guidance_tracking_weight != 0
+    or args.guidance_tangent_velocity_fraction != 0):
+    parser.error('encounter guidance requires verified-human yield mode and zero extra tracking; global zero bias is separate')
 if args.guidance_tracking_weight > 0 and args.experiment_baseline == "geometric_velocity_cbf":
     parser.error("guidance tracking is a separate MPC ablation, unavailable for geometric CBF")
 if not math.isfinite(args.guidance_max_heading_bias_degrees) or not 0 < args.guidance_max_heading_bias_degrees < 90:
@@ -940,6 +947,7 @@ def main():
     from robot.perception.object_height import ObjectHeightConfig
     from robot.perception.human_body_contact import HumanBodyContactPriorConfig
     from robot.safety.motion_aware_passing import MotionAwarePassingConfig
+    from robot.safety.encounter_motion import EncounterMotionConfig
     from robot.perception.human_body_envelope import HumanBodyEnvelopeConfig
 
     perception = LiveObjectPerception(
@@ -968,6 +976,8 @@ def main():
         human_prior_geometry_associations=args.human_prior_geometry_associations,
         human_fresh_person_policy=args.human_fresh_person_policy,
         zero_tangential_bias_ablation=args.zero_tangential_bias_ablation,
+        encounter_motion_config=EncounterMotionConfig()
+            if args.encounter_guidance_ablation else None,
         human_fragment_coverage_config=fragment_coverage_config,
         calibration=calibration,
         class_policy=class_policy,
@@ -2211,6 +2221,12 @@ def main():
             passing_validation = summarize_motion_passing(live_fields, human.records, moving_robot=True,
                 nominal_goal_world_xy=passing_goal, expected_lambda=0. if args.zero_tangential_bias_ablation else 1.25,
                 continuing_away=args.human_continuing_away)
+            if args.encounter_guidance_ablation:
+                # Keep all legacy identity/flux/route/arc scoring; only the
+                # declared per-row lambda expectation differs for this variant.
+                passing_validation = summarize_motion_passing(live_fields, human.records, moving_robot=True,
+                    nominal_goal_world_xy=passing_goal, continuing_away=args.human_continuing_away,
+                    encounter_guidance=True)
             if args.crossing_strategy == "legacy":
                 completed = completed and passing_validation["passed"]
             else:
@@ -2417,8 +2433,9 @@ def main():
         "controller_scope": "circular_velocity_aware_cbf_nominal_omega_no_mpc; shadow_CRA_fields_for_matched_perception" if args.experiment_baseline == "geometric_velocity_cbf" else "checked_guidance_local_path_ablation_with_exact_DTCBF_geometry_and_analytical_CBF" if args.guidance_tracking_weight > 0 else "online_unicycle_MPC_exact_DTCBF_geometry_and_analytical_CBF",
         "crossing_strategy_ablation": args.crossing_strategy,
         "zero_tangential_bias_ablation": args.zero_tangential_bias_ablation,
+        "encounter_guidance_ablation": args.encounter_guidance_ablation,
         "physical_CRA_lambda": 1.25,
-        "fixed_lambda": 0. if args.zero_tangential_bias_ablation else 1.25,
+        "fixed_lambda": None if args.encounter_guidance_ablation else 0. if args.zero_tangential_bias_ablation else 1.25,
         "plume_control": args.plume_control,
         "restaurant_scene": str(SCENE_PATH) if args.restaurant_scene else None,
         "static_restaurant_server": args.restaurant_server,
@@ -2475,6 +2492,8 @@ def main():
              if args.experiment_baseline == "geometric_velocity_cbf" else
              ("physical CRA lambda1.25; explicit wait-go applied field lambda0 ablation; unchanged nominal/exact MPC/DTCBF/analytical CBF; paced, not real-time or causal CRA superiority"
               if args.zero_tangential_bias_ablation else
+              "physical CRA lambda1.25; separate observed encounter-dependent per-human lambda0/1.25; original safety and source gates, no real-time or causal CRA claim"
+              if args.encounter_guidance_ablation else
               "fixed lambda 1.25, unchanged nominal/exact MPC/DTCBF/analytical CBF; paced development, not real-time or causal CRA superiority")),
             "renderer transform-history warning remains unresolved; separate carried-bowl physical assessment, calibrated load and moving-view plume remain unvalidated",
         ]

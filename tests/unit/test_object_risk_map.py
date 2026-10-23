@@ -585,6 +585,26 @@ def test_motion_passing_state_is_transactional_with_the_actual_field():
     assert runtime.motion_passing.last_timestamp == 1.1
 
 
+def test_encounter_state_is_transactional_and_missing_humans_leave_normal_field():
+    from robot.safety.encounter_motion import EncounterMotionClassifier
+    from robot.safety.motion_aware_passing import MotionAwarePassing
+    runtime, baseline = mapped_worker(), mapped_worker()
+    runtime.motion_passing = MotionAwarePassing()
+    runtime.encounter_motion = EncounterMotionClassifier()
+    first, reference = runtime(multi_packet()), baseline(multi_packet())
+    original = runtime.encounter_motion
+    assert original.last_timestamp == 1.
+    assert first.field.crossing_yield_track_ids == ()
+    np.testing.assert_array_equal(first.field.pipeline.h_full.values, reference.field.pipeline.h_full.values)
+    with pytest.raises(ValueError, match='unpublished recovery baseline'):
+        runtime(multi_packet(2, 1.5))
+    assert runtime.encounter_motion is original and original.last_timestamp == 1.
+    runtime(multi_packet(3, 1.1))
+    assert runtime.encounter_motion.last_timestamp == 1.1
+    with pytest.raises(ValueError, match='subset'):
+        replace(first.field, crossing_yield_track_ids=(0,))
+
+
 def test_observed_crossing_changes_only_field_side_and_keeps_all_risks_and_returns():
     from robot.safety.motion_aware_passing import MotionAwarePassing, MotionAwarePassingConfig
     runtime = mapped_worker()

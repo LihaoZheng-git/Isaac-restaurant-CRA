@@ -242,6 +242,7 @@ class LiveObjectPerception:
         human_prior_geometry_associations=False,
         human_fresh_person_policy=False,
         zero_tangential_bias_ablation=False,
+        encounter_motion_config=None,
     ):
         self.segmenter, self.mass_estimator, self.contact_detector = (
             segmenter,
@@ -339,6 +340,14 @@ class LiveObjectPerception:
                 or self.experiment_baseline is not CRABaseline.CONTINUOUS_CRA_SAFE_SAGE)):
             raise ValueError("zero tangential bias requires the explicit continuous-CRA crossing ablation")
         self.zero_tangential_bias_ablation = zero_tangential_bias_ablation
+        from robot.safety.encounter_motion import EncounterMotionClassifier, EncounterMotionConfig
+        if encounter_motion_config is not None and (
+            not isinstance(encounter_motion_config, EncounterMotionConfig)
+            or self.motion_passing is None or not self.motion_passing.config.require_visual_person_selection
+            or self.human_body_envelope is None or zero_tangential_bias_ablation
+            or self.experiment_baseline is not CRABaseline.CONTINUOUS_CRA_SAFE_SAGE):
+            raise ValueError('encounter guidance requires current verified bare-human passing and cannot combine with global zero bias')
+        self.encounter_motion = EncounterMotionClassifier(encounter_motion_config) if encounter_motion_config is not None else None
         from robot.perception.human_fragment_coverage import HumanFragmentCoverage
         if human_fragment_coverage_config is not None and (
             self.human_body_envelope is None or self.experiment_baseline is not CRABaseline.CONTINUOUS_CRA_SAFE_SAGE):

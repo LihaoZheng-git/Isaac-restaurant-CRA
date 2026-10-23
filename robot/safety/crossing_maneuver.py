@@ -28,6 +28,9 @@ def apply_crossing_maneuver(mpc, result, initial, nominal, field, strategy, chec
     if strategy not in {"rear-pass-or-yield", "yield-then-go"}:
         raise ValueError("unknown explicit crossing maneuver")
     ids = field.motion_passing_reference_track_ids
+    encounter_yield = getattr(field, 'crossing_yield_track_ids', None)
+    if encounter_yield is not None:
+        ids = tuple(k for k in ids if k in encounter_yield)
     selected = bool(ids and field.motion_passing_reference_sides)
     detail = getattr(result, "guidance_tracking", None)
     reason = "no_current_crossing_selection"
@@ -51,6 +54,7 @@ def apply_crossing_maneuver(mpc, result, initial, nominal, field, strategy, chec
         original_planner_status=result.status, original_command=result.first_command,
         checked_reference_selected_for_plan=bool(detail is not None and detail.active),
         wait_exact_checked=False, wait_analytical_checked=False,
+        encounter_guidance_ablation=encounter_yield is not None,
         scope="controller preference only; current positive identity and original expiry; no physical evidence, occupancy or clock renewal")
     if want_wait:
         commands = np.zeros((mpc.config.horizon_steps, 2))
