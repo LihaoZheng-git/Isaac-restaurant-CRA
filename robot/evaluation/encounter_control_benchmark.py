@@ -110,6 +110,80 @@ def _clearance(state, center, radius):
     )
 
 
+def summarize_oracle_rear_pass(result):
+    """Score the existing fixed-clock ORACLE fixture, never native sensor records.
+
+    Recorded states are interval endpoints: row.time is the start, and each
+    interval is .2 s. Authored actor phase/position is independent scoring truth
+    only. Route arrival alone is not acceptance of the proposed curved strategy.
+    """
+    case = result["case"]
+    if case not in {
+        "cross-left-right",
+        "cross-right-left",
+        "cross-then-parallel",
+    } or not result.get("scope", "").startswith("ORACLE moving-disk virtual unicycle;"):
+        raise ValueError("rear-pass scoring requires an ORACLE crossing fixture")
+    rows = result["rows"]
+    times = np.array([r["time"] + 0.2 for r in rows], dtype=float)
+    robot = np.array([r["state"][:2] for r in rows], dtype=float)
+    if (
+        not len(times)
+        or robot.shape != (len(times), 2)
+        or not np.isfinite(times).all()
+        or not np.isfinite(robot).all()
+        or not np.isclose(times[0], 0.2, rtol=0, atol=1e-8)
+        or not np.allclose(np.diff(times), 0.2, rtol=0, atol=1e-8)
+    ):
+        raise ValueError("finite ordered fixed-fixture endpoint trace required")
+    actor = np.array([oracle_actor(case, t)[0] for t in times])
+    motion = oracle_actor(case, 12.5)[1]
+    motion /= np.linalg.norm(motion)
+    walking = (
+        (times >= 11.5)
+        & (times < 15.5)
+        & (np.linalg.norm(robot - actor, axis=1) <= 2.0)
+    )
+    excursion = float(np.max(-robot[walking] @ motion)) if walking.any() else 0.0
+    # Preserve the initial transverse plane even when the actor later turns.
+    plane = oracle_actor(case, 11.5)[0][0]
+    earlier = np.vstack((np.zeros(2), robot[:-1]))
+    earlier_times = np.concatenate(([0.0], times[:-1]))
+    indices = np.flatnonzero((earlier[:, 0] < plane) & (robot[:, 0] >= plane))
+    behind, crossing_time = None, None
+    if len(indices):
+        i = indices[0]
+        f = (plane - earlier[i, 0]) / (robot[i, 0] - earlier[i, 0])
+        crossing_time = float(earlier_times[i] + f * (times[i] - earlier_times[i]))
+        position = earlier[i] + f * (robot[i] - earlier[i])
+        behind = float((position - oracle_actor(case, crossing_time)[0]) @ motion)
+    checks = dict(
+        original_route_acceptance=bool(
+            result.get("passed") is True
+            and result.get("reason") == "goal_reached"
+            and result.get("arrival_seconds") is not None
+            and np.linalg.norm(robot[-1] - [3.9, 0.0]) <= 0.1
+        ),
+        independent_clearance=result["minimum_clearance_m"] > 0.02,
+        analytical_checks=all(
+            not r["emergency"]
+            and math.isfinite(r["cbf_margin"])
+            and r["cbf_margin"] >= -1e-6
+            for r in rows
+        ),
+        visible_trailing_arc_during_walking=excursion >= 0.20,
+        crossed_walking_plane_behind_actor=behind is not None and behind <= -0.10,
+    )
+    return dict(
+        passed=all(checks.values()),
+        checks=checks,
+        maximum_trailing_excursion_during_walking_m=excursion,
+        behind_projection_at_route_crossing_m=behind,
+        route_crossing_time_seconds=crossing_time,
+        scope="ORACLE fixed .2s virtual endpoint scoring only; authored actor phase/route used solely for evaluation; not sensors, physical braking or native rear-pass acceptance",
+    )
+
+
 def run_encounter_control_case(case, variant, *, maximum_seconds=40.0, progress=None):
     if case not in CASES or variant not in VARIANTS or not 0 < maximum_seconds <= 90:
         raise ValueError("bounded known comparison required")

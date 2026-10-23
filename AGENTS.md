@@ -1649,3 +1649,22 @@
   Final evaluation/report-only revision passed2,523 unit tests/Ruff/compilation;
   default-sandbox temporary-directory setup errors were resolved with a fresh
   repository-local pytest base directory, without environment changes.
+
+- The user's next decision authorized a bounded step4 rear-pass attempt, with
+  the validated step1–3 stop-and-go configuration retained if it fails. Fifteen
+  ORACLE virtual probes (existing tangent, .4/.7m motion-trailing references,
+  .7/1.0m direct checked-reference diagnostics; both crossings and mixed
+  departure) all arrived with positive clearance/analytical checks, but ALL
+  FAILED the unchanged.20m walking-window arc gate. Largest any-time deviation
+  .197506m occurred after crossing; largest during-crossing trailing arc across
+  all probes was only.021093m. Never report these route passes or late curves
+  as rear-pass acceptance. Prototypes stay UNINTEGRATED, with no new Isaac
+  wheels; selected practical behavior is the prior accepted encounter-dependent
+  stop-and-go option, primary fixedlambda1.25/defaults unchanged. The independent
+  ORACLE scorer aligns .2s interval endpoints, rejects missing ticks/wrong scope,
+  and changes no field/command or original result. Keep existing native priors,
+  zero complete fresh four-factor finding and main/long-service/PR117 holds.
+  This is bounded failure evidence, not global impossibility. See
+  docs/rear_pass_development.md and retain full ignored probe sources/results.
+  The evaluation-only branch passed102 focused and2,537 full unit tests/Ruff/
+  compilation; it grants no native rear-pass or main-merge acceptance.

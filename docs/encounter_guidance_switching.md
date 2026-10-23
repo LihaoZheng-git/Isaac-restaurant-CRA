@@ -2,6 +2,9 @@
 
 The user approved steps 1–3: observed encounter classification, per-human lambda
 switching and controlled navigation comparisons. Rear-pass planning is deferred.
+The later step4 attempt is recorded in `rear_pass_development.md`: its bounded
+virtual candidates failed curved-strategy acceptance, so the validated
+encounter-dependent stop-and-go configuration remains the selected fallback.
 The primary comparison retains fixed lambda 1.25; encounter-dependent switching
 is a separate ablation, not risk-dependent lambda or a replacement safety theorem.
 
