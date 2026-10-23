@@ -1791,3 +1791,29 @@
   articulation/no-return check; legacy defaults/reports stay intact. Native
   rear-reference integration is separate. See docs/live_crossing_coverage.md;
   acceptance is pending and all existing main/long-service/PR117 holds persist.
+
+- At50165de the direction/timing coverage source passed2,623 units/Ruff and
+  compilation/CLI checks; runtime estimator/CRA/checked-wait/MPC/CBF/nominal
+  modules and all non-case command arguments match the accepted reference.
+  Mirrored parked sensor/actor geometry PASSED (zero robot wheels,3 stationary/
+  9 steady moving fresh rows, .134665m/s moving error, .295257m layout clearance).
+  Both new own60-frame stationary gates and actual3/3 routes passed, but BOTH
+  original overall native reports FAILED intentional-wait acceptance. Mirror10:
+  23.3167s, .498531m clearance/.002304m drift,232/232 containment,1 admitted wait
+  field/26 rejected-normal,0 walking checked-yield plans/0 verified yield command
+  execution despite1.183333s observed wait. Planner requested field21.4 then21.6,
+  skipping the sole admitted21.5 field; one field also cannot meet the unchanged
+  three-source gate. Late11.5 left-to-right:24.1s, .467338m/.002240m drift,
+  240/240 containment,5 admitted fields/28 rejected-normal, field switchingPASS
+  but only1 walking-window yield source. Three all-phase yield plans executed
+  .5s of verified zero commands only AFTER actual departure began at23.133333;
+  field sources23.0/23.2/23.3 and real request clocks stay distinct. Never count
+  these as walking-window execution or relabel ordinary safety stops. Independent
+  source/pair/selection/currentpose/policy/arrival/stopping/analytical/scene checks
+  passed; native reports/tracebacks remain failed regardless of launcher exit0.
+  Keep91/92 visuals and ZERO fresh four-factor rows, unchanged priors, renderer
+  warning and original accepted10s reference. Next bounded target is admitted-
+  field planning/execution handoff plus short-window diagnosis, not lowered
+  confidence/temporal/classification or waiting gates. See
+  docs/live_crossing_coverage.md. Native curved rear-reference/guide acceptance
+  and main/long-service/PR117 holds remain separate and unchanged.
