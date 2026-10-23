@@ -34,6 +34,7 @@ def main():
     )
     parser.add_argument("--rear-minimum-lead", type=float, default=1.4)
     parser.add_argument("--rear-existing-turn-heading", type=float)
+    parser.add_argument("--rear-minimum-first-translation", type=float, default=0.)
     parser.add_argument("--checked-wait-transition", action="store_true")
     parser.add_argument(
         "--controller",
@@ -51,6 +52,7 @@ def main():
     rear_config = CheckedRearPassReferenceConfig(
         minimum_lead_m=args.rear_minimum_lead,
         existing_turn_heading_radians=args.rear_existing_turn_heading,
+        minimum_first_translation_m=args.rear_minimum_first_translation,
     )
     args.output.mkdir(parents=True, exist_ok=False)
     paths = (

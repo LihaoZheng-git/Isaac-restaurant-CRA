@@ -29,10 +29,13 @@ class CheckedRearPassReferenceConfig:
     lateral_gain: float = 0.1
     minimum_translation_m: float = 0.01
     candidate_limit: int = 576
+    minimum_first_translation_m: float = 0.0
 
     def __post_init__(self):
         for key, value in asdict(self).items():
             if key == "existing_turn_heading_radians" and value is None:
+                continue
+            if key == "minimum_first_translation_m" and not isinstance(value, bool) and isinstance(value, (int, float)) and math.isfinite(value) and value == 0.0:
                 continue
             if (
                 isinstance(value, bool)
@@ -154,6 +157,7 @@ def search_checked_rear_pass_reference(
         exact_feasible=0,
         future_analytical_rejections=0,
         translation_rejections=0,
+        first_translation_rejections=0,
         first_command_checks=0,
     )
     audit = dict(
@@ -232,6 +236,12 @@ def search_checked_rear_pass_reference(
         displacement = end[:2] - initial[:2]
         if np.linalg.norm(displacement) < cfg.minimum_translation_m:
             counts["translation_rejections"] += 1
+            continue
+        # Optional reference-quality rule, never an executable velocity floor:
+        # unavailable translating references retain primary/wait safety behavior.
+        first_displacement = value.chassis_states[1, :2] - initial[:2]
+        if np.linalg.norm(first_displacement) + 1e-12 < cfg.minimum_first_translation_m:
+            counts["first_translation_rejections"] += 1
             continue
         gain = float(np.linalg.norm(delta) - np.linalg.norm(target - end[:2]))
         end_angle = math.atan2(target[1] - end[1], target[0] - end[0])

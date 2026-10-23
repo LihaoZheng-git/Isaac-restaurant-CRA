@@ -1833,3 +1833,20 @@
   behavior/scenario assumptions, not physical evidence or new safety bounds.
   Preserve old native wait/curved failures and all main/long-service/PR117 holds.
   Native acceptance is pending; see docs/live_rear_pass.md.
+
+- At a846ae5 the first native checked rear-reference/guide trial passed both
+  stationary gates and reached3/3 in21.266667s,.767339m clearance/.002376m drift,
+  min analytical margin.160314 and212/212 containment (max error.161301m).
+  Overall FAILED unchanged walking-arc gate:.153753m<.20m, despite behind-plane
+  -.745559m. Keep26 rear fields/17 accepted plans/16 walking-source plans and
+  87 request-clock-joined translating rows/1.45s separate from full acceptance.
+  All source/pair/vector/policy/scene checks pass;69 visuals/14,203 assessments/
+  ZERO fresh complete factors, prior scope and renderer warning remain. A
+  separate opt-in first-interval reference quality of.01m may exclude pure-turn
+  first commands; default0 preserves old search. It never forces execution or
+  relaxes exact/analytical/source/geometry checks: no qualifying reference keeps
+  primary/wait fallback. Original16.7s numeric replay selects(.2,.6) instead of
+  (0,.8) with unchanged input/field; this is not native acceptance. Require
+  virtual/component checks and a new own60-frame native gate before retry.
+  Keep the original failure and main/long-service/PR117 holds. See
+  docs/live_rear_pass.md.

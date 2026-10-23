@@ -28,6 +28,9 @@ from robot.safety.safe_sage_unicycle_cbf_filter import SafeSAGEUnicycleCBFFilter
         dict(goal_fade_distance_m=0.05),
         dict(existing_turn_heading_radians=0),
         dict(existing_turn_heading_radians=np.pi / 2),
+        dict(minimum_first_translation_m=-.01),
+        dict(minimum_first_translation_m=True),
+        dict(minimum_first_translation_m=np.nan),
     ],
 )
 def test_invalid_reference_configuration_rejected(changes):
@@ -103,7 +106,7 @@ def test_unsupported_motion_cannot_create_a_trailing_reference(velocity):
     )
 
 
-def search(*, failure=None, budget=576):
+def search(*, failure=None, budget=576, first_translation=0.):
     mpc = SafeSAGEUnicycleMPC(make_filter(), replace(config(), horizon_steps=6))
     options = {
         **field(
@@ -136,9 +139,23 @@ def search(*, failure=None, budget=576):
         [1.0, 0.0],
         options,
         check,
-        config=CheckedRearPassReferenceConfig(candidate_limit=budget),
+        config=CheckedRearPassReferenceConfig(candidate_limit=budget,
+            minimum_first_translation_m=first_translation),
     )
     return mpc, result, options, check
+
+
+def test_first_translation_quality_excludes_zero_first_reference_without_forcing_primary_motion():
+    mpc, result, options, check = search(first_translation=.01)
+    assert result.trajectory is not None
+    value = result.trajectory
+    assert np.linalg.norm(value.chassis_states[1, :2]) >= .01-1e-12
+    assert result.diagnostics['counts']['first_translation_rejections'] > 0
+    assert not check(value.commands[0]).emergency_stop_active
+    assert mpc._trajectory_is_safe(value)
+    _, absent, _, _ = search(first_translation=100.)
+    assert absent.trajectory is None and not absent.diagnostics['selected']
+    assert absent.diagnostics['reason'] == 'no_complete_checked_reference'
 
 
 def test_complete_productive_reference_passes_exact_and_analytical_checks_without_field_mutation():

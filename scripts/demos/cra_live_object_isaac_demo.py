@@ -41,6 +41,8 @@ parser.add_argument('--checked-rear-pass-reference', action='store_true',
                     help='separate live sensor-tracked checked rear-reference experiment, with admitted-wait fallback')
 parser.add_argument('--rear-existing-turn-heading', type=float, default=None,
                     help='optional current trailing-turn continuation threshold in radians; behavior assumption only')
+parser.add_argument('--rear-minimum-first-translation', type=float, default=0.,
+                    help='optional rear-reference first-interval progress quality in metres; never a minimum executable velocity')
 parser.add_argument('--encounter-guidance-ablation', action='store_true',
                     help='selected observed crossing human lambda0, normal lambda1.25 for parallel/other occupancy; separate from primary')
 parser.add_argument('--encounter-comparison', action='store_true',
@@ -257,6 +259,9 @@ if args.checked_rear_pass_reference and (not args.checked_wait_transition or arg
 if args.rear_existing_turn_heading is not None and (not args.checked_rear_pass_reference
     or not math.isfinite(args.rear_existing_turn_heading) or not 0 < args.rear_existing_turn_heading < math.pi/2):
     parser.error('rear turn continuation requires the explicit live rear mode and a threshold in (0,pi/2)')
+if (not math.isfinite(args.rear_minimum_first_translation) or args.rear_minimum_first_translation < 0
+    or args.rear_minimum_first_translation > 0 and not args.checked_rear_pass_reference):
+    parser.error('nonnegative first-translation quality requires the explicit live rear mode')
 if args.encounter_guidance_ablation and (args.zero_tangential_bias_ablation
     or args.crossing_strategy != 'yield-then-go' or not args.human_observed_passing_target
     or args.human_body_envelope_radius is None or args.guidance_tracking_weight != 0
@@ -1171,7 +1176,8 @@ def main():
         from robot.evaluation.live_rear_pass import LiveRearPassControlRuntime
         from robot.safety.checked_rear_pass_reference import CheckedRearPassReferenceConfig
         perception.live_rear_pass_config = CheckedRearPassReferenceConfig(
-            existing_turn_heading_radians=args.rear_existing_turn_heading)
+            existing_turn_heading_radians=args.rear_existing_turn_heading,
+            minimum_first_translation_m=args.rear_minimum_first_translation)
         control = LiveRearPassControlRuntime(mpc=mpc, backup_filter=backup,
             config=perception.live_rear_pass_config)
     staged_perception = None
@@ -2547,6 +2553,7 @@ def main():
         "checked_wait_transition_enabled": args.checked_wait_transition,
         "checked_rear_pass_reference_enabled": args.checked_rear_pass_reference,
         "rear_existing_turn_heading_radians": args.rear_existing_turn_heading,
+        "rear_minimum_first_translation_m": args.rear_minimum_first_translation,
         "checked_wait_current_pose_admissions": checked_wait_admissions,
         "encounter_comparison": args.encounter_comparison,
         "physical_CRA_lambda": 1.25,
