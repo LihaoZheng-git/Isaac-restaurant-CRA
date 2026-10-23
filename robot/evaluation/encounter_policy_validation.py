@@ -1,6 +1,48 @@
 """Independent source/policy audit, separate from route and physical perception gates."""
 
 
+def summarize_variant_passing(
+    passing, *, require_encounter=False, encounter=None, strategy=None
+):
+    """Compare shared policy behavior without requiring a baseline's proposed feature.
+
+    Arrival, clearance, braking, current perception and containment are separate
+    mandatory caller gates. An actual selection must still have valid identity
+    and source clocks. The encounter variant additionally needs its unchanged
+    switching and intentional-wait acceptance; absent selections never pass it.
+    """
+    original = passing.get("checks", {})
+    required = (
+        "fixed_lambda_and_flux_mapping",
+        "identity_prior_selection_provenance_bounded",
+        "completed_route_progress",
+        "rejoined_original_route_goal",
+    )
+    checks = {key: original.get(key) is True for key in required}
+    checks["no_rejected_selection_provenance"] = not passing.get("rejections", ())
+    if passing.get("selected_rows") or require_encounter:
+        for key in (
+            "selected_target_is_the_observed_human",
+            "original_selection_clock_bounded",
+        ):
+            checks[key] = original.get(key) is True
+    if require_encounter:
+        checks.update(
+            three_observed_policy_rows=original.get("three_observed_policy_rows")
+            is True,
+            encounter_switching_passed=(encounter or {}).get("passed") is True,
+            intentional_wait_strategy_passed=(strategy or {}).get("passed") is True,
+        )
+    return dict(
+        passed=all(checks.values()),
+        checks=checks,
+        original_passing_passed=passing.get("passed"),
+        original_strategy_passed=(strategy or {}).get("passed"),
+        selected_rows=len(passing.get("selected_rows", ())),
+        scope="controller-variant passing comparison only; baseline side selection/curved bypass/intentional waiting are measured, not required; arrival, independent clearance, stopping, current perception and containment remain mandatory separately",
+    )
+
+
 def summarize_encounter_policy(records, *, require_transition=False):
     zero_rows = parallel_rows = 0
     errors = []

@@ -57,8 +57,9 @@ class EncounterMotionConfig:
 class EncounterMotionClassifier:
     """Three consistent current observations; ambiguity immediately disables classification.
 
-    Parallel includes both directions. Angle is relative to the current waypoint
-    bearing, independent of chassis heading. State hysteresis is policy only;
+    Parallel includes both directions. Angle uses the configured nominal route
+    segment when supplied, otherwise the current waypoint bearing, independent
+    of chassis heading. State hysteresis is policy only;
     source times and physical measurements are never renewed or borrowed.
     """
 
@@ -212,7 +213,12 @@ class EncounterMotionClassifier:
                 else "configured_obstacle_unaware_nominal_route_segment",
                 reasons=reasons,
                 status="inferred" if state != "uncertain" else "unavailable",
-                basis="current LiDAR tracked world velocity and obstacle-unaware active waypoint bearing",
+                basis="current LiDAR tracked world velocity and obstacle-unaware "
+                + (
+                    "active waypoint bearing"
+                    if nominal_route_direction_world_xy is None
+                    else "configured nominal route segment"
+                ),
             )
         # Missing identities disappear immediately. A reappearing ID must qualify again.
         self.history, self.last_timestamp = history, t

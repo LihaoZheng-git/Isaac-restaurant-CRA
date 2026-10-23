@@ -1621,3 +1621,31 @@
   route context, never actor truth or a global planner. Legacy callers keep
   the old near-goal guard; new own stationary/native validation is mandatory.
   See docs/encounter_guidance_switching.md; main/PR117 holds remain.
+
+- At912d1a2, the corrected nominal-route-segment encounter variant passed its
+  own60-frame zero-wheel gate and original full native report:3/3 goals in
+  23.50s, .655669m braking-inclusive clearance/.002278m drift,234/234 body-prior
+  containment rows (max center error.172673m within unchanged.25m prior).
+  Independent policy audit passed32 crossing-zero fields/74 parallel states;
+  nine accepted walking-window yields and2.283333s observed wait passed.
+  Original OPTIMIZER-REQUEST-clock command joining verified1.133333s checked
+  zero execution; never join by field clock. Fixed/global-zero native baselines
+  also arrived3/3 (23.35/22.85s; .617182/.634683m clearance), but their original
+  proposed-selection/wait strategy reports remain FAILED. Separate recorded
+  shared-comparison companions pass without overwriting those reports. A
+  baseline need not select a passing side; any actual selection still requires
+  identity/source validity. The encounter candidate must retain full switching
+  AND intentional-wait gates. Physical safety, stationary, arrival, source and
+  containment checks stay mandatory; legacy non-comparison scoring is intact.
+  The old report did not serialize the in-memory fixture-root invariant; the
+  companion cannot independently reassess it. Future reports record it.
+  Five renewed candidate ORACLE cases passed; the original matrix remains14/15
+  with global-zero/oncoming analytical emergency. Native coverage is only the
+  one left-to-right crossing/parallel-departure fixture, not all five cases.
+  Keep single-run/prior-assisted scope, zero complete fresh four-factor rows,
+  no pronounced curved-rear-pass/real-time/causal-superiority claim and unchanged
+  main/long-service/PR117 holds. Rear-pass planning remains deferred. See
+  docs/encounter_guidance_switching.md and preserve all earlier failures.
+  Final evaluation/report-only revision passed2,523 unit tests/Ruff/compilation;
+  default-sandbox temporary-directory setup errors were resolved with a fresh
+  repository-local pytest base directory, without environment changes.

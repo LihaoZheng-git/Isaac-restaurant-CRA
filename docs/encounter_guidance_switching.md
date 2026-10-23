@@ -8,14 +8,17 @@ is a separate ablation, not risk-dependent lambda or a replacement safety theore
 ## Step 1: current motion classification
 
 `EncounterMotionClassifier` uses only current LiDAR track centroids/inferred world
-velocities, validated human track IDs and the obstacle-unaware active waypoint
-bearing. No actor pose, authored route, speed or phase enters it. The existing
+velocities, validated human track IDs and the configured obstacle-unaware active
+route-segment direction. Legacy callers retain the robot-to-waypoint bearing.
+No actor pose, authored route, speed or phase enters it. The existing
 human identity adapter supplies current positive ownership and original class
 clocks; the classifier neither creates nor renews those identities.
 
 Default engineering gates are configurable: >=20 current points, >=3 consistent
 observations, <=.35 s source gap, <=.35 m/s velocity change, <=.2 m position
-prediction residual, <=15 degree route-bearing change, >=.2 m goal distance.
+prediction residual and <=15 degree route-direction change. The legacy waypoint
+bearing additionally requires >=.2 m goal distance; an explicitly supplied unit
+route-segment direction remains defined near the waypoint.
 Speeds <=.12 m/s may classify stationary; moving classification requires
 .2..2 m/s. The interval between is uncertain. Absolute velocity-route angle
 distinguishes parallel (entry <=30 degrees, hold <=40) and transverse crossing
@@ -28,8 +31,8 @@ hysteresis is not physical evidence persistence or a guaranteed collision model.
 Step 1 unit tests cover both crossing directions, both parallel directions,
 stationary actors, rotated world frames, angular hysteresis/turns, source gaps,
 missing/replaced identities, sparse returns, excessive speeds, changed waypoint
-bearings and invalid inputs. Runtime integration and navigation results are
-pending on subsequent bounded branches.
+bearings and invalid inputs. Steps 2–3 integrate this classifier transactionally
+and validate the bounded live transition described below.
 
 ## Step 2: per-human field integration
 
@@ -133,7 +136,112 @@ All motion/identity/source/consistency and exact safety gates stay unchanged.
 Genuine route turns still reset classification through the existing direction-
 change gate. Tests separately verify the legacy rejection and new segment path.
 
-The corrected controller requires new virtual/stationary/native validation;
-neither earlier failure is retroactively repaired. Matched native baselines
-were held automatically when the candidate reports failed. No physical wheels
-remain active while this correction is edited.
+The corrected controller's validation is below; neither earlier failure is
+retroactively repaired. Matched native baselines were held automatically when
+the first two candidate reports failed. Each subsequent trial used its own
+stationary gate and frozen tracked source; all native processes have now exited.
+
+## Final bounded validation (control source 912d1a2)
+
+All 2,509 unit tests and Ruff passed before native motion. The corrected
+encounter variant also passed all five renewed ORACLE virtual cases in
+`encounter-oracle-candidate-segment-v1`; the earlier global-zero oncoming failure
+remains unchanged. Both crossing directions and both parallel directions have
+virtual coverage, **not** a five-case native sensor validation.
+
+Three native Isaac trials used the same continuing-away left-to-right pedestrian,
+10 s exogenous navigation onset, original three robot goals, body prior
+.40+.25 m, human boundary flux -1.7, N6/.2 s MPC, QP1000/rescue20, .5 s candidate
+age/.2 s verified execution interval, 90 s bound and .025 simulation pacing.
+Every run passed its own 60-frame zero-wheel human/envelope gate first. The
+physical CRA lambda stayed 1.25, with unchanged exact DTCBF, geometry, analytical
+CBF, source/identity, independent clearance and braking checks. There is no
+extra guidance-tracking cost in these three variants.
+
+| Native variant | Arrival | Navigation time | Minimum clearance, braking included | Stop drift | Live fields / containment |
+| --- | --- | --- | --- | --- | --- |
+| Primary fixed field lambda1.25 | 3/3 | 23.35 s | .617182 m | 2.326 mm | 233 / 233 |
+| Separate global-zero field | 3/3 | 22.85 s | .634683 m | 2.340 mm | 228 / 228 |
+| Encounter-dependent field | 3/3 | 23.50 s | .655669 m | 2.278 mm | 234 / 234 |
+
+The encounter variant's **original full report passed**. Its independent audit
+verified 32 selected crossing-zero fields, 74 parallel classifications and
+unchanged lambda1.25 on unrelated occupancy. It had nine accepted checked-yield
+sources during transverse walking and 2.283333 s of observed waiting. Joining
+commands by their **original optimizer-request epochs**, not field epochs,
+verified 68 physics rows / 1.133333 s of actual checked-yield zero commands during
+walking. Safety stops are retained separately and do not count as accepted yield
+plans. All 234 independent body-prior containment rows passed; maximum center
+error was .172673 m within the unchanged .25 m prior. The analytical margin
+minimum was .061844. The robot resumed and reached the unchanged final goal.
+
+### Baseline scoring correction and preserved reports
+
+The two original baseline reports remain `passed=false`: neither made a
+passing-side selection in this fixture, so the inherited proposed-strategy
+three-selection requirement failed. Global-zero also had zero accepted
+intentional yield sources, despite .85 s of observed stopping. Neither baseline
+is claimed to pass the proposed intentional-wait/curved-bypass strategy. Both
+did reach all goals and pass their recorded human-source, numeric policy, flux,
+containment, clearance and stopping checks (minimum analytical margins
+.164769/.158384). Their original reports and launcher exceptions are unchanged.
+
+`summarize_variant_passing` now separates shared comparison criteria from the
+proposed feature. Baselines need valid normal-flux/lambda mapping and route
+completion; **any actual selection** still needs correct human provenance and
+original source-age checks. The encounter variant additionally requires its
+unchanged full switching **and** intentional-wait strategy gates. Arrival,
+physical safety, source freshness, stationary readiness and containment remain
+mandatory separate caller checks. Legacy non-comparison acceptance is intact.
+This is an evaluation correction after the frozen native runs, not a controller
+change or relaxation of the candidate's earlier failed wait/policy thresholds.
+
+Each native folder has a separate `variant-comparison-validation.json`; all
+three pass its **recorded shared comparison** checks. It records the original
+report SHA256 and evaluator SHA256. This companion does not rewrite the native
+report or assert a new run. The older reports did not serialize the in-memory
+fixture-root invariant; that unrecorded invariant cannot be independently
+reassessed by the companion. Future reports explicitly serialize it and retain
+the existing runtime invariant check. The candidate's original successful
+full report already included that check in its original acceptance.
+
+### Interpretation and artifacts
+
+These are single, prior-assisted development trials, not statistical superiority
+or causal CRA comparisons. The encounter variant is slightly slower here; no
+speed advantage is claimed. Its contribution is the verified per-human policy
+transition and intentional checked wait. The virtual matrix's largest lateral
+deviation was under .01 m, and the native paths are nearly straight: **no
+pronounced curved rear-pass is validated**. Restoring lambda does not force a
+visible curve when the departing pedestrian is no longer blocking the route.
+Rear-pass planning remains the deferred fourth step.
+
+Human mass70 [45,100] kg and blunt-body contact.10 are configured priors selected
+only by validated visual associations; missing potential/thermal stay labeled
+.25 priors. The candidate recorded 15,538 object assessments, 79 accepted visual
+instances across all objects, and **zero complete fresh four-factor
+assessments**. This is not moving-view plume acceptance, calibrated human mass,
+physical sharpness/temperature, crowds, real time or exact Safe-SAGE equivalence.
+Oracle ego references, RGB read-time approximation and renderer history warnings
+remain. Nothing in this work lifts the main/long-service/PR117 merge holds.
+
+Local artifacts (ignored outputs are not bundled into the PR):
+
+- `outputs/paper_flux/encounter-native-{fixed,always-zero,encounter}-v3/`: original
+  reports, own stationary gates, source histories, commands, containment and video.
+- `outputs/paper_flux/encounter-native-encounter-v3/verified-wait-command-audit-v2.json`:
+  correct original-request-clock execution join.
+- `outputs/paper_flux/encounter-native-comparison-audit-v3.json`: companion results.
+- `outputs/paper_flux/encounter-guidance-native-comparison-v3.png`: checked plot.
+- `outputs/paper_flux/audit_encounter_native_comparison_v3.py` and
+  `plot_encounter_native_comparison_v3.py`: local audit/plot recipes.
+- `outputs/paper_flux/encounter-oracle-matrix-v1/` and the renewed candidate
+  matrix: explicit ORACLE control results, retaining the global-zero failure.
+
+The final changes after control source912d1a2 only correct evaluation/reporting
+and route-basis wording; no post-run physical/controller behavior was changed.
+Final regression: **2,523 unit tests passed in85.43 s**, Ruff over robot/tests/
+scripts and Python compilation passed. The first full run had2,375 passes and
+148 temporary-directory setup errors in the sandbox's default temp location;
+rerunning unchanged tests with a fresh repository-local `--basetemp` passed.
+No dependency or environment upgrade was performed.

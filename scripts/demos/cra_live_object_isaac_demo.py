@@ -2252,16 +2252,7 @@ def main():
                     nominal_goal_world_xy=passing_goal, continuing_away=args.human_continuing_away,
                     encounter_guidance=True)
             if args.crossing_strategy == "legacy":
-                if args.encounter_comparison:
-                    # A primary baseline need not exhibit the proposed curved
-                    # bypass to complete a safety/arrival comparison. Retain
-                    # its full original failed curved report separately.
-                    checks = {k:v for k,v in passing_validation['checks'].items()
-                        if k not in {'visible_trailing_side_arc','passes_behind_moving_actor'}}
-                    passing_validation['comparison_acceptance'] = dict(checks=checks,passed=all(checks.values()),
-                        scope='separate complete controller-variant comparison; curved passage is measured, not required of the primary baseline')
-                    completed = completed and all(checks.values())
-                else:
+                if not args.encounter_comparison:
                     completed = completed and passing_validation["passed"]
             else:
                 from robot.evaluation.crossing_strategy import summarize_crossing_strategy
@@ -2273,8 +2264,16 @@ def main():
                     execution = summarize_wait_execution(plan_events, human.records)
                     strategy_validation["wait_execution"] = execution
                     strategy_validation["passed"] &= execution["passed"]
-                completed = completed and strategy_validation["passed"]
+                if not args.encounter_comparison:
+                    completed = completed and strategy_validation["passed"]
                 save_json("crossing-strategy-validation.json", strategy_validation)
+            if args.encounter_comparison:
+                from robot.evaluation.encounter_policy_validation import summarize_variant_passing
+                comparison = summarize_variant_passing(passing_validation,
+                    require_encounter=args.encounter_guidance_ablation,
+                    encounter=encounter_validation, strategy=strategy_validation)
+                passing_validation['comparison_acceptance'] = comparison
+                completed = completed and comparison['passed']
             save_json("motion-passing-validation.json", passing_validation)
         if human.carry is not None:
             from robot.scene.restaurant_human_carry import summarize_carry_records
@@ -2348,6 +2347,7 @@ def main():
         },
         "human_mass_prior_config": asdict(perception.human_mass_prior_config) if human is not None else None,
         "scene_source_sha256": source_hashes,
+        "fixture_root_layer_unchanged": root_unchanged_by_fixture,
         "completed": arrived,
         "reason": reason,
         "minimum_clearance_m": minimum_clearance,
