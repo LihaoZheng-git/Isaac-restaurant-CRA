@@ -55,3 +55,36 @@ CRA/lambda1.25, risk/flux/side, all raw occupancy and factor provenance are inta
 `fixed_lambda=null` explicitly identifies the mixed per-obstacle field; it is
 never reported as the primary fixed-lambda experiment. Legacy defaults and the
 always-zero ablation remain separate.
+
+## Step 3: comparisons and acceptance
+
+`scripts/evaluation/compare_encounter_guidance.py` runs five controlled cases:
+both transverse crossing directions, both parallel directions, and crossing then
+parallel departure. The three variants are primary fixed lambda1.25 without the
+new yield preference, the earlier global-zero/yield variant and the new
+encounter-dependent/yield variant. Their actor onset (11.5 s), geometry, nominal
+waypoints, risk/flux and numerical budgets are identical. This compares complete
+controller variants, not a causal lambda-only intervention.
+
+The first matrix is **ORACLE virtual control**: authored moving disks, class
+identity/velocity and risk, no visual estimation or physical wheels. It uses
+the actual field pipeline, temporal derivative, N6/.2 s unicycle MPC, exact
+DTCBF/dense geometry and 60 Hz analytical checks. It records arrival, independent
+physical-disk/robot-footprint clearance, lateral deviation, checked yields and
+all failures. The virtual model has no physical stopping inertia or asynchronous
+latency. A one-second zero-command tail cannot validate physical robot braking.
+The fixed grid/out-of-domain oracle fixture scope remains explicit.
+
+The optional recorded-sensor replay instead uses saved measured/inferred tracks,
+original source times, verified identity rows and recovered waypoint context.
+Its matched flag is reconstructed from recorded observation count. It only
+replays policy classification: no new perception, field, controller or motion
+acceptance follows. Do not describe either benchmark as a live sensor result.
+
+The critical live Isaac validation is the existing crossing-then-departure
+fixture with the new option, its own60-frame stationary component/envelope gate,
+unchanged three-waypoint arrival, containment, .02 m independent clearance,
+source/command freshness and actual stopping requirements. A separate mandatory
+policy audit requires >=3 selected crossing-zero fields and >=3 observed
+parallel classifications with restored normal guidance. Full fresh four-factor
+perception, curved bypass and real-time acceptance remain separate gates.

@@ -2182,6 +2182,13 @@ def main():
     human_validation = None
     passing_validation = None
     strategy_validation = None
+    encounter_validation = None
+    if args.encounter_guidance_ablation:
+        from robot.evaluation.encounter_policy_validation import summarize_encounter_policy
+        encounter_validation = summarize_encounter_policy(live_fields,
+            require_transition=args.human_continuing_away)
+        completed = completed and encounter_validation['passed']
+        save_json('encounter-guidance-validation.json', encounter_validation)
     if human is not None:
         from robot.evaluation.human_navigation_validation import summarize_human_navigation
         human_validation = summarize_human_navigation(live_fields, human.records,
@@ -2296,6 +2303,7 @@ def main():
         "human_navigation_validation": human_validation,
         "motion_passing_validation": passing_validation,
         "crossing_strategy_validation": strategy_validation,
+        "encounter_guidance_validation": encounter_validation,
         "native_human_mode": args.restaurant_human,
         "human_lidar_cluster_radius_m": args.human_cluster_radius,
         "native_carried_bowl": args.human_carry_bowl,

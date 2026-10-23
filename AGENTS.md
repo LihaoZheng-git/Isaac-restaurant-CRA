@@ -1595,3 +1595,14 @@
   MPC/DTCBF/analytical/independent clearance and actual-arrival checks. Rear-pass
   planning remains deferred; own stationary gate precedes each new wheel trial.
   See docs/encounter_guidance_switching.md; main/PR117 holds remain unchanged.
+
+- The step1 classifier and step2 transactional per-human guidance integration
+  passed2,499 unit tests/Ruff before comparison work. The new controlled matrix
+  uses ORACLE moving-disk identity/velocity/geometry/risk and no physical wheels;
+  it is not sensor acceptance or physical stopping validation. Recorded-sensor
+  policy replays retain source epochs and disclose reconstructed tracker/waypoint
+  context; they never supply a runtime field. Native crossing-to-parallel tests
+  need their own stationary gate, actual arrival/stopping and an independent
+  current policy audit proving crossing lambda0 and parallel lambda1.25. Preserve
+  all failures and distinguish virtual/sensor/native results. See the encounter
+  switching report; main/long-service/PR117 holds remain.
