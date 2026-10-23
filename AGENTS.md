@@ -1583,3 +1583,15 @@
   fixture, not a repaired close-endpoint case or causal CRA comparison. Keep
   main/long-service/PR117 holds. Subsequent edits correct report wording only;
   see docs/continuing_away_crossing.md and original saved native reports.
+
+- The user approved encounter-classification, per-human guidance switching and
+  controlled comparisons as steps1–3. Keep fixed lambda1.25 as primary and the
+  always-zero experiment separate. Only a current qualified perpendicular human
+  encounter may get applied lambda0; parallel/departing/stationary/uncertain
+  humans and unrelated occupancy retain normal guidance. Use observed velocity
+  versus the obstacle-unaware active waypoint bearing with explicit source/
+  continuity/hysteresis gates; never authored actor phase/route. Preserve all
+  original physical factors, identity/source clocks, priors, occupancy, exact
+  MPC/DTCBF/analytical/independent clearance and actual-arrival checks. Rear-pass
+  planning remains deferred; own stationary gate precedes each new wheel trial.
+  See docs/encounter_guidance_switching.md; main/PR117 holds remain unchanged.
