@@ -889,6 +889,7 @@ def main():
             controller.stop()
             raise RuntimeError("settled restaurant setup fails independent clearance guard")
     active_waypoint_local = ROUTE[0]
+    active_waypoint_index = 0
     save_json("fixture-monitor.json", {"fixtures": fixtures,
         "anchor_world_xy_yaw": [anchor.x, anchor.y, anchor.yaw],
         "scope": "authored fixture and oracle anchor for independent evaluation/rendering only; never factor input"})
@@ -1207,6 +1208,13 @@ def main():
             anchor.x + c * active_waypoint_local[0] - s * active_waypoint_local[1],
             anchor.y + s * active_waypoint_local[0] + c * active_waypoint_local[1],
         )
+        segment = np.asarray(active_waypoint_local) - (np.asarray(ROUTE[active_waypoint_index-1])
+            if active_waypoint_index > 0 else np.zeros(2))
+        segment_length = float(np.linalg.norm(segment))
+        route_direction = None
+        if args.encounter_guidance_ablation and segment_length >= .2:
+            segment = segment / segment_length
+            route_direction = (c*segment[0]-s*segment[1], s*segment[0]+c*segment[1])
         packet = LiveObjectPacket(
             info.sensor_frame_id,
             scan_time,
@@ -1242,6 +1250,7 @@ def main():
             "bounded static scene; legacy conservative scan-interval union, not per-return deskew"
             if args.disable_lidar_deskew
             else "bounded static scene; per-return ego-motion deskew to retained scan-header pose; no independently moving object correction",
+            nominal_route_direction_world_xy=route_direction,
         )
         last_sensor_id = info.sensor_frame_id
         captures.append(
@@ -1860,6 +1869,7 @@ def main():
                 arrived, reason = True, "goal_reached"
                 break
             active_waypoint_local = (nominal.target_waypoint.x, nominal.target_waypoint.y)
+            active_waypoint_index = nominal.target_waypoint_index
             if nominal.waypoint_advanced:
                 waypoint_events.append({"time": now-start_sim,
                     "next_waypoint_index": nominal.target_waypoint_index, "state": current.tolist()})

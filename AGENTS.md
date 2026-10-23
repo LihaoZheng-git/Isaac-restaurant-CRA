@@ -1606,3 +1606,18 @@
   current policy audit proving crossing lambda0 and parallel lambda1.25. Preserve
   all failures and distinguish virtual/sensor/native results. See the encounter
   switching report; main/long-service/PR117 holds remain.
+
+- At2acae83 the oracle matrix passed14/15, not15/15: global-zero/oncoming failed
+  analytical_emergency; fixed and encounter each passed5/5. Retain the explicit
+  commentary correction. Native11.5s encounter onset reached3/3 in24.4s with
+  .467149m clearance/.002367m drift and passed switching/containment, but overall
+  FAILED the three-source walking-window wait gate (one accepted source; later
+  turn-phase yields cannot count). The separate10s retry also failed policy
+  readiness: <.2m active-waypoint bearing disabled crossing selection. Baselines
+  were held; preserve both failures. The bounded correction may supply the
+  configured obstacle-unaware active ROUTE SEGMENT unit direction to the new
+  classifier/selector, keeping physical goal/CRA/nominal and every consistency,
+  identity/source/geometry/exact/analytical/arrival gate unchanged. This is robot
+  route context, never actor truth or a global planner. Legacy callers keep
+  the old near-goal guard; new own stationary/native validation is mandatory.
+  See docs/encounter_guidance_switching.md; main/PR117 holds remain.

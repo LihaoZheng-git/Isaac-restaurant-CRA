@@ -20,6 +20,7 @@ def update(
     matched=True,
     goal=(0.0, 4.0),
     angle=0.0,
+    route_direction=None,
 ):
     v = np.array(velocity)
     rot = np.array([[np.cos(angle), -np.sin(angle)], [np.sin(angle), np.cos(angle)]])
@@ -39,6 +40,9 @@ def update(
         robot_xy=(0.0, 0.0),
         goal_xy=rot @ goal,
         human_track_ids=ids,
+        nominal_route_direction_world_xy=None
+        if route_direction is None
+        else rot @ route_direction,
     )["tracks"]
 
 
@@ -124,3 +128,20 @@ def test_source_order_bad_inputs_and_configuration_are_rejected():
         replace(EncounterMotionConfig(), parallel_enter_degrees=60)
     with pytest.raises(ValueError):
         replace(EncounterMotionConfig(), minimum_observations=True)
+
+
+def test_nominal_segment_resolves_direction_near_waypoint_without_weakening_legacy_guard():
+    a, b = EncounterMotionClassifier(), EncounterMotionClassifier()
+    for t in (0.1, 0.2, 0.3):
+        legacy = update(a, t, goal=(0.0, 0.01))[7]
+        current = update(b, t, goal=(0.0, 0.01), route_direction=(0.0, 1.0))[7]
+    assert legacy["classification"] == "uncertain"
+    assert current["classification"] == "crossing"
+    assert (
+        current["route_direction_basis"]
+        == "configured_obstacle_unaware_nominal_route_segment"
+    )
+    assert current["source_timestamp_seconds"] == 0.3
+    for direction in [(0.0, 0.0), (0.0, 2.0), (np.nan, 1.0)]:
+        with pytest.raises(ValueError):
+            update(b, 0.4, route_direction=direction)

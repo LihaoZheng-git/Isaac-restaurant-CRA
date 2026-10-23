@@ -274,9 +274,18 @@ def run_encounter_control_case(case, variant, *, maximum_seconds=40.0, progress=
             else rows[-1]["velocity_world_xy"],
             goal_xy=goal,
             visual_person_track_ids=human_ids,
+            nominal_route_direction_world_xy=(1.0, 0.0)
+            if variant == "encounter"
+            else None,
         )
         classification = classifier.update(
-            tracking, robot_xy=state[:2], goal_xy=goal, human_track_ids=human_ids
+            tracking,
+            robot_xy=state[:2],
+            goal_xy=goal,
+            human_track_ids=human_ids,
+            nominal_route_direction_world_xy=(1.0, 0.0)
+            if variant == "encounter"
+            else None,
         )
         guidance = {
             k: replace(v, passing_side=sides.get(k, v.passing_side))

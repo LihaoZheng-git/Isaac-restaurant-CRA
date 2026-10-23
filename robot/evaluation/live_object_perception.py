@@ -98,6 +98,7 @@ class LiveObjectPacket:
     pose_status: EstimateStatus = EstimateStatus.ORACLE
     scan_pose_samples_world: np.ndarray | None = None
     scan_interval_scope: str | None = None
+    nominal_route_direction_world_xy: tuple | None = None
 
     def __post_init__(self):
         for name in ("sensor_frame_id", "camera_frame_id"):
@@ -149,6 +150,10 @@ class LiveObjectPacket:
             value = getattr(self, name)
             if isinstance(value, bool) or not math.isfinite(value):
                 raise ValueError(f"{name} must be finite")
+        if self.nominal_route_direction_world_xy is not None:
+            from robot.safety.encounter_motion import validated_route_direction
+            direction = validated_route_direction(self.nominal_route_direction_world_xy)
+            object.__setattr__(self, 'nominal_route_direction_world_xy', tuple(float(x) for x in direction))
         if not isinstance(self.clean_reference_validated, bool):
             raise TypeError("clean reference flag must be boolean")
         if not isinstance(self.pose_source, str) or not self.pose_source.strip():

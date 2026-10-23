@@ -6,6 +6,17 @@ import math
 import numpy as np
 
 
+def validated_route_direction(value):
+    direction = np.asarray(value, dtype=float)
+    if (
+        direction.shape != (2,)
+        or not np.isfinite(direction).all()
+        or not np.isclose(np.linalg.norm(direction), 1.0, rtol=0.0, atol=1e-6)
+    ):
+        raise ValueError("nominal route direction must be a finite planar unit vector")
+    return direction
+
+
 @dataclass(frozen=True)
 class EncounterMotionConfig:
     minimum_points: int = 20
@@ -58,7 +69,15 @@ class EncounterMotionClassifier:
         self.history = {}
         self.last_timestamp = None
 
-    def update(self, tracking, *, robot_xy, goal_xy, human_track_ids):
+    def update(
+        self,
+        tracking,
+        *,
+        robot_xy,
+        goal_xy,
+        human_track_ids,
+        nominal_route_direction_world_xy=None,
+    ):
         cfg = self.config
         t = float(tracking.timestamp_seconds)
         if (
@@ -86,7 +105,11 @@ class EncounterMotionClassifier:
             raise ValueError("unique current verified human identities required")
         delta = goal - robot
         distance = float(np.linalg.norm(delta))
-        direction = delta / max(distance, 1e-9)
+        direction = (
+            delta / max(distance, 1e-9)
+            if nominal_route_direction_world_xy is None
+            else validated_route_direction(nominal_route_direction_world_xy)
+        )
         history, rows = {}, {}
         for key in ids:
             track = tracks[key]
@@ -121,7 +144,10 @@ class EncounterMotionClassifier:
                 reasons.append("unvalidated_track_continuity")
             if track.point_count < cfg.minimum_points:
                 reasons.append("sparse_current_geometry")
-            if distance < cfg.minimum_goal_distance_m:
+            if (
+                nominal_route_direction_world_xy is None
+                and distance < cfg.minimum_goal_distance_m
+            ):
                 reasons.append("waypoint_bearing_unresolved_near_goal")
             if speed > cfg.maximum_speed_mps:
                 reasons.append("speed_outside_validated_scope")
@@ -181,6 +207,9 @@ class EncounterMotionClassifier:
                 if state == "parallel"
                 else None,
                 route_direction_world_xy=direction.tolist(),
+                route_direction_basis="active_waypoint_bearing"
+                if nominal_route_direction_world_xy is None
+                else "configured_obstacle_unaware_nominal_route_segment",
                 reasons=reasons,
                 status="inferred" if state != "uncertain" else "unavailable",
                 basis="current LiDAR tracked world velocity and obstacle-unaware active waypoint bearing",

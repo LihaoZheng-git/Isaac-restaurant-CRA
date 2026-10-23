@@ -64,7 +64,7 @@ class MotionAwarePassing:
         self.last_timestamp = None
 
     def update(self, tracking, *, robot_xy, robot_velocity_xy, goal_xy, visual_person_track_ids=None,
-               identity_prior_selection_evidence=None):
+               identity_prior_selection_evidence=None, nominal_route_direction_world_xy=None):
         cfg = self.config
         t = float(tracking.timestamp_seconds)
         if (
@@ -84,6 +84,9 @@ class MotionAwarePassing:
         delta = goal - robot
         distance = float(np.linalg.norm(delta))
         direction = delta / max(distance, 1e-9)
+        if nominal_route_direction_world_xy is not None:
+            from robot.safety.encounter_motion import validated_route_direction
+            direction = validated_route_direction(nominal_route_direction_world_xy)
         tracks = {track.track_id: track for track in tracking.tracked_obstacles}
         if len(tracks) != len(tracking.tracked_obstacles):
             raise ValueError("ambiguous duplicate track identity")
@@ -167,7 +170,7 @@ class MotionAwarePassing:
             if not cfg.minimum_speed_mps <= speed <= cfg.maximum_speed_mps:
                 reasons.append("not_bounded_moving_obstacle")
             if (
-                distance < 0.2
+                (nominal_route_direction_world_xy is None and distance < 0.2)
                 or rel @ direction <= 0
                 or np.linalg.norm(rel) > cfg.maximum_distance_m
             ):
@@ -246,6 +249,8 @@ class MotionAwarePassing:
         audit = {
             "decision": decision,
             "source_timestamp": t,
+            'route_direction_world_xy': direction.tolist(),
+            'route_direction_basis': 'active_waypoint_bearing' if nominal_route_direction_world_xy is None else 'configured_obstacle_unaware_nominal_route_segment',
             "encounter_selected_timestamp": None
             if self.encounter is None
             else self.encounter[2],

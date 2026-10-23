@@ -92,3 +92,48 @@ source/command freshness and actual stopping requirements. A separate mandatory
 policy audit requires >=3 selected crossing-zero fields and >=3 observed
 parallel classifications with restored normal guidance. Full fresh four-factor
 perception, curved bypass and real-time acceptance remain separate gates.
+
+## Retained first results and route-context correction
+
+At2acae83, all2,506 units/Ruff passed. The full ORACLE matrix is **14/15** passes:
+fixed and encounter variants passed5/5 each; global-zero passed4/5. Its oncoming
+parallel run failed `analytical_emergency` at12.8 s with .354489 m clearance and
+negative analytical margin -.057559. Positive clearance does not pass that run.
+An earlier commentary claim of15/15 was incorrect and was explicitly corrected.
+The original matrix remains in `encounter-oracle-matrix-v1`; it is not sensors.
+The240-field recorded-sensor policy replay classified32 crossing/63 parallel
+rows. That replay is not a recomputed field or navigation result.
+
+The native11.5 s onset run (`encounter-native-encounter-v1`) reached3/3 goals in
+24.4 s, with .467149 m clearance/.002367 m stop drift. Current policy, motion,
+containment and source checks passed (33 crossing-zero/65 parallel rows), but
+**overall FAILED**: only one accepted checked-yield source occurred during
+transverse walking, against the unchanged three-source gate. The2.45 s observed
+wait included safety stops. Many zero horizons were correctly rejected by full
+predictive/geometry checks; optimizer source ages were short, so this is not
+evidence for a latency-only diagnosis. Two additional accepted yields occurred
+after the actor started turning, with actual root speed .042/.142 m/s, and must
+not be counted as walking. Keep the old report and its failure.
+
+The separately declared10 s onset retry (`encounter-native-encounter-v2`) exposed
+another issue: near the first waypoint, the legacy bearing's <.2 m unresolved
+direction gate disabled crossing classification/selection despite valid current
+motion. It also remains a failed policy-transition trial even though navigation
+completed. Moving the actor earlier alone does not fix that context issue.
+
+The bounded correction supplies a separate validated unit direction for the
+configured active nominal route segment (previous waypoint to active waypoint;
+initially anchor to first waypoint). Only the new encounter variant consumes it.
+It is obstacle-unaware configured navigation context, **not** an authored human
+route, perception evidence, or a new path planner. Physical `waypoint_world_xy`,
+CRA route interactions and the nominal controller are unchanged. The classifier
+and crossing selector no longer need an unstable robot-to-waypoint bearing when
+that direction is provided; absent it, their original near-goal guard remains.
+All motion/identity/source/consistency and exact safety gates stay unchanged.
+Genuine route turns still reset classification through the existing direction-
+change gate. Tests separately verify the legacy rejection and new segment path.
+
+The corrected controller requires new virtual/stationary/native validation;
+neither earlier failure is retroactively repaired. Matched native baselines
+were held automatically when the candidate reports failed. No physical wheels
+remain active while this correction is edited.

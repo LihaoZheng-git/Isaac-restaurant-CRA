@@ -547,6 +547,7 @@ def assess_all_objects(worker, packet):
                 row["boundary_flux"] = applied_guidance[key].boundary_flux
     passing = copy.deepcopy(getattr(worker, "motion_passing", None))
     passing_audit = None
+    nominal_direction = getattr(packet, 'nominal_route_direction_world_xy', None) if getattr(worker, 'encounter_motion', None) is not None else None
     passing_visual_evidence = copy.deepcopy(getattr(worker, "passing_visual_selection_evidence", None))
     if passing is not None:
         visual = fresh_person_selection_evidence(objects, packet.camera_timestamp_seconds,
@@ -566,6 +567,7 @@ def assess_all_objects(worker, packet):
             tracking, robot_xy=packet.robot_position_world_xy,
             robot_velocity_xy=packet.measured_robot_velocity_world_xy,
             goal_xy=packet.waypoint_world_xy,
+            nominal_route_direction_world_xy=nominal_direction,
             visual_person_track_ids=None if visual is None else tuple(visual),
             identity_prior_selection_evidence=envelope_memory.passing_selection_priors(
                 tracking, camera_timestamp_seconds=packet.camera_timestamp_seconds,
@@ -604,7 +606,8 @@ def assess_all_objects(worker, packet):
     if encounter is not None:
         from robot.evaluation.encounter_guidance import apply_encounter_guidance
         encounter_audit = encounter.update(tracking, robot_xy=packet.robot_position_world_xy,
-            goal_xy=packet.waypoint_world_xy, human_track_ids=tuple(r['track_id'] for r in envelope_audit))
+            goal_xy=packet.waypoint_world_xy, human_track_ids=tuple(r['track_id'] for r in envelope_audit),
+            nominal_route_direction_world_xy=nominal_direction)
         applied_guidance, baseline_audit, yield_ids = apply_encounter_guidance(
             applied_guidance, baseline_audit, encounter_audit, passing_audit,
             source_time=packet.sensor_timestamp_seconds)

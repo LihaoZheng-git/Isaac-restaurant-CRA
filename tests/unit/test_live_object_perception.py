@@ -147,6 +147,16 @@ def test_static_world_track_stays_static_during_ego_translation_and_keeps_scan_e
     )
 
 
+def test_packet_nominal_segment_is_optional_validated_and_separate_from_physical_goal():
+    from dataclasses import replace
+    source=packet()
+    changed=replace(source,nominal_route_direction_world_xy=(0.,1.))
+    assert changed.waypoint_world_xy==source.waypoint_world_xy
+    assert changed.nominal_route_direction_world_xy==(0.,1.)
+    with pytest.raises(ValueError,match='unit vector'):
+        replace(source,nominal_route_direction_world_xy=(0.,0.))
+
+
 def test_failed_field_transaction_does_not_advance_track_or_epoch():
     runtime = worker()
     accepted = runtime(packet())

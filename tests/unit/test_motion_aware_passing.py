@@ -102,3 +102,16 @@ def test_invalid_geometry_and_duplicate_identity_are_rejected():
         step(p, 0.1, ids=(7, 7))
     with pytest.raises(ValueError, match="finite"):
         step(p, 0.1, speed=float("nan"))
+
+
+def test_configured_nominal_segment_keeps_crossing_selection_near_intermediate_waypoint():
+    p=MotionAwarePassing()
+    legacy=MotionAwarePassing()
+    for t in (.1,.2,.3):
+        tracking,_=sample(t)
+        args=dict(robot_xy=(0.,0.),robot_velocity_xy=(0.,0.),goal_xy=(0.,.01))
+        selected,audit=p.update(tracking,nominal_route_direction_world_xy=(0.,1.),**args)
+        before,_=legacy.update(tracking,**args)
+    assert selected and not before
+    assert audit['encounter_selected_timestamp']==.3
+    assert audit['route_direction_basis']=='configured_obstacle_unaware_nominal_route_segment'
