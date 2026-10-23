@@ -94,3 +94,34 @@ cases (both crossings and mixed departure). Virtual walking arcs were.331043,
 results and the exact-input numerical replay do not pass a native retry. The
 retry preserves the8s scenario and every other native controller/physical
 parameter; it changes only the explicit.01m rear-reference quality setting.
+
+## First-interval native retry (86eb92e)
+
+`native-rear-first01-left8-v2` also remains **FAILED**: actual3/3 arrival in
+20.966667s, .697523m braking-inclusive clearance/.002386m drift and.019259
+minimum executed analytical margin passed, as did209/209 body containment
+(maximum center error.161561m). The arc was.143690m, below.20m; behind-plane
+projection-.784005m passed. There were27 rear fields/18 selected and accepted
+plans,17 walking-window rear-plan sources and124 verified translating command
+rows/2.066667s. More immediate translating execution did **not** improve the
+curved gate. All source/pair/vector/policy/scene checks passed separately.
+Seventy visuals/13,978 assessments and zero fresh complete four-factor inputs
+retain their original priors/scope. Preserve its failed report and traceback.
+
+The final bounded tuning attempt changes the rear target offset from.7m to
+1.2m, retaining the.01m first-interval quality and every other8s native setting.
+This is a **preferred reference target**, never a larger body envelope, measured
+clearance, physical risk or forced lateral path. All candidates still require
+every original safety check and may fall back. No native success is implied.
+
+The rear-only report labels now name rear-or-checked-wait source coverage and
+the curved strategy correctly. Older reports used legacy keys containing
+`crossing_zero`/`intentional_wait` for those separate rear-variant booleans.
+Their numeric counts and acceptance formulas have not changed; the original
+reports/SHAs stay intact, and any corrected-label companion is separate.
+
+The1.2m target configuration passed2,651 unit tests in87.61s, Ruff/compilation,
+and all three early8s ORACLE curved/arrival cases. Their walking arcs were
+.480649/.478677/.480649m (virtual only). The original native-input replay still
+selected a bounded(.2,.6) first command with all checks: a larger target is not
+a forced larger command. Native final tuning acceptance is pending.

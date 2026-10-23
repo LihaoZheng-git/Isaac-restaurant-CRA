@@ -106,7 +106,10 @@ def test_separate_rear_policy_audit_keeps_normal_guidance_only_with_current_sour
         r[0]['diagnostics']['rear_pass_reference_track_ids'] = [8]
     if corruption == 'lambda':
         row['lambda'] = 0.
-    assert summarize_encounter_policy(r, require_transition=True, checked_wait=True, checked_rear=True)['passed'] == (corruption is None)
+    summary = summarize_encounter_policy(r, require_transition=True, checked_wait=True, checked_rear=True)
+    assert summary['passed'] == (corruption is None)
+    assert 'current_rear_or_checked_wait_and_parallel_normal_observed' in summary['checks']
+    assert 'crossing_zero_and_parallel_normal_observed' not in summary['checks']
     assert not summarize_encounter_policy(r, checked_wait=True)['passed']
 
 

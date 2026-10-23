@@ -31,8 +31,10 @@ def summarize_variant_passing(
             three_observed_policy_rows=original.get("three_observed_policy_rows")
             is True,
             encounter_switching_passed=(encounter or {}).get("passed") is True,
-            intentional_wait_strategy_passed=(strategy or {}).get("passed") is True,
         )
+        strategy_check = ("curved_rear_strategy_passed" if (strategy or {}).get("strategy") == "rear-pass-or-yield"
+                          else "intentional_wait_strategy_passed")
+        checks[strategy_check] = (strategy or {}).get("passed") is True
     return dict(
         passed=all(checks.values()),
         checks=checks,
@@ -155,10 +157,11 @@ def summarize_encounter_policy(records, *, require_transition=False, checked_wai
                 )
     checks = dict(
         current_ordered_sources_and_bounded_policy=bool(records) and not errors,
-        crossing_zero_and_parallel_normal_observed=not require_transition
-        or (zero_rows + rear_rows if checked_rear else zero_rows) >= 3
-        and parallel_rows >= 3,
     )
+    transition_name = ("current_rear_or_checked_wait_and_parallel_normal_observed" if checked_rear
+                       else "crossing_zero_and_parallel_normal_observed")
+    checks[transition_name] = not require_transition or (
+        (zero_rows + rear_rows if checked_rear else zero_rows) >= 3 and parallel_rows >= 3)
     return dict(
         passed=all(checks.values()),
         checks=checks,

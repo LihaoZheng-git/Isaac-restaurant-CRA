@@ -1850,3 +1850,19 @@
   virtual/component checks and a new own60-frame native gate before retry.
   Keep the original failure and main/long-service/PR117 holds. See
   docs/live_rear_pass.md.
+
+- At86eb92e the first-interval rear retry also FAILED the unchanged walking
+  arc:.143690m<.20m, despite actual3/3goal20.966667s,.697523m clearance/.002386m
+  drift,.019259 minimum analytical margin and209/209 containment(max.161561m).
+  Keep27 rear fields/18accepted plans/17walking sources/124request-clock-joined
+  translating rows2.066667s separate from curved acceptance: more immediate
+  translation did not fix it.70visuals/13,978assessments/ZERO complete factors
+  and every original failure/clock/prior remain. One final bounded tuning may
+  explicitly use1.2m REFERENCE offset instead of.7m, with.01m first-interval
+  quality and unchanged8s scenario, .40+.25 body PRIOR, physical risk/flux,
+  lambda/exact/analytical/geometry/arrival/stopping gates. This target is behavior
+  preference only, never an occupancy envelope or enforced motion. New own60
+  stationary gate remains mandatory. Rear-only report key names are corrected
+  to rear-or-checked-wait/curved-strategy; formulas/booleans remain unchanged.
+  Keep old reportSHAs and any new-label companions separate; no retroactive
+  native pass or main/long-service/PR117 hold release. See docs/live_rear_pass.md.
