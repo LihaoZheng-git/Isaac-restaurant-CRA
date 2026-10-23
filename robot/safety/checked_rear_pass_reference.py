@@ -23,6 +23,7 @@ class CheckedRearPassReferenceConfig:
     goal_radius_m: float = 0.1
     minimum_lead_m: float = 1.4
     existing_trailing_offset_m: float = 0.15
+    existing_turn_heading_radians: float | None = None
     release_lateral_m: float = 1.2
     heading_gain_m_per_radian: float = 0.4
     lateral_gain: float = 0.1
@@ -31,6 +32,8 @@ class CheckedRearPassReferenceConfig:
 
     def __post_init__(self):
         for key, value in asdict(self).items():
+            if key == "existing_turn_heading_radians" and value is None:
+                continue
             if (
                 isinstance(value, bool)
                 or not isinstance(value, (int, float))
@@ -46,6 +49,11 @@ class CheckedRearPassReferenceConfig:
             raise ValueError(
                 "candidate budget must be an integer <=576; fade exceeds goal radius"
             )
+        if (
+            self.existing_turn_heading_radians is not None
+            and self.existing_turn_heading_radians >= math.pi / 2
+        ):
+            raise ValueError("existing trailing turn threshold must be below pi/2")
 
 
 def rear_pass_context(initial, goal, obstacle, velocity, route_direction, config=None):
@@ -79,10 +87,18 @@ def rear_pass_context(initial, goal, obstacle, velocity, route_direction, config
     lateral = float((obstacle - goal) @ (-rear))
     lead = float((obstacle - initial[:2]) @ route)
     offset = float((initial[:2] - goal) @ rear)
+    heading = np.array([math.cos(initial[2]), math.sin(initial[2])])
+    trailing_heading = math.atan2(float(heading @ rear), float(heading @ route))
+    continuing_turn = (
+        cfg.existing_turn_heading_radians is not None
+        and cfg.existing_turn_heading_radians <= trailing_heading < math.pi / 2
+    )
     result.update(
         current_lead_m=lead,
         current_trailing_offset_m=offset,
         current_human_lateral_progress_m=lateral,
+        current_trailing_heading_radians=trailing_heading,
+        continuing_existing_trailing_turn=continuing_turn,
         rear_direction=rear.tolist(),
     )
     if distance <= cfg.goal_radius_m:
@@ -91,7 +107,11 @@ def rear_pass_context(initial, goal, obstacle, velocity, route_direction, config
     if lateral >= cfg.release_lateral_m:
         result["reason"] = "current_human_has_cleared_behavior_window"
         return result
-    if lead < cfg.minimum_lead_m and offset < cfg.existing_trailing_offset_m:
+    if (
+        lead < cfg.minimum_lead_m
+        and offset < cfg.existing_trailing_offset_m
+        and not continuing_turn
+    ):
         result.update(mode="wait", reason="insufficient_maneuver_lead")
         return result
     along = float((goal - initial[:2]) @ route)
@@ -101,7 +121,9 @@ def rear_pass_context(initial, goal, obstacle, velocity, route_direction, config
     target += cfg.offset_m * min(1.0, distance / cfg.goal_fade_distance_m) ** 2 * rear
     result.update(
         mode="rear",
-        reason="current_crossing_with_maneuver_room",
+        reason="continue_existing_trailing_turn"
+        if continuing_turn
+        else "current_crossing_with_maneuver_room",
         target_grid_xy=target.tolist(),
     )
     return result

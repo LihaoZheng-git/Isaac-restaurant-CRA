@@ -22,6 +22,11 @@ sys.path.insert(0, str(ROOT))
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument("--output", type=Path, required=True)
 parser.add_argument("--motion", action="store_true")
+parser.add_argument("--waypoint-mode", choices=("checkpoints", "guides"), default="checkpoints",
+                    help="separate pose-only route-guide variant; final-goal arrival and stopping remain mandatory")
+parser.add_argument("--route-guide-lookahead", type=float, default=1.0)
+parser.add_argument("--route-guide-max-cross-track", type=float, default=1.5,
+                    help="intermediate-plane route association bound, not obstacle clearance")
 parser.add_argument("--experiment-baseline", choices=("geometric_velocity_cbf", "fixed_class_safe_sage", "continuous_cra_safe_sage"),
                     default="continuous_cra_safe_sage", help="explicit matched restaurant comparison; physical assessments always retained")
 parser.add_argument("--motion-aware-passing", action="store_true",
@@ -67,7 +72,7 @@ parser.add_argument("--human-unique-full-surface", action="store_true",
 parser.add_argument("--human-visual-fragment-association", action="store_true",
                     help="fresh RGB/current-positive 3D small-body-part association in separated bare-human observed-only mode")
 parser.add_argument("--human-fragment-mask-boundary-pixels", type=int, choices=(0, 1), default=0,
-                    help="separate one-native-pixel mask-boundary association prior; >=95% original mask support, unchanged current 3D/clock/ambiguity gates")
+                    help="separate one-native-pixel mask-boundary association prior; >=95%% original mask support, unchanged current 3D/clock/ambiguity gates")
 parser.add_argument("--human-visual-part-field-policy", action="store_true",
                     help="current positive associated parts share verified human control flux/side; physical child CRA, class, geometry and clocks stay unchanged")
 parser.add_argument("--human-prior-geometry-associations", action="store_true",
@@ -212,6 +217,9 @@ parser.add_argument(
     help="optimizer candidate age cap; every executed horizon still needs fresh exact validation",
 )
 args = parser.parse_args()
+if any(not math.isfinite(x) or x <= 0 for x in
+       (args.route_guide_lookahead, args.route_guide_max_cross_track)):
+    parser.error("route-guide lookahead/association distances must be finite and positive")
 if args.mpc_horizon_steps is not None and not 6 <= args.mpc_horizon_steps <= 30:
     parser.error("explicit MPC horizon ablation must use 6..30 unchanged .2 s intervals")
 if (not math.isfinite(args.guidance_tangent_velocity_fraction)
@@ -1208,7 +1216,7 @@ def main():
             anchor.x + c * active_waypoint_local[0] - s * active_waypoint_local[1],
             anchor.y + s * active_waypoint_local[0] + c * active_waypoint_local[1],
         )
-        segment = np.asarray(active_waypoint_local) - (np.asarray(ROUTE[active_waypoint_index-1])
+        segment = np.asarray(ROUTE[active_waypoint_index]) - (np.asarray(ROUTE[active_waypoint_index-1])
             if active_waypoint_index > 0 else np.zeros(2))
         segment_length = float(np.linalg.norm(segment))
         route_direction = None
@@ -1674,7 +1682,11 @@ def main():
             maximum_angular_velocity=0.6,
             rotate_in_place_threshold_radians=math.radians(100),
             minimum_alignment_scale=0.25,
+            intermediate_waypoints_as_guides=args.waypoint_mode == "guides",
+            route_guide_lookahead_m=args.route_guide_lookahead,
+            route_guide_max_cross_track_m=args.route_guide_max_cross_track,
         ),
+        route_start=Waypoint(0., 0.),
     )
     footprint = RectangularRobotFootprint(
         stationary.ROBOT_FRONT_EXTENT,
@@ -2314,6 +2326,13 @@ def main():
         else "bounded_conservative_navigation; four-factor availability reported separately",
         "passed": completed and scene_unchanged and root_unchanged_by_fixture,
         "experiment_baseline": args.experiment_baseline,
+        "nominal_route_policy": {
+            "waypoint_mode": args.waypoint_mode,
+            "configured_anchors_local_xy": ROUTE,
+            "guide_lookahead_m": args.route_guide_lookahead,
+            "guide_max_cross_track_m": args.route_guide_max_cross_track,
+            "final_goal_tolerance_m": waypoint.config.position_tolerance,
+            "scope": "pose-only obstacle-unaware nominal; intermediate progress is guide passage in guides mode, not checkpoint arrival; final goal and stopping mandatory"},
         "human_body_contact_prior_config": asdict(perception.human_body_contact_config) if perception.human_body_contact_config is not None else None,
         "human_control_policy_ablation": {
             "enabled": args.human_observed_occupancy_only or args.human_boundary_flux is not None,

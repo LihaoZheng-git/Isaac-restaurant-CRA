@@ -120,12 +120,11 @@ a still-near perpendicular walker. No real-time, physical-braking, human mass/
 contact/temperature calibration, fresh four-factor sensing or native claim
 follows. Native factor priors and main/long-service/PR117 holds remain unchanged.
 
-## Pending navigation decision
+## Subsequent approved navigation decision
 
-The user was asked whether intermediate waypoints should remain mandatory
-.10m checkpoints or become route guides while the final goal remains mandatory.
-That answer changes the navigation objective/evaluation, so no guide-style
-acceptance or native route change has been made while it is pending. Any guide
+The user subsequently approved intermediate waypoints as route guides while
+the final goal remains mandatory. This changes the navigation objective and
+must be reported separately from the strict-checkpoint results above. Any guide
 variant must remain obstacle-unaware, based only on pose/route progress, with
 unchanged online MPC/CBF safety and final-goal arrival/stopping. Old checkpoint
 results remain separately reported. Selected actor/scenario stationary gates
@@ -167,5 +166,5 @@ passed in 10.39s. Ruff passed for `robot`, `tests` and `scripts`; the modified
 runtime/evaluation modules and comparison script compiled. No packages or
 environment settings changed, and no new Isaac wheel trial was launched.
 
-The component is implemented and tested; native integration and any change to
-the original waypoint semantics are not complete.
+The component and the results above predate the approved route-guide variant.
+They do not establish native acceptance of that subsequent navigation change.

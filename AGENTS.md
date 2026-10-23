@@ -1685,10 +1685,10 @@
   checkpoint failures; onset8 alone did not fix them. Plane crossing occurred
   after the transverse window, so do not claim close timed rear passing, native
   wheels, fresh four-factor perception, real time or causal CRA superiority.
-  The user was asked whether intermediate waypoints are route guides or strict
-  .10m checkpoints; this consequential navigation choice remains PENDING.
-  Do not change waypoint acceptance/native route until answered. Nominal must
-  remain obstacle-unaware; final goal/stopping and all safety gates remain.
+  The user subsequently approved intermediate waypoints as route guides, with
+  final-goal arrival/stopping mandatory. This is a separate opt-in navigation
+  variant; preserve strict .10m checkpoints as the legacy/default comparison.
+  Nominal must remain obstacle-unaware and all safety gates remain unchanged.
   Historical virtual crossing keys have mirrored robot-frame wording; use
   actual observed velocity vectors in labels and preserve the old keys/results.
   See docs/rear_pass_feasibility.md; native priors and main/PR117 holds persist.
@@ -1696,3 +1696,28 @@
   component/adapter/benchmark tests passed. Ruff and compilation passed. Matched
   fixed-lambda primary also arrived3/3 in20.2s without a curve; a single .2s
   difference does not establish a meaningful speed or causal CRA advantage.
+
+- The approved guide variant uses pose-only polyline projection/lookahead and
+  bounded intermediate-plane progress. Its configurable 1m lookahead and1.5m
+  cross-track association scope are navigation assumptions, never free-space,
+  physical clearance, human geometry or CRA evidence. Only intermediate anchors
+  may be passed laterally; the final goal retains Euclidean .10m acceptance and
+  actual stopping. Predicted nominal sequences must copy original route anchor/
+  progress without committing it. Native route-guide/rear-pass acceptance still
+  requires its own stationary and full motion gates; previous ORACLE results
+  alone cannot authorize a sensor/native success claim.
+  Guide mode alone FAILED the late11.5s curved gates; right-mirror wait also
+  failed analytical acceptance despite .465790m clearance. Preserve it and the
+  matched wait-baseline failure; fixed-primary late runs arrived3/3. Explicit
+  .8m lead attempts and late .2rad heading continuation did not repair the arc.
+  In a DIFFERENT8s fixture with original guides2.2/3.1/3.9, optional current
+  trailing-heading continuation at.2rad passed3/3 curves/19.8s arrivals with
+  >=.587563m clearance; all nine matched route/safety trials passed. Primary
+  straight paths arrived19.6s, so no speed/causal CRA advantage is established.
+  Plane crossing was after transverse walking. The heading rule is behavior
+  continuation from current pose only, not new identity/evidence retention;
+  it defaults disabled and retains every full exact/dense/analytical check.
+  No new Isaac process/wheels were launched; native guide CLI support is not
+  native rear-reference integration or acceptance. All2,590 units/Ruff/compile
+  and CLI smoke checks passed. See docs/route_guide_navigation.md; keep native
+  priors and main/long-service/PR117 holds.

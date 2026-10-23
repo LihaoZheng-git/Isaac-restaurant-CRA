@@ -204,6 +204,7 @@ def run_encounter_control_case(
     progress=None,
     actor_onset_seconds=11.5,
     waypoint_layout="legacy",
+    waypoint_mode="checkpoints",
     control_factory=None,
     encounter_policy_adapter=None,
 ):
@@ -213,6 +214,8 @@ def run_encounter_control_case(
     oracle_actor(case, 0.0, onset_seconds=actor_onset_seconds)
     if waypoint_layout not in {"legacy", "before-crossing"}:
         raise ValueError("known explicitly declared waypoint fixture required")
+    if waypoint_mode not in {"checkpoints", "guides"}:
+        raise ValueError("known waypoint completion policy required")
     route_x = (2.2, 3.1, 3.9) if waypoint_layout == "legacy" else (1.0, 1.5, 3.9)
     # Reuse the audited yaw/footprint/solver setup, not its static oracle geometry.
     grid_config = LocalOccupancyGridConfig(
@@ -281,8 +284,10 @@ def run_encounter_control_case(
     waypoint = WaypointController(
         [Waypoint(x, 0.0) for x in route_x],
         config=WaypointControllerConfig(
-            rotate_in_place_threshold_radians=np.deg2rad(100)
+            rotate_in_place_threshold_radians=np.deg2rad(100),
+            intermediate_waypoints_as_guides=waypoint_mode == "guides",
         ),
+        route_start=Waypoint(0.0, 0.0),
     )
     state = np.zeros(3)
     previous = None
@@ -361,8 +366,8 @@ def run_encounter_control_case(
             route_completed = now
             reason = "goal_reached"
         goal = (
-            (waypoint.current_waypoint.x, waypoint.current_waypoint.y)
-            if waypoint.current_waypoint
+            (nominal.target_waypoint.x, nominal.target_waypoint.y)
+            if nominal.target_waypoint
             else (3.9, 0.0)
         )
         human_ids = tuple(x.track_id for x in tracks if x.track_id == 7)
@@ -530,6 +535,10 @@ def run_encounter_control_case(
                 checked_yield=getattr(plan, "crossing_maneuver", {}).get("action")
                 == "checked_yield",
                 rear_pass_reference=getattr(plan, "rear_pass_reference", None),
+                nominal_target_xy=list(goal),
+                route_guide_index=nominal.target_waypoint_index,
+                route_advanced=nominal.waypoint_advanced,
+                nominal_route_complete=nominal.route_complete,
             )
         )
         if progress and step % 10 == 0:
@@ -551,6 +560,8 @@ def run_encounter_control_case(
         variant=variant,
         fixture_actor_onset_seconds=actor_onset_seconds,
         fixture_waypoint_layout=waypoint_layout,
+        waypoint_mode=waypoint_mode,
+        final_goal_tolerance_m=waypoint.config.position_tolerance,
         nominal_waypoints_local_xy=[[x, 0.0] for x in route_x],
         passed=bool(passed),
         reason=reason,

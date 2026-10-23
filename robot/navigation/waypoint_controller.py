@@ -78,6 +78,9 @@ class WaypointControllerConfig:
     rotate_in_place_threshold_radians: float = (
         math.radians(25.0)
     )
+    intermediate_waypoints_as_guides: bool = False
+    route_guide_lookahead_m: float = 1.0
+    route_guide_max_cross_track_m: float = 1.5
 
     def __post_init__(self) -> None:
         positive_values = {
@@ -90,6 +93,8 @@ class WaypointControllerConfig:
             "linear_gain": self.linear_gain,
             "angular_gain": self.angular_gain,
             "position_tolerance": self.position_tolerance,
+            "route_guide_lookahead_m": self.route_guide_lookahead_m,
+            "route_guide_max_cross_track_m": self.route_guide_max_cross_track_m,
             "rotate_in_place_threshold_radians": (
                 self.rotate_in_place_threshold_radians
             ),
@@ -103,6 +108,9 @@ class WaypointControllerConfig:
                 raise ValueError(
                     f"{name} must be greater than zero."
                 )
+
+        if not isinstance(self.intermediate_waypoints_as_guides, bool):
+            raise TypeError("intermediate_waypoints_as_guides must be a bool.")
 
         if self.rotate_in_place_threshold_radians > math.pi:
             raise ValueError(
@@ -135,6 +143,7 @@ class WaypointCommand:
     mode: WaypointMode
 
     target_waypoint_index: int | None
+    # In guide mode this is the pose-only lookahead target, not the guide anchor.
     target_waypoint: Waypoint | None
 
     distance_to_waypoint: float
@@ -167,6 +176,7 @@ class WaypointController:
         waypoints: Sequence[Waypoint],
         *,
         config: WaypointControllerConfig | None = None,
+        route_start: Waypoint | None = None,
     ) -> None:
         self.config = config or WaypointControllerConfig()
 
@@ -186,6 +196,10 @@ class WaypointController:
             )
 
         self._current_waypoint_index = 0
+        if route_start is not None and not isinstance(route_start, Waypoint):
+            raise TypeError("route_start must be a Waypoint or None.")
+        self._configured_route_start = route_start
+        self._route_start = route_start
 
     @property
     def waypoints(self) -> tuple[Waypoint, ...]:
@@ -215,7 +229,7 @@ class WaypointController:
 
     @property
     def route_complete(self) -> bool:
-        """Whether every waypoint has been reached."""
+        """Whether the final goal is reached (all checkpoints in legacy mode)."""
 
         return (
             self._current_waypoint_index
@@ -226,12 +240,16 @@ class WaypointController:
         """Restart navigation from the first waypoint."""
 
         self._current_waypoint_index = 0
+        self._route_start = self._configured_route_start
 
     def compute_command(
         self,
         pose: RobotPose2D,
     ) -> WaypointCommand:
         """Return the nominal command for the current robot pose."""
+
+        if self.config.intermediate_waypoints_as_guides and self._route_start is None:
+            self._route_start = Waypoint(pose.x, pose.y)
 
         waypoint_advanced = (
             self._advance_reached_waypoints(pose)
@@ -253,6 +271,8 @@ class WaypointController:
         target = self._waypoints[
             self._current_waypoint_index
         ]
+        if self.config.intermediate_waypoints_as_guides:
+            target = self._route_guide_target(pose)
 
         x_error = target.x - pose.x
         y_error = target.y - pose.y
@@ -343,7 +363,9 @@ class WaypointController:
         if prediction_time_step <= 0.0:
             raise ValueError("time_step must be greater than zero.")
 
-        predictor = WaypointController(self._waypoints, config=self.config)
+        predictor = WaypointController(
+            self._waypoints, config=self.config, route_start=self._route_start
+        )
         predictor._current_waypoint_index = self._current_waypoint_index
         predicted_pose = pose
         commands: list[WaypointCommand] = []
@@ -366,7 +388,12 @@ class WaypointController:
         self,
         pose: RobotPose2D,
     ) -> bool:
-        """Advance past all waypoints already within tolerance."""
+        """Advance reached checkpoints or passed intermediate guide planes.
+
+        Guide progress uses only pose and the configured polyline. The lateral
+        gate bounds route association, not physical clearance or free space.
+        Final-goal completion always retains the original Euclidean tolerance.
+        """
 
         waypoint_advanced = False
 
@@ -380,16 +407,64 @@ class WaypointController:
                 target.y - pose.y,
             )
 
+            passed_guide = False
             if (
-                distance
-                > self.config.position_tolerance
+                self.config.intermediate_waypoints_as_guides
+                and self._current_waypoint_index < len(self._waypoints) - 1
             ):
+                start = self._segment_start()
+                dx, dy = target.x - start.x, target.y - start.y
+                length = math.hypot(dx, dy)
+                if length <= 1e-12:
+                    passed_guide = True
+                else:
+                    px, py = pose.x - start.x, pose.y - start.y
+                    along = (px * dx + py * dy) / length
+                    cross_track = abs(px * dy - py * dx) / length
+                    passed_guide = (
+                        along >= length
+                        and cross_track <= self.config.route_guide_max_cross_track_m
+                    )
+            if distance > self.config.position_tolerance and not passed_guide:
                 break
 
             self._current_waypoint_index += 1
             waypoint_advanced = True
 
         return waypoint_advanced
+
+    def _segment_start(self) -> Waypoint:
+        if self._current_waypoint_index:
+            return self._waypoints[self._current_waypoint_index - 1]
+        return self._route_start
+
+    def _route_guide_target(self, pose: RobotPose2D) -> Waypoint:
+        """Look ahead on the authored route; no obstacle input or rerouting."""
+        start = self._segment_start()
+        end = self._waypoints[self._current_waypoint_index]
+        dx, dy = end.x - start.x, end.y - start.y
+        length_squared = dx * dx + dy * dy
+        fraction = (
+            max(
+                0.0,
+                min(1.0, ((pose.x - start.x) * dx + (pose.y - start.y) * dy) / length_squared),
+            )
+            if length_squared > 1e-24
+            else 1.0
+        )
+        point = Waypoint(start.x + fraction * dx, start.y + fraction * dy)
+        remaining = self.config.route_guide_lookahead_m
+        for end in self._waypoints[self._current_waypoint_index :]:
+            dx, dy = end.x - point.x, end.y - point.y
+            length = math.hypot(dx, dy)
+            if length > remaining:
+                return Waypoint(
+                    point.x + dx * remaining / length,
+                    point.y + dy * remaining / length,
+                )
+            remaining -= length
+            point = end
+        return self._waypoints[-1]
 
     def _clip_angular_velocity(
         self,

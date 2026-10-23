@@ -26,6 +26,8 @@ from robot.safety.safe_sage_unicycle_cbf_filter import SafeSAGEUnicycleCBFFilter
         dict(candidate_limit=1.5),
         dict(candidate_limit=True),
         dict(goal_fade_distance_m=0.05),
+        dict(existing_turn_heading_radians=0),
+        dict(existing_turn_heading_radians=np.pi / 2),
     ],
 )
 def test_invalid_reference_configuration_rejected(changes):
@@ -70,6 +72,25 @@ def test_target_fades_toward_original_waypoint_and_never_claims_it_reached():
         [0.15, 0.0, 0.0], [0.2, 0.0], [3.3, -0.5], [0.0, 0.5], [1.0, 0.0]
     )
     assert near["mode"] == "none" and near["reason"] == "nominal_waypoint_region"
+
+
+@pytest.mark.parametrize("side", [-1, 1])
+def test_opt_in_current_trailing_turn_can_continue_before_lateral_translation(side):
+    args = ([0, 0, -side * 0.35], [3.9, 0], [1, -side * 0.5], [0, side * 0.5], [1, 0])
+    assert rear_pass_context(*args)["mode"] == "wait"
+    result = rear_pass_context(
+        *args, CheckedRearPassReferenceConfig(existing_turn_heading_radians=0.2)
+    )
+    assert result["mode"] == "rear" and result["continuing_existing_trailing_turn"]
+    assert result["reason"] == "continue_existing_trailing_turn"
+    assert (
+        rear_pass_context(
+            [0, 0, side * 0.35],
+            *args[1:],
+            CheckedRearPassReferenceConfig(existing_turn_heading_radians=0.2),
+        )["mode"]
+        == "wait"
+    )  # Turning toward the pedestrian is not trailing commitment.
 
 
 @pytest.mark.parametrize("velocity", [(0.0, 0.0), (0.5, 0.0), (0.0, 3.0)])

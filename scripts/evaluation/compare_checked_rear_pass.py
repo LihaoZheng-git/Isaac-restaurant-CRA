@@ -1,6 +1,8 @@
 """Matched ORACLE reference/stop-go/primary comparisons; no native wheels."""
 
 import argparse
+from dataclasses import asdict
+from functools import partial
 import hashlib
 import json
 from pathlib import Path
@@ -17,6 +19,7 @@ from robot.evaluation.encounter_control_benchmark import (
     run_encounter_control_case,
     summarize_oracle_rear_pass,
 )
+from robot.safety.checked_rear_pass_reference import CheckedRearPassReferenceConfig
 
 
 def main():
@@ -26,6 +29,11 @@ def main():
     parser.add_argument(
         "--waypoint-layout", choices=("legacy", "before-crossing"), default="legacy"
     )
+    parser.add_argument(
+        "--waypoint-mode", choices=("checkpoints", "guides"), default="checkpoints"
+    )
+    parser.add_argument("--rear-minimum-lead", type=float, default=1.4)
+    parser.add_argument("--rear-existing-turn-heading", type=float)
     parser.add_argument(
         "--controller",
         nargs="+",
@@ -39,11 +47,16 @@ def main():
         default=("cross-left-right", "cross-right-left", "cross-then-parallel"),
     )
     args = parser.parse_args()
+    rear_config = CheckedRearPassReferenceConfig(
+        minimum_lead_m=args.rear_minimum_lead,
+        existing_turn_heading_radians=args.rear_existing_turn_heading,
+    )
     args.output.mkdir(parents=True, exist_ok=False)
     paths = (
         "robot/safety/checked_rear_pass_reference.py",
         "robot/evaluation/checked_rear_pass_benchmark.py",
         "robot/evaluation/encounter_control_benchmark.py",
+        "robot/navigation/waypoint_controller.py",
         "scripts/evaluation/compare_checked_rear_pass.py",
     )
     manifest = dict(
@@ -55,6 +68,8 @@ def main():
         },
         actor_onset_seconds=args.actor_onset_seconds,
         waypoint_layout=args.waypoint_layout,
+        waypoint_mode=args.waypoint_mode,
+        rear_pass_configuration=asdict(rear_config),
         controllers=args.controller,
         zero_wheels=True,
         scope=__doc__,
@@ -70,8 +85,12 @@ def main():
             )
             extra = (
                 dict(
-                    control_factory=CheckedRearPassBenchmarkRuntime,
-                    encounter_policy_adapter=rear_pass_policy_adapter,
+                    control_factory=partial(
+                        CheckedRearPassBenchmarkRuntime, rear_pass_config=rear_config
+                    ),
+                    encounter_policy_adapter=partial(
+                        rear_pass_policy_adapter, configuration=rear_config
+                    ),
                 )
                 if controller == "rear"
                 else {}
@@ -81,6 +100,7 @@ def main():
                 "fixed" if controller == "primary" else "encounter",
                 actor_onset_seconds=args.actor_onset_seconds,
                 waypoint_layout=args.waypoint_layout,
+                waypoint_mode=args.waypoint_mode,
                 **extra,
             )
             result["experimental_controller"] = controller

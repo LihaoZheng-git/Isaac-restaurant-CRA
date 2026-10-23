@@ -5,6 +5,7 @@ import numpy as np
 
 from robot.evaluation.encounter_guidance import apply_encounter_guidance
 from robot.safety.checked_rear_pass_reference import (
+    CheckedRearPassReferenceConfig,
     rear_pass_context,
     search_checked_rear_pass_reference,
 )
@@ -14,7 +15,14 @@ from robot.safety.safe_sage_unicycle_mpc import SafeSAGEUnicycleMPCResult
 
 
 def rear_pass_policy_adapter(
-    guidance, audit, classification, passing, *, source_time, context
+    guidance,
+    audit,
+    classification,
+    passing,
+    *,
+    source_time,
+    context,
+    configuration=None,
 ):
     """Only this fixed world=grid ORACLE fixture supplies these qualified tracks."""
     changed, rows, ids = apply_encounter_guidance(
@@ -28,6 +36,7 @@ def rear_pass_policy_adapter(
             tracks[key].centroid_world_xy,
             tracks[key].velocity_world_xy,
             (1.0, 0.0),
+            configuration,
         )
         for key in ids
     }
@@ -67,10 +76,13 @@ class CheckedRearPassBenchmarkRuntime(SafeSAGEControlRuntime):
 
     requires_nominal_goal_context = True
 
-    def __init__(self, *, mpc, backup_filter, crossing_strategy=None):
+    def __init__(
+        self, *, mpc, backup_filter, crossing_strategy=None, rear_pass_config=None
+    ):
         super().__init__(
             mpc=mpc, backup_filter=backup_filter, crossing_strategy="legacy"
         )
+        self.rear_pass_config = rear_pass_config or CheckedRearPassReferenceConfig()
 
     def plan(self, initial, nominal, field, *, nominal_goal_grid_xy):
         result = super().plan(initial, nominal, field)
@@ -108,6 +120,7 @@ class CheckedRearPassBenchmarkRuntime(SafeSAGEControlRuntime):
                     (1.0, 0.0),
                     options,
                     lambda command: self.filter_command(command, initial, field),
+                    config=self.rear_pass_config,
                 )
                 audit.update(search.diagnostics, track_id=ids[0])
                 if search.trajectory is not None:

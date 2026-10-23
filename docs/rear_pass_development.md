@@ -2,7 +2,8 @@
 
 Follow-up: the user subsequently authorized further diagnosis. See
 `rear_pass_feasibility.md` for a conditional virtual result under a separately
-declared fixture and the pending waypoint-semantics decision. All original
+declared fixture. The user then approved route-guide semantics; see
+`route_guide_navigation.md` for that separate variant. All original
 failed results below remain unchanged.
 
 The user authorized step4 as a bounded attempt at a curved pass behind a crossing
