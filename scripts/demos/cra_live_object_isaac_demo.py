@@ -129,7 +129,7 @@ parser.add_argument("--human-crossing-delay-seconds", type=float,
 parser.add_argument("--human-crossing-direction", choices=("right-to-left", "left-to-right"), default="right-to-left",
                     help="authored standalone actor fixture only; never supplies estimator velocity or passing direction")
 parser.add_argument("--human-continuing-away", action="store_true",
-                    help="separate bare left-to-right crossing then upper-aisle departure at .5 m/s; actor fixture only")
+                    help="separate bare crossing then same-side upper-aisle departure at .5 m/s; actor fixture only")
 parser.add_argument("--human-walking-speed", type=float, default=.7,
                     help="explicit native actor speed .5..1 m/s; never estimator input")
 parser.add_argument("--human-cluster-radius", type=float, default=.12,
@@ -340,9 +340,9 @@ if not math.isfinite(args.progress_seed_fraction) or not 0 < args.progress_seed_
 if args.human_crossing_direction == "left-to-right" and args.restaurant_human != "crossing":
     parser.error("mirrored actor direction requires standalone crossing mode")
 if args.human_continuing_away and (args.restaurant_human != "crossing"
-    or args.human_crossing_direction != "left-to-right" or args.human_carry_bowl
+    or args.human_carry_bowl
     or args.human_walking_speed != .5):
-    parser.error("continuing-away fixture requires bare left-to-right crossing at .5 m/s")
+    parser.error("continuing-away fixture requires bare standalone crossing at .5 m/s")
 if args.motion_aware_passing and not (args.restaurant_human == "crossing" and args.persistent_object_risk_map
                                     and args.experiment_baseline != "geometric_velocity_cbf"):
     parser.error("bounded motion-aware passing requires the standalone crossing object-map scenario")

@@ -3,7 +3,9 @@
 import numpy as np
 
 
-def summarize_departing_pedestrian(records, *, parked_robot):
+def summarize_departing_pedestrian(records, *, parked_robot, crossing_direction="left-to-right"):
+    if crossing_direction not in {"left-to-right", "right-to-left"}:
+        raise ValueError("unsupported independent crossing direction")
     if len(records) < 30:
         return dict(passed=False, checks=dict(enough_actual_samples=False))
     t = np.array([r["time"] for r in records], dtype=float)
@@ -14,7 +16,9 @@ def summarize_departing_pedestrian(records, *, parked_robot):
     recognized = {"idle_before", "move", "walk_away", "away_endpoint", "aborted"}
     if not set(phases) <= recognized:
         raise ValueError("explicit crossing/departure phase metadata required")
-    crossed = (phases == "walk_away") & (xyz[:, 0] >= 29.5) & (np.abs(xyz[:, 1] - 8.9) <= .4)
+    left_to_right = crossing_direction == "left-to-right"
+    crossed_side = xyz[:, 0] >= 29.5 if left_to_right else xyz[:, 0] <= 28.1
+    crossed = (phases == "walk_away") & crossed_side & (np.abs(xyz[:, 1] - 8.9) <= .4)
     departing = phases == "walk_away"
     speed = np.linalg.norm(np.diff(xyz[:, :2], axis=0), axis=1) / np.diff(t)
     walking = np.isin(phases, ["move", "walk_away"])
@@ -25,7 +29,6 @@ def summarize_departing_pedestrian(records, *, parked_robot):
     geometry = np.array([[r["actor_layout_clearance_m"], r["collider_alignment_error_m"]] for r in records])
     robot = np.array([r["robot_xy"] for r in records])
     checks = dict(
-        actual_left_to_right_crossing=xyz[0, 0] <= 28.1 and crossed.any(),
         actual_upper_aisle_departure=departing.sum() >= 30 and len(upper) > 0,
         no_return_to_robot_route=bool(len(upper)) and np.all(xyz[upper[0]:, 1] >= 11.2),
         requested_half_metre_speed_observed=len(steady) >= 10 and .325 <= (median or 0) <= .7,
@@ -40,6 +43,8 @@ def summarize_departing_pedestrian(records, *, parked_robot):
             and np.linalg.norm(robot - robot[0], axis=1).max() <= .02
             and all(r["nonzero_wheel_command_count"] == 0 for r in records)),
     )
+    checks["actual_left_to_right_crossing" if left_to_right else "actual_right_to_left_crossing"] = (
+        (xyz[0, 0] <= 28.1 if left_to_right else xyz[0, 0] >= 29.5) and crossed.any())
     checks = {k: bool(v) for k, v in checks.items()}
     return dict(passed=all(checks.values()), checks=checks,
         median_moving_speed_mps=median, maximum_actor_y_m=float(xyz[:, 1].max()),

@@ -52,10 +52,9 @@ parser.add_argument(
     metavar=("KG", "LOWER", "UPPER"),
 )
 args = parser.parse_args()
-if args.continuing_away_crossing and (args.crossing_direction != "left-to-right"
-    or args.speed != .5 or args.carry_bowl or args.continuous_crossing
-    or args.goal_x != 29.8 or args.goal_y != 8.9):
-    parser.error("departure fixture requires bare left-to-right goal (29.8,8.9), speed .5")
+if args.continuing_away_crossing and (args.speed != .5 or args.carry_bowl or args.continuous_crossing
+    or args.goal_x != (29.8 if args.crossing_direction == "left-to-right" else 27.8) or args.goal_y != 8.9):
+    parser.error("departure fixture requires matching bare crossing goal, speed .5")
 if args.motion_aware_passing and (not args.sensor_diagnostic or args.carry_bowl):
     parser.error("motion-aware stationary component requires standalone sensor mode")
 if args.human_body_contact_prior is not None and (
@@ -174,7 +173,7 @@ def main():
     from robot.scene.restaurant_continuous_server import ContinuousServerRoute
     circuit = ContinuousServerRoute(upper_continuation=args.continuous_upper_continuation) if args.continuous_crossing else None
     from robot.scene.restaurant_departing_pedestrian import DepartingPedestrianRoute
-    departure = DepartingPedestrianRoute() if args.continuing_away_crossing else None
+    departure = DepartingPedestrianRoute(crossing_direction=args.crossing_direction) if args.continuing_away_crossing else None
     goal = circuit.goal if circuit else (args.goal_x, args.goal_y, 0.0)
     robot_start = (28.8, 7.9, SHORT_START_WORLD_XYZ[2]) if args.robot_view == "close" else SHORT_START_WORLD_XYZ
     robot_yaw = math.pi / 2 if args.robot_view == "close" else SHORT_START_YAW
@@ -315,6 +314,8 @@ def main():
     }
     if args.crossing_direction == "left-to-right":
         agent.idle(facing=carb.Float3(1, 0, 0))
+    elif departure is not None:
+        agent.idle(facing=carb.Float3(-1, 0, 0))
     else:
         agent.idle()
     # Let the native idle transition and its one-physics-step collider settle
@@ -564,7 +565,8 @@ def main():
         report["actor_circuit_events"] = circuit.events
     if departure is not None:
         from robot.evaluation.departing_pedestrian_validation import summarize_departing_pedestrian
-        report = summarize_departing_pedestrian(records, parked_robot=True)
+        report = summarize_departing_pedestrian(records, parked_robot=True,
+            crossing_direction=args.crossing_direction)
         report["actor_departure_events"] = departure.events
     report.update(
         {

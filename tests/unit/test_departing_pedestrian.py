@@ -40,6 +40,39 @@ def test_departure_checks_actual_crossing_motion_articulation_and_geometry():
     assert "actor_stopped" not in report["checks"]
 
 
+def test_mirrored_departure_targets_do_not_mutate_the_legacy_route():
+    route = DepartingPedestrianRoute(crossing_direction="right-to-left")
+    assert route.goal == (27.8, 8.9, 0.)
+    assert not route.advance((28.8, 8.9, 0.), 1.)
+    assert route.advance((28.04, 8.9, 0.), 2.)
+    assert route.goal == (27.8, 12.5, 0.)
+    assert not route.advance(route.goal, 3.)
+    assert len(route.events) == 1
+    assert DepartingPedestrianRoute().goal == (29.8, 8.9, 0.)
+
+
+def test_mirrored_actual_trace_needs_its_explicit_direction_and_all_geometry_gates():
+    rows = copy.deepcopy(trace())
+    for row in rows:
+        row["actor_xyz"][0] = 57.6 - row["actor_xyz"][0]
+    result = summarize_departing_pedestrian(rows, parked_robot=True, crossing_direction="right-to-left")
+    assert result["passed"] and result["checks"]["actual_right_to_left_crossing"]
+    assert not summarize_departing_pedestrian(rows, parked_robot=True)["passed"]
+    assert not summarize_departing_pedestrian(trace(), parked_robot=True,
+        crossing_direction="right-to-left")["passed"]
+    rows[80]["actor_layout_clearance_m"] = .01
+    assert not summarize_departing_pedestrian(rows, parked_robot=True,
+        crossing_direction="right-to-left")["passed"]
+
+
+@pytest.mark.parametrize("direction", [None, "forward", True])
+def test_departure_rejects_unsupported_direction(direction):
+    with pytest.raises(ValueError, match="direction"):
+        DepartingPedestrianRoute(crossing_direction=direction)
+    with pytest.raises(ValueError, match="direction"):
+        summarize_departing_pedestrian(trace(), parked_robot=True, crossing_direction=direction)
+
+
 @pytest.mark.parametrize("failure", ["no_crossing", "no_departure", "return", "no_articulation",
     "collision", "collider", "airborne", "wheels", "robot_drift", "nan", "phase", "time"])
 def test_departure_cannot_pass_missing_or_invalid_actual_motion(failure):

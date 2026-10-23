@@ -8,7 +8,14 @@ class DepartingPedestrianRoute:
 
     route = ((29.8, 8.9, 0.0), (29.8, 12.5, 0.0))
 
-    def __init__(self):
+    def __init__(self, *, crossing_direction="left-to-right"):
+        if crossing_direction not in {"left-to-right", "right-to-left"}:
+            raise ValueError("unsupported authored crossing direction")
+        self.crossing_direction = crossing_direction
+        if crossing_direction == "right-to-left":
+            # Mirror only the actor fixture about the restaurant route x=28.8.
+            # These targets are never estimator or robot-controller inputs.
+            self.route = ((27.8, 8.9, 0.0), (27.8, 12.5, 0.0))
         self.index = 0
         self.events = []
 

@@ -1779,3 +1779,15 @@
   rear-reference/guide-mode or every mirrored/late case. No real-time, exact-paper,
   speed or causal CRA advantage follows. See docs/live_checked_wait.md; original
   failures and main/long-service/PR117 holds remain.
+
+- The next bounded native coverage step mirrors the continuing-away actor route
+  (right-to-left at10s, then x27.8 upper-aisle departure) and separately tests
+  the original left-to-right route at11.5s. Direction/timing/targets remain actor
+  and evaluation data only. Runtime observed-velocity selection, CRA/priors,
+  body geometry, checked-wait field admission and exact/source/arrival/stopping
+  gates remain unchanged. Validate the new mirrored moving actor with zero robot
+  wheels before its own60-frame-gated navigation. Direction-aware departure
+  scoring must require actual crossing and retain every geometry/grounding/
+  articulation/no-return check; legacy defaults/reports stay intact. Native
+  rear-reference integration is separate. See docs/live_crossing_coverage.md;
+  acceptance is pending and all existing main/long-service/PR117 holds persist.

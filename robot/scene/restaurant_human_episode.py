@@ -37,11 +37,10 @@ class RestaurantHumanEpisode:
         ):
             raise ValueError("mirrored crossing is bounded to standalone walking")
         self.crossing_direction = crossing_direction
-        if continuing_away and (mode != "crossing" or crossing_direction != "left-to-right"
-                                or carry_bowl or speed_mps != .5):
-            raise ValueError("departure requires bare left-to-right crossing at .5 m/s")
+        if continuing_away and (mode != "crossing" or carry_bowl or speed_mps != .5):
+            raise ValueError("departure requires bare standalone crossing at .5 m/s")
         from robot.scene.restaurant_departing_pedestrian import DepartingPedestrianRoute
-        self.departure = DepartingPedestrianRoute() if continuing_away else None
+        self.departure = DepartingPedestrianRoute(crossing_direction=crossing_direction) if continuing_away else None
         if carry_bowl and mode != "continuous-crossing":
             raise ValueError("carried server requires explicit continuous crossing")
         if upper_continuation and mode != "continuous-crossing":
@@ -107,6 +106,9 @@ class RestaurantHumanEpisode:
         if self.crossing_direction == "left-to-right":
             import carb
             self.agent.idle(facing=carb.Float3(1, 0, 0))
+        elif self.departure is not None:
+            import carb
+            self.agent.idle(facing=carb.Float3(-1, 0, 0))
         else:
             self.agent.idle()
         self.body = RigidPrim(self.setup["collider_path"])
