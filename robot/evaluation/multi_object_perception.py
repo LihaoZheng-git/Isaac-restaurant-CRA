@@ -601,6 +601,7 @@ def assess_all_objects(worker, packet):
             sensor_timestamp_seconds=packet.sensor_timestamp_seconds,
             mask_boundary_prior_pixels=worker.human_fragment_mask_boundary_pixels)
     field_guidance_policy = worker.guidance_policy
+    normal_guidance = dict(applied_guidance)
     encounter = copy.deepcopy(getattr(worker, 'encounter_motion', None))
     encounter_audit, yield_ids = None, None
     if encounter is not None:
@@ -632,82 +633,111 @@ def assess_all_objects(worker, packet):
         },
     )
     pipeline_started = time.perf_counter()
-    pipeline = build_safe_sage_field_pipeline(
-        grid,
-        guidance_policy=field_guidance_policy,
-        config=replace(
-            worker.field_config,
-            guidance_field_config=replace(
-                worker.field_config.guidance_field_config,
-                merge_equal_policy_regions=True,
+    def build_candidate(guidance_parameters):
+        pipeline = build_safe_sage_field_pipeline(
+            grid,
+            guidance_policy=field_guidance_policy,
+            config=replace(
+                worker.field_config,
+                guidance_field_config=replace(
+                    worker.field_config.guidance_field_config,
+                    merge_equal_policy_regions=True,
+                ),
             ),
-        ),
-        semantic_obstacles=semantics,
-        track_guidance_parameters=applied_guidance,
-    )
-    pipeline_seconds = time.perf_counter() - pipeline_started
-    temporal = 0.0
-    recovery = {"used": False}
-    if worker.previous is not None:
-        old = worker.previous.temporal_safety_derivative
-        previous_h = worker.previous.pipeline.h_full
-        previous_time = worker.previous.sensor_timestamp_seconds
-        baseline = getattr(worker, "temporal_recovery_baseline", None)
-        if (
-            baseline is not None
-            and previous_time < baseline[1] < packet.sensor_timestamp_seconds
-            and baseline[0] < packet.sensor_frame_id
-        ):
-            previous_h, previous_time = baseline[2], baseline[1]
-            old = None
-            recovery = {
-                "used": True,
-                "baseline_frame_id": baseline[0],
-                "baseline_timestamp": baseline[1],
-                "scope": "two actual perception fields after a temporal gap; first bootstrap was not published for control",
-            }
-        delta = packet.sensor_timestamp_seconds - previous_time
-        if delta > worker.temporal.config.maximum_time_delta_seconds:
-            # A gap must stop control, but must not permanently prevent later
-            # fresh fields from recovering. Keep only an unpublished numerical
-            # baseline; tracker, evidence and accepted field stay transactional.
-            worker.temporal_recovery_baseline = (
-                packet.sensor_frame_id,
-                packet.sensor_timestamp_seconds,
-                pipeline.h_full,
-            )
-            raise ValueError(
-                "temporal source gap; unpublished recovery baseline recorded; no control field"
-            )
-        temporal = worker.temporal.estimate(
-            previous_h_full=previous_h,
-            current_h_full=pipeline.h_full,
-            grid_config=worker.grid_config,
-            time_delta_seconds=delta,
-            egomotion_translation_grid_xy=(0.0, 0.0),
-            previous_estimate=old
-            if isinstance(old, SafeSAGETemporalDerivativeResult)
-            else None,
+            semantic_obstacles=semantics,
+            track_guidance_parameters=guidance_parameters,
         )
-    field = SafeSAGERuntimeField(
-        packet.sensor_frame_id,
-        packet.sensor_timestamp_seconds,
-        worker.anchor,
-        worker.anchor_yaw,
-        len(packet.obstacle_xyz),
-        len(packet.obstacle_xyz),
-        tracking,
-        SemanticLabelResult(
-            tuple(SemanticTrackAssignment(semantic) for semantic in semantics)
-        ),
-        pipeline,
-        temporal,
-        time.perf_counter() - started,
-        motion_passing_reference_track_ids=tuple(sorted(sides)) if passing is not None else (),
-        motion_passing_reference_sides=tuple(sides[k].value for k in sorted(sides)) if passing is not None else (),
-        motion_passing_reference_source_timestamp_seconds=passing.encounter[2] if passing is not None and sides else None,
-        crossing_yield_track_ids=yield_ids,
-    )
+        recovery = {"used": False}
+        temporal = 0.0
+        if worker.previous is not None:
+            old = worker.previous.temporal_safety_derivative
+            previous_h = worker.previous.pipeline.h_full
+            previous_time = worker.previous.sensor_timestamp_seconds
+            baseline = getattr(worker, "temporal_recovery_baseline", None)
+            if (
+                baseline is not None
+                and previous_time < baseline[1] < packet.sensor_timestamp_seconds
+                and baseline[0] < packet.sensor_frame_id
+            ):
+                previous_h, previous_time = baseline[2], baseline[1]
+                old = None
+                recovery = {
+                    "used": True,
+                    "baseline_frame_id": baseline[0],
+                    "baseline_timestamp": baseline[1],
+                    "scope": "two actual perception fields after a temporal gap; first bootstrap was not published for control",
+                }
+            delta = packet.sensor_timestamp_seconds - previous_time
+            if delta > worker.temporal.config.maximum_time_delta_seconds:
+                # A gap must stop control, but must not permanently prevent later
+                # fresh fields from recovering. Keep only an unpublished numerical
+                # baseline; tracker, evidence and accepted field stay transactional.
+                worker.temporal_recovery_baseline = (
+                    packet.sensor_frame_id,
+                    packet.sensor_timestamp_seconds,
+                    pipeline.h_full,
+                )
+                raise ValueError(
+                    "temporal source gap; unpublished recovery baseline recorded; no control field"
+                )
+            temporal = worker.temporal.estimate(
+                previous_h_full=previous_h,
+                current_h_full=pipeline.h_full,
+                grid_config=worker.grid_config,
+                time_delta_seconds=delta,
+                egomotion_translation_grid_xy=(0.0, 0.0),
+                previous_estimate=old
+                if isinstance(old, SafeSAGETemporalDerivativeResult)
+                else None,
+            )
+        field = SafeSAGERuntimeField(
+            packet.sensor_frame_id,
+            packet.sensor_timestamp_seconds,
+            worker.anchor,
+            worker.anchor_yaw,
+            len(packet.obstacle_xyz),
+            len(packet.obstacle_xyz),
+            tracking,
+            SemanticLabelResult(
+                tuple(SemanticTrackAssignment(semantic) for semantic in semantics)
+            ),
+            pipeline,
+            temporal,
+            time.perf_counter() - started,
+            motion_passing_reference_track_ids=tuple(sorted(sides)) if passing is not None else (),
+            motion_passing_reference_sides=tuple(sides[k].value for k in sorted(sides)) if passing is not None else (),
+            motion_passing_reference_source_timestamp_seconds=passing.encounter[2] if passing is not None and sides else None,
+            crossing_yield_track_ids=yield_ids,
+        )
+        return field, recovery
+
+    field, recovery = build_candidate(applied_guidance)
+    transition_audit = None
+    checked_control = getattr(worker, "checked_wait_control", None)
+    if checked_control is not None and yield_ids:
+        from robot.evaluation.live_checked_wait import check_wait, packet_state_in_field
+
+        transition_audit = check_wait(checked_control, packet_state_in_field(packet, field), field)
+        transition_audit["previous_accepted_source_timestamp_seconds"] = (
+            worker.previous.sensor_timestamp_seconds if worker.previous is not None else None)
+        transition_audit["temporal_recovery"] = recovery
+        transition_audit["candidate_track_ids"] = yield_ids
+        if transition_audit["accepted"]:
+            transition_audit["selected_policy"] = "checked_zero_bias_wait_field"
+        else:
+            # A real rebuild from the same accepted source pair, never the
+            # rejected candidate or its smoothed temporal derivative.
+            field, recovery = build_candidate(normal_guidance)
+            field = replace(field, crossing_yield_track_ids=())
+            yield_ids = ()
+            for row in baseline_audit:
+                cue = row["encounter_guidance_ablation"]
+                row["lambda"] = normal_guidance[row["track_or_group_id"]].tangential_strength
+                cue.update(lambda_suppressed=False, basis="checked_wait_rejected_normal_guidance")
+            transition_audit["selected_policy"] = "normal_guidance_current_field"
+        applied_guidance = normal_guidance if not yield_ids else applied_guidance
+    pipeline_seconds = time.perf_counter() - pipeline_started
+    field = replace(field, build_wall_seconds=time.perf_counter() - started)
     # Transaction commit only after the whole multi-obstacle field succeeds.
     worker.tracker, worker.plume, worker.persistent_properties, worker.previous = (
         tracker,
@@ -744,6 +774,7 @@ def assess_all_objects(worker, packet):
         "motion_aware_passing": passing_audit,
         "encounter_motion_classification": encounter_audit,
         "crossing_yield_track_ids": yield_ids,
+        "checked_wait_transition": transition_audit,
         "motion_passing_reference_track_ids": field.motion_passing_reference_track_ids,
         "human_body_envelope_priors": envelope_audit,
         "current_visual_body_part_associations": visual_part_groups,

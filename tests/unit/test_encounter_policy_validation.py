@@ -62,6 +62,49 @@ def test_transition_audit_requires_current_crossing_zero_then_normal_parallel():
     ]
 
 
+def guarded_records():
+    result = records()
+    for row in result[:3]:
+        t, d = row["sensor_timestamp"], row["diagnostics"]
+        d["motion_aware_passing"]["encounter_selected_timestamp"] = 1.
+        d["checked_wait_transition"] = dict(
+            accepted=True, source_timestamp_seconds=t, candidate_track_ids=[7],
+            original_selection_timestamp_seconds=1.,
+            selected_policy="checked_zero_bias_wait_field", exact_dense_accepted=True,
+            future_analytical_accepted=True, first_analytical_accepted=True)
+        d["checked_wait_current_pose_admission"] = dict(accepted=True, source_timestamp_seconds=t)
+    return result
+
+
+def test_guarded_variant_requires_both_source_and_current_pose_admission():
+    r = guarded_records()
+    assert summarize_encounter_policy(r, require_transition=True, checked_wait=True)["passed"]
+    for key in ("checked_wait_transition", "checked_wait_current_pose_admission"):
+        broken = copy.deepcopy(r)
+        broken[0]["diagnostics"][key]["accepted"] = False
+        assert not summarize_encounter_policy(broken, checked_wait=True)["passed"]
+
+
+@pytest.mark.parametrize("corruption", [None, "source", "ids", "clock", "wrong_lambda"])
+def test_guarded_normal_alternative_requires_original_rejected_candidate_audit(corruption):
+    r = guarded_records()
+    d = r[0]["diagnostics"]
+    d["crossing_yield_track_ids"] = []
+    d["applied_field_policies"][0]["lambda"] = 1.25
+    audit = d["checked_wait_transition"]
+    audit.update(accepted=False, selected_policy="normal_guidance_current_field")
+    if corruption == "source":
+        audit["source_timestamp_seconds"] = 0.
+    elif corruption == "ids":
+        audit["candidate_track_ids"] = [8]
+    elif corruption == "clock":
+        audit["original_selection_timestamp_seconds"] = 0.
+    elif corruption == "wrong_lambda":
+        d["applied_field_policies"][0]["lambda"] = 0.
+    assert summarize_encounter_policy(r, checked_wait=True)["passed"] == (corruption is None)
+    assert not summarize_encounter_policy(r)["passed"]  # Strict historical variant is unchanged.
+
+
 @pytest.mark.parametrize("failure", ["stale", "parallel_zero", "flux", "unconfirmed"])
 def test_transition_audit_rejects_stale_wrong_or_unconfirmed_policy(failure):
     r = copy.deepcopy(records())

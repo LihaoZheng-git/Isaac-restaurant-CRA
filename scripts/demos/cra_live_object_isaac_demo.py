@@ -35,6 +35,8 @@ parser.add_argument("--crossing-strategy", choices=("legacy", "rear-pass-or-yiel
                     help="separate maneuver ablation; yielding requires exact predictive and analytical checks")
 parser.add_argument("--zero-tangential-bias-ablation", action="store_true",
                     help="explicit wait-and-go field lambda=0; physical CRA and normal repulsion unchanged")
+parser.add_argument('--checked-wait-transition', action='store_true',
+                    help='separate live stopped-field admission ablation; requires encounter guidance/comparison')
 parser.add_argument('--encounter-guidance-ablation', action='store_true',
                     help='selected observed crossing human lambda0, normal lambda1.25 for parallel/other occupancy; separate from primary')
 parser.add_argument('--encounter-comparison', action='store_true',
@@ -244,6 +246,8 @@ if args.crossing_strategy == "rear-pass-or-yield" and (args.guidance_tracking_we
 if args.zero_tangential_bias_ablation and (args.crossing_strategy != "yield-then-go"
     or args.guidance_tracking_weight != 0 or args.guidance_tangent_velocity_fraction != 0):
     parser.error("zero tangential bias is a separate wait-and-go ablation with zero extra tracking weight/fraction")
+if args.checked_wait_transition and (not args.encounter_guidance_ablation or not args.encounter_comparison):
+    parser.error("checked waiting requires encounter guidance and explicit encounter comparison")
 if args.encounter_guidance_ablation and (args.zero_tangential_bias_ablation
     or args.crossing_strategy != 'yield-then-go' or not args.human_observed_passing_target
     or args.human_body_envelope_radius is None or args.guidance_tracking_weight != 0
@@ -1124,6 +1128,45 @@ def main():
             )
         return now
 
+    mpc, backup = existing.create_controller_stack(controller)
+    substeps = round(mpc.config.time_step / stationary.PHYSICS_DT)
+    mpc = SafeSAGEUnicycleMPC(
+        mpc.paper_filter,
+        replace(
+            mpc.config,
+            horizon_steps=mpc.config.horizon_steps if args.mpc_horizon_steps is None else args.mpc_horizon_steps,
+            safety_substeps_per_interval=substeps,
+            integration_substeps_per_interval=substeps,
+            enable_progress_seeds=True,
+            enable_recovery_cost_pruning=True,
+            enable_recovery_feasibility_pruning=True,
+            maximum_solver_iterations=args.qp_iteration_limit,
+            maximum_nonlinear_rescue_iterations=args.nonlinear_rescue_iterations,
+            progress_seed_linear_fraction=args.progress_seed_fraction,
+            configuration_position_padding_m=0.025,
+            configuration_yaw_padding_radians=0.21,
+            configuration_padding_initial_fraction=0.1,
+        ),
+    )
+    if args.guidance_tracking_weight > 0:
+        mpc = LaplaceGuidanceTrackingMPC(mpc.paper_filter, mpc.config,
+            guidance_config=LaplaceGuidanceTrackingConfig(args.guidance_tracking_weight, args.guidance_activation_h,
+                math.radians(args.guidance_max_heading_bias_degrees), args.guidance_reference_goal_radius,
+                args.guidance_fade_distance, args.guidance_minimum_reference_progress,
+                args.guidance_turn_first_minimum_cap, args.guidance_reference_mode,
+                args.guidance_reference_search_width, args.guidance_reference_search_candidates,
+                args.guidance_tangent_velocity_fraction, args.guidance_tangent_basis,
+                minimum_reference_speed_fraction=args.guidance_reference_minimum_speed_fraction))
+    control = SafeSAGEControlRuntime(mpc=mpc, backup_filter=backup, crossing_strategy=args.crossing_strategy)
+    staged_perception = None
+    if args.checked_wait_transition:
+        from robot.evaluation.live_checked_wait import StagedLivePerception
+        guard_mpc = SafeSAGEUnicycleMPC(mpc.paper_filter, mpc.config)
+        perception.checked_wait_control = SafeSAGEControlRuntime(
+            mpc=guard_mpc, backup_filter=backup, crossing_strategy=args.crossing_strategy)
+        staged_perception = StagedLivePerception(perception)
+    checked_wait_admissions = []
+
     def capture(clean=False):
         nonlocal last_sensor_id, copied_scan
         if copied_scan is None:
@@ -1645,36 +1688,6 @@ def main():
 
     save_json("numeric-runtime-contract.json", numeric_runtime_contract())
 
-    mpc, backup = existing.create_controller_stack(controller)
-    substeps = round(mpc.config.time_step / stationary.PHYSICS_DT)
-    mpc = SafeSAGEUnicycleMPC(
-        mpc.paper_filter,
-        replace(
-            mpc.config,
-            horizon_steps=mpc.config.horizon_steps if args.mpc_horizon_steps is None else args.mpc_horizon_steps,
-            safety_substeps_per_interval=substeps,
-            integration_substeps_per_interval=substeps,
-            enable_progress_seeds=True,
-            enable_recovery_cost_pruning=True,
-            enable_recovery_feasibility_pruning=True,
-            maximum_solver_iterations=args.qp_iteration_limit,
-            maximum_nonlinear_rescue_iterations=args.nonlinear_rescue_iterations,
-            progress_seed_linear_fraction=args.progress_seed_fraction,
-            configuration_position_padding_m=0.025,
-            configuration_yaw_padding_radians=0.21,
-            configuration_padding_initial_fraction=0.1,
-        ),
-    )
-    if args.guidance_tracking_weight > 0:
-        mpc = LaplaceGuidanceTrackingMPC(mpc.paper_filter, mpc.config,
-            guidance_config=LaplaceGuidanceTrackingConfig(args.guidance_tracking_weight, args.guidance_activation_h,
-                math.radians(args.guidance_max_heading_bias_degrees), args.guidance_reference_goal_radius,
-                args.guidance_fade_distance, args.guidance_minimum_reference_progress,
-                args.guidance_turn_first_minimum_cap, args.guidance_reference_mode,
-                args.guidance_reference_search_width, args.guidance_reference_search_candidates,
-                args.guidance_tangent_velocity_fraction, args.guidance_tangent_basis,
-                minimum_reference_speed_fraction=args.guidance_reference_minimum_speed_fraction))
-    control = SafeSAGEControlRuntime(mpc=mpc, backup_filter=backup, crossing_strategy=args.crossing_strategy)
     waypoint = WaypointController(
         [Waypoint(*point) for point in ROUTE],
         config=WaypointControllerConfig(
@@ -1765,7 +1778,7 @@ def main():
             **coverage_geometry(latest, packet), **coverage_prior_inputs(latest, packet))
     def infer_with_timing(packet):
         started = time.perf_counter()
-        result = profile_call(perception, packet,
+        result = profile_call(staged_perception or perception, packet,
             profile_path=args.output / "profiles" / f"perception-{packet.sensor_frame_id}.pstats"
             if args.profile_runtime else None)
         elapsed = time.perf_counter() - started
@@ -1890,6 +1903,20 @@ def main():
             outcome = inference.poll(current_sensor_time_seconds=now)
             if outcome is not None:
                 if outcome.value is not None:
+                    if staged_perception is not None and outcome.value.field.crossing_yield_track_ids:
+                        from robot.evaluation.live_checked_wait import check_wait
+                        admission = check_wait(perception.checked_wait_control, current, outcome.value.field)
+                        admission.update(current_simulation_time=now, state_grid=current.tolist(),
+                            source_age_seconds=now-outcome.value.field.sensor_timestamp_seconds)
+                        checked_wait_admissions.append(admission)
+                        outcome.value.diagnostics["checked_wait_current_pose_admission"] = admission
+                        if not admission["accepted"]:
+                            staged_perception.discard()
+                            rejections.append("checked wait rejected at current pose; field unpublished")
+                            controller.stop()
+                            active_plan, active_plan_lease, warm = None, None, None
+                            reason = "checked_wait_current_pose_rejected"
+                            break
                     if coverage_guard is not None:
                         if args.save_sensor_snapshots and human is not None:
                             old_tracks = latest.field.tracking_result.tracked_obstacles
@@ -1944,6 +1971,8 @@ def main():
                             break
                     consecutive_failures = 0
                     commit(outcome.value, now)
+                    if staged_perception is not None:
+                        staged_perception.accept(outcome.value)
                     latest = outcome.value
                     latest_source_packet = submitted_packet
                     live_fields.append(field_record(latest, now, current))
@@ -1986,6 +2015,8 @@ def main():
                             flush=True,
                         )
                 else:
+                    if staged_perception is not None:
+                        staged_perception.discard()
                     rejections.append(outcome.rejection_reason)
                     consecutive_failures += 1
                     print(
@@ -2215,7 +2246,7 @@ def main():
     if args.encounter_guidance_ablation:
         from robot.evaluation.encounter_policy_validation import summarize_encounter_policy
         encounter_validation = summarize_encounter_policy(live_fields,
-            require_transition=args.human_continuing_away)
+            require_transition=args.human_continuing_away, checked_wait=args.checked_wait_transition)
         completed = completed and encounter_validation['passed']
         save_json('encounter-guidance-validation.json', encounter_validation)
     if human is not None:
@@ -2488,6 +2519,8 @@ def main():
         "crossing_strategy_ablation": args.crossing_strategy,
         "zero_tangential_bias_ablation": args.zero_tangential_bias_ablation,
         "encounter_guidance_ablation": args.encounter_guidance_ablation,
+        "checked_wait_transition_enabled": args.checked_wait_transition,
+        "checked_wait_current_pose_admissions": checked_wait_admissions,
         "encounter_comparison": args.encounter_comparison,
         "physical_CRA_lambda": 1.25,
         "fixed_lambda": None if args.encounter_guidance_ablation else 0. if args.zero_tangential_bias_ablation else 1.25,

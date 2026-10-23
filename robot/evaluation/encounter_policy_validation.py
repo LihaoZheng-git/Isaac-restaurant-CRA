@@ -43,8 +43,9 @@ def summarize_variant_passing(
     )
 
 
-def summarize_encounter_policy(records, *, require_transition=False):
+def summarize_encounter_policy(records, *, require_transition=False, checked_wait=False):
     zero_rows = parallel_rows = 0
+    rejected_wait_rows = 0
     errors = []
     previous = None
     for record in records:
@@ -58,6 +59,31 @@ def summarize_encounter_policy(records, *, require_transition=False):
         expected_yield = {
             k for k in selected if tracks.get(k, {}).get("classification") == "crossing"
         }
+        if checked_wait and expected_yield:
+            audit = detail.get("checked_wait_transition") or {}
+            source_valid = (
+                audit.get("source_timestamp_seconds") == t
+                and set(audit.get("candidate_track_ids", ())) == expected_yield
+                and audit.get("original_selection_timestamp_seconds")
+                == passing.get("encounter_selected_timestamp")
+            )
+            if audit.get("accepted") is True:
+                admission = detail.get("checked_wait_current_pose_admission") or {}
+                source_valid &= (
+                    audit.get("selected_policy") == "checked_zero_bias_wait_field"
+                    and all(audit.get(k) is True for k in (
+                        "exact_dense_accepted", "future_analytical_accepted", "first_analytical_accepted"))
+                    and admission.get("accepted") is True
+                    and admission.get("source_timestamp_seconds") == t
+                )
+            elif audit.get("accepted") is False:
+                source_valid &= audit.get("selected_policy") == "normal_guidance_current_field"
+                expected_yield = set()
+                rejected_wait_rows += 1
+            else:
+                source_valid = False
+            if not source_valid:
+                errors.append(dict(time=t, reason="checked_wait_admission_mismatch"))
         if (
             previous is not None
             and t <= previous
@@ -116,6 +142,8 @@ def summarize_encounter_policy(records, *, require_transition=False):
         checks=checks,
         selected_crossing_zero_fields=zero_rows,
         current_parallel_classifications=parallel_rows,
+        rejected_wait_normal_fields=rejected_wait_rows,
+        checked_wait_transition_enabled=checked_wait,
         rejections=errors,
         scope="per-row source/motion/lambda/flux audit only; route, body containment, physical perception and actual execution are separate",
     )

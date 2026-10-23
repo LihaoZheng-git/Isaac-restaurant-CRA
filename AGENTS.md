@@ -1749,3 +1749,14 @@
   arrays/flags. Original-source record audits and actual virtual zero-yield
   state checks pass. All2,606 units/Ruff/compile passed. This remains ORACLE-only
   integration with no new Isaac wheels, physical braking or live sensor claim.
+
+- The next live opt-in checked-wait integration stages all-object worker state
+  until source freshness, current-pose stopped-horizon admission and the existing
+  positive-geometry coverage guard pass. Source-pose wait rejection rebuilds a
+  real normal-lambda field against the same accepted temporal pair; current-pose
+  rejection stops the bounded trial without publication. Preserve original
+  evidence clocks, unpublished gap-bootstrap semantics, legacy strict encounter
+  scoring and the fixed-lambda primary. This is not native checked rear-reference
+  integration. Its first source freeze passed2,618 units/Ruff; stationary/native
+  acceptance is still pending. See docs/live_checked_wait.md and retain all
+  original failures and main/long-service/PR117 holds.
