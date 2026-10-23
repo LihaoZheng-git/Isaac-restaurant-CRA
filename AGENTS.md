@@ -1866,3 +1866,20 @@
   to rear-or-checked-wait/curved-strategy; formulas/booleans remain unchanged.
   Keep old reportSHAs and any new-label companions separate; no retroactive
   native pass or main/long-service/PR117 hold release. See docs/live_rear_pass.md.
+
+- Final bounded rear-target tuning atc772308(runtimef2e8d25) also FAILED the
+  unchanged.20m walking arc:.185079m, despite3/3arrival21.433333s,.704079m
+  clearance/.002660m drift,.093791 analytical margin and212/212 containment
+  (max center error.163032m within unchanged.25 prior). Current human motion,
+  source/pair/vector/policy/scene/stop checks passed;25rear fields/16accepted
+  plans/15walking sources/122request-clock-joined translating rows2.033333s
+  establish native integration/execution, not full curved acceptance.72visuals/
+  14,243assessments/ZERO fresh complete factors and all original priors/oracle
+  ego/RGB clock/renderer limitations remain. Three attempts' all-phase bends
+  .261930/.265815/.345595m peaked1.45/1.55/1.866667s after transverse walking
+  ended; do not substitute them for failed walking arcs or claim sole causation.
+  Keep every original report/SHA/traceback, label-only companions and default
+  primary/accepted wait-go unchanged. No mirrored rear wheels follow failed
+  first-direction acceptance, no main/long-service/PR117 hold release. Further
+  timed-curvature work needs a separately discussed encounter/planning scope,
+  not endless parameter tuning or relaxed checks. See docs/live_rear_pass.md.

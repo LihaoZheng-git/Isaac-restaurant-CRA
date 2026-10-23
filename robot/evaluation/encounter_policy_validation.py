@@ -9,7 +9,7 @@ def summarize_variant_passing(
     Arrival, clearance, braking, current perception and containment are separate
     mandatory caller gates. An actual selection must still have valid identity
     and source clocks. The encounter variant additionally needs its unchanged
-    switching and intentional-wait acceptance; absent selections never pass it.
+    switching and its declared strategy acceptance; absent selections never pass it.
     """
     original = passing.get("checks", {})
     required = (

@@ -125,3 +125,65 @@ and all three early8s ORACLE curved/arrival cases. Their walking arcs were
 .480649/.478668/.480649m (virtual only). The original native-input replay still
 selected a bounded(.2,.6) first command with all checks: a larger target is not
 a forced larger command. Native final tuning acceptance is pending.
+
+## Final bounded native tuning (c772308; runtime f2e8d25)
+
+The original `native-rear-offset12-left8-v3/report.json` remains **FAILED**.
+Its own60-frame stationary gate and all three route guides/final arrival passed
+in21.433333 simulation seconds. Braking-inclusive minimum clearance was.704079m,
+stop drift.002660m and minimum executed analytical margin.093791. All212
+source-aligned body-containment rows passed (maximum center error.163032m against
+unchanged.25m uncertainty). The current-human motion/kinetic gate also passed.
+
+The walking-window arc improved to.185079m, still below unchanged.20m. Behind-plane
+projection-.771229m passed. There were25 rear fields,16 selected and accepted
+plans,15 walking-window rear-plan sources and122 request-clock-joined translating
+command rows/2.033333s. Independent source/frame/selection/pair/vector-transform,
+policy, physical clearance, analytical, scene/root and stopping audits all passed
+separately; they do not replace the failed curved criterion. The simulator's
+exit0 again accompanied the saved failed report and RuntimeError.
+
+| Native development attempt | Final arrival | Walking arc (required.20m) | Minimum clearance | Stop drift | Overall |
+| --- | --- | --- | --- | --- | --- |
+| Original rear reference |3/3,21.266667s |.153753m |.767339m |2.376mm |FAIL |
+| First-interval quality.01m |3/3,20.966667s |.143690m |.697523m |2.386mm |FAIL |
+| Quality.01m, target offset1.2m |3/3,21.433333s |.185079m |.704079m |2.660mm |FAIL |
+
+The independent recorded actor/robot timing audit reproduced every original
+walking arc. Transverse walking was source16.3--19.6s. Maximum *all-phase* bends
+were.261930/.265815/.345595m, occurring1.45/1.55/1.866667s **after** transverse
+walking ended. Thus native rear-reference dataflow and visible curves exist,
+but a sufficiently pronounced curve within the specified walking window is not
+accepted. This timing observation is not proof of a sole/global failure cause.
+Do not substitute those later bends for the walking metric or lower its threshold.
+
+The final trial recorded72 visual instances/14,243 object assessments and **zero
+complete fresh four-factor assessments**. Human mass/contact and unsupported
+factor/body priors, oracle ego-pose/extrinsic references, simulation read-time RGB
+clock approximation and renderer-history warning remain explicit. None of these
+trials establishes calibrated human physics, real-time operation, general crowds,
+an exact paper reproduction or a causal CRA advantage. These are development
+attempts on one fixture, not held-out tests, replicated estimates or matched
+primary-controller comparisons.
+
+No mirrored rear-reference wheel trial was launched after the first direction
+failed its acceptance gate. The original accepted checked wait-and-go reference
+remains available. The optional rear variant is not promoted to a default or
+merged to main. Further timed-curve development should first review encounter
+timing and longer-range maneuver planning as separate research choices; do not
+keep tuning this one metric or silently change the scenario/uncertainty policy.
+All earlier main/long-service/PR117 holds remain.
+
+Local ignored artifacts preserve each invocation, original report/traceback,
+complete fields/commands/truth, native video and independent audit:
+
+- `outputs/paper_flux/native-rear-left8-v1/` (sourcea846ae5).
+- `outputs/paper_flux/native-rear-first01-left8-v2/` (source86eb92e).
+- `outputs/paper_flux/native-rear-offset12-left8-v3/` (sourcec772308).
+- `native-rear-timing-comparison-v1.json` and the individual
+  `independent-rear-audit.json` files preserve original report SHAs.
+- The first two folders' `rear-policy-label-companion.json` changes names only;
+  original numeric acceptance and failed reports remain unchanged.
+- `native-rear-offset12-results-v3.png` and `human-navigation.mp4` show recorded
+  native results. All three functional configurations passed the documented
+  unit/Ruff/virtual checks; virtual passes never overwrite the native failures.
