@@ -1758,5 +1758,24 @@
   evidence clocks, unpublished gap-bootstrap semantics, legacy strict encounter
   scoring and the fixed-lambda primary. This is not native checked rear-reference
   integration. Its first source freeze passed2,618 units/Ruff; stationary/native
-  acceptance is still pending. See docs/live_checked_wait.md and retain all
+  acceptance was pending at that freeze (the subsequent result is below). See
+  docs/live_checked_wait.md and retain all
   original failures and main/long-service/PR117 holds.
+
+- At21f0968 the live checked-wait integration passed an independent60-frame
+  zero-wheel gate and its own60-frame gate before native motion. Original native
+  report PASSED3/3 strict checkpoints in23.4667s, .644488m braking-inclusive
+  clearance/.002315m drift,234 live fields/210 translating fields,234/234 body
+  containment rows (max error.174666m within unchanged.25 prior). Nine wait fields
+  passed source/current-pose checks;24 rejected candidates were rebuilt normal
+  against the same accepted temporal pair. Four walking-window accepted yield
+  sources/.683333s observed wait passed; original OPTIMIZER-REQUEST-clock joining
+  verified22 zero-command rows/.366667s, not the entire observed wait. Independent
+  audit passed original source/selection/frame/pair, policy, arrival, stopping,
+  containment and unchanged scene/root checks. Preserve restricted-launch-v1
+  failure (no scene/wheels; exit0 is not success),84 visuals/15,424 assessments/
+  ZERO fresh complete four-factor rows, human/factor/body priors and renderer
+  warning. This is one native continuing-away left-to-right case, not native
+  rear-reference/guide-mode or every mirrored/late case. No real-time, exact-paper,
+  speed or causal CRA advantage follows. See docs/live_checked_wait.md; original
+  failures and main/long-service/PR117 holds remain.
