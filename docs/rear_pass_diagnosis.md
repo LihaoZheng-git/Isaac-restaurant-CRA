@@ -71,3 +71,91 @@ rear-pass acceptance is pending at this source freeze. Keep all main,
 long-service and PR117 holds, the declared human/factor priors, oracle ego pose,
 RGB read-time approximation, renderer warning and incomplete fresh four-factor
 perception limitations.
+
+## Native result at 5ba34c2: timed rear curve still fails
+
+The independent 60-frame stationary run passed with zero robot wheel commands
+in 162.84 wall seconds. Its independent source-position audit reproduced all
+32 accepted fits and preserved three short-window and two opposing-motion
+rejections. The navigation trial then passed its own 60-frame stationary gate.
+
+Original `outputs/paper_flux/native-rear-motionfit-left8-v4/report.json` is
+**FAILED**, SHA256
+`14cc2683d21ba3d19db0eb820401f2165b8bf72dc9e27f5c3d52a8ea39662217`.
+It completed all three guides and reached the goal in 21.65 simulation seconds.
+Minimum braking-inclusive clearance was 0.730241 m, stopping drift 0.002659 m
+and minimum executed analytical margin 0.260822. All 216 body-containment rows
+passed; maximum center error 0.162700 m remains within the unchanged 0.25 m
+uncertainty prior. Original source/pair/selection/vector-transform, current
+human kinetic, policy, scene/root, arrival and stopping audits passed separately.
+The launcher returned zero **with a traceback and failed saved report**.
+
+| Same development fixture | Walking-window arc, required 0.20 m | Goal | Clearance | Overall |
+| --- | --- | --- | --- | --- |
+| Previous target-offset trial | 0.185079 m | 3/3, 21.433333 s | 0.704079 m | FAIL |
+| Source-window classification fit | 0.188876 m | 3/3, 21.65 s | 0.730241 m | FAIL |
+
+There were 30 rear fields, 19 accepted selected rear plans and 18 accepted
+walking-window rear-plan sources. The original report joins 121 translating
+command rows / 2.016667 s. An independent audit conservatively joins 120 / 2 s.
+`execution-clock-boundary-companion.json` reproduces this one-row difference:
+recovering the original start `8.199999999999987` from the original joined
+command reproduces 121; reconstructing start as `8.2` excludes the exact walking
+boundary row. Both execution booleans pass. No original report, source timestamp
+or failed curve flag was changed.
+
+The fit improved encounter continuity, but did not fix the entire maneuver:
+
+- The new first rear plan was received at source 17.033333 s, compared with
+  16.85 s previously. The fit's onset delay and existing planning cadence matter.
+- At source 17.3 s the fitted classification remained crossing, while the
+  unchanged **raw** transverse-motion rear-context gate rejected the current
+  velocity. This correctly disabled the rear reference under this experiment's
+  declared contract; classification alone cannot establish reference readiness.
+- At source 17.6 s, searches had 117 exact-feasible candidates but no selected
+  complete reference after the future analytical, translation, first-interval
+  quality and utility checks. Ordinary fallback remained necessary. New-field
+  horizon revalidation also caused eight stops plus seven awaiting-plan rows
+  in the diagnostic walking interval. These are safety stops, not intentional
+  checked yields and not grounds to weaken acceptance.
+- The maximum all-phase bend, 0.364912 m, still occurred 1.983333 s **after**
+  transverse walking ended. It cannot replace the failed walking-window arc.
+
+These observations identify several contributors rather than one proven sole
+cause. The source-window fit is an optional tested component, **not an accepted
+native rear-pass strategy or a new default**. There is no mirrored rear wheel
+acceptance. This is a single development run, not a replicated or held-out
+comparison and not evidence of a causal CRA advantage.
+
+The navigation record contains 68 accepted visual instances, 14,514 object
+assessments and **zero fresh complete four-factor assessments**. The independent
+fit audit reproduced 237 accepted fits (29 stationary, 208 live), with original
+centroid epochs, raw physical velocities and classifier inputs verified; ten
+opposing-motion and three short-window rejections remain explicit. Human/factor/
+body priors and the previously documented sensor/clock/rendering limitations
+remain.
+
+## Practical choice after this bounded attempt
+
+Use the **previously accepted checked stop-and-go fixture** for perpendicular
+crossing: the continuing-away left-to-right pedestrian with 10 s onset,
+documented in `docs/live_checked_wait.md` and
+`outputs/paper_flux/live-checked-wait-motion-v2/`. That earlier original report
+passed actual arrival, intentional checked waiting, clearance and stopping.
+It is not a new validation of stop/go on this 8 s guide-mode fixture, every
+timing or the mirrored case. Parallel departure keeps normal applied guidance;
+do not globally disable lambda. Keep rear development optional, preserve all
+four failed native rear attempts and retain the main/long-service/PR117 holds.
+
+Any future rear development should address coherent encounter prediction,
+reference feasibility and planning/execution handoff together. Do not keep
+increasing offsets, remove geometry, lower the 0.20 m criterion, renew clocks or
+relabel late curves to obtain a pass.
+
+Local ignored artifacts include both native folders' invocations and gate
+records, `independent-motion-fit-audit.json`, the motion trial's
+`independent-rear-audit.json`, the clock-boundary companion,
+`rear-motionfit-timing-diagnosis-v4.json`,
+`native-rear-motion-fit-comparison-v4.png` and the native
+`human-navigation.mp4`. Source code remains frozen at 5ba34c2; subsequent result
+documentation does not change the tested runtime.

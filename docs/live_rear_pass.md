@@ -187,3 +187,10 @@ complete fields/commands/truth, native video and independent audit:
 - `native-rear-offset12-results-v3.png` and `human-navigation.mp4` show recorded
   native results. All three functional configurations passed the documented
   unit/Ruff/virtual checks; virtual passes never overwrite the native failures.
+
+The subsequently authorized diagnosis is recorded in
+`docs/rear_pass_diagnosis.md`. A bounded source-window encounter fit improved
+classification continuity but its new native trial also failed the unchanged
+walking arc (0.188876 m), despite actual arrival and physical checks passing.
+The previously accepted checked stop/go fixture remains the practical choice;
+rear development is optional and all original reports remain unchanged.

@@ -1900,3 +1900,26 @@
   Native acceptance is pending at this freeze; stationary gate precedes wheels.
   Preserve all old failures and main/long-service/PR117 holds. See
   docs/rear_pass_diagnosis.md.
+
+- At5ba34c2 the source-window classification correction passed2,671 units/Ruff/
+  compile/CLI and independent+own60-frame zero-wheel gates. Native original
+  report still FAILED timed arc:.188876m<.20m despite3/3goal21.65s,.730241m
+  braking-inclusive clearance,.002659m stop drift,.260822 analytical margin and
+  216/216 containment(max center error.162700m within unchanged.25m prior).
+  Keep30rear fields/19accepted plans/18walking sources separate from acceptance;
+  original121joined rows2.016667s versus conservative independent120rows2s has
+  an explicitly reproduced one-boundary-row floating-clock companion, with
+  original report unchanged. All source/vector/policy/scene/kinetic/physical
+  checks pass separately;237fits independently reproduce original epochs/raw
+  motion.68visuals/14,514assessments/ZERO fresh complete factors, prior/oracle/
+  clock/renderer limits remain. Classification continuity improved but onset
+  was later, raw context still rejected17.3 and bounded search selected no
+  complete productive reference17.6 after checks/quality/utility; exact field
+  revalidation stops remain necessary.
+  All-phase bend.364912m peaked1.983333s after crossing, not a passing metric.
+  Per user fallback, retain the previously accepted left-to-right10s checked
+  wait/go fixture for perpendicular crossing, normal guidance for parallel
+  departure. This is not new8s/mirrored/late wait-go validation. Rear fit stays
+  explicit/experimental and draft; no mirrored wheels or hold releases follow.
+  Preserve all four original rear failures, main/long-service/PR117 holds and
+  docs/rear_pass_diagnosis.md. Do not chase the metric with offsets/relaxed checks.
