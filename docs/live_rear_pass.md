@@ -122,6 +122,6 @@ reports/SHAs stay intact, and any corrected-label companion is separate.
 
 The1.2m target configuration passed2,651 unit tests in87.61s, Ruff/compilation,
 and all three early8s ORACLE curved/arrival cases. Their walking arcs were
-.480649/.478677/.480649m (virtual only). The original native-input replay still
+.480649/.478668/.480649m (virtual only). The original native-input replay still
 selected a bounded(.2,.6) first command with all checks: a larger target is not
 a forced larger command. Native final tuning acceptance is pending.
