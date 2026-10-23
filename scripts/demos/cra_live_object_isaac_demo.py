@@ -37,6 +37,10 @@ parser.add_argument("--zero-tangential-bias-ablation", action="store_true",
                     help="explicit wait-and-go field lambda=0; physical CRA and normal repulsion unchanged")
 parser.add_argument('--checked-wait-transition', action='store_true',
                     help='separate live stopped-field admission ablation; requires encounter guidance/comparison')
+parser.add_argument('--checked-rear-pass-reference', action='store_true',
+                    help='separate live sensor-tracked checked rear-reference experiment, with admitted-wait fallback')
+parser.add_argument('--rear-existing-turn-heading', type=float, default=None,
+                    help='optional current trailing-turn continuation threshold in radians; behavior assumption only')
 parser.add_argument('--encounter-guidance-ablation', action='store_true',
                     help='selected observed crossing human lambda0, normal lambda1.25 for parallel/other occupancy; separate from primary')
 parser.add_argument('--encounter-comparison', action='store_true',
@@ -248,6 +252,11 @@ if args.zero_tangential_bias_ablation and (args.crossing_strategy != "yield-then
     parser.error("zero tangential bias is a separate wait-and-go ablation with zero extra tracking weight/fraction")
 if args.checked_wait_transition and (not args.encounter_guidance_ablation or not args.encounter_comparison):
     parser.error("checked waiting requires encounter guidance and explicit encounter comparison")
+if args.checked_rear_pass_reference and (not args.checked_wait_transition or args.waypoint_mode != 'guides'):
+    parser.error('live checked rear reference requires checked waiting and explicit route guides')
+if args.rear_existing_turn_heading is not None and (not args.checked_rear_pass_reference
+    or not math.isfinite(args.rear_existing_turn_heading) or not 0 < args.rear_existing_turn_heading < math.pi/2):
+    parser.error('rear turn continuation requires the explicit live rear mode and a threshold in (0,pi/2)')
 if args.encounter_guidance_ablation and (args.zero_tangential_bias_ablation
     or args.crossing_strategy != 'yield-then-go' or not args.human_observed_passing_target
     or args.human_body_envelope_radius is None or args.guidance_tracking_weight != 0
@@ -1158,6 +1167,13 @@ def main():
                 args.guidance_tangent_velocity_fraction, args.guidance_tangent_basis,
                 minimum_reference_speed_fraction=args.guidance_reference_minimum_speed_fraction))
     control = SafeSAGEControlRuntime(mpc=mpc, backup_filter=backup, crossing_strategy=args.crossing_strategy)
+    if args.checked_rear_pass_reference:
+        from robot.evaluation.live_rear_pass import LiveRearPassControlRuntime
+        from robot.safety.checked_rear_pass_reference import CheckedRearPassReferenceConfig
+        perception.live_rear_pass_config = CheckedRearPassReferenceConfig(
+            existing_turn_heading_radians=args.rear_existing_turn_heading)
+        control = LiveRearPassControlRuntime(mpc=mpc, backup_filter=backup,
+            config=perception.live_rear_pass_config)
     staged_perception = None
     if args.checked_wait_transition:
         from robot.evaluation.live_checked_wait import StagedLivePerception
@@ -1798,7 +1814,7 @@ def main():
             data[1],
             data[2],
             initial_command_guess=data[3],
-            **({"nominal_goal_grid_xy": data[4]} if args.guidance_tracking_weight > 0 else {}),
+            **({"nominal_goal_grid_xy": data[4]} if args.guidance_tracking_weight > 0 or args.checked_rear_pass_reference else {}),
             profile_path=args.output / "profiles" / f"planner-{data[2].sensor_frame_id}.pstats"
             if args.profile_runtime else None,
         )
@@ -2108,7 +2124,8 @@ def main():
                     frame_id=plan_id,
                     sensor_timestamp_seconds=now,
                     packet=(current.copy(), sequence, latest.field, warm,
-                        np.array(ROUTE[waypoint.current_waypoint_index], dtype=float) if args.guidance_tracking_weight > 0 else None),
+                        np.array([nominal.target_waypoint.x, nominal.target_waypoint.y]) if args.checked_rear_pass_reference
+                        else np.array(ROUTE[waypoint.current_waypoint_index], dtype=float) if args.guidance_tracking_weight > 0 else None),
                 )
                 plan_waypoints[plan_id] = waypoint.current_waypoint_index
                 plan_id += 1
@@ -2246,7 +2263,8 @@ def main():
     if args.encounter_guidance_ablation:
         from robot.evaluation.encounter_policy_validation import summarize_encounter_policy
         encounter_validation = summarize_encounter_policy(live_fields,
-            require_transition=args.human_continuing_away, checked_wait=args.checked_wait_transition)
+            require_transition=args.human_continuing_away, checked_wait=args.checked_wait_transition,
+            checked_rear=args.checked_rear_pass_reference)
         completed = completed and encounter_validation['passed']
         save_json('encounter-guidance-validation.json', encounter_validation)
     if human is not None:
@@ -2254,7 +2272,7 @@ def main():
         human_validation = summarize_human_navigation(live_fields, human.records,
             mode=args.restaurant_human, upper_continuation=args.human_upper_continuation,
             crossing_direction=args.human_crossing_direction, continuing_away=args.human_continuing_away)
-        if args.crossing_strategy == "yield-then-go":
+        if args.crossing_strategy == "yield-then-go" and not args.checked_rear_pass_reference:
             # Waiting deliberately need not include simultaneous translation.
             # Keep the original motion benchmark and its result untouched.
             wait_checks = {key: value for key, value in human_validation["checks"].items()
@@ -2300,9 +2318,16 @@ def main():
             else:
                 from robot.evaluation.crossing_strategy import summarize_crossing_strategy
                 strategy_validation = summarize_crossing_strategy(passing_validation, human.records,
-                    strategy=args.crossing_strategy, nominal_goal_world_xy=passing_goal,
+                    strategy="rear-pass-or-yield" if args.checked_rear_pass_reference else args.crossing_strategy,
+                    nominal_goal_world_xy=passing_goal,
                     continuing_away=args.human_continuing_away)
-                if args.crossing_strategy == "yield-then-go":
+                if args.checked_rear_pass_reference:
+                    from robot.evaluation.live_rear_pass import summarize_rear_execution
+                    execution = summarize_rear_execution(plan_events, commands, human.records,
+                        navigation_start_time=start_sim)
+                    strategy_validation["rear_reference_execution"] = execution
+                    strategy_validation["passed"] &= execution["passed"]
+                if args.crossing_strategy == "yield-then-go" and not args.checked_rear_pass_reference:
                     from robot.evaluation.crossing_strategy import summarize_wait_execution
                     execution = summarize_wait_execution(plan_events, human.records)
                     strategy_validation["wait_execution"] = execution
@@ -2516,10 +2541,12 @@ def main():
         "wall_seconds": time.perf_counter() - start_wall,
         "navigation_simulation_seconds": now - start_sim,
         "controller_scope": "circular_velocity_aware_cbf_nominal_omega_no_mpc; shadow_CRA_fields_for_matched_perception" if args.experiment_baseline == "geometric_velocity_cbf" else "checked_guidance_local_path_ablation_with_exact_DTCBF_geometry_and_analytical_CBF" if args.guidance_tracking_weight > 0 else "online_unicycle_MPC_exact_DTCBF_geometry_and_analytical_CBF",
-        "crossing_strategy_ablation": args.crossing_strategy,
+        "crossing_strategy_ablation": "live-checked-rear-or-wait" if args.checked_rear_pass_reference else args.crossing_strategy,
         "zero_tangential_bias_ablation": args.zero_tangential_bias_ablation,
         "encounter_guidance_ablation": args.encounter_guidance_ablation,
         "checked_wait_transition_enabled": args.checked_wait_transition,
+        "checked_rear_pass_reference_enabled": args.checked_rear_pass_reference,
+        "rear_existing_turn_heading_radians": args.rear_existing_turn_heading,
         "checked_wait_current_pose_admissions": checked_wait_admissions,
         "encounter_comparison": args.encounter_comparison,
         "physical_CRA_lambda": 1.25,

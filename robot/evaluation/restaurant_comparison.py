@@ -32,6 +32,8 @@ def planner_result_diagnostic(result):
            if result is not None and hasattr(result, "guidance_tracking") else {}),
         **({"crossing_maneuver_ablation": result.crossing_maneuver}
            if result is not None and hasattr(result, "crossing_maneuver") else {}),
+        **({"rear_pass_reference_ablation": result.rear_pass_reference}
+           if result is not None and hasattr(result, "rear_pass_reference") else {}),
     }
 
 

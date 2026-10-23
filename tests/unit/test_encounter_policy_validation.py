@@ -85,6 +85,31 @@ def test_guarded_variant_requires_both_source_and_current_pose_admission():
         assert not summarize_encounter_policy(broken, checked_wait=True)["passed"]
 
 
+@pytest.mark.parametrize('corruption', [None, 'clock', 'source', 'id', 'lambda'])
+def test_separate_rear_policy_audit_keeps_normal_guidance_only_with_current_source_behavior(corruption):
+    r = guarded_records()
+    for record in r[:3]:
+        d = record['diagnostics']
+        d['crossing_yield_track_ids'] = []
+        d['rear_pass_reference_track_ids'] = [7]
+        row = d['applied_field_policies'][0]
+        row['lambda'] = 1.25
+        row['live_rear_pass_behavior'] = dict(track_id=7, mode='rear',
+            source_timestamp_seconds=record['sensor_timestamp'], original_selection_timestamp_seconds=1.)
+        d['checked_wait_transition'] = None
+    row = r[0]['diagnostics']['applied_field_policies'][0]
+    if corruption == 'clock':
+        row['live_rear_pass_behavior']['original_selection_timestamp_seconds'] = 0.
+    if corruption == 'source':
+        row['live_rear_pass_behavior']['source_timestamp_seconds'] = 0.
+    if corruption == 'id':
+        r[0]['diagnostics']['rear_pass_reference_track_ids'] = [8]
+    if corruption == 'lambda':
+        row['lambda'] = 0.
+    assert summarize_encounter_policy(r, require_transition=True, checked_wait=True, checked_rear=True)['passed'] == (corruption is None)
+    assert not summarize_encounter_policy(r, checked_wait=True)['passed']
+
+
 @pytest.mark.parametrize("corruption", [None, "source", "ids", "clock", "wrong_lambda"])
 def test_guarded_normal_alternative_requires_original_rejected_candidate_audit(corruption):
     r = guarded_records()

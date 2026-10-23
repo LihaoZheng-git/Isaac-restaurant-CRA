@@ -604,6 +604,7 @@ def assess_all_objects(worker, packet):
     normal_guidance = dict(applied_guidance)
     encounter = copy.deepcopy(getattr(worker, 'encounter_motion', None))
     encounter_audit, yield_ids = None, None
+    rear_ids, rear_route = (), None
     if encounter is not None:
         from robot.evaluation.encounter_guidance import apply_encounter_guidance
         encounter_audit = encounter.update(tracking, robot_xy=packet.robot_position_world_xy,
@@ -612,6 +613,12 @@ def assess_all_objects(worker, packet):
         applied_guidance, baseline_audit, yield_ids = apply_encounter_guidance(
             applied_guidance, baseline_audit, encounter_audit, passing_audit,
             source_time=packet.sensor_timestamp_seconds)
+        if getattr(worker, "live_rear_pass_config", None) is not None:
+            from robot.evaluation.live_rear_pass import adapt_live_rear_guidance
+            applied_guidance, baseline_audit, yield_ids, rear_ids, rear_route = adapt_live_rear_guidance(
+                normal_guidance, applied_guidance, baseline_audit, tracking, packet,
+                anchor=worker.anchor, anchor_yaw=worker.anchor_yaw,
+                crossing_ids=yield_ids, config=worker.live_rear_pass_config)
     if getattr(worker, "zero_tangential_bias_ablation", False):
         from robot.evaluation.crossing_strategy import zero_tangential_bias
         field_guidance_policy, applied_guidance, baseline_audit = zero_tangential_bias(
@@ -708,6 +715,8 @@ def assess_all_objects(worker, packet):
             motion_passing_reference_sides=tuple(sides[k].value for k in sorted(sides)) if passing is not None else (),
             motion_passing_reference_source_timestamp_seconds=passing.encounter[2] if passing is not None and sides else None,
             crossing_yield_track_ids=yield_ids,
+            rear_pass_reference_track_ids=rear_ids,
+            rear_pass_route_direction_grid_xy=rear_route,
         )
         return field, recovery
 
@@ -774,6 +783,8 @@ def assess_all_objects(worker, packet):
         "motion_aware_passing": passing_audit,
         "encounter_motion_classification": encounter_audit,
         "crossing_yield_track_ids": yield_ids,
+        "rear_pass_reference_track_ids": rear_ids,
+        "rear_pass_route_direction_grid_xy": rear_route,
         "checked_wait_transition": transition_audit,
         "motion_passing_reference_track_ids": field.motion_passing_reference_track_ids,
         "human_body_envelope_priors": envelope_audit,

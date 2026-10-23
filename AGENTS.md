@@ -1817,3 +1817,19 @@
   confidence/temporal/classification or waiting gates. See
   docs/live_crossing_coverage.md. Native curved rear-reference/guide acceptance
   and main/long-service/PR117 holds remain separate and unchanged.
+
+- The user now authorizes trying the curved checked rear-reference component in
+  live Isaac. Keep it a separate explicit controller/guide-mode ablation, with
+  world-to-field transforms of current sensor-tracked motion and configured robot
+  route; actor truth remains evaluation only. Only qualified current crossing
+  IDs may request rear/wait behavior. Rear/released modes retain appliedlambda1.25;
+  waitlambda0 still needs the original same-source-pair/current-pose full stopped
+  admission. Preserve every exact/dense/future-analytical/first-CBF, freshness,
+  geometry/containment/clearance, final-arrival/stopping gate and all original
+  source clocks/priors. Three walking-window rear plan sources and actual
+  request-clock-joined translating execution are separate from proposal selection.
+  Start with a separately labeled8s actor fixture, optional.2rad current trailing
+  turn continuation and existing guide lookahead1m/cross-track1.5m; these are
+  behavior/scenario assumptions, not physical evidence or new safety bounds.
+  Preserve old native wait/curved failures and all main/long-service/PR117 holds.
+  Native acceptance is pending; see docs/live_rear_pass.md.

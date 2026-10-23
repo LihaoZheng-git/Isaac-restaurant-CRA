@@ -269,6 +269,8 @@ class SafeSAGERuntimeField:
     motion_passing_reference_sides: tuple[str, ...] = ()
     motion_passing_reference_source_timestamp_seconds: float | None = None
     crossing_yield_track_ids: tuple[int, ...] | None = None
+    rear_pass_reference_track_ids: tuple[int, ...] = ()
+    rear_pass_route_direction_grid_xy: tuple[float, float] | None = None
 
     def __post_init__(self) -> None:
         frame_id = _nonnegative_integer(
@@ -321,6 +323,16 @@ class SafeSAGERuntimeField:
                 or k not in reference_ids for k in yield_ids)):
                 raise ValueError('encounter yielding requires a subset of current selected human IDs')
             object.__setattr__(self, 'crossing_yield_track_ids', yield_ids)
+        rear_ids = tuple(self.rear_pass_reference_track_ids)
+        if (len(set(rear_ids)) != len(rear_ids) or len(rear_ids) > 1
+            or any(isinstance(k, bool) or not isinstance(k, int) or k not in reference_ids for k in rear_ids)
+            or rear_ids and (not sides or self.rear_pass_route_direction_grid_xy is None)):
+            raise ValueError("rear reference requires one currently selected positive track and route context")
+        object.__setattr__(self, "rear_pass_reference_track_ids", rear_ids)
+        if self.rear_pass_route_direction_grid_xy is not None:
+            from robot.safety.encounter_motion import validated_route_direction
+            direction = validated_route_direction(self.rear_pass_route_direction_grid_xy)
+            object.__setattr__(self, "rear_pass_route_direction_grid_xy", tuple(direction))
         if not isinstance(self.label_result, SemanticLabelResult):
             raise TypeError("label_result must be a SemanticLabelResult.")
         if not isinstance(self.pipeline, SafeSAGEFieldPipelineResult):

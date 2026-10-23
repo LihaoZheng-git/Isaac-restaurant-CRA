@@ -43,8 +43,9 @@ def summarize_variant_passing(
     )
 
 
-def summarize_encounter_policy(records, *, require_transition=False, checked_wait=False):
+def summarize_encounter_policy(records, *, require_transition=False, checked_wait=False, checked_rear=False):
     zero_rows = parallel_rows = 0
+    rear_rows = 0
     rejected_wait_rows = 0
     errors = []
     previous = None
@@ -59,6 +60,27 @@ def summarize_encounter_policy(records, *, require_transition=False, checked_wai
         expected_yield = {
             k for k in selected if tracks.get(k, {}).get("classification") == "crossing"
         }
+        if checked_rear:
+            decisions = {}
+            for row in detail.get("applied_field_policies", ()):
+                decision = row.get("live_rear_pass_behavior")
+                if decision is None:
+                    continue
+                key = decision.get("track_id")
+                if (key not in expected_yield
+                    or decision.get("source_timestamp_seconds") != t
+                    or decision.get("original_selection_timestamp_seconds") != passing.get("encounter_selected_timestamp")
+                    or decision.get("mode") not in {"rear", "wait", "none"}
+                    or key in decisions and decisions[key] != decision):
+                    errors.append(dict(time=t, reason="rear_behavior_source_or_owner_mismatch"))
+                decisions[key] = decision
+            if set(decisions) != expected_yield:
+                errors.append(dict(time=t, reason="missing_current_rear_behavior"))
+            expected_rear = {k for k, d in decisions.items() if d["mode"] == "rear"}
+            if set(detail.get("rear_pass_reference_track_ids", ())) != expected_rear:
+                errors.append(dict(time=t, reason="rear_reference_ids_mismatch"))
+            rear_rows += bool(expected_rear)
+            expected_yield = {k for k, d in decisions.items() if d["mode"] == "wait"}
         if checked_wait and expected_yield:
             audit = detail.get("checked_wait_transition") or {}
             source_valid = (
@@ -134,13 +156,15 @@ def summarize_encounter_policy(records, *, require_transition=False, checked_wai
     checks = dict(
         current_ordered_sources_and_bounded_policy=bool(records) and not errors,
         crossing_zero_and_parallel_normal_observed=not require_transition
-        or zero_rows >= 3
+        or (zero_rows + rear_rows if checked_rear else zero_rows) >= 3
         and parallel_rows >= 3,
     )
     return dict(
         passed=all(checks.values()),
         checks=checks,
         selected_crossing_zero_fields=zero_rows,
+        selected_crossing_rear_reference_fields=rear_rows,
+        checked_rear_reference_enabled=checked_rear,
         current_parallel_classifications=parallel_rows,
         rejected_wait_normal_fields=rejected_wait_rows,
         checked_wait_transition_enabled=checked_wait,
