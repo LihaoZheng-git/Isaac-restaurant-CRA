@@ -65,6 +65,10 @@ new yield preference, the earlier global-zero/yield variant and the new
 encounter-dependent/yield variant. Their actor onset (11.5 s), geometry, nominal
 waypoints, risk/flux and numerical budgets are identical. This compares complete
 controller variants, not a causal lambda-only intervention.
+The native `--encounter-comparison` mode requires all arrival, safety, source,
+identity and flux checks while reporting the original curved-bypass score
+separately: the primary baseline is not required to demonstrate the proposed
+curved passing behavior. Legacy demo acceptance remains unchanged.
 
 The first matrix is **ORACLE virtual control**: authored moving disks, class
 identity/velocity and risk, no visual estimation or physical wheels. It uses

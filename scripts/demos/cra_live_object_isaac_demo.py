@@ -32,6 +32,8 @@ parser.add_argument("--zero-tangential-bias-ablation", action="store_true",
                     help="explicit wait-and-go field lambda=0; physical CRA and normal repulsion unchanged")
 parser.add_argument('--encounter-guidance-ablation', action='store_true',
                     help='selected observed crossing human lambda0, normal lambda1.25 for parallel/other occupancy; separate from primary')
+parser.add_argument('--encounter-comparison', action='store_true',
+                    help='explicit variant comparison: arrival/safety/source gates required, curved-bypass metrics reported separately for every variant')
 parser.add_argument("--guidance-tracking-weight", type=float, default=0.0,
                     help="separate checked Laplace local-path MPC ablation; zero preserves primary")
 parser.add_argument("--mpc-horizon-steps", type=int,
@@ -239,6 +241,11 @@ if args.encounter_guidance_ablation and (args.zero_tangential_bias_ablation
     or args.human_body_envelope_radius is None or args.guidance_tracking_weight != 0
     or args.guidance_tangent_velocity_fraction != 0):
     parser.error('encounter guidance requires verified-human yield mode and zero extra tracking; global zero bias is separate')
+if args.encounter_comparison and (args.restaurant_human != 'crossing'
+    or not args.motion_aware_passing or not args.human_observed_passing_target
+    or not args.human_continuing_away or args.guidance_tracking_weight != 0
+    or args.guidance_tangent_velocity_fraction != 0):
+    parser.error('encounter comparison requires the explicit bare-human mixed fixture with no extra tracking objective')
 if args.guidance_tracking_weight > 0 and args.experiment_baseline == "geometric_velocity_cbf":
     parser.error("guidance tracking is a separate MPC ablation, unavailable for geometric CBF")
 if not math.isfinite(args.guidance_max_heading_bias_degrees) or not 0 < args.guidance_max_heading_bias_degrees < 90:
@@ -2235,7 +2242,17 @@ def main():
                     nominal_goal_world_xy=passing_goal, continuing_away=args.human_continuing_away,
                     encounter_guidance=True)
             if args.crossing_strategy == "legacy":
-                completed = completed and passing_validation["passed"]
+                if args.encounter_comparison:
+                    # A primary baseline need not exhibit the proposed curved
+                    # bypass to complete a safety/arrival comparison. Retain
+                    # its full original failed curved report separately.
+                    checks = {k:v for k,v in passing_validation['checks'].items()
+                        if k not in {'visible_trailing_side_arc','passes_behind_moving_actor'}}
+                    passing_validation['comparison_acceptance'] = dict(checks=checks,passed=all(checks.values()),
+                        scope='separate complete controller-variant comparison; curved passage is measured, not required of the primary baseline')
+                    completed = completed and all(checks.values())
+                else:
+                    completed = completed and passing_validation["passed"]
             else:
                 from robot.evaluation.crossing_strategy import summarize_crossing_strategy
                 strategy_validation = summarize_crossing_strategy(passing_validation, human.records,
@@ -2442,6 +2459,7 @@ def main():
         "crossing_strategy_ablation": args.crossing_strategy,
         "zero_tangential_bias_ablation": args.zero_tangential_bias_ablation,
         "encounter_guidance_ablation": args.encounter_guidance_ablation,
+        "encounter_comparison": args.encounter_comparison,
         "physical_CRA_lambda": 1.25,
         "fixed_lambda": None if args.encounter_guidance_ablation else 0. if args.zero_tangential_bias_ablation else 1.25,
         "plume_control": args.plume_control,
