@@ -88,6 +88,28 @@ def test_native_field_no_current_crossing_does_not_borrow_old_reference(monkeypa
         replace(result.field, rear_pass_reference_track_ids=(999,))
 
 
+def test_encounter_fit_state_is_transactional_and_no_human_defaults_are_identical():
+    from robot.evaluation.live_checked_wait import StagedLivePerception
+    from robot.safety.encounter_motion import EncounterMotionClassifier
+    from robot.safety.encounter_motion_estimate import EncounterMotionEstimate
+    ordinary, experimental = configured(), configured()
+    ordinary.encounter_motion, experimental.encounter_motion = EncounterMotionClassifier(), EncounterMotionClassifier()
+    experimental.rear_encounter_motion_estimate = EncounterMotionEstimate()
+    a, b = ordinary(packet()), experimental(packet())
+    np.testing.assert_array_equal(a.field.pipeline.h_full.values, b.field.pipeline.h_full.values)
+    assert a.objects[0].policy == b.objects[0].policy
+    estimator = experimental.rear_encounter_motion_estimate
+    staged = StagedLivePerception(experimental)
+    proposed = staged(replace(packet(2, 1.1)))
+    assert experimental.rear_encounter_motion_estimate is estimator
+    assert estimator.last_timestamp == 1.
+    staged.discard()
+    proposed = staged(packet(3, 1.2))
+    staged.accept(proposed)
+    assert experimental.rear_encounter_motion_estimate is not estimator
+    assert experimental.rear_encounter_motion_estimate.last_timestamp == 1.2
+
+
 def test_native_runtime_primary_identity_without_qualified_crossing():
     from test_safe_sage_runtime import make_runtime, make_observation, make_provider
     from test_checked_rear_pass_reference import search

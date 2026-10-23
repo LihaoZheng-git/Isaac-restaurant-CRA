@@ -1883,3 +1883,20 @@
   first-direction acceptance, no main/long-service/PR117 hold release. Further
   timed-curvature work needs a separately discussed encounter/planning scope,
   not endless parameter tuning or relaxed checks. See docs/live_rear_pass.md.
+
+- The user renewed authorization to diagnose/fix rear passing, retaining the
+  accepted stop/go fallback. Recorded source17.2--17.7 centroid-motion ambiguity
+  interrupted the rear reference and ordinary commands reversed its trailing
+  turn; this is a specific observed contributor, not sole causation. A separate
+  --rear-encounter-motion-fit ablation uses an original-source0.4s centroid fit
+  ONLY for encounter classification (>=4 samples/.25s span, <=.25s gaps,
+  >=20 current points, established identity, <=.06m residual, no opposing current
+  velocity). Keep every original sample epoch and the inferred-average basis;
+  gaps/missing identity discard history and rejection uses raw current motion,
+  never a borrowed crossing label. Stage/commit its state transactionally.
+  CRA kinetic inputs, occupancy/body priors, passing selection, raw transverse
+  rear-context and every exact/analytical/freshness/physical gate stay unchanged.
+  The fit may delay genuine transitions and is not general human prediction.
+  Native acceptance is pending at this freeze; stationary gate precedes wheels.
+  Preserve all old failures and main/long-service/PR117 holds. See
+  docs/rear_pass_diagnosis.md.

@@ -603,13 +603,29 @@ def assess_all_objects(worker, packet):
     field_guidance_policy = worker.guidance_policy
     normal_guidance = dict(applied_guidance)
     encounter = copy.deepcopy(getattr(worker, 'encounter_motion', None))
+    motion_estimate = copy.deepcopy(getattr(worker, 'rear_encounter_motion_estimate', None))
+    motion_estimate_audit = None
     encounter_audit, yield_ids = None, None
     rear_ids, rear_route = (), None
     if encounter is not None:
         from robot.evaluation.encounter_guidance import apply_encounter_guidance
-        encounter_audit = encounter.update(tracking, robot_xy=packet.robot_position_world_xy,
-            goal_xy=packet.waypoint_world_xy, human_track_ids=tuple(r['track_id'] for r in envelope_audit),
+        human_ids = tuple(r['track_id'] for r in envelope_audit)
+        encounter_tracking = tracking
+        if motion_estimate is not None:
+            estimates, motion_estimate_audit = motion_estimate.update(tracking, human_ids)
+            # Policy-only copy: physical kinetic/geometry/body-coverage inputs,
+            # passing selection and rear target still use original tracking.
+            encounter_tracking = replace(tracking, tracked_obstacles=tuple(
+                replace(track, velocity_world_xy=estimates[track.track_id])
+                if track.track_id in estimates else track for track in tracks))
+        encounter_audit = encounter.update(encounter_tracking, robot_xy=packet.robot_position_world_xy,
+            goal_xy=packet.waypoint_world_xy, human_track_ids=human_ids,
             nominal_route_direction_world_xy=nominal_direction)
+        if motion_estimate_audit is not None:
+            for key, row in encounter_audit['tracks'].items():
+                row['policy_motion_fit'] = motion_estimate_audit['tracks'][key]
+                if row['policy_motion_fit']['accepted']:
+                    row['basis'] = 'inferred original-source-window centroid velocity for encounter policy; configured nominal route segment'
         applied_guidance, baseline_audit, yield_ids = apply_encounter_guidance(
             applied_guidance, baseline_audit, encounter_audit, passing_audit,
             source_time=packet.sensor_timestamp_seconds)
@@ -760,6 +776,8 @@ def assess_all_objects(worker, packet):
         worker.passing_visual_selection_evidence = passing_visual_evidence
     if encounter is not None:
         worker.encounter_motion = encounter
+    if motion_estimate is not None:
+        worker.rear_encounter_motion_estimate = motion_estimate
     if envelope_memory is not None:
         worker.human_body_envelope = envelope_memory
     if fragment_memory is not None:
@@ -782,6 +800,7 @@ def assess_all_objects(worker, packet):
         "applied_field_policies": baseline_audit,
         "motion_aware_passing": passing_audit,
         "encounter_motion_classification": encounter_audit,
+        "rear_encounter_motion_estimate": motion_estimate_audit,
         "crossing_yield_track_ids": yield_ids,
         "rear_pass_reference_track_ids": rear_ids,
         "rear_pass_route_direction_grid_xy": rear_route,
