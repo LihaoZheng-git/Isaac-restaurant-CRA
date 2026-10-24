@@ -1923,3 +1923,20 @@
   explicit/experimental and draft; no mirrored wheels or hold releases follow.
   Preserve all four original rear failures, main/long-service/PR117 holds and
   docs/rear_pass_diagnosis.md. Do not chase the metric with offsets/relaxed checks.
+
+- The user explicitly renewed rear-performance work. The next separate opt-in
+  --rear-consistent-motion-fit uses the SAME validated original-source window
+  estimate for classification and rear maneuver policy, addressing the previous
+  mixed raw/fitted gate. Immutable records independently validate observed fit
+  samples and current source/identity/centroid/counts; preserve raw tracking,
+  CRA kinetic inputs, body geometry and initial passing selection. This changes
+  only the new policy vector; legacy raw transverse checks remain default.
+  --rear-turn-first-fallback prefers the old first-translation quality but may
+  select a fully exact/dense/future-analytical/first-CBF-checked productive
+  turn-first reference ONLY when no preferred reference passes. Same bounded
+  pool, positive utility/full-horizon translation, original command/field
+  freshness, current-pose verification and stopping remain. Both options are
+  disabled by default; no geometry/prior/lambda/nominal/acceptance changes.
+  Native acceptance pending; new stationary and own60 gates precede wheels.
+  Keep every old failed report and main/long-service/PR117 holds. See
+  docs/rear_pass_continuity.md.

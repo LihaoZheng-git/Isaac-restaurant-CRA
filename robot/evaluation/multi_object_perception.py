@@ -605,6 +605,7 @@ def assess_all_objects(worker, packet):
     encounter = copy.deepcopy(getattr(worker, 'encounter_motion', None))
     motion_estimate = copy.deepcopy(getattr(worker, 'rear_encounter_motion_estimate', None))
     motion_estimate_audit = None
+    rear_policy_motion = ()
     encounter_audit, yield_ids = None, None
     rear_ids, rear_route = (), None
     if encounter is not None:
@@ -626,6 +627,11 @@ def assess_all_objects(worker, packet):
                 row['policy_motion_fit'] = motion_estimate_audit['tracks'][key]
                 if row['policy_motion_fit']['accepted']:
                     row['basis'] = 'inferred original-source-window centroid velocity for encounter policy; configured nominal route segment'
+            if getattr(worker, 'rear_consistent_motion_fit', False):
+                from robot.safety.encounter_motion_estimate import EncounterPolicyMotion
+                rear_policy_motion = tuple(EncounterPolicyMotion.from_diagnostic(row, motion_estimate.config)
+                    for key, row in motion_estimate_audit['tracks'].items()
+                    if row['accepted'] and key in sides)
         applied_guidance, baseline_audit, yield_ids = apply_encounter_guidance(
             applied_guidance, baseline_audit, encounter_audit, passing_audit,
             source_time=packet.sensor_timestamp_seconds)
@@ -634,7 +640,8 @@ def assess_all_objects(worker, packet):
             applied_guidance, baseline_audit, yield_ids, rear_ids, rear_route = adapt_live_rear_guidance(
                 normal_guidance, applied_guidance, baseline_audit, tracking, packet,
                 anchor=worker.anchor, anchor_yaw=worker.anchor_yaw,
-                crossing_ids=yield_ids, config=worker.live_rear_pass_config)
+                crossing_ids=yield_ids, config=worker.live_rear_pass_config,
+                policy_motion=rear_policy_motion)
     if getattr(worker, "zero_tangential_bias_ablation", False):
         from robot.evaluation.crossing_strategy import zero_tangential_bias
         field_guidance_policy, applied_guidance, baseline_audit = zero_tangential_bias(
@@ -733,6 +740,7 @@ def assess_all_objects(worker, packet):
             crossing_yield_track_ids=yield_ids,
             rear_pass_reference_track_ids=rear_ids,
             rear_pass_route_direction_grid_xy=rear_route,
+            rear_pass_policy_motion=rear_policy_motion,
         )
         return field, recovery
 
@@ -801,6 +809,7 @@ def assess_all_objects(worker, packet):
         "motion_aware_passing": passing_audit,
         "encounter_motion_classification": encounter_audit,
         "rear_encounter_motion_estimate": motion_estimate_audit,
+        "rear_policy_motion_estimates": [m.diagnostic() for m in rear_policy_motion],
         "crossing_yield_track_ids": yield_ids,
         "rear_pass_reference_track_ids": rear_ids,
         "rear_pass_route_direction_grid_xy": rear_route,

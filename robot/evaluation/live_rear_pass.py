@@ -27,7 +27,7 @@ def world_to_grid_rotation(yaw):
     return np.array([[c, s], [-s, c]])
 
 
-def live_track_context(field, track_id):
+def live_track_context(field, track_id, *, use_policy_motion=True):
     """Reject absent/weak/stale geometry rather than promoting a retained label."""
     source = field.sensor_timestamp_seconds
     selection = field.motion_passing_reference_source_timestamp_seconds
@@ -44,11 +44,17 @@ def live_track_context(field, track_id):
     track = tracks[0]
     position = rotation @ (np.asarray(track.centroid_world_xy) - field.anchor_position_world_xy)
     velocity = rotation @ np.asarray(track.velocity_world_xy)
+    estimates = [m for m in getattr(field, 'rear_pass_policy_motion', ()) if m.track_id == track_id]
+    if len(estimates) > 1:
+        raise ValueError("ambiguous source-window rear policy motion")
+    if estimates and use_policy_motion:
+        estimates[0].validate_current_track(track, source)
+        velocity = rotation @ np.asarray(estimates[0].velocity_world_xy)
     return position, velocity
 
 
 def adapt_live_rear_guidance(normal, applied, rows, tracking, packet, *,
-                            anchor, anchor_yaw, crossing_ids, config):
+                            anchor, anchor_yaw, crossing_ids, config, policy_motion=()):
     """Choose rear/checked-wait/release using current source pose and motion.
 
     Only the wait preference retains encounter lambda0. Rear/released/invalid
@@ -63,6 +69,7 @@ def adapt_live_rear_guidance(normal, applied, rows, tracking, packet, *,
         anchor_position_world_xy=np.asarray(anchor), anchor_yaw=anchor_yaw,
         sensor_timestamp_seconds=packet.sensor_timestamp_seconds,
         tracking_result=tracking,
+        rear_pass_policy_motion=policy_motion,
         motion_passing_reference_track_ids=tuple(crossing_ids),
         motion_passing_reference_sides=("selected",) if crossing_ids else (),
         motion_passing_reference_source_timestamp_seconds=next((
@@ -85,6 +92,8 @@ def adapt_live_rear_guidance(normal, applied, rows, tracking, packet, *,
         decisions[key] = dict(decision, track_id=key,
             source_timestamp_seconds=packet.sensor_timestamp_seconds,
             original_selection_timestamp_seconds=context_field.motion_passing_reference_source_timestamp_seconds)
+        decisions[key]['motion_policy_estimate'] = next(
+            (m.diagnostic() for m in policy_motion if m.track_id == key), None)
     wait_ids = tuple(k for k, d in decisions.items() if d["mode"] == "wait")
     rear_ids = tuple(k for k, d in decisions.items() if d["mode"] == "rear")
     for row in audit:
@@ -131,6 +140,7 @@ class LiveRearPassControlRuntime(SafeSAGEControlRuntime):
         ids = field.rear_pass_reference_track_ids
         if len(ids) == 1:
             position, velocity = live_track_context(field, ids[0])
+            _, raw_velocity = live_track_context(field, ids[0], use_policy_motion=False)
             search = search_checked_rear_pass_reference(self.mpc, initial,
                 nominal_goal_grid_xy, position, velocity,
                 field.rear_pass_route_direction_grid_xy,
@@ -141,7 +151,9 @@ class LiveRearPassControlRuntime(SafeSAGEControlRuntime):
                 config=self.rear_pass_config)
             audit.update(search.diagnostics, track_id=ids[0],
                          observed_centroid_grid_xy=position.tolist(),
-                         observed_velocity_grid_xy=velocity.tolist(),
+                         observed_velocity_grid_xy=raw_velocity.tolist(),
+                         policy_velocity_grid_xy=velocity.tolist(),
+                         motion_policy_estimate=next((m.diagnostic() for m in getattr(field, 'rear_pass_policy_motion', ()) if m.track_id == ids[0]), None),
                          route_direction_grid_xy=field.rear_pass_route_direction_grid_xy)
             if search.trajectory is not None:
                 value = search.trajectory

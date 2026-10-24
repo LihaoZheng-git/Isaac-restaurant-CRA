@@ -135,6 +135,54 @@ def test_world_rotation_does_not_apply_translation_to_velocity():
 
 
 @pytest.mark.parametrize('sign', [-1, 1])
+def test_consistent_fit_prevents_mixed_motion_rear_context_without_changing_raw_tracking(sign):
+    from robot.safety.encounter_motion_estimate import EncounterPolicyMotion, EncounterMotionEstimateConfig
+    raw, fitted = np.array([sign*.26, -.38]), np.array([sign*.5, -.1])
+    center = np.array([10.-sign*.5, 23.3])
+    times = np.array([1.6,1.7,1.8,1.9,2.])
+    positions = center+(times-2.)[:,None]*fitted
+    estimate = EncounterPolicyMotion(7,tuple(times),tuple(map(tuple,positions)),tuple(raw),tuple(fitted),30,3,EncounterMotionEstimateConfig())
+    tracked = SimpleNamespace(timestamp_seconds=2.,tracked_obstacles=[track(position=tuple(center),velocity=tuple(raw))])
+    source = SimpleNamespace(sensor_timestamp_seconds=2.,robot_position_world_xy=(10.,20.),robot_yaw=np.pi/2,
+        waypoint_world_xy=(10.,23.9),nominal_route_direction_world_xy=(0.,1.))
+    normal, rows, classification, passing = inputs()
+    applied, rows, crossing = apply_encounter_guidance(normal, rows, classification, passing, source_time=2.)
+    kwargs = dict(anchor=np.array([10.,20.]),anchor_yaw=np.pi/2,crossing_ids=crossing,
+        config=CheckedRearPassReferenceConfig())
+    _, old_rows, _, old_rear, _ = adapt_live_rear_guidance(normal,applied,rows,tracked,source,**kwargs)
+    _, new_rows, _, new_rear, _ = adapt_live_rear_guidance(normal,applied,rows,tracked,source,
+        policy_motion=(estimate,),**kwargs)
+    assert not old_rear and new_rear == (7,)
+    assert next(r['live_rear_pass_behavior'] for r in old_rows if 'live_rear_pass_behavior' in r)['mode'] == 'none'
+    decision = next(r['live_rear_pass_behavior'] for r in new_rows if 'live_rear_pass_behavior' in r)
+    np.testing.assert_allclose(decision['rear_direction'],(0.,sign),atol=1e-12)
+    assert decision['motion_policy_estimate']['status'] == 'inferred'
+    np.testing.assert_array_equal(tracked.tracked_obstacles[0].velocity_world_xy,raw)
+
+
+def test_runtime_field_rejects_policy_motion_with_unselected_or_changed_source():
+    from test_safe_sage_runtime import make_runtime,make_observation,make_provider
+    from robot.safety.encounter_motion_estimate import EncounterPolicyMotion,EncounterMotionEstimateConfig
+    runtime=make_runtime()
+    runtime.initialize(make_observation(1,2.),make_provider())
+    f=runtime.field
+    # Provide one established current track in this numeric metadata fixture.
+    t=replace(f.tracking_result.tracked_obstacles[0],point_count=30,observation_count=3,matched_previous_track=True)
+    tracking=replace(f.tracking_result,tracked_obstacles=(t,))
+    times=(1.6,1.7,1.8,1.9,2.)
+    estimate=EncounterPolicyMotion(t.track_id,times,tuple(t.centroid_world_xy for _ in times),
+        t.velocity_world_xy,(0.,0.),30,3,EncounterMotionEstimateConfig())
+    f=replace(f,tracking_result=tracking)
+    with pytest.raises(ValueError,match='currently selected'):
+        replace(f,rear_pass_policy_motion=(estimate,))
+    accepted=replace(f,motion_passing_reference_track_ids=(t.track_id,),motion_passing_reference_sides=('left',),
+        motion_passing_reference_source_timestamp_seconds=1.9,rear_pass_policy_motion=(estimate,))
+    assert accepted.rear_pass_policy_motion == (estimate,)
+    with pytest.raises(ValueError,match='original current'):
+        replace(accepted,sensor_timestamp_seconds=2.1,tracking_result=replace(tracking,timestamp_seconds=2.1))
+
+
+@pytest.mark.parametrize('sign', [-1, 1])
 def test_native_numeric_search_selects_translating_checked_reference_with_rotated_tracks(monkeypatch, sign):
     from test_checked_wait_transition import context
     from robot.safety.safe_sage_unicycle_cbf_filter import SafeSAGEUnicycleCBFFilter

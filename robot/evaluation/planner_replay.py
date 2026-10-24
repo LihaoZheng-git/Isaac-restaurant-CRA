@@ -61,4 +61,22 @@ def save_planner_replay(directory, control, request, result):
         (directory / "first-selected.pickle").write_bytes(payload)
         (directory / "first-selected.json").write_text(
             json.dumps(selected_metadata, indent=2, allow_nan=False), encoding="utf-8")
+    rear = getattr(result, 'rear_pass_reference', {})
+    # Two bounded failure/continuation snapshots retain the exact first inputs
+    # that a five-second bucket would otherwise overwrite. Export remains in
+    # worker timing; these files never enter control or renew evidence clocks.
+    special = []
+    if rear.get('context', {}).get('mode') == 'rear' and rear.get('selected') is False:
+        special.append('first-rear-unavailable')
+    if rear.get('selection_tier') == 'checked_turn_first_fallback':
+        special.append('first-rear-turn-fallback')
+    for name in special:
+        if (directory / f'{name}.pickle').exists():
+            continue
+        (directory / f'{name}.pickle').write_bytes(payload)
+        special_metadata = dict(metadata, file=f'{name}.pickle',
+            snapshot_basis=name, rear_reference_reason=rear.get('reason'),
+            rear_reference_selection_tier=rear.get('selection_tier'))
+        (directory / f'{name}.json').write_text(
+            json.dumps(special_metadata, indent=2, allow_nan=False), encoding='utf-8')
     return metadata

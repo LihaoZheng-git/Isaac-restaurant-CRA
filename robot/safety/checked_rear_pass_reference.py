@@ -30,9 +30,14 @@ class CheckedRearPassReferenceConfig:
     minimum_translation_m: float = 0.01
     candidate_limit: int = 576
     minimum_first_translation_m: float = 0.0
+    allow_turn_first_fallback: bool = False
 
     def __post_init__(self):
         for key, value in asdict(self).items():
+            if key == "allow_turn_first_fallback":
+                if not isinstance(value, bool):
+                    raise ValueError("turn-first fallback must be an explicit boolean")
+                continue
             if key == "existing_turn_heading_radians" and value is None:
                 continue
             if key == "minimum_first_translation_m" and not isinstance(value, bool) and isinstance(value, (int, float)) and math.isfinite(value) and value == 0.0:
@@ -159,6 +164,7 @@ def search_checked_rear_pass_reference(
         translation_rejections=0,
         first_translation_rejections=0,
         first_command_checks=0,
+        turn_first_fallback_candidates=0,
     )
     audit = dict(
         context=context,
@@ -188,6 +194,7 @@ def search_checked_rear_pass_reference(
         else abs(mpc.config.minimum_angular_velocity)
     )
     best, rank = None, 0.0
+    turn_first_best, turn_first_rank = None, 0.0
     pool = product(
         (0.2, 0.4, 0.8, 1.0),
         (0.25, 0.5, 0.75, 1.0),
@@ -240,9 +247,12 @@ def search_checked_rear_pass_reference(
         # Optional reference-quality rule, never an executable velocity floor:
         # unavailable translating references retain primary/wait safety behavior.
         first_displacement = value.chassis_states[1, :2] - initial[:2]
-        if np.linalg.norm(first_displacement) + 1e-12 < cfg.minimum_first_translation_m:
+        first_quality = np.linalg.norm(first_displacement) + 1e-12 >= cfg.minimum_first_translation_m
+        if not first_quality:
             counts["first_translation_rejections"] += 1
-            continue
+            if not cfg.allow_turn_first_fallback:
+                continue
+            counts["turn_first_fallback_candidates"] += 1
         gain = float(np.linalg.norm(delta) - np.linalg.norm(target - end[:2]))
         end_angle = math.atan2(target[1] - end[1], target[0] - end[0])
         heading = error - abs(wrap_to_pi(end_angle - end[2]))
@@ -251,7 +261,8 @@ def search_checked_rear_pass_reference(
             + cfg.heading_gain_m_per_radian * heading
             + cfg.lateral_gain * float(displacement @ rear)
         )
-        if utility <= rank + 1e-9:
+        candidate_rank = rank if first_quality else turn_first_rank
+        if utility <= candidate_rank + 1e-9:
             continue
         counts["first_command_checks"] += 1
         filtered = check_first_command(value.commands[0])
@@ -262,13 +273,21 @@ def search_checked_rear_pass_reference(
             atol=1e-6,
         ):
             continue
-        best, rank = value, utility
+        if first_quality:
+            best, rank = value, utility
+        else:
+            turn_first_best, turn_first_rank = value, utility
+    selection_tier = "translating_first" if best is not None else None
+    if best is None and turn_first_best is not None:
+        best, rank = turn_first_best, turn_first_rank
+        selection_tier = "checked_turn_first_fallback"
     audit.update(
         selected=best is not None,
         reason="checked_reference_selected"
         if best is not None
         else "no_complete_checked_reference",
         selected_utility=rank if best is not None else None,
+        selection_tier=selection_tier,
         budget_exhausted=counts["tested"] >= cfg.candidate_limit,
         wall_seconds=time.perf_counter() - started,
     )

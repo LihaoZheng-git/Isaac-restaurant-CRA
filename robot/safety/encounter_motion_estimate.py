@@ -32,6 +32,78 @@ class EncounterMotionEstimateConfig:
                 raise ValueError(f"{name} must be an integer >=3")
 
 
+@dataclass(frozen=True)
+class EncounterPolicyMotion:
+    """Auditable source-window inference for maneuver policy, never CRA motion."""
+
+    track_id: int
+    source_timestamps_seconds: tuple[float, ...]
+    centroids_world_xy: tuple[tuple[float, float], ...]
+    raw_velocity_world_xy: tuple[float, float]
+    velocity_world_xy: tuple[float, float]
+    point_count: int
+    observation_count: int
+    config: EncounterMotionEstimateConfig
+
+    def __post_init__(self):
+        if not isinstance(self.config, EncounterMotionEstimateConfig):
+            raise TypeError("validated source-window configuration required")
+        cfg = self.config
+        for name in ("track_id", "point_count", "observation_count"):
+            value = getattr(self, name)
+            if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+                raise ValueError("integer current motion identity/counts required")
+        times = np.asarray(self.source_timestamps_seconds, float)
+        points = np.asarray(self.centroids_world_xy, float)
+        raw, velocity = (np.asarray(v, float) for v in (self.raw_velocity_world_xy, self.velocity_world_xy))
+        if (times.ndim != 1 or len(times) < cfg.minimum_samples
+            or points.shape != (len(times), 2) or any(v.shape != (2,) for v in (raw, velocity))
+            or not all(np.isfinite(v).all() for v in (times, points, raw, velocity))
+            or np.any(times < 0) or np.any(np.diff(times) <= 0)
+            or np.max(np.diff(times)) > cfg.maximum_gap_seconds + 1e-9
+            or not cfg.minimum_span_seconds - 1e-9 <= times[-1]-times[0] <= cfg.window_seconds + 1e-9
+            or self.point_count < cfg.minimum_points or self.observation_count < 3):
+            raise ValueError("motion policy needs a bounded original source window and current support")
+        centered = times - times[-1]
+        centered -= centered.mean()
+        fitted = centered @ (points-points.mean(axis=0)) / (centered @ centered)
+        residual = np.max(np.linalg.norm(points-(points.mean(axis=0)+centered[:, None]*fitted), axis=1))
+        if (not np.allclose(fitted, velocity, rtol=0, atol=1e-10)
+            or residual > cfg.maximum_fit_residual_m
+            or max(np.linalg.norm(raw), np.linalg.norm(velocity)) > cfg.maximum_speed_mps
+            or raw @ velocity < -1e-9):
+            raise ValueError("motion policy fit does not pass original residual/speed/direction checks")
+        for name in ("source_timestamps_seconds", "centroids_world_xy", "raw_velocity_world_xy", "velocity_world_xy"):
+            array = np.asarray(getattr(self, name), float)
+            object.__setattr__(self, name, tuple(map(tuple, array)) if array.ndim == 2 else tuple(array))
+
+    @classmethod
+    def from_diagnostic(cls, row, config):
+        if (row.get("accepted") is not True or row.get("status") != "inferred"
+            or row.get("current_matched_previous_track") is not True
+            or not row.get("original_source_timestamps_seconds")
+            or row['original_source_timestamps_seconds'][-1] != row.get('source_timestamp_seconds')):
+            raise ValueError("only an accepted inferred current fit can enter policy")
+        return cls(row["track_id"], tuple(row["original_source_timestamps_seconds"]),
+            tuple(map(tuple, row["original_centroids_world_xy"])),
+            tuple(row["raw_tracker_velocity_world_xy"]), tuple(row["fitted_velocity_world_xy"]),
+            row["current_point_count"], row["current_observation_count"], config)
+
+    def validate_current_track(self, track, source_time):
+        if (self.track_id != track.track_id or self.source_timestamps_seconds[-1] != source_time
+            or not track.matched_previous_track or self.point_count != track.point_count
+            or self.observation_count != track.observation_count
+            or not np.allclose(self.centroids_world_xy[-1], track.centroid_world_xy, rtol=0, atol=1e-9)
+            or not np.allclose(self.raw_velocity_world_xy, track.velocity_world_xy, rtol=0, atol=1e-12)):
+            raise ValueError("policy motion must match the original current positive track/source")
+
+    def diagnostic(self):
+        return dict(track_id=self.track_id, source_timestamp_seconds=self.source_timestamps_seconds[-1],
+            original_source_timestamps_seconds=self.source_timestamps_seconds,
+            velocity_world_xy=self.velocity_world_xy, raw_velocity_world_xy=self.raw_velocity_world_xy,
+            basis="inferred_source_window_motion_for_rear_policy_only", status="inferred")
+
+
 class EncounterMotionEstimate:
     """Fit only current positively supported IDs; gaps/identity loss clear history.
 
@@ -81,6 +153,7 @@ class EncounterMotionEstimate:
             samples.append((now, tuple(position)))
             history[key] = samples
             row["original_source_timestamps_seconds"] = [s[0] for s in samples]
+            row["original_centroids_world_xy"] = [s[1] for s in samples]
             row["source_span_seconds"] = now - samples[0][0]
             if len(samples) < cfg.minimum_samples or row["source_span_seconds"] < cfg.minimum_span_seconds - 1e-9:
                 continue

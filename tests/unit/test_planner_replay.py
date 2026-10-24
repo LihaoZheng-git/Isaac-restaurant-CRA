@@ -1,6 +1,7 @@
 import hashlib
 import json
 import pickle
+from types import SimpleNamespace
 from dataclasses import replace
 
 import numpy as np
@@ -73,3 +74,24 @@ def test_first_selected_snapshot_retains_original_request_and_is_not_replaced(tm
     restored = pickle.loads(original)  # This test just generated the trusted file.
     np.testing.assert_array_equal(restored["request"][0], np.zeros(3))
     assert restored["request"][2].sensor_timestamp_seconds == 1.
+
+
+@pytest.mark.parametrize('selected,tier,name', [(False,None,'first-rear-unavailable'),
+    (True,'checked_turn_first_fallback','first-rear-turn-fallback')])
+def test_rear_debug_snapshot_preserves_first_failure_or_fallback_request(tmp_path, selected, tier, name):
+    perception=make_runtime()
+    perception.initialize(make_observation(1,1.),make_provider())
+    paper=make_filter()
+    control=SafeSAGEControlRuntime(mpc=LaplaceGuidanceTrackingMPC(paper,config()),
+        backup_filter=SafeSAGEUnicycleCBFFilter(paper))
+    result=SimpleNamespace(success=True,status='diagnostic',first_command=(0.,.2),
+        rear_pass_reference=dict(context=dict(mode='rear'),selected=selected,selection_tier=tier,reason='diagnostic'))
+    request=(np.zeros(3),(.2,0.),perception.field,None,(1.,0.))
+    save_planner_replay(tmp_path,control,request,result)
+    original=(tmp_path/f'{name}.pickle').read_bytes()
+    save_planner_replay(tmp_path,control,(np.ones(3),*request[1:]),result)
+    assert (tmp_path/f'{name}.pickle').read_bytes() == original
+    meta=json.loads((tmp_path/f'{name}.json').read_text())
+    assert hashlib.sha256(original).hexdigest() == meta['sha256']
+    restored=pickle.loads(original)  # This test generated the trusted bytes.
+    np.testing.assert_array_equal(restored['request'][0],np.zeros(3))

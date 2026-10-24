@@ -47,6 +47,10 @@ parser.add_argument('--rear-reference-offset', type=float, default=.7,
                     help='rear-reference lateral target offset in metres; behavior preference, never a safety/body margin')
 parser.add_argument('--rear-encounter-motion-fit', action='store_true',
                     help='separate rear ablation: bounded original-source centroid fit for encounter classification only; physical motion unchanged')
+parser.add_argument('--rear-consistent-motion-fit', action='store_true',
+                    help='use the same validated source-window fit for rear maneuver policy; physical tracking/CRA/occupancy unchanged')
+parser.add_argument('--rear-turn-first-fallback', action='store_true',
+                    help='prefer translating rear references, permit fully checked productive turn-first references when none qualify')
 parser.add_argument('--encounter-guidance-ablation', action='store_true',
                     help='selected observed crossing human lambda0, normal lambda1.25 for parallel/other occupancy; separate from primary')
 parser.add_argument('--encounter-comparison', action='store_true',
@@ -262,6 +266,10 @@ if args.checked_rear_pass_reference and (not args.checked_wait_transition or arg
     parser.error('live checked rear reference requires checked waiting and explicit route guides')
 if args.rear_encounter_motion_fit and not args.checked_rear_pass_reference:
     parser.error('encounter motion fit requires the separate checked rear-reference experiment')
+if args.rear_consistent_motion_fit and not args.rear_encounter_motion_fit:
+    parser.error('consistent rear motion requires the explicit bounded encounter fit')
+if args.rear_turn_first_fallback and (not args.checked_rear_pass_reference or args.rear_minimum_first_translation <= 0):
+    parser.error('turn-first fallback requires explicit rear mode with a positive preferred first-translation quality')
 if args.rear_existing_turn_heading is not None and (not args.checked_rear_pass_reference
     or not math.isfinite(args.rear_existing_turn_heading) or not 0 < args.rear_existing_turn_heading < math.pi/2):
     parser.error('rear turn continuation requires the explicit live rear mode and a threshold in (0,pi/2)')
@@ -1187,12 +1195,14 @@ def main():
         perception.live_rear_pass_config = CheckedRearPassReferenceConfig(
             existing_turn_heading_radians=args.rear_existing_turn_heading,
             minimum_first_translation_m=args.rear_minimum_first_translation,
-            offset_m=args.rear_reference_offset)
+            offset_m=args.rear_reference_offset,
+            allow_turn_first_fallback=args.rear_turn_first_fallback)
         control = LiveRearPassControlRuntime(mpc=mpc, backup_filter=backup,
             config=perception.live_rear_pass_config)
         if args.rear_encounter_motion_fit:
             from robot.safety.encounter_motion_estimate import EncounterMotionEstimate
             perception.rear_encounter_motion_estimate = EncounterMotionEstimate()
+            perception.rear_consistent_motion_fit = args.rear_consistent_motion_fit
     staged_perception = None
     if args.checked_wait_transition:
         from robot.evaluation.live_checked_wait import StagedLivePerception
@@ -2569,6 +2579,8 @@ def main():
         "rear_minimum_first_translation_m": args.rear_minimum_first_translation,
         "rear_reference_offset_m": args.rear_reference_offset,
         "rear_encounter_motion_fit_enabled": args.rear_encounter_motion_fit,
+        "rear_consistent_motion_fit_enabled": args.rear_consistent_motion_fit,
+        "rear_turn_first_fallback_enabled": args.rear_turn_first_fallback,
         "checked_wait_current_pose_admissions": checked_wait_admissions,
         "encounter_comparison": args.encounter_comparison,
         "physical_CRA_lambda": 1.25,

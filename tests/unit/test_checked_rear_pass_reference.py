@@ -31,6 +31,7 @@ from robot.safety.safe_sage_unicycle_cbf_filter import SafeSAGEUnicycleCBFFilter
         dict(minimum_first_translation_m=-.01),
         dict(minimum_first_translation_m=True),
         dict(minimum_first_translation_m=np.nan),
+        dict(allow_turn_first_fallback=1),
     ],
 )
 def test_invalid_reference_configuration_rejected(changes):
@@ -106,7 +107,7 @@ def test_unsupported_motion_cannot_create_a_trailing_reference(velocity):
     )
 
 
-def search(*, failure=None, budget=576, first_translation=0.):
+def search(*, failure=None, budget=576, first_translation=0., turn_fallback=False, side=1):
     mpc = SafeSAGEUnicycleMPC(make_filter(), replace(config(), horizon_steps=6))
     options = {
         **field(
@@ -119,6 +120,9 @@ def search(*, failure=None, budget=576, first_translation=0.):
     initial = np.zeros(3)
 
     def check(command):
+        if failure == "moving_first" and command[0] > 1e-9:
+            return SimpleNamespace(emergency_stop_active=True,
+                safe_linear_velocity=0., safe_angular_velocity=0.)
         if failure in {"analytical", "modified"}:
             return SimpleNamespace(
                 emergency_stop_active=failure == "analytical",
@@ -135,14 +139,43 @@ def search(*, failure=None, budget=576, first_translation=0.):
         initial,
         [2.0, 0.0],
         [3.3, -0.5],
-        [0.0, 0.5],
+        [0.0, side * 0.5],
         [1.0, 0.0],
         options,
         check,
         config=CheckedRearPassReferenceConfig(candidate_limit=budget,
-            minimum_first_translation_m=first_translation),
+            minimum_first_translation_m=first_translation,
+            allow_turn_first_fallback=turn_fallback),
     )
     return mpc, result, options, check
+
+
+@pytest.mark.parametrize('side', [-1, 1])
+def test_turn_first_fallback_retains_complete_productive_reference_when_forward_first_cannot_pass(side):
+    _, strict, _, _ = search(failure='moving_first', first_translation=.01, side=side)
+    assert strict.trajectory is None
+    mpc, result, options, check = search(failure='moving_first', first_translation=.01,
+        turn_fallback=True, side=side)
+    value = result.trajectory
+    assert value is not None
+    assert result.diagnostics['selection_tier'] == 'checked_turn_first_fallback'
+    assert abs(value.commands[0, 0]) < 1e-9 and value.commands[0, 1] * side < 0
+    assert np.linalg.norm(value.chassis_states[-1, :2]) >= .01
+    assert mpc._trajectory_is_safe(mpc._evaluate_trajectory(np.zeros(3), value.commands,
+        require_feasible=True, **options))
+    filtered = check(value.commands[0])
+    assert not filtered.emergency_stop_active
+    np.testing.assert_allclose(value.commands[0],
+        [filtered.safe_linear_velocity, filtered.safe_angular_velocity], atol=1e-6)
+
+
+def test_turn_first_fallback_does_not_displace_available_preferred_reference_or_bypass_first_cbf():
+    _, original, _, _ = search(first_translation=.01)
+    _, enabled, _, _ = search(first_translation=.01, turn_fallback=True)
+    np.testing.assert_array_equal(original.trajectory.commands, enabled.trajectory.commands)
+    assert enabled.diagnostics['selection_tier'] == 'translating_first'
+    _, rejected, _, _ = search(failure='analytical', first_translation=.01, turn_fallback=True)
+    assert rejected.trajectory is None
 
 
 def test_first_translation_quality_excludes_zero_first_reference_without_forcing_primary_motion():

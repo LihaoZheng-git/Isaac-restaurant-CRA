@@ -40,6 +40,7 @@ from robot.safety.obstacle_tracking import (
     ObstacleTracker,
     ObstacleTrackingResult,
 )
+from robot.safety.encounter_motion_estimate import EncounterPolicyMotion
 from robot.safety.safe_sage_field_pipeline import (
     SafeSAGEFieldPipelineConfig,
     SafeSAGEFieldPipelineResult,
@@ -271,6 +272,7 @@ class SafeSAGERuntimeField:
     crossing_yield_track_ids: tuple[int, ...] | None = None
     rear_pass_reference_track_ids: tuple[int, ...] = ()
     rear_pass_route_direction_grid_xy: tuple[float, float] | None = None
+    rear_pass_policy_motion: tuple[EncounterPolicyMotion, ...] = ()
 
     def __post_init__(self) -> None:
         frame_id = _nonnegative_integer(
@@ -333,6 +335,15 @@ class SafeSAGERuntimeField:
             from robot.safety.encounter_motion import validated_route_direction
             direction = validated_route_direction(self.rear_pass_route_direction_grid_xy)
             object.__setattr__(self, "rear_pass_route_direction_grid_xy", tuple(direction))
+        policy_motion = tuple(self.rear_pass_policy_motion)
+        if (any(not isinstance(m, EncounterPolicyMotion) for m in policy_motion)
+            or len({m.track_id for m in policy_motion}) != len(policy_motion)
+            or any(m.track_id not in reference_ids for m in policy_motion)):
+            raise ValueError("rear policy motion requires unique currently selected source-window fits")
+        for estimate in policy_motion:
+            track = next(t for t in self.tracking_result.tracked_obstacles if t.track_id == estimate.track_id)
+            estimate.validate_current_track(track, sensor_time)
+        object.__setattr__(self, "rear_pass_policy_motion", policy_motion)
         if not isinstance(self.label_result, SemanticLabelResult):
             raise TypeError("label_result must be a SemanticLabelResult.")
         if not isinstance(self.pipeline, SafeSAGEFieldPipelineResult):

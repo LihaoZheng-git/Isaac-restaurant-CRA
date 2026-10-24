@@ -5,7 +5,7 @@ import numpy as np
 import pytest
 
 from robot.safety.encounter_motion_estimate import (
-    EncounterMotionEstimate, EncounterMotionEstimateConfig,
+    EncounterMotionEstimate, EncounterMotionEstimateConfig, EncounterPolicyMotion,
 )
 from robot.safety.encounter_motion import EncounterMotionClassifier
 from robot.safety.obstacle_tracking import TrackedObstacle
@@ -110,3 +110,36 @@ def test_source_epoch_repeats_and_nonfinite_positions_are_rejected():
         fit.update(observation(1.,(0.,0.)),(7,))
     with pytest.raises(ValueError, match='finite current'):
         fit.update(observation(1.1,(np.nan,0.)),(7,))
+
+
+def policy_record():
+    fit = EncounterMotionEstimate()
+    for i in range(5):
+        source = observation(1.+i*.1, (i*.05, 0.))
+        _, audit = fit.update(source, (7,))
+    return EncounterPolicyMotion.from_diagnostic(audit['tracks'][7], fit.config), source
+
+
+@pytest.mark.parametrize('failure', ['epoch','identity','position','raw_velocity','points','unmatched'])
+def test_policy_motion_cannot_be_used_for_another_track_epoch_or_geometry(failure):
+    estimate, source = policy_record()
+    track = source.tracked_obstacles[0]
+    estimate.validate_current_track(track, source.timestamp_seconds)
+    if failure == 'epoch':
+        with pytest.raises(ValueError, match='original current'):
+            estimate.validate_current_track(track, 1.5)
+        return
+    changes = dict(identity=dict(track_id=8), position=dict(centroid_world_xy=(.3,0.)),
+        raw_velocity=dict(velocity_world_xy=(.4,0.)), points=dict(point_count=29),
+        unmatched=dict(matched_previous_track=False))
+    with pytest.raises(ValueError, match='original current'):
+        estimate.validate_current_track(replace(track, **changes[failure]), source.timestamp_seconds)
+
+
+@pytest.mark.parametrize('changes', [dict(velocity_world_xy=(.6,0.)),
+    dict(source_timestamps_seconds=(1.,1.1,1.2,1.3,1.5)),
+    dict(raw_velocity_world_xy=(-.5,0.)),dict(point_count=19)])
+def test_fabricated_or_unqualified_policy_motion_rejected(changes):
+    estimate, _ = policy_record()
+    with pytest.raises(ValueError):
+        replace(estimate, **changes)
