@@ -51,6 +51,8 @@ parser.add_argument('--rear-consistent-motion-fit', action='store_true',
                     help='use the same validated source-window fit for rear maneuver policy; physical tracking/CRA/occupancy unchanged')
 parser.add_argument('--rear-turn-first-fallback', action='store_true',
                     help='prefer translating rear references, permit fully checked productive turn-first references when none qualify')
+parser.add_argument('--rear-feasibility-start', action='store_true',
+                    help='separate ablation: permit full checked rear search below the non-safety lead preference for a currently ahead crossing')
 parser.add_argument('--encounter-guidance-ablation', action='store_true',
                     help='selected observed crossing human lambda0, normal lambda1.25 for parallel/other occupancy; separate from primary')
 parser.add_argument('--encounter-comparison', action='store_true',
@@ -270,6 +272,8 @@ if args.rear_consistent_motion_fit and not args.rear_encounter_motion_fit:
     parser.error('consistent rear motion requires the explicit bounded encounter fit')
 if args.rear_turn_first_fallback and (not args.checked_rear_pass_reference or args.rear_minimum_first_translation <= 0):
     parser.error('turn-first fallback requires explicit rear mode with a positive preferred first-translation quality')
+if args.rear_feasibility_start and not (args.rear_consistent_motion_fit and args.rear_turn_first_fallback):
+    parser.error('feasibility-led rear starts require consistent motion and checked turn-first fallback')
 if args.rear_existing_turn_heading is not None and (not args.checked_rear_pass_reference
     or not math.isfinite(args.rear_existing_turn_heading) or not 0 < args.rear_existing_turn_heading < math.pi/2):
     parser.error('rear turn continuation requires the explicit live rear mode and a threshold in (0,pi/2)')
@@ -1196,7 +1200,8 @@ def main():
             existing_turn_heading_radians=args.rear_existing_turn_heading,
             minimum_first_translation_m=args.rear_minimum_first_translation,
             offset_m=args.rear_reference_offset,
-            allow_turn_first_fallback=args.rear_turn_first_fallback)
+            allow_turn_first_fallback=args.rear_turn_first_fallback,
+            feasibility_led_start=args.rear_feasibility_start)
         control = LiveRearPassControlRuntime(mpc=mpc, backup_filter=backup,
             config=perception.live_rear_pass_config)
         if args.rear_encounter_motion_fit:
@@ -2581,6 +2586,7 @@ def main():
         "rear_encounter_motion_fit_enabled": args.rear_encounter_motion_fit,
         "rear_consistent_motion_fit_enabled": args.rear_consistent_motion_fit,
         "rear_turn_first_fallback_enabled": args.rear_turn_first_fallback,
+        "rear_feasibility_start_enabled": args.rear_feasibility_start,
         "checked_wait_current_pose_admissions": checked_wait_admissions,
         "encounter_comparison": args.encounter_comparison,
         "physical_CRA_lambda": 1.25,

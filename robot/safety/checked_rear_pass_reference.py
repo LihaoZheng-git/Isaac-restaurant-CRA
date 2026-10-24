@@ -31,12 +31,13 @@ class CheckedRearPassReferenceConfig:
     candidate_limit: int = 576
     minimum_first_translation_m: float = 0.0
     allow_turn_first_fallback: bool = False
+    feasibility_led_start: bool = False
 
     def __post_init__(self):
         for key, value in asdict(self).items():
-            if key == "allow_turn_first_fallback":
+            if key in {"allow_turn_first_fallback", "feasibility_led_start"}:
                 if not isinstance(value, bool):
-                    raise ValueError("turn-first fallback must be an explicit boolean")
+                    raise ValueError("reference options must be explicit booleans")
                 continue
             if key == "existing_turn_heading_radians" and value is None:
                 continue
@@ -115,11 +116,12 @@ def rear_pass_context(initial, goal, obstacle, velocity, route_direction, config
     if lateral >= cfg.release_lateral_m:
         result["reason"] = "current_human_has_cleared_behavior_window"
         return result
-    if (
+    short_lead = (
         lead < cfg.minimum_lead_m
         and offset < cfg.existing_trailing_offset_m
         and not continuing_turn
-    ):
+    )
+    if short_lead and (not cfg.feasibility_led_start or lead <= 0):
         result.update(mode="wait", reason="insufficient_maneuver_lead")
         return result
     along = float((goal - initial[:2]) @ route)
@@ -129,7 +131,8 @@ def rear_pass_context(initial, goal, obstacle, velocity, route_direction, config
     target += cfg.offset_m * min(1.0, distance / cfg.goal_fade_distance_m) ** 2 * rear
     result.update(
         mode="rear",
-        reason="continue_existing_trailing_turn"
+        lead_preference_overridden=bool(short_lead),
+        reason="probe_complete_reference_below_lead_preference" if short_lead else "continue_existing_trailing_turn"
         if continuing_turn
         else "current_crossing_with_maneuver_room",
         target_grid_xy=target.tolist(),

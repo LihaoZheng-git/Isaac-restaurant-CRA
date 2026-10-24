@@ -1940,3 +1940,24 @@
   Native acceptance pending; new stationary and own60 gates precede wheels.
   Keep every old failed report and main/long-service/PR117 holds. See
   docs/rear_pass_continuity.md.
+
+- At28e6dec consistent policy + checked turn-first PASSED native left-to-right8s:
+  walkingarc.292412m>unchanged.20,3/3goal21.4s,.696047mclearance,.002435mdrift,
+  .068479analytical margin,213/213containment(max.161136m).21rearplans including
+  2checkedturnfallbacks,20walking sources;independent21actualturnrows/.35s and
+  124translationrows/2.066667s.242fits/80policyrecords reproduce sources/raw
+  tracking. Mirroredright8 original FAILED curve/encounter:0rearplans,.014677m
+  arc, despite3/3goal21.216667s,.749022mclearance,.002323mdrift and210/210
+  containment(max.149236m);252fits/33policyrecords audited. Preserve bothoriginal
+  reports and67/83visuals,ZERO freshcompletefactors and prior/oracle/clock limits.
+  Mirrorselection17.1s metthe1.4mnon-safety lead gate too late (actual observed
+  planning lead1.345464m), so rear search was never admitted. New separate
+  --rear-feasibility-start may attempt a FULL checked reference below the lead
+  preference only for a current ahead qualified crossing. Keep minimumlead1.4
+  configured/reported, legacy/default gating, all source/identity/goal/release
+  and exact/dense/future/first-CBF/physical/execution constraints. Search admission
+  is not command admission or a zero-lambda wait. No candidate keeps primary
+  MPC fallback. Original mirrored numeric snapshot admits(.1,-.8) with unchanged
+  physical field; offline only.2696units/Ruff/compileCLI passed; new independent
+  andown60stationary gates required before retry. Native retry pending. This is
+  a separate controller ablation; all main/long-service/PR117 holds persist.

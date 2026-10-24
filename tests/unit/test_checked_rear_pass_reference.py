@@ -32,6 +32,7 @@ from robot.safety.safe_sage_unicycle_cbf_filter import SafeSAGEUnicycleCBFFilter
         dict(minimum_first_translation_m=True),
         dict(minimum_first_translation_m=np.nan),
         dict(allow_turn_first_fallback=1),
+        dict(feasibility_led_start=1),
     ],
 )
 def test_invalid_reference_configuration_rejected(changes):
@@ -107,7 +108,8 @@ def test_unsupported_motion_cannot_create_a_trailing_reference(velocity):
     )
 
 
-def search(*, failure=None, budget=576, first_translation=0., turn_fallback=False, side=1):
+def search(*, failure=None, budget=576, first_translation=0., turn_fallback=False, side=1,
+           feasibility_start=False, lead=3.3):
     mpc = SafeSAGEUnicycleMPC(make_filter(), replace(config(), horizon_steps=6))
     options = {
         **field(
@@ -138,16 +140,39 @@ def search(*, failure=None, budget=576, first_translation=0., turn_fallback=Fals
         mpc,
         initial,
         [2.0, 0.0],
-        [3.3, -0.5],
+        [lead, -0.5],
         [0.0, side * 0.5],
         [1.0, 0.0],
         options,
         check,
         config=CheckedRearPassReferenceConfig(candidate_limit=budget,
             minimum_first_translation_m=first_translation,
-            allow_turn_first_fallback=turn_fallback),
+            allow_turn_first_fallback=turn_fallback, feasibility_led_start=feasibility_start),
     )
     return mpc, result, options, check
+
+
+def test_feasibility_start_keeps_the_lead_preference_but_requires_a_complete_checked_reference():
+    _, original, _, _ = search(lead=1.)
+    assert original.trajectory is None and original.diagnostics['context']['mode'] == 'wait'
+    mpc, result, options, check = search(lead=1.,feasibility_start=True)
+    assert result.trajectory is not None
+    context=result.diagnostics['context']
+    assert context['lead_preference_overridden'] and context['configuration']['minimum_lead_m'] == 1.4
+    assert context['reason'] == 'probe_complete_reference_below_lead_preference'
+    value=result.trajectory
+    assert mpc._trajectory_is_safe(mpc._evaluate_trajectory(np.zeros(3),value.commands,
+        require_feasible=True,**options))
+    assert not check(value.commands[0]).emergency_stop_active
+    _, rejected, _, _ = search(lead=1.,feasibility_start=True,failure='analytical')
+    assert rejected.trajectory is None
+
+
+@pytest.mark.parametrize('lead', [-.1,0.])
+def test_feasibility_start_does_not_initiate_a_new_turn_for_an_obstacle_already_behind(lead):
+    context=rear_pass_context([0.,0.,0.],[3.9,0.],[lead,-.5],[0.,.5],[1.,0.],
+        CheckedRearPassReferenceConfig(feasibility_led_start=True))
+    assert context['mode'] == 'wait'
 
 
 @pytest.mark.parametrize('side', [-1, 1])

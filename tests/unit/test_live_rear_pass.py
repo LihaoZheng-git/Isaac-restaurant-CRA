@@ -52,6 +52,24 @@ def test_live_policy_rotates_motion_and_changes_only_owned_lambda(sign, lead, mo
     assert (normal, applied, rows) == saved
 
 
+@pytest.mark.parametrize('sign', [-1,1])
+def test_feasibility_start_admits_only_reference_search_and_retains_physical_policy(sign):
+    normal,rows,classification,passing=inputs()
+    applied,rows,crossing=apply_encounter_guidance(normal,rows,classification,passing,source_time=2.)
+    source=SimpleNamespace(sensor_timestamp_seconds=2.,robot_position_world_xy=(10.,20.),robot_yaw=np.pi/2,
+        waypoint_world_xy=(10.,23.9),nominal_route_direction_world_xy=(0.,1.))
+    tracked=SimpleNamespace(timestamp_seconds=2.,tracked_obstacles=[track(position=(10.+sign*.5,21.),velocity=(-sign*.5,0.))])
+    changed,audit,waiting,rear,_=adapt_live_rear_guidance(normal,applied,rows,tracked,source,
+        anchor=np.array([10.,20.]),anchor_yaw=np.pi/2,crossing_ids=crossing,
+        config=CheckedRearPassReferenceConfig(feasibility_led_start=True))
+    assert not waiting and rear == (7,)
+    for row in audit:
+        key=row['track_or_group_id']
+        assert changed[key] == normal[key]
+        if 'live_rear_pass_behavior' in row:
+            assert row['live_rear_pass_behavior']['lead_preference_overridden'] is True
+
+
 @pytest.mark.parametrize('failure', ['old', 'expired', 'few', 'unmatched', 'short'])
 def test_live_track_context_rejects_stale_or_weak_geometry(failure):
     t = track()
