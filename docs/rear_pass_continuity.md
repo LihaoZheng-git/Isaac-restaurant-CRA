@@ -1,9 +1,11 @@
 # Rear-pass policy continuity experiment
 
 This is a separately enabled continuation of `docs/rear_pass_diagnosis.md`.
-All four original failed native rear reports remain unchanged. The user has
-authorized another bounded attempt; the accepted stop/go fixture remains the
-fallback. Native acceptance is pending at this source freeze.
+All earlier failed native rear reports remain unchanged. The user authorized
+bounded improvements while retaining the accepted stop/go fallback. The final
+results below include a successful left-to-right native trial and a successful
+mirrored trial with additional, explicitly labeled feasibility/identity options.
+These are separate controller-ablation configurations, not primary comparisons.
 
 The previous fit was used only for classification. At source 17.3 s the same
 human was classified as crossing from fitted motion while the rear target was
@@ -206,3 +208,92 @@ experiment. Keep 1ebdfd4 runtime logic, the feasibility-led option, 1.4 m report
 lead preference, body/factor priors, fixed physical lambda and all exact/physical/
 arrival/arc/stopping gates unchanged. Native outcome is pending at this recipe
 freeze; neither earlier mirrored failure is relabeled.
+
+## Native short-identity-prior result at 2c4754a
+
+The final recipe changes only `--human-passing-identity-prior-max-age` from zero
+to 0.5 relative to the failed 1ebdfd4 mirrored recipe. Commit 2c4754a changes only
+guidance/results documentation relative to that runtime source. The exact
+invocation audit preserves all other arguments except the unique output path.
+No packages, model weights, geometry, physical factors, lambda, lead value,
+acceptance thresholds or safety constraints changed for this retry.
+
+The independent stationary gate passed 60 zero-wheel frames in 164.12 wall
+seconds; the motion run passed its own 60-frame gate. Its original overall
+report **PASSED**, with no launcher traceback. Native report SHA256:
+`41a238d2a2685310ab79f6461ac24bd0b59fe58380577cdc3caf338c0cfa0a72`.
+
+| Accepted development configuration | Walking-window trailing arc (required 0.20 m) | Actual arrival | Braking-inclusive clearance | Stop drift |
+| --- | --- | --- | --- | --- |
+| Left to right, 28e6dec: consistent motion + checked turn-first | 0.292412 m | 3/3 in 21.40 simulation s | 0.696047 m | 2.435 mm |
+| Right to left, 2c4754a: additionally feasibility-led start + short identity-selection PRIOR | 0.223436 m | 3/3 in 21.833333 simulation s | 0.682125 m | 2.293 mm |
+
+The mirrored trial recorded 216 live fields, 214 while translating. All 216
+independent body-containment rows passed, with maximum center error 0.149661 m
+inside the unchanged 0.25 m centroid prior. Minimum analytical margin was
+0.258504; the robot crossed the route plane 1.407785 m behind the human. Current
+human kinetic/motion, source/freshness, encounter, scene-preservation, actual
+arrival and stopping gates all passed separately.
+
+The new selection occurred at LiDAR source 16.9 s, versus 17.1 s in the failed
+fresh-only mirrored recipe. Its original image was frame 148 at 16.883333 s;
+the selection camera clock was 16.983333 s, so the identity age was **0.1 s**.
+There were 1,048 current positive LiDAR returns. The selection was explicitly
+**PRIOR**, with no fresh person ID at that source. Thirty-seven held-policy rows
+preserved this exact original record and the unchanged eight-second selection
+clock. Later camera observations never renewed the original selection. The
+independent identity audit verified current body support, unchanged 0.40+0.25 m
+extent, original photo/frame/selection epochs and the separate prior label.
+
+Twenty accepted rear plans included two checked turn-first fallbacks; eighteen
+rear sources occurred during transverse walking. The original request-clock
+join verified 121 translating command rows/2.016667 s. A conservative independent
+reconstruction counted 120 rows/2.0 s: its source-derived start was
+8.200000000000001 s versus the native accumulated-timeline tick
+8.199999999999987 s. Replaying the exact native tick reproduces the **entire
+original execution report**; retain both counts and the separate boundary
+companion, without altering the original report or any criterion. Independent
+turn-first execution verified ten walking-window rows/0.166667 s.
+
+Independent audits reproduced 257 original-source fits and 37 maneuver-policy
+records, keeping raw tracking/CRA kinetic inputs separate. Seven worker sources
+and three accepted plans used feasibility-led search below the still-reported
+1.4 m lead preference. The first accepted source 16.9 s had observed lead
+1.372970 m and command `(0.1, -0.6)`. Trusted numeric replay reproduced its full
+command sequence, exact/dense checks and unchanged first CBF result (input
+SHA256 `fcfa7a99a197e6714b49d2cdbccef2737bcacfb8c8c09102cb68994e4e3a7d80`).
+The first turn-first snapshot at source 17.4 s similarly reproduced `(0, -0.6)`
+and its complete productive horizon (input SHA256
+`35197073c97ae54e9337f49c3d70b392cdc99d47070d0af20b07e0443e591c1c`).
+
+Artifacts are under `outputs/paper_flux/native-rear-priorselection-right8-v7/`:
+`report.json`, `native-summary.json`, the five independent audits, both numeric
+replays, `execution-clock-boundary-companion.json`, `human-navigation.mp4` and
+`crossing-current.png`. The independent stationary run is in
+`native-rear-priorselection-stationary-v7/`. The per-direction figure is
+`outputs/paper_flux/native-rear-directions-v7.png`; its caption explicitly
+distinguishes the two configurations. All seven previous native report hashes,
+including six failures, were rechecked unchanged.
+
+## Final scope and remaining limits
+
+The runtime source passed **2,696 unit tests** in 89.85 s, plus 52 focused
+identity/passing tests in 5.29 s. Repository Ruff, compilation, CLI and diff
+checks passed. The final native retry uses that same runtime source; subsequent
+changes only record results and durable guidance.
+
+The mirrored run had 75 accepted visual instances/14,205 object assessments and
+**zero fresh complete four-factor assessments**. Configured human mass
+70 [45,100] kg, blunt-human contact and unavailable-factor priors remain
+explicit, as do the 0.65 m body-envelope prior, oracle ego/extrinsic references,
+RGB read-time acquisition approximation and unresolved renderer-history warning.
+The 0.5 s identity option supplies no physical factor and remains excluded from
+primary comparisons. Physical lambda remains 1.25; human flux -1.7 remains a
+separate declared control ablation.
+
+This establishes two successful bounded native rear-pass development trials,
+with different explicit options. It is not repeated/held-out robustness,
+real-time control, a causal CRA advantage, calibrated human mass/contact/heat,
+exact paper equivalence or global convergence. The mirrored trial took about
+18.22 wall minutes at the explicit 0.025 simulation pacing. Keep stop/go as the
+fallback, original failures intact, and main/long-service/PR117 holds unchanged.

@@ -1979,3 +1979,26 @@
   factor/field/command clocks; primary same-frame selection unchanged. Exclude
   prior-selection variants from primary comparisons. No geometry/phi/lambda/
   leadvalue/arc threshold relaxation. All earlier failures and holds persist.
+
+- At2c4754a (runtime unchanged since1ebdfd4), the separately labeled <=.5s
+  identity-selection retry PASSED mirrored native right8: walkingarc.223436m
+  >unchanged.20,3/3goal21.833333s,.682125mbraking-inclusiveclearance,.002293m
+  drift,.258504analyticalmargin,216/216containment(max.149661m within.25prior).
+  Independent+own60zero-wheel gates passed. Selectionsource16.9 retained image
+  16.883333/frame148 at.1s age with1048CURRENTreturns;37heldpolicyrows preserve
+  original photo/selection clocks, explicitPRIOR and no fresh selection claim.
+  20rearplans(2turnfallback),18walking sources;original121translationrows2.016667s
+  vs conservative independent120rows2s is an exactly reproduced floating-clock
+  boundary companion, not altered acceptance.10actualturnrows/.166667s,
+  257fits/37policyrecords and all source/vector/identity/physical audits pass.
+  Firstsource16.9 lead1.372970 selects(.1,-.6) via FULL checks while reportedlead
+  remains1.4; original snapshots/full commands/firstCBF independently replay.
+  ReportSHA41a238d2a2685310ab79f6461ac24bd0b59fe58380577cdc3caf338c0cfa0a72.
+  Keep accepted left28e6dec and right2c4754a configurations distinct: right adds
+  feasibility-led start AND short identity-selection PRIOR, excluded from primary
+  comparisons.75visuals/14205assessments/ZERO freshcomplete4factors; human/body/
+  factor priors, oracleego/RGBclock/renderer and paced-not-realtime limits remain.
+  2696units+52focusedidentitytests/Ruff/compileCLI passed. All7priorreportSHAs
+  unchanged(6failures). These are bounded native development successes, not
+  repeated/general/causalCRA acceptance. Keep stop/go fallback, main/long-service/
+  PR117 holds and docs/rear_pass_continuity.md; no automatic hold release.
