@@ -1961,3 +1961,21 @@
   physical field; offline only.2696units/Ruff/compileCLI passed; new independent
   andown60stationary gates required before retry. Native retry pending. This is
   a separate controller ablation; all main/long-service/PR117 holds persist.
+
+- At1ebdfd4 mirrored feasibility-start original still FAILED the.20m walking
+  arc (.183845m), despite17rearplans/16walksources/110translationrows1.833333s,
+  3/3goal21.883333s,.690817mclearance,.002305mdrift,.307344analyticalmargin and
+  217/217containment(max.149520m). Current reference execution/encounter/human
+  gates and allindependent source/vector/fit/physical audits pass separately:
+  258fits/34policyrecords,20actualturnrows/.333333s,6worker/3plan lead overrides.
+  Preserve78visuals/14,205assessments/ZERO freshcompletefactors and original
+  reportSHAb3e5a6624e8cf1db02e41991eae26f88662080ed12a85327f21b796028e13ccd.
+  Sources16.9/17.0 geometrically qualified but lacked a fresh selection cue;
+  current verified envelope retained original image16.883333s at ages.1/.2s
+  with1048/1004currentreturns. Next separate recipe may reuse the ALREADY
+  user-approved <=.5s identity-selection PRIOR (docs/identity_prior_selection.md),
+  with new stationary/own60gates and no runtime code change. Keep original camera
+  and selection epochs, current LiDAR/body/competitor checks, unchanged8s latch,
+  factor/field/command clocks; primary same-frame selection unchanged. Exclude
+  prior-selection variants from primary comparisons. No geometry/phi/lambda/
+  leadvalue/arc threshold relaxation. All earlier failures and holds persist.

@@ -157,3 +157,52 @@ require complete exact admission and reject failed analytical commands. Require
 a new independent stationary gate and its own 60-frame motion gate before the
 mirrored retry. Native retry acceptance is pending at this freeze. No original
 failed flags, geometry, priors, lambda or 0.20 m criterion are changed.
+
+## Native feasibility-led mirrored result at 1ebdfd4
+
+Its independent stationary gate passed 60 zero-wheel frames in 164.55 wall
+seconds, followed by its own passed 60-frame motion gate. The original overall
+report remains **FAILED**, SHA256
+`b3e5a6624e8cf1db02e41991eae26f88662080ed12a85327f21b796028e13ccd`.
+Rear execution now passed, but the walking arc was 0.183845 m < 0.20 m. Actual
+arrival was 3/3 in 21.883333 simulation seconds, braking-inclusive clearance
+0.690817 m, stop drift 0.002305 m and minimum analytical margin 0.307344.
+All 217 containment rows passed (max center error 0.149520 m).
+
+Seventeen accepted rear plans included two turn-first fallbacks; sixteen rear
+sources occurred during walking, with 110 joined translating rows/1.833333 s.
+Independent audits verified 20 turn-first rows/0.333333 s, 34 current policy
+records, 258 original-source fits and all original source/vector/physical
+checks separately. Six worker sources and three accepted plans used the
+explicit lead-preference override. The actual first selected source 17.1 s
+replays `(0.1, -0.8)` and its full exact-checked command sequence from the
+unchanged trusted snapshot (SHA256
+`41be301746fb61e38e4f93475d00102f08e79c5ed7a213b6b51af0f76f1ff056`).
+This is improvement from zero rear plans, not full curved acceptance. The 78
+visual instances/14,205 assessments still had zero fresh complete four-factor
+assessments. Original priors and sensor/clock/rendering limits remain.
+
+## Reuse of the previously approved identity-selection ablation
+
+The remaining mirrored delay has a directly observed eligibility gap. Sources
+16.9 and 17.0 s already qualified geometrically/motion-wise but reported
+`unverified_visual_person_target`. The current body adapter had verified 1,048/
+1,004 LiDAR returns and retained the original accepted image at 16.883333 s,
+with image ages 0.1/0.2 s. Fresh selection occurred only at source 17.1 s.
+
+The next bounded recipe reuses the **existing user-approved**
+`--human-passing-identity-prior-max-age .5` option, documented in
+`docs/identity_prior_selection.md` (2026-10-20 decision). No runtime code changes
+are needed. Only current successfully verified body-envelope continuity may
+admit that short person-identity prior; source image/frame, selection time and
+current LiDAR epoch remain separate. The eight-second policy clock and physical
+factor, field and command clocks never renew through this retention. This is
+not a fresh visual selection or an extension of the longer geometry identity
+lease. Primary same-frame selection remains unchanged, and this option remains
+excluded from primary comparisons.
+
+Require a new stationary gate and own 60-frame gate for this labeled combined
+experiment. Keep 1ebdfd4 runtime logic, the feasibility-led option, 1.4 m reported
+lead preference, body/factor priors, fixed physical lambda and all exact/physical/
+arrival/arc/stopping gates unchanged. Native outcome is pending at this recipe
+freeze; neither earlier mirrored failure is relabeled.
