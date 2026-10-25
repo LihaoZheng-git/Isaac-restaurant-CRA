@@ -31,6 +31,7 @@ class RestaurantHumanEpisode:
         continuing_away=False,
         crossing_extension_m=0.,
         crossing_y_m=8.9,
+        crossing_layout="legacy",
     ):
         if mode not in {"standing", "crossing", "continuous-crossing"}:
             raise ValueError("unknown human episode")
@@ -39,13 +40,19 @@ class RestaurantHumanEpisode:
         ):
             raise ValueError("mirrored crossing is bounded to standalone walking")
         self.crossing_direction = crossing_direction
+        from robot.scene.rear_pass_encounter import validate_crossing_layout
+        self.open_layout = validate_crossing_layout(crossing_layout, direction=crossing_direction,
+            extension=crossing_extension_m, crossing_y=crossing_y_m)
+        if self.open_layout and not continuing_away:
+            raise ValueError("lower-aisle encounter requires continuing-away mode")
         if continuing_away and (mode != "crossing" or carry_bowl or speed_mps != .5):
             raise ValueError("departure requires bare standalone crossing at .5 m/s")
         from robot.scene.restaurant_departing_pedestrian import DepartingPedestrianRoute
         if (crossing_extension_m or crossing_y_m != 8.9) and not continuing_away:
             raise ValueError("authored extension requires the explicit continuing-away fixture")
         self.departure = DepartingPedestrianRoute(crossing_direction=crossing_direction,
-            crossing_extension_m=crossing_extension_m,crossing_y_m=crossing_y_m) if continuing_away else None
+            crossing_extension_m=crossing_extension_m,crossing_y_m=crossing_y_m,
+            crossing_layout=crossing_layout) if continuing_away else None
         if carry_bowl and mode != "continuous-crossing":
             raise ValueError("carried server requires explicit continuous crossing")
         if upper_continuation and mode != "continuous-crossing":
@@ -56,7 +63,9 @@ class RestaurantHumanEpisode:
         if mode == "continuous-crossing" and speed_mps != 0.5:
             raise ValueError("bounded continuous circuit requires .5 m/s")
         maximum_trigger_y = 8.4 if mode == "crossing" and not carry_bowl else 7.8
-        if not math.isfinite(trigger_robot_y) or not 6.8 <= trigger_robot_y <= maximum_trigger_y:
+        minimum_trigger_y = 6.0 if self.open_layout else 6.8
+        maximum_trigger_y = 6.6 if self.open_layout else maximum_trigger_y
+        if not math.isfinite(trigger_robot_y) or not minimum_trigger_y <= trigger_robot_y <= maximum_trigger_y:
             raise ValueError(f"bounded native crossing trigger must be y=6.8..{maximum_trigger_y}")
         self.trigger_robot_y = trigger_robot_y
         if crossing_delay_seconds is not None and (
@@ -71,7 +80,8 @@ class RestaurantHumanEpisode:
         self.stage, self.mode, self.output = stage, mode, output
         with Usd.EditContext(stage, stage.GetSessionLayer()):
             self.setup = prepare_native_restaurant_human(stage, crossing_direction=crossing_direction,
-                crossing_extension_m=crossing_extension_m,crossing_y_m=crossing_y_m)
+                crossing_extension_m=crossing_extension_m,crossing_y_m=crossing_y_m,
+                crossing_layout=crossing_layout)
         self.goal = (29.8 if crossing_direction == "left-to-right" else 27.8, 8.9, 0.0)
         if self.departure is not None:
             self.goal = self.departure.goal
@@ -165,10 +175,10 @@ class RestaurantHumanEpisode:
                 .SetLookAt(
                     Gf.Vec3d(26.5, 7.7, 2.4)
                     if self.carry_setup is not None
-                    else Gf.Vec3d(25.9, 6.7, 3.2),
+                    else Gf.Vec3d(24.5, 5.5, 3.2) if self.open_layout else Gf.Vec3d(25.9, 6.7, 3.2),
                     Gf.Vec3d(29.0, 9.5, 0.8)
                     if self.carry_setup is not None
-                    else Gf.Vec3d(29.0, 8.2, 0.7),
+                    else Gf.Vec3d(28.0, 7.0, 0.8) if self.open_layout else Gf.Vec3d(29.0, 8.2, 0.7),
                     Gf.Vec3d(0, 0, 1),
                 )
                 .GetInverse()

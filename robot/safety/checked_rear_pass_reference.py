@@ -177,7 +177,9 @@ def search_checked_rear_pass_reference(
             if (cfg.person_relative.maximum_linear_velocity > mpc.config.maximum_linear_velocity+1e-9
                 or cfg.person_relative.maximum_angular_velocity > min(mpc.config.maximum_angular_velocity, abs(mpc.config.minimum_angular_velocity))+1e-9):
                 raise ValueError("person-relative screening cannot exceed actual actuator bounds")
-            if context['mode'] != 'none':
+            continue_frozen = (cfg.person_relative.continue_frozen_until_deadline
+                and context['reason'] == 'current_human_has_cleared_behavior_window')
+            if context['mode'] != 'none' or continue_frozen:
                 context.update(person_relative_reference.context(initial))
     counts = dict(
         tested=0,

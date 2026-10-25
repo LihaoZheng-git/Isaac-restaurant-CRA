@@ -25,6 +25,7 @@ parser.add_argument("--continuing-away-crossing", action="store_true",
                     help="separate bare crossing then upper-aisle departure; parked robot, no actor endpoint-stop claim")
 parser.add_argument('--crossing-extension',type=float,default=0.)
 parser.add_argument('--crossing-line-y',type=float,default=8.9)
+parser.add_argument("--crossing-layout", choices=("legacy", "lower-aisle"), default="legacy")
 parser.add_argument("--motion-aware-passing", action="store_true")
 parser.add_argument("--human-body-contact-prior", type=float, default=None, metavar="SCORE",
                     help="explicit low nonzero human-body contact policy prior; legacy outline mode if omitted")
@@ -54,6 +55,12 @@ parser.add_argument(
     metavar=("KG", "LOWER", "UPPER"),
 )
 args = parser.parse_args()
+from robot.scene.rear_pass_encounter import validate_crossing_layout, OPEN_ROBOT_START_WORLD, OPEN_ROBOT_YAW
+open_crossing_layout = validate_crossing_layout(args.crossing_layout, direction=args.crossing_direction,
+    extension=args.crossing_extension, crossing_y=args.crossing_line_y)
+if open_crossing_layout and (not args.continuing_away_crossing or not args.sensor_diagnostic
+    or args.robot_view != 'crossing-approach'):
+    parser.error('lower-aisle parked layout requires explicit continuing-away sensor component')
 if (not math.isfinite(args.crossing_extension) or not 0 <= args.crossing_extension <= .5
     or not math.isfinite(args.crossing_line_y) or not 8.4 <= args.crossing_line_y <= 8.9
     or (args.crossing_extension or args.crossing_line_y!=8.9) and not args.continuing_away_crossing):
@@ -180,7 +187,7 @@ def main():
     circuit = ContinuousServerRoute(upper_continuation=args.continuous_upper_continuation) if args.continuous_crossing else None
     from robot.scene.restaurant_departing_pedestrian import DepartingPedestrianRoute
     departure = DepartingPedestrianRoute(crossing_direction=args.crossing_direction,
-        crossing_extension_m=args.crossing_extension,crossing_y_m=args.crossing_line_y) if args.continuing_away_crossing else None
+        crossing_extension_m=args.crossing_extension,crossing_y_m=args.crossing_line_y, crossing_layout=args.crossing_layout) if args.continuing_away_crossing else None
     goal = circuit.goal if circuit else (args.goal_x, args.goal_y, 0.0)
     if departure is not None:
         goal = departure.goal
@@ -197,6 +204,8 @@ def main():
         robot_yaw = math.atan2(1.5, 2.8)
     if args.robot_view == "approach-forward":
         robot_yaw = math.pi / 2
+    if open_crossing_layout:
+        robot_start, robot_yaw = OPEN_ROBOT_START_WORLD, OPEN_ROBOT_YAW
     sources = {
         ROOT / "scenes/generated/restaurant_base.usda",
         ROOT / "scenes/generated/restaurant_robot.usda",
@@ -237,7 +246,7 @@ def main():
         raise RuntimeError("configured parked robot overlaps authored occupancy")
     with Usd.EditContext(stage, stage.GetSessionLayer()):
         setup = prepare_native_restaurant_human(stage, crossing_direction=args.crossing_direction,
-            crossing_extension_m=args.crossing_extension,crossing_y_m=args.crossing_line_y)
+            crossing_extension_m=args.crossing_extension,crossing_y_m=args.crossing_line_y, crossing_layout=args.crossing_layout)
     carry_setup = None
     if args.carry_bowl:
         from robot.scene.restaurant_human_carry import author_native_carry_bowl
@@ -290,8 +299,8 @@ def main():
         camera.MakeMatrixXform().Set(
             Gf.Matrix4d()
             .SetLookAt(
-                Gf.Vec3d(27.7, 9.6, 2.0) if args.carry_bowl else Gf.Vec3d(25.9, 6.7, 3.2) if crossing_goal else Gf.Vec3d(27.7, 10.6, 2.0),
-                Gf.Vec3d(29.8, 9.8, .95) if args.carry_bowl else Gf.Vec3d(29.0, 8.9, .8) if crossing_goal else Gf.Vec3d(29.8, 10.7, 0.9),
+                Gf.Vec3d(27.7, 9.6, 2.0) if args.carry_bowl else Gf.Vec3d(24.5, 5.5, 3.2) if open_crossing_layout else Gf.Vec3d(25.9, 6.7, 3.2) if crossing_goal else Gf.Vec3d(27.7, 10.6, 2.0),
+                Gf.Vec3d(29.8, 9.8, .95) if args.carry_bowl else Gf.Vec3d(28.0, 7.0, .8) if open_crossing_layout else Gf.Vec3d(29.0, 8.9, .8) if crossing_goal else Gf.Vec3d(29.8, 10.7, 0.9),
                 Gf.Vec3d(0, 0, 1),
             )
             .GetInverse()
@@ -576,7 +585,7 @@ def main():
     if departure is not None:
         from robot.evaluation.departing_pedestrian_validation import summarize_departing_pedestrian
         report = summarize_departing_pedestrian(records, parked_robot=True,
-            crossing_direction=args.crossing_direction,crossing_y_m=args.crossing_line_y)
+            crossing_direction=args.crossing_direction,crossing_y_m=args.crossing_line_y, crossing_layout=args.crossing_layout)
         report["actor_departure_events"] = departure.events
     report.update(
         {

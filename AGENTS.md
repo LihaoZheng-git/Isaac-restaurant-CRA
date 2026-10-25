@@ -2097,3 +2097,19 @@
   Further pronounced rear passing needs a separate earlier-prediction or more
   open encounter choice, not tighter triggers or weaker physical gates.
   See docs/person_relative_rear_pass.md for exact artifacts and limitations.
+
+- Renewed rear-pass work has a separate default-disabled lower-aisle encounter:
+  native human (25.8,7.0)->(29.8,7.0)->(29.8,12.5), robot (27,5.1) with straight
+  obstacle-unaware guides through y6.2/7.1/7.9, actor-only robot-y6.4 trigger.
+  This longer walking window is a different fixture, never a retroactive narrow-
+  aisle pass; all authored actor poses stay rendering/evaluation-only. New parked
+  actor/sensor and independent+own60 stationary gates are mandatory before wheels.
+  --rear-delayed-commit requires current motion-rear separation>=1.05m before
+  first freeze (behavior preference, not safe-space evidence); a compatible frozen
+  curve may outlast the legacy lateral-release preference only until its original
+  <=3s source and8s selection limits. Identity/motion/gap invalidation, exact/dense/
+  analytical/current-pose/physical/braking checks and robot limits are unchanged.
+  No renewed clocks, future occupancy, smaller body envelope or lambda tuning.
+  Strict timed/location/.20m arc/execution/arrival acceptance remains pending;
+  no mirrored wheels, main/long-service/PR117 hold release or primary pooling.
+  See docs/rear_pass_open_encounter.md and retain every old failure report.

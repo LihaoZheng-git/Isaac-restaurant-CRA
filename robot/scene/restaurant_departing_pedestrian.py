@@ -9,7 +9,12 @@ class DepartingPedestrianRoute:
 
     route = ((29.8, 8.9, 0.0), (29.8, 12.5, 0.0))
 
-    def __init__(self, *, crossing_direction="left-to-right", crossing_extension_m=0., crossing_y_m=8.9):
+    def __init__(self, *, crossing_direction="left-to-right", crossing_extension_m=0., crossing_y_m=8.9,
+                 crossing_layout="legacy"):
+        from robot.scene.rear_pass_encounter import validate_crossing_layout, OPEN_ACTOR_ROUTE_WORLD
+        self.open_layout = validate_crossing_layout(crossing_layout, direction=crossing_direction,
+            extension=crossing_extension_m, crossing_y=crossing_y_m)
+        self.crossing_layout = crossing_layout
         if crossing_direction not in {"left-to-right", "right-to-left"}:
             raise ValueError("unsupported authored crossing direction")
         self.crossing_direction = crossing_direction
@@ -28,6 +33,8 @@ class DepartingPedestrianRoute:
             delta = crossing_extension_m*(1 if crossing_direction=='left-to-right' else -1)
             self.route = tuple((x+delta,y,z) for x,y,z in self.route)
         self.route = ((self.route[0][0],crossing_y_m,0.),self.route[1])
+        if self.open_layout:
+            self.route = OPEN_ACTOR_ROUTE_WORLD
         self.index = 0
         self.events = []
 

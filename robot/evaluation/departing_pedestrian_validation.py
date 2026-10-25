@@ -3,10 +3,15 @@
 import numpy as np
 
 
-def summarize_departing_pedestrian(records, *, parked_robot, crossing_direction="left-to-right", crossing_y_m=8.9):
+def summarize_departing_pedestrian(records, *, parked_robot, crossing_direction="left-to-right", crossing_y_m=8.9, crossing_layout="legacy"):
+    from robot.scene.rear_pass_encounter import validate_crossing_layout
+    open_layout = validate_crossing_layout(crossing_layout, direction=crossing_direction,
+        extension=0., crossing_y=8.9 if crossing_layout == 'lower-aisle' else crossing_y_m)
+    if open_layout:
+        crossing_y_m = 7.0
     if crossing_direction not in {"left-to-right", "right-to-left"}:
         raise ValueError("unsupported independent crossing direction")
-    if isinstance(crossing_y_m, bool) or not np.isfinite(crossing_y_m) or not 8.4 <= crossing_y_m <= 8.9:
+    if isinstance(crossing_y_m, bool) or not np.isfinite(crossing_y_m) or not (crossing_y_m == 7.0 if open_layout else 8.4 <= crossing_y_m <= 8.9):
         raise ValueError("explicit authored crossing-line evaluation scope required")
     if len(records) < 30:
         return dict(passed=False, checks=dict(enough_actual_samples=False))
@@ -36,8 +41,8 @@ def summarize_departing_pedestrian(records, *, parked_robot, crossing_direction=
         requested_half_metre_speed_observed=len(steady) >= 10 and .325 <= (median or 0) <= .7,
         articulated_limbs=np.isfinite(feet).all() and walking.any()
             and np.max(np.ptp(feet[walking], axis=0)) >= .1,
-        bounded_actor_region=bool(((xyz[:, 0] >= 27.3) & (xyz[:, 0] <= 30.4)
-            & (xyz[:, 1] >= 8.2) & (xyz[:, 1] <= 13.3)).all()),
+        bounded_actor_region=bool(((xyz[:, 0] >= (25.5 if open_layout else 27.3)) & (xyz[:, 0] <= 30.4)
+            & (xyz[:, 1] >= (6.7 if open_layout else 8.2)) & (xyz[:, 1] <= 13.3)).all()),
         grounded_actor=np.max(np.abs(xyz[:, 2])) <= .05,
         independent_geometry=np.isfinite(geometry).all() and geometry[:, 0].min() > .02
             and geometry[:, 1].max() <= .03,
@@ -52,4 +57,5 @@ def summarize_departing_pedestrian(records, *, parked_robot, crossing_direction=
         median_moving_speed_mps=median, maximum_actor_y_m=float(xyz[:, 1].max()),
         minimum_actor_layout_clearance_m=float(geometry[:, 0].min()),
         maximum_collider_alignment_error_m=float(geometry[:, 1].max()),
+        authored_crossing_layout=crossing_layout,
         scope="separate one-crossing then upper-aisle departure; actual root/articulation/geometry only; no human endpoint stopping, CRA or robot arrival claim")

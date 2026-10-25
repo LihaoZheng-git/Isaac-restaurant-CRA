@@ -72,7 +72,7 @@ def attach_moving_human_collider(stage, rig, *, radius=0.4, height=1.7):
 
 
 def prepare_native_restaurant_human(stage, *, crossing_direction="right-to-left",
-                                    crossing_extension_m=0., crossing_y_m=8.9):
+                                    crossing_extension_m=0., crossing_y_m=8.9, crossing_layout="legacy"):
     import omni.client
     import omni.kit.commands
     from pxr import NavSchema, Sdf, Usd
@@ -86,6 +86,9 @@ def prepare_native_restaurant_human(stage, *, crossing_direction="right-to-left"
             "native human motion library unavailable or fingerprint changed"
         )
     server = stage.GetPrimAtPath(SERVER_PRIM_PATH)
+    from robot.scene.rear_pass_encounter import validate_crossing_layout, OPEN_ACTOR_START_WORLD
+    open_layout = validate_crossing_layout(crossing_layout, direction=crossing_direction,
+        extension=crossing_extension_m, crossing_y=crossing_y_m)
     if crossing_direction not in {"right-to-left", "left-to-right"}:
         raise ValueError("unsupported authored crossing direction")
     if crossing_direction == "left-to-right":
@@ -97,6 +100,8 @@ def prepare_native_restaurant_human(stage, *, crossing_direction="right-to-left"
             crossing_extension_m=crossing_extension_m,crossing_y_m=crossing_y_m)
         start_x = 27.8-crossing_extension_m if crossing_direction=='left-to-right' else 29.8+crossing_extension_m
         server.GetAttribute("xformOp:translate").Set(Gf.Vec3d(start_x,crossing_y_m,0.))
+    if open_layout:
+        server.GetAttribute("xformOp:translate").Set(Gf.Vec3d(*OPEN_ACTOR_START_WORLD))
     rigs = [p for p in Usd.PrimRange(server) if p.IsA(UsdSkel.Root)]
     skeletons = [p for p in Usd.PrimRange(server) if p.IsA(UsdSkel.Skeleton)]
     if len(rigs) != 1 or len(skeletons) != 1:
@@ -123,7 +128,8 @@ def prepare_native_restaurant_human(stage, *, crossing_direction="right-to-left"
         stage, "/World/CRAServiceActors/HumanNavMeshVolume"
     )
     volume.CreateNavVolumeTypeAttr("Include")
-    volume.CreateExtentAttr([Gf.Vec3f(27, 7, -0.2), Gf.Vec3f(31, 14, 2.5)])
+    volume.CreateExtentAttr([Gf.Vec3f(25, 6, -0.2) if open_layout else Gf.Vec3f(27, 7, -0.2),
+                             Gf.Vec3f(31, 14, 2.5)])
     settings = configure_human_navmesh(stage)
     return {
         "rig_path": str(rig.GetPath()),
@@ -135,4 +141,5 @@ def prepare_native_restaurant_human(stage, *, crossing_direction="right-to-left"
         "collision_height_m": 1.7,
         "scope": "native actor motion/render/independent evaluation only; no estimator inputs",
         "authored_crossing_direction": crossing_direction,
+        "authored_crossing_layout": crossing_layout,
     }

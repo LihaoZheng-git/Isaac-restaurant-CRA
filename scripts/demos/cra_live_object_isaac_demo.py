@@ -55,6 +55,10 @@ parser.add_argument('--rear-feasibility-start', action='store_true',
                     help='separate ablation: permit full checked rear search below the non-safety lead preference for a currently ahead crossing')
 parser.add_argument('--rear-person-relative', action='store_true',
                     help='separate frozen person-relative rear curve with bounded timing and unchanged exact safety checks')
+parser.add_argument('--rear-delayed-commit', action='store_true',
+                    help='separate rear ablation: require 1.05m current motion-rear separation before freezing; retain a compatible frozen curve to its original deadline')
+parser.add_argument('--human-crossing-layout', choices=('legacy', 'lower-aisle'), default='legacy',
+                    help='separate longer lower-aisle pedestrian encounter and obstacle-unaware robot route; authored poses are never physical evidence')
 parser.add_argument('--encounter-guidance-ablation', action='store_true',
                     help='selected observed crossing human lambda0, normal lambda1.25 for parallel/other occupancy; separate from primary')
 parser.add_argument('--encounter-comparison', action='store_true',
@@ -419,8 +423,21 @@ if not .5 <= args.human_walking_speed <= 1. or (
     args.human_walking_speed != .7 and args.restaurant_human not in {"crossing", "continuous-crossing"}
 ):
     parser.error("coupled walking-speed override requires crossing mode, .5..1 m/s")
+from robot.scene.rear_pass_encounter import (
+    validate_crossing_layout, OPEN_ROBOT_START_WORLD, OPEN_ROBOT_YAW, open_robot_route_local_xy,
+)
+open_crossing_layout = validate_crossing_layout(args.human_crossing_layout,
+    direction=args.human_crossing_direction, extension=args.human_crossing_extension,
+    crossing_y=args.human_crossing_line_y)
+if open_crossing_layout and (not args.human_continuing_away or args.restaurant_route != 'human-service'
+    or args.restaurant_human != 'crossing' or args.human_start_view != 'original'):
+    parser.error('lower-aisle layout requires the bare continuing-away human-service experiment')
+if args.rear_delayed_commit and not args.rear_person_relative:
+    parser.error('delayed rear commitment requires the explicit person-relative experiment')
+minimum_crossing_trigger_y = 6.0 if open_crossing_layout else 6.8
 maximum_crossing_trigger_y = 8.4 if args.restaurant_human == "crossing" and not args.human_carry_bowl else 7.8
-if not 6.8 <= args.human_crossing_trigger_y <= maximum_crossing_trigger_y or (
+maximum_crossing_trigger_y = 6.6 if open_crossing_layout else maximum_crossing_trigger_y
+if not minimum_crossing_trigger_y <= args.human_crossing_trigger_y <= maximum_crossing_trigger_y or (
     args.human_crossing_trigger_y != 7.8 and args.restaurant_human not in {"crossing", "continuous-crossing"}
 ):
     parser.error(f"crossing trigger override requires crossing mode, world y=6.8..{maximum_crossing_trigger_y}")
@@ -615,6 +632,11 @@ if args.restaurant_scene:
     stationary.ROBOT_START_YAW_RADIANS = restaurant_yaw
     GOAL = restaurant_route_local_xy(args.restaurant_route, human_start_view=args.human_start_view)[-1]
 ROUTE = restaurant_route_local_xy(args.restaurant_route, human_start_view=args.human_start_view) if args.restaurant_scene else (GOAL,)
+if open_crossing_layout:
+    stationary.ROBOT_START_POSITION_WORLD = OPEN_ROBOT_START_WORLD
+    stationary.ROBOT_START_YAW_RADIANS = OPEN_ROBOT_YAW
+    ROUTE = open_robot_route_local_xy()
+    GOAL = ROUTE[-1]
 GROUND_SCOPE = "bounded separated ground sphere; observed flat plane with assumed unseen local support/landing continuity"
 PLUME_SCOPE = "bounded rendered matte sphere and opaque bright puffs; validated initial clean reference; registered object-associated visible-plume proxy only"
 if args.actor_shape == "upright_capsule":
@@ -769,7 +791,7 @@ def main():
                                        upper_continuation=args.human_upper_continuation,
                                        continuing_away=args.human_continuing_away,
                                        crossing_extension_m=args.human_crossing_extension,
-                                       crossing_y_m=args.human_crossing_line_y)
+                                       crossing_y_m=args.human_crossing_line_y, crossing_layout=args.human_crossing_layout)
         ACTIVE_HUMAN = human
         save_json("human-native-setup.json", human.setup)
         for _ in range(20):
@@ -1216,6 +1238,8 @@ def main():
         if args.rear_person_relative:
             from robot.safety.person_relative_rear import PersonRelativeRearConfig, PersonRelativeRearMemory
             person_config = PersonRelativeRearConfig(rear_distance_m=args.rear_reference_offset,
+                minimum_current_rear_separation_m=1.05 if args.rear_delayed_commit else 0.,
+                continue_frozen_until_deadline=args.rear_delayed_commit,
                 maximum_linear_velocity=mpc.config.maximum_linear_velocity,
                 maximum_angular_velocity=min(mpc.config.maximum_angular_velocity, abs(mpc.config.minimum_angular_velocity)))
             perception.person_relative_rear_memory = PersonRelativeRearMemory(person_config)
@@ -2334,7 +2358,7 @@ def main():
         human_validation = summarize_human_navigation(live_fields, human.records,
             mode=args.restaurant_human, upper_continuation=args.human_upper_continuation,
             crossing_direction=args.human_crossing_direction, continuing_away=args.human_continuing_away,
-            crossing_y_m=args.human_crossing_line_y)
+            crossing_y_m=args.human_crossing_line_y, crossing_layout=args.human_crossing_layout)
         if args.crossing_strategy == "yield-then-go" and not args.checked_rear_pass_reference:
             # Waiting deliberately need not include simultaneous translation.
             # Keep the original motion benchmark and its result untouched.
@@ -2482,7 +2506,7 @@ def main():
         "human_crossing_direction": args.human_crossing_direction,
         "human_continuing_away_fixture": args.human_continuing_away,
         "human_crossing_extension_metres": args.human_crossing_extension,
-        "human_crossing_line_world_y": args.human_crossing_line_y,
+        "human_crossing_line_world_y": 7.0 if open_crossing_layout else args.human_crossing_line_y,
         "motion_aware_passing_config": asdict(perception.motion_passing.config) if perception.motion_passing is not None else None,
         "actor_trigger_basis": "exogenous_navigation_elapsed_time" if args.human_crossing_delay_seconds is not None else "robot_world_y",
         "human_requested_walking_speed_mps": args.human_walking_speed,
@@ -2624,6 +2648,8 @@ def main():
         "rear_turn_first_fallback_enabled": args.rear_turn_first_fallback,
         "rear_feasibility_start_enabled": args.rear_feasibility_start,
         "rear_person_relative_enabled": args.rear_person_relative,
+        "rear_delayed_commit_enabled": args.rear_delayed_commit,
+        "human_crossing_layout": args.human_crossing_layout,
         "person_relative_rear_validation": person_relative_validation,
         "checked_wait_current_pose_admissions": checked_wait_admissions,
         "encounter_comparison": args.encounter_comparison,

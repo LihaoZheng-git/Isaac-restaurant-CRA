@@ -29,9 +29,17 @@ class PersonRelativeRearConfig:
     deadline_slack_seconds: float = 0.5
     maximum_linear_velocity: float = 0.2
     maximum_angular_velocity: float = 1.0
+    minimum_current_rear_separation_m: float = 0.0
+    continue_frozen_until_deadline: bool = False
 
     def __post_init__(self):
         for key, value in asdict(self).items():
+            if key == "continue_frozen_until_deadline":
+                if not isinstance(value, bool):
+                    raise ValueError("frozen-reference continuation must be explicit")
+                continue
+            if key == "minimum_current_rear_separation_m" and value == 0 and not isinstance(value, bool):
+                continue
             if (
                 isinstance(value, bool)
                 or not isinstance(value, (int, float))
@@ -164,6 +172,9 @@ class PersonRelativeRearReference:
             np.array(self.original_person_xy) - np.array(self.initial_state[:2])
         ) @ route <= 0:
             raise ValueError("new passage needs a currently ahead person")
+        if (self.config.minimum_current_rear_separation_m > 0
+            and self.current_rear_separation_m + 1e-9 < self.config.minimum_current_rear_separation_m):
+            raise ValueError("current person has not cleared the rear-commit preference")
         if (self.passage_point - np.array(self.initial_state[:2])) @ route <= 0.1:
             raise ValueError("passage must be ahead of the original robot")
         if (np.array(self.nominal_goal_xy) - self.passage_point) @ route <= 0.1:
@@ -172,6 +183,12 @@ class PersonRelativeRearReference:
             raise ValueError(
                 "no passage slot within the configured kinematic screening bound"
             )
+
+    @property
+    def current_rear_separation_m(self):
+        motion = np.array(self.original_person_velocity)
+        motion /= np.linalg.norm(motion)
+        return float((np.array(self.original_person_xy) - self.initial_state[:2]) @ motion)
 
     @property
     def predicted_person(self):
@@ -314,6 +331,7 @@ class PersonRelativeRearReference:
             passage_timestamp_seconds=self.source_timestamp + self.passage_seconds,
             expires_at_seconds=self.expires_at,
             kinematic_screening_seconds=self.screening_seconds,
+            original_current_rear_separation_m=self.current_rear_separation_m,
             configuration=asdict(self.config),
             status="inferred",
             basis="frozen_constant_velocity_person_relative_maneuver_hypothesis",
@@ -375,6 +393,12 @@ class PersonRelativeRearMemory:
         if self.reference is None and not self.invalidated:
             self.attempt_count += 1
             self.reason = "no_passage_within_short_kinematic_scope"
+            motion = _vector(velocity_xy, 2)
+            speed = float(np.linalg.norm(motion))
+            if (self.config.minimum_current_rear_separation_m > 0 and speed > 0
+                and float((_vector(person_xy, 2) - _vector(initial, 3)[:2]) @ (motion / speed)) + 1e-9 < self.config.minimum_current_rear_separation_m):
+                self.reason = "waiting_for_current_rear_commit_separation"
+                return None
             for tau in np.linspace(
                 self.config.minimum_prediction_seconds,
                 self.config.maximum_prediction_seconds,
