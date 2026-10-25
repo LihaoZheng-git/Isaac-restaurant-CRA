@@ -354,16 +354,21 @@ class PersonRelativeRearMemory:
         gap = None if self.last_source is None else source_timestamp - self.last_source
         self.last_source = source_timestamp
         if track_id is None:
+            # A rejected pre-passage attempt has no forecast/path to retain.
+            # Only an actually frozen curve (or an already invalidated key)
+            # is permanently lost. A later fully qualified source may make a
+            # first fresh attempt under the SAME original selection expiry.
+            self.invalidated |= self.reference is not None
             self.reference, self.reason = None, "no_current_qualified_crossing"
-            self.invalidated = True
             return None
         key = (track_id, selection_timestamp)
         if key != self.key:
             self.key, self.reference = key, None
             self.invalidated, self.attempt_count = False, 0
         elif gap is not None and gap > self.config.maximum_source_gap_seconds + 1e-9:
-            self.reference, self.reason = None, "source_gap_invalidated_reference"
-            self.invalidated = True
+            if self.reference is not None or self.invalidated:
+                self.reference, self.reason = None, "source_gap_invalidated_reference"
+                self.invalidated = True
         if not 0 <= source_timestamp - selection_timestamp <= 8.0 + 1e-9:
             self.reference, self.reason = None, "original_selection_expired_or_future"
             self.invalidated = True
@@ -415,5 +420,5 @@ class PersonRelativeRearMemory:
             fresh_attempt_count=self.attempt_count,
             invalidated=self.invalidated,
             reference=None if self.reference is None else self.reference.diagnostic(),
-            scope="fresh-source search before first frozen curve; original eight-second selection cap; invalidated/expired curves cannot restart",
+            scope="fresh-source search may resume only before a first frozen curve; original eight-second selection cap; invalidated/expired curves cannot restart",
         )

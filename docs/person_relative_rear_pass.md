@@ -136,3 +136,82 @@ The actor/perception component code is unchanged by this stricter maneuver-only
 check. All **2,750 unit tests passed in 98.51 s**, with Ruff and compilation.
 The independent stationary controller gate and coupled native trial remain
 pending at this new source freeze.
+
+## First coupled native results and retry correction
+
+At 2422a87 the independent controller stationary gate and both coupled trials'
+own 60-frame zero-wheel gates passed. The two separately timed left-to-right
+fixtures **failed the rear-pass experiment**, despite arrival and stopping:
+
+| Actor trigger (robot world y) | Arrival | Minimum clearance, including braking | Stop drift | Minimum analytical margin | Independent body containment | Person-relative curves / executed rear plans |
+| --- | --- | --- | --- | --- | --- | --- |
+| 7.4 m, extension 0.15 m | 3/3, 24.0167 s | 0.282323 m | 0.002291 m | 0.127754 | 239/239; max center error 0.225544 m | 0 / 0 |
+| 7.8 m, extension 0.15 m | 3/3, 27.2333 s | 0.101784 m | 0.002221 m | 0.250798 | 271/271; max center error 0.226593 m | 0 / 0 |
+
+Both failed the unchanged walking-arc/execution/encounter checks and the new
+timed/location component. Their crossings of the observed human plane occurred
+at source times 26.9481 and 30.8874 s, after transverse walking. Nine/seven fresh
+attempts found no passage within the three-second kinematic scope. A subsequent
+brief inconsistent motion fit invalidated the selection before any curve froze.
+Later normal/checked fallback motion is not person-relative reference execution.
+The later trigger also delayed departure while ordinary safety intervention
+slowed the approach; changing a trigger does not guarantee a coordinated meeting.
+
+All independent source/fit/raw-velocity/physical checks passed separately:
+275/306 source-window fits and 40/79 policy records reproduced. There were
+84/98 accepted visual instances and **zero fresh complete four-factor
+assessments**. Human/body/factor priors and fixed physical lambda were unchanged.
+Original reports remain failed and byte-identical:
+
+- `native-person-rear-motion-left-v1/report.json`: SHA256
+  `93d0343aab20ad1dc9022f342999ce18db90afd263def6054f9c32d3fe509aea`.
+- `native-person-rear-motion-left-v2/report.json`: SHA256
+  `6df20eeb505cbb7a401f6cdb29593ce2278916ba38457ffc0b6293a419de82e4`.
+
+Each native launcher returned zero but the saved gate-failure `RuntimeError`
+was recorded. The saved acceptance report, not launcher status, establishes
+failure. A trusted first-selected numeric snapshot in each also admitted no
+candidate from the old checked rearward pool on that original physical field.
+That bounded replay is not a proof that every safe maneuver was impossible.
+
+The retry-state correction distinguishes **no curve created yet** from an
+**invalidated frozen curve**. A missing/rejected qualification or source gap
+before the first curve may be followed by a new fully qualified current-source
+attempt. Nothing is borrowed through that gap. The original selection timestamp
+and eight-second cap remain; the new curve's source is that real new observation.
+An actually frozen curve still loses eligibility permanently for its original
+selection after a gap, incompatible motion, identity loss or expiry. Expired
+unfrozen selections also cannot restart. Field temporal continuity, positive
+identity, fit acceptance, physical factor/command freshness and every exact and
+analytical check remain independent requirements. This repairs premature search
+lockout; it does not establish successful navigation or justify longer forecasts.
+
+## Wider actor component
+
+A separate extension 0.25 m / y8.4 fixture starts (27.55,8.4), crosses to
+(30.05,8.4), then departs to (30.05,12.5). A proposed robot-y7.9 trigger changes
+only actor timing. Robot and human speed limits remain unchanged. Authored
+raster margins were 0.052145 m left and 0.077145 m right. These are independent
+abort/evaluation data, never controller/factor inputs.
+
+At 2422a87 the new parked native route passed actor and sensor gates with zero
+wheels: 8 fresh idle, 14 crossing, 26 departure and 2 endpoint associations;
+median speed 0.518044 m/s, minimum actual furniture clearance 0.033824 m and
+maximum collider alignment error 2.86e-8 m. The route is tight and bounded;
+passing it does not make it an ordinary wide-aisle scenario. Original report:
+`native-person-rear-parked-left-v3/native/validation.json`, SHA256
+`5065e17ffb988a1bb6038266fafe33b547e7fa758c21441ee5d5815ee42cf777`.
+The independent 60-frame zero-wheel controller gate also passed. No v3 wheel
+trial was launched before the retry-state correction. Actor/perception code is
+unchanged by that correction, but a new independent stationary gate and the
+coupled trial's own 60-frame gate are required for the corrected controller.
+
+Keep the accepted old stop/go fallback and all main/long-service/PR117 holds.
+No person-relative native success, primary-comparison improvement or complete
+fresh physical perception follows from these component/arrival results.
+
+The retry-state correction passed **2,754 unit tests in 104.28 s**, including
+75 focused rear/checked-wait checks in 9.77 s. Ruff across `robot`, `scripts`
+and `tests`, compilation and whitespace checks passed. Corrected-controller
+native acceptance remains pending; old native results retain their original
+source revision and labels.

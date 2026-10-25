@@ -2041,3 +2041,34 @@
   Actor/perception unchanged;2750units98.51s/Ruffcompile pass. Independent and
   own60stationary gates plus actualcoupled timed/location/arrival/stopping
   acceptance remain pending; no main/long-service/PR117 hold release.
+
+- At 2422a87 the person-relative native trials with actor triggers 7.4/7.8 m
+  both FAILED rear arc/execution/encounter and strict timed/location checks:
+  zero frozen curves and executed rear plans, despite 3/3 goals in
+  24.0167/27.2333 s, clearance .282323/.101784 m, drift .002291/.002221 m,
+  positive analytical margins and 239/239, 271/271 containment rows (maximum
+  center errors .225544/.226593 m within the unchanged .25 m prior). Preserve
+  original failed reports/SHA and nine/seven ineligible fresh attempts followed
+  by brief fit loss. 275/306 fits and 40/79 policy records were audited;
+  84/98 visual instances, ZERO fresh complete factors. Launcher exit zero with
+  a gate-failure RuntimeError is not acceptance.
+  The retry-state correction allows a first FRESH current-source search after
+  temporary qualification loss/gaps ONLY when no curve ever froze and the
+  original eight-second selection remains valid. No old forecast, identity,
+  property, source/command time or field continuity is borrowed or renewed.
+  Actually frozen or expired invalidated selections still cannot restart;
+  current positive identity, fit, exact/dense/analytical/physical gates remain
+  unchanged. This repairs premature search lockout, not timed rear-pass success.
+  The separate .25 m extension/y8.4 actor route parked component PASSED at
+  2422a87: 8 idle/14 crossing/26 departure/2 endpoint fresh prior associations,
+  zero wheels, .518044 m/s median, .033824 m minimum furniture clearance and
+  2.86e-8 m collider error; original report SHA256
+  5065e17ffb988a1bb6038266fafe33b547e7fa758c21441ee5d5815ee42cf777.
+  Its independent 60-frame zero-wheel gate passed; no v3 wheels ran before the
+  correction. Parked actor/perception code is unchanged; the corrected controller
+  needs new independent and own 60-frame gates before the coupled .25 m
+  extension/7.9 m trigger retry. Keep all priors, robot/human limits, lambda,
+  old failures, stop/go fallback and main/long-service/PR117 holds. See
+  docs/person_relative_rear_pass.md. Correction source validation: 2,754 unit
+  tests in 104.28 s, 75 focused tests in 9.77 s, Ruff across robot/scripts/tests
+  and compilation PASS; corrected native acceptance pending.

@@ -93,6 +93,40 @@ def test_original_distant_crossing_is_rejected_instead_of_chasing_a_late_person(
     assert memory.key == (7, 1.0)
 
 
+@pytest.mark.parametrize("source_gap", [0.1, 0.5])
+def test_no_frozen_curve_allows_a_fresh_qualified_retry_after_missing_motion(source_gap):
+    memory = PersonRelativeRearMemory(configuration())
+    assert memory.update(**inputs(lead=1.37)) is None
+    memory.update(**dict(inputs(), track_id=None, source_timestamp=1.1))
+    assert memory.reference is None and not memory.invalidated
+    source = 1.1 + source_gap
+    ref = memory.update(**dict(inputs(), source_timestamp=source))
+    assert ref is not None
+    assert memory.key == (7, 1.0) and ref.selection_timestamp == 1.0
+    assert ref.source_timestamp == source and memory.attempt_count == 2
+    assert ref.expires_at <= min(9.0, source + 3.0)
+
+
+def test_source_gap_before_first_curve_does_not_reuse_a_failed_forecast():
+    memory = PersonRelativeRearMemory(configuration())
+    assert memory.update(**inputs(lead=1.37)) is None
+    current = dict(inputs(), source_timestamp=1.5, person_xy=(0.6, -0.4))
+    ref = memory.update(**current)
+    assert ref is not None and ref.source_timestamp == 1.5
+    assert ref.original_person_xy == current['person_xy']
+    assert ref.selection_timestamp == 1.0 and memory.attempt_count == 2
+
+
+def test_missing_motion_cannot_reopen_an_expired_unfrozen_selection():
+    memory = PersonRelativeRearMemory(configuration())
+    assert memory.update(**inputs(lead=1.37)) is None
+    assert memory.update(**dict(inputs(), source_timestamp=9.1)) is None
+    assert memory.invalidated
+    memory.update(**dict(inputs(), track_id=None, source_timestamp=9.2))
+    assert memory.update(**dict(inputs(), source_timestamp=9.3)) is None
+    assert memory.invalidated and memory.attempt_count == 1
+
+
 def test_reference_is_frozen_under_small_current_motion_variations_without_clock_renewal():
     memory = PersonRelativeRearMemory(configuration())
     args = inputs()
