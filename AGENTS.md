@@ -2072,3 +2072,28 @@
   docs/person_relative_rear_pass.md. Correction source validation: 2,754 unit
   tests in 104.28 s, 75 focused tests in 9.77 s, Ruff across robot/scripts/tests
   and compilation PASS; corrected native acceptance pending.
+
+- At corrected 4f0054f, independent and own 60-frame zero-wheel gates passed
+  before the .25 m extension/7.9 m trigger coupled trial. One frozen curve
+  retained source23.4, selection22.5 and passage/expiry26.4 across 31 fields,
+  all using current accepted policy-window motion. This changed actor fixture
+  is not a causal test of the retry correction; no natural pre-first gap is
+  established in this run. All 30 curve-bearing requests were rejected as
+  unsafe_configuration_boundary: 17,280 candidates, zero exact-feasible or
+  executed rear horizons. Original numeric snapshot SHA233ae08d... reproduces
+  the complete rejection; its occupied query belongs to human-envelope
+  track3000000073. Physical CRA phi .68359375 remains separate from the already
+  approved human-flux -1.7 / applied-field-risk1 ablation, lambda1.25 unchanged.
+  Actual goal/stop passed in27.5167s with .002316m drift, 274/274 containment
+  (max error .192470m), but clearance was only .026425m versus the .02m gate.
+  Rear curve/execution and strict timed/location gates FAILED; plane crossing
+  was5.0407s after transverse walking. Do not recommend this tighter fixture
+  for the final demo or enable mirrored person-relative wheels from it.
+  293 fits/47 policy records and original clocks audited;86 visual instances,
+  ZERO fresh complete factors. Original failed report SHA256
+  002e6bb27ca683477cc172fb06785a3077e543cc731400fc755273d4c4877985.
+  Keep the default-disabled draft, all old reports, main/long-service/PR117
+  holds and previously accepted stop/go fallback (parallel guidance unchanged).
+  Further pronounced rear passing needs a separate earlier-prediction or more
+  open encounter choice, not tighter triggers or weaker physical gates.
+  See docs/person_relative_rear_pass.md for exact artifacts and limitations.

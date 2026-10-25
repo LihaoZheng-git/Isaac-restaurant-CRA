@@ -6,6 +6,13 @@ a person-relative arc, and on 2026-10-25 approved adjusting only pedestrian
 timing/route for its next fixture, keeping robot limits and all safety gates.
 Main, long-service and PR117 holds remain unchanged.
 
+**Current outcome:** experimental and disabled by default. At corrected source
+4f0054f, local regression and stationary gates passed and one person-relative
+curve was retained across 31 native fields, but no rear command was executable.
+All three coupled development trials failed the rear-pass acceptance gates.
+Keep the previously validated stop/go configuration as the practical fallback;
+the tighter latest fixture is not recommended for the final demonstration.
+
 ## Behavior and provenance
 
 `--rear-person-relative` requires the explicit checked rear/consistent-motion/
@@ -215,3 +222,85 @@ The retry-state correction passed **2,754 unit tests in 104.28 s**, including
 and `tests`, compilation and whitespace checks passed. Corrected-controller
 native acceptance remains pending; old native results retain their original
 source revision and labels.
+
+## Corrected coupled result: curve available, rear pass failed
+
+At **4f0054f** the new independent stationary gate and the coupled trial's own
+60-frame zero-wheel gate passed. The wider actor/perception code was unchanged
+from its separately passed parked component. This trial used the .25 m extension
+and y7.9 trigger described above, retaining every robot limit, physical prior,
+source/command clock and safety check. It is a different fixture from v1/v2,
+not a matched causal test of the retry correction.
+
+One curve froze from source **23.4 s**, retaining selection **22.5 s**, predicted
+passage/expiry **26.4 s** and the original three-second hypothesis. All 31 active
+fields used current accepted source-window policy motion; no raw fallback was
+needed for that reference. Independent checks reproduce the frozen path, current
+motion compatibility, original epochs, rear region and unchanged actuator bounds.
+There were ten first-curve attempts. This run does not establish that a natural
+pre-first-curve gap was exercised; that correction has dedicated unit coverage.
+
+All **30** planner requests carrying the curve were rejected with
+`unsafe_configuration_boundary`: **17,280** candidates tested, zero exact-feasible
+horizons and zero executed rear commands. The first trusted original numeric
+snapshot at source23.5 exactly reproduces the entire rejected command sequence
+and candidate counts. Its query cell is occupied by human-envelope track
+3000000073 in both adjacent yaw slices; sampled h and guidance are zero. The
+snapshot SHA256 is
+`233ae08d501c13c4cffbd7b04dd855b4a28f3cf2e733775767320aa7c7e8f0ea`.
+This identifies a concrete geometry/admission limit in these requests, not proof
+that every possible safe maneuver or planner is impossible. A guidance-weight
+change cannot override this exact occupied-configuration rejection.
+
+Preserve the distinction between physical CRA and the existing stronger-human
+control ablation: at that snapshot physical CRA phi was **0.68359375**, while
+requested human boundary flux **-1.7** maps to applied field risk **1**; physical
+lambda remained **1.25**. The latter is an explicit verified-human control
+override, not a newly measured physical risk or automatic unknown-factor rule.
+Neither those values nor the .65 m body-envelope prior were changed here.
+
+The robot subsequently reached all three configured route guides and the final
+goal in **27.5167 simulation seconds**, then stopped with **0.002316 m** drift.
+The reported analytical minimum was .239761; 274/274 independent body-containment
+rows passed with maximum center error .192470 m. However, minimum independent
+clearance was only **.026425 m**, just .006425 m above the unchanged .02 m gate.
+Positive clearance is not rear-pass acceptance, and this tight result is not
+recommended for the final demo. The curve/execution and stricter timed/location
+gates all failed. Actual transverse walking was 21.8667..26.25 s; the robot
+crossed the observed walking plane at31.2907 s, **5.0407 s after** that window.
+Actor trace data is evaluation only, never a runtime maneuver input.
+
+There were 274 committed fields (215 while translating), 86 accepted visual
+instances and **zero fresh complete four-factor assessments** among 18,017 object
+assessments. Adult mass/body-contact and unknown-factor priors remain explicit.
+Independent audits reproduced 293 motion fits and 47 policy records, retained
+raw physical velocities, verified source/identity/field clocks and reproduced
+the original zero-row execution metric. All original reports remain unchanged.
+
+Original failed report SHA256:
+`002e6bb27ca683477cc172fb06785a3077e543cc731400fc755273d4c4877985`.
+The launcher returned zero with the expected saved gate-failure RuntimeError;
+this is a failed native experiment. No mirrored person-relative wheel trial
+was enabled. Tests remain 2,754 units / 75 focused / Ruff / compilation passed
+at the frozen functional source, not a passing live rear-pass claim.
+
+Artifacts under `outputs/paper_flux/`:
+
+- `native-person-rear-motion-left-v4/` retains original reports, sensor/actor
+  traces, independent source/curve/fit/policy audits, the exact unavailable
+  snapshot replay and the search/timing summaries.
+- `native-person-rear-motion-left-v4-trajectory.png` distinguishes the proposed
+  purple curve from the actual blue path. A proposed curve is not execution.
+- `native-person-rear-motion-left-v4/human-navigation.mp4` is the native video;
+  all 355 frames are readable, with distinct start/middle/end frames checked.
+- `person-relative-native-comparison-v2.png` retains the first two failed
+  timing-fixture paths. These are not matched causal comparisons.
+
+The bounded recommendation is the previously accepted stop/go configuration
+for perpendicular crossings, with normal fixed-lambda guidance for parallel
+departure. Further pronounced rear passing needs an explicitly scoped earlier
+predictive-planning or more open encounter experiment. Do not keep tightening
+the pedestrian trigger, weaken geometry/uncertainty or relabel failures to obtain
+a curve. The primary comparison, main/long-service/PR117 holds, prior/oracle
+provenance, RGB-clock approximation, paced-not-real-time and renderer limitations
+remain unchanged. PR181 stays a development draft.
