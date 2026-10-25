@@ -91,11 +91,12 @@ def adapt_live_rear_guidance(normal, applied, rows, tracking, packet, *,
                     rotation @ (np.asarray(packet.waypoint_world_xy) - anchor),
                     position, velocity, route, config,
                 )
-                continue_frozen = (config.person_relative is not None
-                    and config.person_relative.continue_frozen_until_deadline
-                    and person_relative_memory.reference is not None
+                person_region = (config.person_relative is not None
+                    and (config.person_relative.minimum_current_rear_separation_m > 0
+                         or config.person_relative.continue_frozen_until_deadline
+                         and person_relative_memory.reference is not None)
                     and decision['reason'] == 'current_human_has_cleared_behavior_window')
-                if config.person_relative is not None and (decision['mode'] != 'none' or continue_frozen):
+                if config.person_relative is not None and (decision['mode'] != 'none' or person_region):
                     terminal = getattr(packet, 'nominal_route_terminal_goal_world_xy', None)
                     if terminal is None:
                         raise ValueError("person-relative mode needs explicit nominal terminal-route context")

@@ -2113,3 +2113,28 @@
   Strict timed/location/.20m arc/execution/arrival acceptance remains pending;
   no mirrored wheels, main/long-service/PR117 hold release or primary pooling.
   See docs/rear_pass_open_encounter.md and retain every old failure report.
+
+- Lower-aisle parked trial atd36ddf6 FAILED overall: actor/sensor checks passed
+  (9idle/27movingfreshassociations, .09344m/s medianmotionerror, .52225m/s actor,
+  .28477m minimumfurnitureclearance) but zero-command robot drift.029382m exceeded
+  unchanged.02m gate. Preserve original SHA06852610e95f9ed37e9da4b4687a426e57dd11bb524e1c375459b4f7f43081de.
+  Retry may clear base/joint velocities ONCE after initial relocation, before
+  settling/capture; never lock pose, reset during measurement/navigation, change
+  friction/drives or relax drift acceptance. Residual velocity is a hypothesis.
+  Delayed-commit mode replaces the legacy lateral release preference for first
+  eligibility as well as frozen continuation; current qualified source, original
+  3s/8s expiry and exact checks still decide acceptance. No wheels until new
+  parked and independent+own60 gates pass; all earlier holds remain.
+
+- The user's later explicit decision approves a SEPARATE mounted stationary
+  perception benchmark after the longer freely parked test exposed slow base
+  creep. This supersedes the no-pose-lock restriction ONLY for that benchmark.
+  --mounted-perception-bench is limited to the zero-wheel actor/sensor program,
+  lower-aisle layout, with a session-only world/chassis fixed joint authored
+  before physics. It has no navigation mode. Keep original robot files, wheel
+  trial physics, stopping/drift checks, body/factor priors and clocks unchanged.
+  Record the mount as authored oracle setup, never physical evidence or free-
+  standing/braking acceptance. Reset/alternative-pose probes failed(.04015/
+  .03370/.03963m in30s); mounted isolated30s passed0drift/0wheelcommands. Full
+  mounted actor/sensor and FREE independent+own60 controller gates still required
+  before wheels. Preserve original failed free-standing report and all holds.

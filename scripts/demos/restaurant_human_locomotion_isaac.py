@@ -26,6 +26,8 @@ parser.add_argument("--continuing-away-crossing", action="store_true",
 parser.add_argument('--crossing-extension',type=float,default=0.)
 parser.add_argument('--crossing-line-y',type=float,default=8.9)
 parser.add_argument("--crossing-layout", choices=("legacy", "lower-aisle"), default="legacy")
+parser.add_argument("--mounted-perception-bench", action="store_true",
+                    help="separate user-approved fixed chassis mount for lower-aisle stationary sensing only; no navigation or braking claim")
 parser.add_argument("--motion-aware-passing", action="store_true")
 parser.add_argument("--human-body-contact-prior", type=float, default=None, metavar="SCORE",
                     help="explicit low nonzero human-body contact policy prior; legacy outline mode if omitted")
@@ -61,6 +63,8 @@ open_crossing_layout = validate_crossing_layout(args.crossing_layout, direction=
 if open_crossing_layout and (not args.continuing_away_crossing or not args.sensor_diagnostic
     or args.robot_view != 'crossing-approach'):
     parser.error('lower-aisle parked layout requires explicit continuing-away sensor component')
+if args.mounted_perception_bench and not open_crossing_layout:
+    parser.error('mounted perception benchmark requires the explicit lower-aisle sensor component')
 if (not math.isfinite(args.crossing_extension) or not 0 <= args.crossing_extension <= .5
     or not math.isfinite(args.crossing_line_y) or not 8.4 <= args.crossing_line_y <= 8.9
     or (args.crossing_extension or args.crossing_line_y!=8.9) and not args.continuing_away_crossing):
@@ -258,6 +262,11 @@ def main():
     print("Baking bounded restaurant human NavMesh...", flush=True)
     if not nav.acquire_interface().start_navmesh_baking_and_wait():
         raise RuntimeError("native restaurant NavMesh bake failed")
+    bench = dict(enabled=False, scope="freely parked robot; original drift gate")
+    if args.mounted_perception_bench:
+        from robot.scene.rear_pass_encounter import mount_stationary_perception_bench
+        bench = mount_stationary_perception_bench(stage, ROBOT_PRIM_PATH, ROBOT_BASE_PRIM_PATH)
+    save("stationary-bench-mount.json", bench)
     controller = NovaCarterController(robot_prim_path=ROBOT_PRIM_PATH)
     SimulationManager.setup_simulation(dt=PHYSICS_DT, device=PHYSICS_DEVICE)
     carb.settings.get_settings().set("/app/player/useFixedTimeStepping", True)
@@ -267,12 +276,16 @@ def main():
     timeline.play()
     for _ in range(10):
         app.update()
-    controller.robot.set_world_poses(
-        positions=[robot_start],
-        orientations=[
-            [math.cos(robot_yaw / 2), 0, 0, math.sin(robot_yaw / 2)]
-        ],
-    )
+    if not args.mounted_perception_bench:
+        controller.robot.set_world_poses(
+            positions=[robot_start],
+            orientations=[
+                [math.cos(robot_yaw / 2), 0, 0, math.sin(robot_yaw / 2)]
+            ],
+        )
+        if open_crossing_layout:
+            from robot.scene.rear_pass_encounter import reset_open_encounter_velocity
+            reset_open_encounter_velocity(controller)
     for _ in range(60):
         controller.stop()
         app.update()
@@ -599,6 +612,7 @@ def main():
             "source_sha256": hashes,
             "wall_seconds": time.perf_counter() - wall_start,
             "nonzero_wheel_commands": 0,
+            "stationary_perception_bench": bench,
             "collider_readback": "PhysX tensor world pose, not ordinary USD transforms; update-phase lag is monitored",
             "render_scope": "10 Hz RTX camera diagnostic; no real-time claim",
             "video_frames_written": len(frame_epochs),

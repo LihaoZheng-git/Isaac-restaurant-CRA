@@ -37,3 +37,37 @@ Validate the new actor/sensors with zero robot wheels, then an independent
 60-frame controller gate and the coupled trial's own gate before motion.
 No mirrored wheels until a strict native success. All main/long-service/PR117
 holds persist. Native results and final validation are pending.
+
+## First parked component: failed robot-stationary gate
+
+At d36ddf6, the actor and sensor checks passed separately: 9 fresh idle and
+27 moving human associations, median motion error 0.09344 m/s, observed actor
+speed 0.52225 m/s and minimum furniture clearance 0.28477 m. Zero nonzero wheel
+commands were recorded, but the base drifted 0.029382 m over the full trace,
+exceeding the unchanged 0.02 m parked limit. Overall acceptance FAILED.
+Original report SHA256: 06852610e95f9ed37e9da4b4687a426e57dd11bb524e1c375459b4f7f43081de.
+The next retry clears base and joint velocities once after setup relocation,
+before settling or sensor capture. This tests a residual-startup-velocity
+hypothesis, not an established cause; no pose lock, friction/drive change,
+ongoing reset or threshold relaxation is permitted. A new parked pass is still
+required before wheels. The delayed-commit mode also uses its own rear-region
+eligibility beyond the legacy 1.2 m release preference; original identity,
+source/selection expiry and all exact checks remain unchanged.
+
+## Explicitly approved mounted perception benchmark
+
+The user approved a separate fixed robot mount for the stationary perception
+benchmark, while retaining the freely moving robot and original physics/stopping
+checks for navigation. This supersedes the earlier no-mount setup restriction
+only for the stationary benchmark; the original free-standing failure remains.
+One-time reset and alternative free-standing pose probes did not pass the
+unchanged 0.02 m drift gate (30 s drift: 0.04015, 0.03370, 0.03963 m).
+The fixed mount is an explicit session-only world/chassis joint, authored before
+physics; it is available only in the zero-wheel actor/sensor program, with no
+motion-mode flag. Root asset files, physical risk/geometry inputs and navigation
+code do not receive its authored pose. Its isolated 30-second diagnostic passed
+with zero drift and zero wheel commands; full human/sensor acceptance is pending.
+No freely parked/braking or navigation claim follows from the mounted result.
+The first two isolated helper attempts produced no valid result; the second
+captured a pose-output parsing error. Both are retained separately from accepted
+diagnostics.

@@ -93,6 +93,16 @@ def test_live_worker_continues_only_an_existing_fresh_curve_after_release():
         person_relative_memory=memory)
     assert rear == (7,) and not wait and memory.reference is reference
 
+    # Delayed eligibility is not confined to the old 1.05..1.2m sliver.
+    fresh = PersonRelativeRearMemory(delayed_config())
+    tracking.tracked_obstacles = [track(position=(.6, 1.4), velocity=(0., .5))]
+    _, _, wait, rear, _ = adapt_live_rear_guidance(normal, applied, rows, tracking, source,
+        anchor=np.zeros(2), anchor_yaw=0., crossing_ids=crossing,
+        config=CheckedRearPassReferenceConfig(person_relative=delayed_config(), feasibility_led_start=True),
+        person_relative_memory=fresh)
+    assert rear == (7,) and not wait and fresh.reference is not None
+    assert fresh.reference.source_timestamp == 2. and fresh.reference.selection_timestamp == 1.
+
 
 def test_open_encounter_has_separate_authored_poses_and_obstacle_unaware_waypoints():
     from robot.scene.restaurant_departing_pedestrian import DepartingPedestrianRoute
@@ -134,3 +144,45 @@ def test_open_actor_acceptance_retains_actual_motion_and_geometry_thresholds():
     assert not summarize_departing_pedestrian(rows, parked_robot=True)['passed']
     rows[80]['actor_layout_clearance_m'] = .01
     assert not summarize_departing_pedestrian(rows, parked_robot=True, crossing_layout='lower-aisle')['passed']
+
+
+def test_relocated_setup_clears_initial_velocities_once_without_pose_lock_or_ongoing_commands():
+    from robot.scene.rear_pass_encounter import reset_open_encounter_velocity
+
+    events = []
+
+    class Robot:
+        def get_dof_positions(self):
+            return SimpleNamespace(numpy=lambda: np.ones((1, 5)))
+
+        def set_velocities(self, **kwargs):
+            events.append(('base', kwargs))
+
+        def set_dof_velocities(self, values):
+            events.append(('dofs', values))
+
+    reset_open_encounter_velocity(SimpleNamespace(robot=Robot(), stop=lambda: events.append(('stop',))))
+    assert [x[0] for x in events] == ['stop', 'base', 'dofs']
+    assert events[1][1] == dict(linear_velocities=[[0., 0., 0.]], angular_velocities=[[0., 0., 0.]])
+    np.testing.assert_array_equal(events[2][1], np.zeros((1, 5)))
+
+
+def test_separate_stationary_mount_keeps_original_layers_and_binds_actual_chassis():
+    from pxr import Gf, Usd, UsdGeom, UsdPhysics
+    from robot.scene.rear_pass_encounter import mount_stationary_perception_bench
+
+    stage = Usd.Stage.CreateInMemory()
+    UsdGeom.Xform.Define(stage, '/World')
+    UsdGeom.Xform.Define(stage, '/World/Robot')
+    chassis = UsdGeom.Xform.Define(stage, '/World/Robot/Chassis')
+    UsdPhysics.RigidBodyAPI.Apply(chassis.GetPrim())
+    chassis.AddTranslateOp().Set(Gf.Vec3d(.1, .2, .3))
+    original = stage.GetRootLayer().ExportToString()
+    metadata = mount_stationary_perception_bench(stage, '/World/Robot', '/World/Robot/Chassis')
+    assert stage.GetRootLayer().ExportToString() == original
+    joint = UsdPhysics.FixedJoint.Get(stage, metadata['joint_path'])
+    assert joint.GetBody0Rel().GetTargets() == []
+    assert [str(x) for x in joint.GetBody1Rel().GetTargets()] == ['/World/Robot/Chassis']
+    np.testing.assert_allclose(joint.GetLocalPos0Attr().Get(), [26.8, 5.2, .37382], atol=1e-6)
+    assert metadata['status'] == 'oracle' and metadata['enabled']
+    assert stage.GetSessionLayer().GetPrimAtPath(metadata['joint_path']) is not None

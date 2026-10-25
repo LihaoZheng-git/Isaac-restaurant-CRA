@@ -940,6 +940,9 @@ def main():
             orientations=[[math.cos(yaw/2), 0., 0., math.sin(yaw/2)]])
     else:
         stationary.position_robot_for_experiment(controller)
+    if open_crossing_layout:
+        from robot.scene.rear_pass_encounter import reset_open_encounter_velocity
+        reset_open_encounter_velocity(controller)
     for _ in range(stationary.SETTLE_STEPS):
         controller.stop()
         app.update()
