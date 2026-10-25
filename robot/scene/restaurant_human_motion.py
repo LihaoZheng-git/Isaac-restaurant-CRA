@@ -71,7 +71,8 @@ def attach_moving_human_collider(stage, rig, *, radius=0.4, height=1.7):
     return collider
 
 
-def prepare_native_restaurant_human(stage, *, crossing_direction="right-to-left"):
+def prepare_native_restaurant_human(stage, *, crossing_direction="right-to-left",
+                                    crossing_extension_m=0., crossing_y_m=8.9):
     import omni.client
     import omni.kit.commands
     from pxr import NavSchema, Sdf, Usd
@@ -90,6 +91,12 @@ def prepare_native_restaurant_human(stage, *, crossing_direction="right-to-left"
     if crossing_direction == "left-to-right":
         # Explicit session-only actor fixture; never estimator/control data.
         server.GetAttribute("xformOp:translate").Set(Gf.Vec3d(27.8, 8.9, 0.))
+    if crossing_extension_m or crossing_y_m != 8.9:
+        from robot.scene.restaurant_departing_pedestrian import DepartingPedestrianRoute
+        DepartingPedestrianRoute(crossing_direction=crossing_direction,
+            crossing_extension_m=crossing_extension_m,crossing_y_m=crossing_y_m)
+        start_x = 27.8-crossing_extension_m if crossing_direction=='left-to-right' else 29.8+crossing_extension_m
+        server.GetAttribute("xformOp:translate").Set(Gf.Vec3d(start_x,crossing_y_m,0.))
     rigs = [p for p in Usd.PrimRange(server) if p.IsA(UsdSkel.Root)]
     skeletons = [p for p in Usd.PrimRange(server) if p.IsA(UsdSkel.Skeleton)]
     if len(rigs) != 1 or len(skeletons) != 1:

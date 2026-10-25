@@ -41,6 +41,7 @@ from robot.safety.obstacle_tracking import (
     ObstacleTrackingResult,
 )
 from robot.safety.encounter_motion_estimate import EncounterPolicyMotion
+from robot.safety.person_relative_rear import PersonRelativeRearReference
 from robot.safety.safe_sage_field_pipeline import (
     SafeSAGEFieldPipelineConfig,
     SafeSAGEFieldPipelineResult,
@@ -273,6 +274,7 @@ class SafeSAGERuntimeField:
     rear_pass_reference_track_ids: tuple[int, ...] = ()
     rear_pass_route_direction_grid_xy: tuple[float, float] | None = None
     rear_pass_policy_motion: tuple[EncounterPolicyMotion, ...] = ()
+    person_relative_rear_reference: PersonRelativeRearReference | None = None
 
     def __post_init__(self) -> None:
         frame_id = _nonnegative_integer(
@@ -344,6 +346,20 @@ class SafeSAGERuntimeField:
             track = next(t for t in self.tracking_result.tracked_obstacles if t.track_id == estimate.track_id)
             estimate.validate_current_track(track, sensor_time)
         object.__setattr__(self, "rear_pass_policy_motion", policy_motion)
+        person_reference = self.person_relative_rear_reference
+        if person_reference is not None:
+            if (not isinstance(person_reference, PersonRelativeRearReference)
+                or rear_ids != (person_reference.track_id,)):
+                raise ValueError("person-relative curve needs the current qualified rear identity")
+            track = next(t for t in self.tracking_result.tracked_obstacles if t.track_id == person_reference.track_id)
+            c, s = math.cos(anchor_yaw), math.sin(anchor_yaw)
+            rotation = np.array([[c, s], [-s, c]])
+            estimate = next((m for m in policy_motion if m.track_id == track.track_id), None)
+            velocity = track.velocity_world_xy if estimate is None else estimate.velocity_world_xy
+            person_reference.validate_current(track_id=track.track_id, selection_timestamp=source,
+                source_timestamp=sensor_time,
+                person_xy=rotation@(np.asarray(track.centroid_world_xy)-self.anchor_position_world_xy),
+                velocity_xy=rotation@np.asarray(velocity), route_direction=self.rear_pass_route_direction_grid_xy)
         if not isinstance(self.label_result, SemanticLabelResult):
             raise TypeError("label_result must be a SemanticLabelResult.")
         if not isinstance(self.pipeline, SafeSAGEFieldPipelineResult):

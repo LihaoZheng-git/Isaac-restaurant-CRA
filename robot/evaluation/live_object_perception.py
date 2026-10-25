@@ -99,6 +99,7 @@ class LiveObjectPacket:
     scan_pose_samples_world: np.ndarray | None = None
     scan_interval_scope: str | None = None
     nominal_route_direction_world_xy: tuple | None = None
+    nominal_route_terminal_goal_world_xy: tuple | None = None
 
     def __post_init__(self):
         for name in ("sensor_frame_id", "camera_frame_id"):
@@ -154,6 +155,11 @@ class LiveObjectPacket:
             from robot.safety.encounter_motion import validated_route_direction
             direction = validated_route_direction(self.nominal_route_direction_world_xy)
             object.__setattr__(self, 'nominal_route_direction_world_xy', tuple(float(x) for x in direction))
+        if self.nominal_route_terminal_goal_world_xy is not None:
+            terminal = np.asarray(self.nominal_route_terminal_goal_world_xy, float)
+            if terminal.shape != (2,) or not np.isfinite(terminal).all():
+                raise ValueError("finite nominal terminal-route context required")
+            object.__setattr__(self, 'nominal_route_terminal_goal_world_xy', tuple(float(v) for v in terminal))
         if not isinstance(self.clean_reference_validated, bool):
             raise TypeError("clean reference flag must be boolean")
         if not isinstance(self.pose_source, str) or not self.pose_source.strip():

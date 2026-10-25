@@ -54,7 +54,8 @@ def live_track_context(field, track_id, *, use_policy_motion=True):
 
 
 def adapt_live_rear_guidance(normal, applied, rows, tracking, packet, *,
-                            anchor, anchor_yaw, crossing_ids, config, policy_motion=()):
+                            anchor, anchor_yaw, crossing_ids, config, policy_motion=(),
+                            person_relative_memory=None):
     """Choose rear/checked-wait/release using current source pose and motion.
 
     Only the wait preference retains encounter lambda0. Rear/released/invalid
@@ -77,6 +78,9 @@ def adapt_live_rear_guidance(normal, applied, rows, tracking, packet, *,
             for r in rows if r["encounter_guidance_ablation"]["lambda_suppressed"]), None),
     )
     decisions = {}
+    if config.person_relative is not None and person_relative_memory is None:
+        raise ValueError("person-relative mode requires staged maneuver memory")
+    memory_updated = False
     for key in crossing_ids:
         decision = dict(mode="none", reason="ambiguous_crossing", track_id=key)
         if len(crossing_ids) == 1:
@@ -87,6 +91,25 @@ def adapt_live_rear_guidance(normal, applied, rows, tracking, packet, *,
                     rotation @ (np.asarray(packet.waypoint_world_xy) - anchor),
                     position, velocity, route, config,
                 )
+                if config.person_relative is not None and decision['mode'] != 'none':
+                    terminal = getattr(packet, 'nominal_route_terminal_goal_world_xy', None)
+                    if terminal is None:
+                        raise ValueError("person-relative mode needs explicit nominal terminal-route context")
+                    terminal_grid = rotation@(np.asarray(terminal)-anchor)
+                    route_delta = terminal_grid-rotation@(np.asarray(packet.waypoint_world_xy)-anchor)
+                    if abs(route_delta[0]*route[1]-route_delta[1]*route[0]) > .05:
+                        raise ValueError("person-relative reference currently requires a straight nominal route segment")
+                    reference = person_relative_memory.update(track_id=key,
+                        selection_timestamp=context_field.motion_passing_reference_source_timestamp_seconds,
+                        source_timestamp=packet.sensor_timestamp_seconds,
+                        initial=packet_state_in_field(packet, context_field),
+                        goal=terminal_grid,
+                        person_xy=position, velocity_xy=velocity, route_direction=route)
+                    memory_updated = True
+                    if reference is None:
+                        decision.update(mode='wait', reason=person_relative_memory.reason)
+                    else:
+                        decision.update(reference.context(packet_state_in_field(packet, context_field)))
             except ValueError as error:
                 decision = dict(mode="none", reason=str(error))
         decisions[key] = dict(decision, track_id=key,
@@ -94,6 +117,10 @@ def adapt_live_rear_guidance(normal, applied, rows, tracking, packet, *,
             original_selection_timestamp_seconds=context_field.motion_passing_reference_source_timestamp_seconds)
         decisions[key]['motion_policy_estimate'] = next(
             (m.diagnostic() for m in policy_motion if m.track_id == key), None)
+    if person_relative_memory is not None and not memory_updated:
+        person_relative_memory.update(track_id=None, selection_timestamp=None,
+            source_timestamp=packet.sensor_timestamp_seconds, initial=None, goal=None,
+            person_xy=None, velocity_xy=None, route_direction=None)
     wait_ids = tuple(k for k, d in decisions.items() if d["mode"] == "wait")
     rear_ids = tuple(k for k, d in decisions.items() if d["mode"] == "rear")
     for row in audit:
@@ -141,6 +168,12 @@ class LiveRearPassControlRuntime(SafeSAGEControlRuntime):
         if len(ids) == 1:
             position, velocity = live_track_context(field, ids[0])
             _, raw_velocity = live_track_context(field, ids[0], use_policy_motion=False)
+            person_reference = getattr(field, 'person_relative_rear_reference', None)
+            if person_reference is not None:
+                person_reference.validate_current(track_id=ids[0],
+                    selection_timestamp=field.motion_passing_reference_source_timestamp_seconds,
+                    source_timestamp=field.sensor_timestamp_seconds, person_xy=position,
+                    velocity_xy=velocity, route_direction=field.rear_pass_route_direction_grid_xy)
             search = search_checked_rear_pass_reference(self.mpc, initial,
                 nominal_goal_grid_xy, position, velocity,
                 field.rear_pass_route_direction_grid_xy,
@@ -148,7 +181,7 @@ class LiveRearPassControlRuntime(SafeSAGEControlRuntime):
                      h_full=field.pipeline.h_full, guidance_fields=field.pipeline.guidance_fields,
                      temporal_safety_derivative=field.temporal_safety_derivative),
                 lambda command: self.filter_command(command, initial, field),
-                config=self.rear_pass_config)
+                config=self.rear_pass_config, person_relative_reference=person_reference)
             audit.update(search.diagnostics, track_id=ids[0],
                          observed_centroid_grid_xy=position.tolist(),
                          observed_velocity_grid_xy=raw_velocity.tolist(),

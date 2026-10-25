@@ -53,7 +53,7 @@ def _current_contact_policy(obj):
     )
 
 
-def summarize_human_navigation(records, truth, *, mode, upper_continuation=False, crossing_direction="right-to-left", continuing_away=False):
+def summarize_human_navigation(records, truth, *, mode, upper_continuation=False, crossing_direction="right-to-left", continuing_away=False, crossing_y_m=8.9):
     if mode not in {"standing", "crossing", "continuous-crossing"}:
         raise ValueError("unknown human navigation mode")
     if crossing_direction not in {"right-to-left", "left-to-right"}:
@@ -231,7 +231,8 @@ def summarize_human_navigation(records, truth, *, mode, upper_continuation=False
             from robot.evaluation.departing_pedestrian_validation import summarize_departing_pedestrian
             checks.pop("actual_crossing")
             checks["actual_crossing_and_departure"] = summarize_departing_pedestrian(
-                truth, parked_robot=False, crossing_direction=crossing_direction)["passed"]
+                truth, parked_robot=False, crossing_direction=crossing_direction,
+                crossing_y_m=crossing_y_m)["passed"]
     else:
         checks["stationary_world_velocity_error"] = (
             bool(rows)

@@ -13,6 +13,7 @@ import numpy as np
 
 from robot.control.unicycle_model import lookahead_control_matrix, wrap_to_pi
 from robot.safety.encounter_motion import validated_route_direction
+from robot.safety.person_relative_rear import PersonRelativeRearConfig, PersonRelativeRearReference
 
 
 @dataclass(frozen=True)
@@ -32,9 +33,14 @@ class CheckedRearPassReferenceConfig:
     minimum_first_translation_m: float = 0.0
     allow_turn_first_fallback: bool = False
     feasibility_led_start: bool = False
+    person_relative: PersonRelativeRearConfig | None = None
 
     def __post_init__(self):
         for key, value in asdict(self).items():
+            if key == 'person_relative':
+                if self.person_relative is not None and not isinstance(self.person_relative, PersonRelativeRearConfig):
+                    raise TypeError("explicit person-relative configuration required")
+                continue
             if key in {"allow_turn_first_fallback", "feasibility_led_start"}:
                 if not isinstance(value, bool):
                     raise ValueError("reference options must be explicit booleans")
@@ -157,9 +163,22 @@ def search_checked_rear_pass_reference(
     check_first_command,
     *,
     config=None,
+    person_relative_reference=None,
 ):
     cfg = config or CheckedRearPassReferenceConfig()
     context = rear_pass_context(initial, goal, obstacle, velocity, route_direction, cfg)
+    if cfg.person_relative is not None:
+        if person_relative_reference is None:
+            if context['mode'] != 'none':
+                context.update(mode='wait', reason='no_current_person_relative_passage')
+        elif not isinstance(person_relative_reference, PersonRelativeRearReference) or person_relative_reference.config != cfg.person_relative:
+            raise ValueError("current validated person-relative reference required")
+        else:
+            if (cfg.person_relative.maximum_linear_velocity > mpc.config.maximum_linear_velocity+1e-9
+                or cfg.person_relative.maximum_angular_velocity > min(mpc.config.maximum_angular_velocity, abs(mpc.config.minimum_angular_velocity))+1e-9):
+                raise ValueError("person-relative screening cannot exceed actual actuator bounds")
+            if context['mode'] != 'none':
+                context.update(person_relative_reference.context(initial))
     counts = dict(
         tested=0,
         exact_feasible=0,

@@ -3,9 +3,11 @@
 import numpy as np
 
 
-def summarize_departing_pedestrian(records, *, parked_robot, crossing_direction="left-to-right"):
+def summarize_departing_pedestrian(records, *, parked_robot, crossing_direction="left-to-right", crossing_y_m=8.9):
     if crossing_direction not in {"left-to-right", "right-to-left"}:
         raise ValueError("unsupported independent crossing direction")
+    if isinstance(crossing_y_m, bool) or not np.isfinite(crossing_y_m) or not 8.4 <= crossing_y_m <= 8.9:
+        raise ValueError("explicit authored crossing-line evaluation scope required")
     if len(records) < 30:
         return dict(passed=False, checks=dict(enough_actual_samples=False))
     t = np.array([r["time"] for r in records], dtype=float)
@@ -18,7 +20,7 @@ def summarize_departing_pedestrian(records, *, parked_robot, crossing_direction=
         raise ValueError("explicit crossing/departure phase metadata required")
     left_to_right = crossing_direction == "left-to-right"
     crossed_side = xyz[:, 0] >= 29.5 if left_to_right else xyz[:, 0] <= 28.1
-    crossed = (phases == "walk_away") & crossed_side & (np.abs(xyz[:, 1] - 8.9) <= .4)
+    crossed = (phases == "walk_away") & crossed_side & (np.abs(xyz[:, 1] - crossing_y_m) <= .4)
     departing = phases == "walk_away"
     speed = np.linalg.norm(np.diff(xyz[:, :2], axis=0), axis=1) / np.diff(t)
     walking = np.isin(phases, ["move", "walk_away"])

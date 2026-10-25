@@ -29,6 +29,8 @@ class RestaurantHumanEpisode:
         carry_facing_crossing=False,
         upper_continuation=False,
         continuing_away=False,
+        crossing_extension_m=0.,
+        crossing_y_m=8.9,
     ):
         if mode not in {"standing", "crossing", "continuous-crossing"}:
             raise ValueError("unknown human episode")
@@ -40,7 +42,10 @@ class RestaurantHumanEpisode:
         if continuing_away and (mode != "crossing" or carry_bowl or speed_mps != .5):
             raise ValueError("departure requires bare standalone crossing at .5 m/s")
         from robot.scene.restaurant_departing_pedestrian import DepartingPedestrianRoute
-        self.departure = DepartingPedestrianRoute(crossing_direction=crossing_direction) if continuing_away else None
+        if (crossing_extension_m or crossing_y_m != 8.9) and not continuing_away:
+            raise ValueError("authored extension requires the explicit continuing-away fixture")
+        self.departure = DepartingPedestrianRoute(crossing_direction=crossing_direction,
+            crossing_extension_m=crossing_extension_m,crossing_y_m=crossing_y_m) if continuing_away else None
         if carry_bowl and mode != "continuous-crossing":
             raise ValueError("carried server requires explicit continuous crossing")
         if upper_continuation and mode != "continuous-crossing":
@@ -65,8 +70,11 @@ class RestaurantHumanEpisode:
             raise ValueError("bounded coupled native walking speed must be .5..1 m/s")
         self.stage, self.mode, self.output = stage, mode, output
         with Usd.EditContext(stage, stage.GetSessionLayer()):
-            self.setup = prepare_native_restaurant_human(stage, crossing_direction=crossing_direction)
+            self.setup = prepare_native_restaurant_human(stage, crossing_direction=crossing_direction,
+                crossing_extension_m=crossing_extension_m,crossing_y_m=crossing_y_m)
         self.goal = (29.8 if crossing_direction == "left-to-right" else 27.8, 8.9, 0.0)
+        if self.departure is not None:
+            self.goal = self.departure.goal
         self.speed = speed_mps
         self.phase = "idle_before"
         self.task = None

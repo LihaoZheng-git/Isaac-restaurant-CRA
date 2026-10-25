@@ -2002,3 +2002,31 @@
   unchanged(6failures). These are bounded native development successes, not
   repeated/general/causalCRA acceptance. Keep stop/go fallback, main/long-service/
   PR117 holds and docs/rear_pass_continuity.md; no automatic hold release.
+
+- The user's2026-10-25 decision approves a SEPARATE person-relative rear-arc
+  implementation and pedestrian timing/route adjustment, retaining robot limits.
+  --rear-person-relative is disabled by default, requires the existing explicit
+  checked/consistent/feasibility experiment, and keeps nominal obstacle-unaware,
+  raw physical tracking/CRA, lambda1.25, body/factor priors and all exact/dense/
+  analytical/source/currentpose/independentclearance/braking gates unchanged.
+  Short0.5..3s constant-motion passage hypotheses select a REAR REGION at the
+  person's plane, not a chased fixed-distance point;1.2m rear/.35m route offset,
+  .25m path lookahead are behavior preferences, never physical safety margins.
+  Frozen curves retain original source/selection/deadline;currentpositiveidentity,
+  <=.25s gaps/.30m residual/.35m/s motion compatibility required. Fresh retries
+  before a first frozen curve keep original8s cap; invalidated curves cannot
+  restart. Stage memory with perception, never commit rejected proposals.
+  New timed/location scoring is separate: line crossing DURING transverse walk,
+  behind>=.10m and >=.20m arc within.75m of plane/2m actor. Old native passes
+  FAIL this stricter component; original reports/SHAs remain unchanged.
+  Actualnominalmax.20/MPCmax.25m/s retained. Trusted old inputs keep identical
+  disabled-mode commands; they do not establish counterfactual navigation.
+  New candidate: bare .5m/s human crossing y8.4, symmetric.15m start/end extension,
+  robot-y7.4 event, then upper-aisle departure. Actor parameters stay rendering/
+  evaluation-only. Failed.4m extension precheck preserved;final conservative
+  raster margins.152145/.177145m pass, not native acceptance. Require parked
+  actor/perception and independent+own60zero-wheel gates before new wheels.
+  2749units/Ruff/compileCLI passed at freeze; native result pending. Preserve
+  prior-assisted/no-fresh-complete4factor/oracleclock/renderer/paced limits,
+  all older failures and main/long-service/PR117 holds. See
+  docs/person_relative_rear_pass.md; no hold release or primary-comparison pooling.

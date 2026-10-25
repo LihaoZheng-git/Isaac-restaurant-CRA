@@ -53,6 +53,8 @@ parser.add_argument('--rear-turn-first-fallback', action='store_true',
                     help='prefer translating rear references, permit fully checked productive turn-first references when none qualify')
 parser.add_argument('--rear-feasibility-start', action='store_true',
                     help='separate ablation: permit full checked rear search below the non-safety lead preference for a currently ahead crossing')
+parser.add_argument('--rear-person-relative', action='store_true',
+                    help='separate frozen person-relative rear curve with bounded timing and unchanged exact safety checks')
 parser.add_argument('--encounter-guidance-ablation', action='store_true',
                     help='selected observed crossing human lambda0, normal lambda1.25 for parallel/other occupancy; separate from primary')
 parser.add_argument('--encounter-comparison', action='store_true',
@@ -148,6 +150,10 @@ parser.add_argument("--human-continuing-away", action="store_true",
                     help="separate bare crossing then same-side upper-aisle departure at .5 m/s; actor fixture only")
 parser.add_argument("--human-walking-speed", type=float, default=.7,
                     help="explicit native actor speed .5..1 m/s; never estimator input")
+parser.add_argument('--human-crossing-extension', type=float, default=0.,
+                    help='separate actor-only crossing/departure endpoint extension 0..0.5 m; legacy route unchanged by default')
+parser.add_argument('--human-crossing-line-y', type=float, default=8.9,
+                    help='separate authored crossing line y=8.4..8.9; never estimator/control context')
 parser.add_argument("--human-cluster-radius", type=float, default=.12,
                     help="explicit human 3D connectivity radius .12...20 m; original occupancy and safety gates retained")
 parser.add_argument("--human-carry-bowl", action="store_true",
@@ -274,6 +280,8 @@ if args.rear_turn_first_fallback and (not args.checked_rear_pass_reference or ar
     parser.error('turn-first fallback requires explicit rear mode with a positive preferred first-translation quality')
 if args.rear_feasibility_start and not (args.rear_consistent_motion_fit and args.rear_turn_first_fallback):
     parser.error('feasibility-led rear starts require consistent motion and checked turn-first fallback')
+if args.rear_person_relative and not args.rear_feasibility_start:
+    parser.error('person-relative rear mode requires the explicit consistent/checked/feasibility rear experiment')
 if args.rear_existing_turn_heading is not None and (not args.checked_rear_pass_reference
     or not math.isfinite(args.rear_existing_turn_heading) or not 0 < args.rear_existing_turn_heading < math.pi/2):
     parser.error('rear turn continuation requires the explicit live rear mode and a threshold in (0,pi/2)')
@@ -378,6 +386,12 @@ if args.human_continuing_away and (args.restaurant_human != "crossing"
     or args.human_carry_bowl
     or args.human_walking_speed != .5):
     parser.error("continuing-away fixture requires bare standalone crossing at .5 m/s")
+if (not math.isfinite(args.human_crossing_extension) or not 0 <= args.human_crossing_extension <= .5
+    or args.human_crossing_extension and not args.human_continuing_away):
+    parser.error('crossing extension requires explicit continuing-away mode and 0..0.5 m')
+if (not math.isfinite(args.human_crossing_line_y) or not 8.4 <= args.human_crossing_line_y <= 8.9
+    or args.human_crossing_line_y != 8.9 and not args.human_continuing_away):
+    parser.error('crossing line adjustment requires continuing-away mode and y=8.4..8.9')
 if args.motion_aware_passing and not (args.restaurant_human == "crossing" and args.persistent_object_risk_map
                                     and args.experiment_baseline != "geometric_velocity_cbf"):
     parser.error("bounded motion-aware passing requires the standalone crossing object-map scenario")
@@ -753,7 +767,9 @@ def main():
                                        carry_bowl=args.human_carry_bowl,
                                        carry_facing_crossing=args.human_carry_facing_crossing,
                                        upper_continuation=args.human_upper_continuation,
-                                       continuing_away=args.human_continuing_away)
+                                       continuing_away=args.human_continuing_away,
+                                       crossing_extension_m=args.human_crossing_extension,
+                                       crossing_y_m=args.human_crossing_line_y)
         ACTIVE_HUMAN = human
         save_json("human-native-setup.json", human.setup)
         for _ in range(20):
@@ -1196,12 +1212,20 @@ def main():
     if args.checked_rear_pass_reference:
         from robot.evaluation.live_rear_pass import LiveRearPassControlRuntime
         from robot.safety.checked_rear_pass_reference import CheckedRearPassReferenceConfig
+        person_config = None
+        if args.rear_person_relative:
+            from robot.safety.person_relative_rear import PersonRelativeRearConfig, PersonRelativeRearMemory
+            person_config = PersonRelativeRearConfig(rear_distance_m=args.rear_reference_offset,
+                maximum_linear_velocity=mpc.config.maximum_linear_velocity,
+                maximum_angular_velocity=min(mpc.config.maximum_angular_velocity, abs(mpc.config.minimum_angular_velocity)))
+            perception.person_relative_rear_memory = PersonRelativeRearMemory(person_config)
         perception.live_rear_pass_config = CheckedRearPassReferenceConfig(
             existing_turn_heading_radians=args.rear_existing_turn_heading,
             minimum_first_translation_m=args.rear_minimum_first_translation,
             offset_m=args.rear_reference_offset,
             allow_turn_first_fallback=args.rear_turn_first_fallback,
-            feasibility_led_start=args.rear_feasibility_start)
+            feasibility_led_start=args.rear_feasibility_start,
+            person_relative=person_config)
         control = LiveRearPassControlRuntime(mpc=mpc, backup_filter=backup,
             config=perception.live_rear_pass_config)
         if args.rear_encounter_motion_fit:
@@ -1352,6 +1376,9 @@ def main():
             if args.disable_lidar_deskew
             else "bounded static scene; per-return ego-motion deskew to retained scan-header pose; no independently moving object correction",
             nominal_route_direction_world_xy=route_direction,
+            nominal_route_terminal_goal_world_xy=(
+                anchor.x+c*ROUTE[-1][0]-s*ROUTE[-1][1], anchor.y+s*ROUTE[-1][0]+c*ROUTE[-1][1]
+            ) if args.rear_person_relative else None,
         )
         last_sensor_id = info.sensor_frame_id
         captures.append(
@@ -2292,6 +2319,7 @@ def main():
     )
     human_validation = None
     passing_validation = None
+    person_relative_validation = None
     strategy_validation = None
     encounter_validation = None
     if args.encounter_guidance_ablation:
@@ -2305,7 +2333,8 @@ def main():
         from robot.evaluation.human_navigation_validation import summarize_human_navigation
         human_validation = summarize_human_navigation(live_fields, human.records,
             mode=args.restaurant_human, upper_continuation=args.human_upper_continuation,
-            crossing_direction=args.human_crossing_direction, continuing_away=args.human_continuing_away)
+            crossing_direction=args.human_crossing_direction, continuing_away=args.human_continuing_away,
+            crossing_y_m=args.human_crossing_line_y)
         if args.crossing_strategy == "yield-then-go" and not args.checked_rear_pass_reference:
             # Waiting deliberately need not include simultaneous translation.
             # Keep the original motion benchmark and its result untouched.
@@ -2377,6 +2406,11 @@ def main():
                 passing_validation['comparison_acceptance'] = comparison
                 completed = completed and comparison['passed']
             save_json("motion-passing-validation.json", passing_validation)
+            if args.rear_person_relative:
+                from robot.evaluation.person_relative_rear_validation import summarize_person_relative_rear
+                person_relative_validation = summarize_person_relative_rear(human.records, nominal_goal_world_xy=passing_goal)
+                completed = completed and person_relative_validation['passed']
+                save_json('person-relative-rear-validation.json', person_relative_validation)
         if human.carry is not None:
             from robot.scene.restaurant_human_carry import summarize_carry_records
             carry_validation = summarize_carry_records(human.carry.records, continuous=human.circuit is not None)
@@ -2447,6 +2481,8 @@ def main():
         "human_crossing_delay_seconds": args.human_crossing_delay_seconds,
         "human_crossing_direction": args.human_crossing_direction,
         "human_continuing_away_fixture": args.human_continuing_away,
+        "human_crossing_extension_metres": args.human_crossing_extension,
+        "human_crossing_line_world_y": args.human_crossing_line_y,
         "motion_aware_passing_config": asdict(perception.motion_passing.config) if perception.motion_passing is not None else None,
         "actor_trigger_basis": "exogenous_navigation_elapsed_time" if args.human_crossing_delay_seconds is not None else "robot_world_y",
         "human_requested_walking_speed_mps": args.human_walking_speed,
@@ -2587,6 +2623,8 @@ def main():
         "rear_consistent_motion_fit_enabled": args.rear_consistent_motion_fit,
         "rear_turn_first_fallback_enabled": args.rear_turn_first_fallback,
         "rear_feasibility_start_enabled": args.rear_feasibility_start,
+        "rear_person_relative_enabled": args.rear_person_relative,
+        "person_relative_rear_validation": person_relative_validation,
         "checked_wait_current_pose_admissions": checked_wait_admissions,
         "encounter_comparison": args.encounter_comparison,
         "physical_CRA_lambda": 1.25,

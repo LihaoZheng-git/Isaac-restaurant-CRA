@@ -23,6 +23,8 @@ parser.add_argument("--sensor-diagnostic", action="store_true")
 parser.add_argument("--crossing-direction", choices=("right-to-left", "left-to-right"), default="right-to-left")
 parser.add_argument("--continuing-away-crossing", action="store_true",
                     help="separate bare crossing then upper-aisle departure; parked robot, no actor endpoint-stop claim")
+parser.add_argument('--crossing-extension',type=float,default=0.)
+parser.add_argument('--crossing-line-y',type=float,default=8.9)
 parser.add_argument("--motion-aware-passing", action="store_true")
 parser.add_argument("--human-body-contact-prior", type=float, default=None, metavar="SCORE",
                     help="explicit low nonzero human-body contact policy prior; legacy outline mode if omitted")
@@ -52,6 +54,10 @@ parser.add_argument(
     metavar=("KG", "LOWER", "UPPER"),
 )
 args = parser.parse_args()
+if (not math.isfinite(args.crossing_extension) or not 0 <= args.crossing_extension <= .5
+    or not math.isfinite(args.crossing_line_y) or not 8.4 <= args.crossing_line_y <= 8.9
+    or (args.crossing_extension or args.crossing_line_y!=8.9) and not args.continuing_away_crossing):
+    parser.error('new crossing geometry requires explicit continuing-away mode and bounded parameters')
 if args.continuing_away_crossing and (args.speed != .5 or args.carry_bowl or args.continuous_crossing
     or args.goal_x != (29.8 if args.crossing_direction == "left-to-right" else 27.8) or args.goal_y != 8.9):
     parser.error("departure fixture requires matching bare crossing goal, speed .5")
@@ -173,8 +179,11 @@ def main():
     from robot.scene.restaurant_continuous_server import ContinuousServerRoute
     circuit = ContinuousServerRoute(upper_continuation=args.continuous_upper_continuation) if args.continuous_crossing else None
     from robot.scene.restaurant_departing_pedestrian import DepartingPedestrianRoute
-    departure = DepartingPedestrianRoute(crossing_direction=args.crossing_direction) if args.continuing_away_crossing else None
+    departure = DepartingPedestrianRoute(crossing_direction=args.crossing_direction,
+        crossing_extension_m=args.crossing_extension,crossing_y_m=args.crossing_line_y) if args.continuing_away_crossing else None
     goal = circuit.goal if circuit else (args.goal_x, args.goal_y, 0.0)
+    if departure is not None:
+        goal = departure.goal
     robot_start = (28.8, 7.9, SHORT_START_WORLD_XYZ[2]) if args.robot_view == "close" else SHORT_START_WORLD_XYZ
     robot_yaw = math.pi / 2 if args.robot_view == "close" else SHORT_START_YAW
     if args.robot_view == "crossing-approach":
@@ -227,7 +236,8 @@ def main():
     if setup_clearance <= 0.02:
         raise RuntimeError("configured parked robot overlaps authored occupancy")
     with Usd.EditContext(stage, stage.GetSessionLayer()):
-        setup = prepare_native_restaurant_human(stage, crossing_direction=args.crossing_direction)
+        setup = prepare_native_restaurant_human(stage, crossing_direction=args.crossing_direction,
+            crossing_extension_m=args.crossing_extension,crossing_y_m=args.crossing_line_y)
     carry_setup = None
     if args.carry_bowl:
         from robot.scene.restaurant_human_carry import author_native_carry_bowl
@@ -566,7 +576,7 @@ def main():
     if departure is not None:
         from robot.evaluation.departing_pedestrian_validation import summarize_departing_pedestrian
         report = summarize_departing_pedestrian(records, parked_robot=True,
-            crossing_direction=args.crossing_direction)
+            crossing_direction=args.crossing_direction,crossing_y_m=args.crossing_line_y)
         report["actor_departure_events"] = departure.events
     report.update(
         {

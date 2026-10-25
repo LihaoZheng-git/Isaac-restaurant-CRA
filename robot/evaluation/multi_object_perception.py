@@ -606,6 +606,7 @@ def assess_all_objects(worker, packet):
     motion_estimate = copy.deepcopy(getattr(worker, 'rear_encounter_motion_estimate', None))
     motion_estimate_audit = None
     rear_policy_motion = ()
+    person_relative_memory = copy.deepcopy(getattr(worker, 'person_relative_rear_memory', None))
     encounter_audit, yield_ids = None, None
     rear_ids, rear_route = (), None
     if encounter is not None:
@@ -641,7 +642,7 @@ def assess_all_objects(worker, packet):
                 normal_guidance, applied_guidance, baseline_audit, tracking, packet,
                 anchor=worker.anchor, anchor_yaw=worker.anchor_yaw,
                 crossing_ids=yield_ids, config=worker.live_rear_pass_config,
-                policy_motion=rear_policy_motion)
+                policy_motion=rear_policy_motion, person_relative_memory=person_relative_memory)
     if getattr(worker, "zero_tangential_bias_ablation", False):
         from robot.evaluation.crossing_strategy import zero_tangential_bias
         field_guidance_policy, applied_guidance, baseline_audit = zero_tangential_bias(
@@ -741,6 +742,7 @@ def assess_all_objects(worker, packet):
             rear_pass_reference_track_ids=rear_ids,
             rear_pass_route_direction_grid_xy=rear_route,
             rear_pass_policy_motion=rear_policy_motion,
+            person_relative_rear_reference=(None if person_relative_memory is None else person_relative_memory.reference),
         )
         return field, recovery
 
@@ -786,6 +788,8 @@ def assess_all_objects(worker, packet):
         worker.encounter_motion = encounter
     if motion_estimate is not None:
         worker.rear_encounter_motion_estimate = motion_estimate
+    if person_relative_memory is not None:
+        worker.person_relative_rear_memory = person_relative_memory
     if envelope_memory is not None:
         worker.human_body_envelope = envelope_memory
     if fragment_memory is not None:
@@ -810,6 +814,7 @@ def assess_all_objects(worker, packet):
         "encounter_motion_classification": encounter_audit,
         "rear_encounter_motion_estimate": motion_estimate_audit,
         "rear_policy_motion_estimates": [m.diagnostic() for m in rear_policy_motion],
+        "person_relative_rear": None if person_relative_memory is None else person_relative_memory.diagnostic(),
         "crossing_yield_track_ids": yield_ids,
         "rear_pass_reference_track_ids": rear_ids,
         "rear_pass_route_direction_grid_xy": rear_route,
