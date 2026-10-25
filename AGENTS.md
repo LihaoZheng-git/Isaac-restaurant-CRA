@@ -2030,3 +2030,14 @@
   prior-assisted/no-fresh-complete4factor/oracleclock/renderer/paced limits,
   all older failures and main/long-service/PR117 holds. See
   docs/person_relative_rear_pass.md; no hold release or primary-comparison pooling.
+
+- Person-relative new-route parked native component atc6ada89 PASSED:9freshidle/
+  15crossing/23departure associations,zero wheels,.518991m/s median,.133828m
+  independentlayoutclearance,2.87e-8mcollidererror. OriginalreportSHA
+  8625bfc89cfde6d1d12beba1238e38ff3117c1a5fcd6309433eed63443fb6f99.
+  Keep adult/body-contact/unknownfactor priors and no fresh4factor claim.
+  Subsequent maneuver-only contract rejects passage timestamps beyond original
+  8s selection expiry (previously curve could expire before its planned pass).
+  Actor/perception unchanged;2750units98.51s/Ruffcompile pass. Independent and
+  own60stationary gates plus actualcoupled timed/location/arrival/stopping
+  acceptance remain pending; no main/long-service/PR117 hold release.

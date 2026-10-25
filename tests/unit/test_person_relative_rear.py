@@ -283,6 +283,12 @@ def test_reference_current_identity_and_source_cannot_be_substituted(change):
         ref.validate_current(**current)
 
 
+def test_a_new_passage_cannot_be_planned_beyond_original_policy_expiry():
+    memory = PersonRelativeRearMemory(configuration())
+    assert memory.update(**dict(inputs(), source_timestamp=8.8)) is None
+    assert memory.key == (7, 1.0)
+
+
 def test_new_field_rejects_reference_identity_and_motion_mismatch():
     from test_safe_sage_runtime import make_runtime, make_observation, make_provider
 

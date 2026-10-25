@@ -137,6 +137,8 @@ class PersonRelativeRearReference:
                 raise ValueError("original finite nonnegative maneuver epochs required")
         if (
             not 0 <= self.source_timestamp - self.selection_timestamp <= 8.0 + 1e-9
+            or self.source_timestamp + self.passage_seconds
+            > self.selection_timestamp + 8.0 + 1e-9
             or not self.config.minimum_prediction_seconds
             <= self.passage_seconds
             <= self.config.maximum_prediction_seconds

@@ -111,3 +111,28 @@ is pending at this freeze. Human/body/factor priors, oracle ego/extrinsics, RGB
 read-time clock approximation, no fresh complete four-factor acceptance, paced
 simulation and renderer-history limits remain. This is not primary Safe-SAGE,
 paper equivalence, real-time control or a general human-navigation guarantee.
+
+## Parked native actor/perception result
+
+At c6ada89 the separately authored left-to-right route passed the native actor
+and parked-human sensor gates with zero wheel commands. There were nine fresh
+idle, fifteen fresh crossing and twenty-three fresh departure associations,
+all retaining the configured adult mass/body-contact priors. Observed median
+walking speed was 0.518991 m/s; minimum independent furniture clearance was
+0.133828 m, and maximum collider alignment error 2.87e-8 m. Grounding,
+articulation, actual crossing, upper-aisle departure and video gates passed.
+This establishes the new actor/perception component, not robot navigation or
+fresh four-factor estimation. Original report SHA256:
+`8625bfc89cfde6d1d12beba1238e38ff3117c1a5fcd6309433eed63443fb6f99`.
+
+Artifacts: `outputs/paper_flux/native-person-rear-parked-left-v1/native/` contains
+`validation.json`, `compact-summary.json`, independent actor/sensor traces and
+`human-motion.mp4`. The launcher exited zero without a traceback.
+
+A subsequent contract review also rejects a new reference whose proposed
+passage time exceeds the original eight-second selection expiry. It could
+previously expire before its own planned passage; no clock had been renewed.
+The actor/perception component code is unchanged by this stricter maneuver-only
+check. All **2,750 unit tests passed in 98.51 s**, with Ruff and compilation.
+The independent stationary controller gate and coupled native trial remain
+pending at this new source freeze.
