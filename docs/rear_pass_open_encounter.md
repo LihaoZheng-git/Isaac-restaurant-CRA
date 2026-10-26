@@ -148,3 +148,78 @@ focused tests passed in 10.49 s. Ruff across robot/scripts/tests, compilation,
 CLI help and whitespace checks passed. Trusted original left/right numeric
 snapshots reproduce the identical full command sequences with preparation
 disabled. These are source checks, not new native rear-pass acceptance.
+
+## Native preparation and timing-only retries: strict rear passing still failed
+
+Both trials ran frozen source **3adb3c6**, the separately approved **0.30 m**
+centroid-uncertainty prior (0.70 m total envelope), unchanged physical CRA,
+lambda/robot limits and acceptance thresholds. The independent free60 gate
+passed in 189.55 wall seconds, with no nonzero wheel commands; one startup epoch
+rejection remains recorded. Each coupled trial also passed its own60 gate.
+The y6.6 timing-only retry reused the independent gate after an exact frozen-
+source/stationary-input comparison: only output and actor trigger differed,
+and the actor trigger is disabled while navigation is false. The mounted
+actor/sensor component remains separate from free navigation and braking.
+
+| Native trial | Actor trigger y | Goal/stop | Minimum clearance | Total stop/tail drift | Containment | Strict rear result |
+| --- | ---: | --- | ---: | ---: | --- | --- |
+| v8 preparation | 6.0 m | 3/3, 20.6500 s | 0.368565 m | 0.012040 m | 206/206; max error 0.186551 m | FAILED: plane crossing 3.124941 s after walking; no qualifying near-person walking arc |
+| v9 timing only | 6.6 m | 3/3, 29.8167 s | 0.041562 m | 0.011201 m | 297/297; max error 0.200353 m | FAILED: plane crossing 2.075028 s after walking; arc 0.020157 m <0.20 m |
+
+Times above are navigation simulation seconds, not real time. Reported minimum
+analytical margins were 0.281102 and 0.171707 respectively. Post-goal checks
+passed throughout both full zero-command windows. Launcher exit zero with the
+expected gate-failure RuntimeError does **not** mean overall acceptance.
+The closer trial's clearance exceeded the unchanged 0.02 m gate by only
+0.021562 m; it is not recommended for the final demo. These changed recipes
+are not matched causal tests of the prior, preparation or timing separately.
+
+Independent audits reproduced all 53/47 fresh preparation fields and their
+original observed source/position/motion/selection, route-anchored targets and
+absence of retained forecasts. Accepted preparation plans (11/3) were excluded
+from full rear execution. The original execution gate passed separately with
+9/13 walking full-reference sources and 76/115 translating rows (1.266667/
+1.916667 s). Independent reconstruction conservatively joins 75/114 rows
+(1.25/1.9 s); the exact accumulated native start clock reproduces each original
+report exactly, including the one floating-boundary row. Companions preserve
+the originals. Full source/deadline/identity/forecast and transactional-state
+audits pass; 249/334 source-window fits and 75/72 policy records independently
+reproduce raw tracking and policy inputs.
+
+Four trusted native numeric snapshots (first preparation and first full curve
+from each run) reproduce the complete command sequences and original source
+epochs. Their exact DTCBF/dense geometry, future analytical, first-command CBF
+and preparation-before-plane checks pass. This validates command dataflow;
+it does not repair strict rear timing. Both trials still have **ZERO complete
+fresh four-factor assessments**, with 66/93 accepted visual instances among
+17,399/24,788 object assessments. Human/body/factor/property priors, oracle ego
+and clock references, renderer warning and paced-simulation limitations remain.
+No new human mass calibration, plume, physical sharpness or temperature claim.
+
+Original report SHA256:
+
+- v8: `26efb934ff1e618cc791a606bbf9ff1bbb2d7b6288d1c3642791ef0548de843f`
+- v9: `9fe1f5a3a91ec5729716ffd4e0e14a01dbed8b3eaa50462d19c3bdfe69866fc6`
+
+Artifacts are under `outputs/paper_flux/native-rear-open-motion-left-v8/` and
+`...-v9/`: original `report.json`, `invocation.json`, stationary/containment/
+post-goal records, independent audits, `person-reference-numeric-replays.json`,
+`execution-clock-boundary-companion.json`, original snapshots and actual
+`human-navigation.mp4`. Videos have 406/498 frames at10fps, each readable with
+three distinct sampled frames. The adjacent `...-trajectory.png` plots show
+executed paths and the walking window, explicitly labeled FAILED acceptance.
+`rear-open-report-preservation-final-v1.json` verifies16 selected earlier/new
+reports byte unchanged, including old failures and the mounted/free distinction.
+
+The remaining problem is timely productive progress under the current local
+forward-only filter/reference, not an absence of a proposed curve. Observed
+native walking also curves around the authored horizontal route; the independent
+metric uses the median actual crossing plane. Neither that observation nor
+successful numeric commands proves one sole cause or global nonconvergence.
+Keep the prior accepted left-to-right10s checked wait/go as the perpendicular
+fallback and normal guidance for parallel departure. These runs do not validate
+a new lower-aisle/mirrored wait/go fixture. Further rear passing would need a
+separately designed longer encounter or broader path-reference work, rather
+than weaker geometry, clocks or success thresholds. Rear preparation stays
+default-disabled/draft; no main/long-service/PR117 hold release or mirrored
+person-relative wheels follows from these results.

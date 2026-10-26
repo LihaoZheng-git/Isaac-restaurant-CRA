@@ -2178,4 +2178,13 @@
   is a separate timing recipe with unchanged route/speed/robot bounds. New free
   independent+own60gates precede wheels; no mirrored wheels until strict success.
   Keep mounted component separate, all failures/main/long-service/PR117 holds.
-  See docs/rear_pass_open_encounter.md; native preparation acceptance pending.
+  Native3adb3c6 retries y6.0/y6.6 both FAILED strict rear timing/near-person arc
+  despite3/3goals, positive analytical margins, stopping and206/206,297/297
+  containment (maxerrors.186551/.200353 within approved.30prior). Plane crossing
+  was3.124941/2.075028s after walking; closer retry clearance.041562m is too tight
+  to recommend as final demo. Original reports unchanged; exact prep/full numeric
+  replays and source/vector/clock audits pass separately.66/93visuals,ZERO fresh
+  complete4factors. Preparation is experimental/default-disabled, no mirrored
+  wheels or hold releases. Retain previously accepted left10s checked wait/go
+  fallback and normal parallel guidance; these new failures do not validate a
+  new lower-aisle or mirrored fallback. See docs/rear_pass_open_encounter.md.
