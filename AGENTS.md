@@ -2138,3 +2138,19 @@
   .03370/.03963m in30s); mounted isolated30s passed0drift/0wheelcommands. Full
   mounted actor/sensor and FREE independent+own60 controller gates still required
   before wheels. Preserve original failed free-standing report and all holds.
+
+- Atcf5be51 the separately user-approved mounted native benchmark PASSED with
+  0wheelcommands/0robotdrift,9idle/24movingfreshhumanassociations,.087218m/s
+  medianvelocityerror,.522254m/sactualactor,.284770mminimumfurnitureclearance,
+  2.87e-8mcollidererror. OriginalSHA256bb840439c5632e7bed92d2380d54f5495b1f0048f4072f718a78424daaadfe67.
+  This is NOT free-standing/braking/navigation acceptance. Preserve free drift
+  failures and priors/clock/renderer/no-complete-fresh-factor limitations.
+  Lower-aisle coupled trials may opt into <=12s post-GOAL zero-command observation
+  to record continued departure after a shorter robot route. Inference/planning
+  are closed; no navigation pause or fresh field/evidence is claimed. Preserve
+  original60-frame stopping-sweep.json; separately require ALL original+tail
+  poses clearance>.02m, drift from ORIGINAL braking start<.05m and original goal
+  tolerance throughout. No intermediate hazards/drift-return/goal loss may pass.
+  Old modes keep zero tail. Require free independent+own60 gates, strict timed/
+  location/.20m arc/actual execution/goal/containment/stopping before rear claims;
+  no mirrored wheels or main/long-service/PR117 hold release follows from bench.

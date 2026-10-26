@@ -59,6 +59,8 @@ parser.add_argument('--rear-delayed-commit', action='store_true',
                     help='separate rear ablation: require 1.05m current motion-rear separation before freezing; retain a compatible frozen curve to its original deadline')
 parser.add_argument('--human-crossing-layout', choices=('legacy', 'lower-aisle'), default='legacy',
                     help='separate longer lower-aisle pedestrian encounter and obstacle-unaware robot route; authored poses are never physical evidence')
+parser.add_argument('--post-goal-observation-seconds', type=float, default=0.,
+                    help='separate 0..12s zero-command observation AFTER lower-aisle goal arrival; original braking window/checks retained')
 parser.add_argument('--encounter-guidance-ablation', action='store_true',
                     help='selected observed crossing human lambda0, normal lambda1.25 for parallel/other occupancy; separate from primary')
 parser.add_argument('--encounter-comparison', action='store_true',
@@ -434,6 +436,9 @@ if open_crossing_layout and (not args.human_continuing_away or args.restaurant_r
     parser.error('lower-aisle layout requires the bare continuing-away human-service experiment')
 if args.rear_delayed_commit and not args.rear_person_relative:
     parser.error('delayed rear commitment requires the explicit person-relative experiment')
+if (not math.isfinite(args.post_goal_observation_seconds) or not 0 <= args.post_goal_observation_seconds <= 12.
+    or args.post_goal_observation_seconds and not open_crossing_layout):
+    parser.error('post-goal observation requires the explicit lower-aisle layout and 0..12 seconds')
 minimum_crossing_trigger_y = 6.0 if open_crossing_layout else 6.8
 maximum_crossing_trigger_y = 8.4 if args.restaurant_human == "crossing" and not args.human_carry_bowl else 7.8
 maximum_crossing_trigger_y = 6.6 if open_crossing_layout else maximum_crossing_trigger_y
@@ -2325,6 +2330,23 @@ def main():
     final_state = np.array(stopping_sweep["final_state"])
     stop_drift = stopping_sweep["translation_drift_m"]
     minimum_clearance = min(minimum_clearance, stopping_sweep["minimum_clearance_m"])
+    post_goal_observation = None
+    if arrived and args.post_goal_observation_seconds:
+        from robot.evaluation.post_goal_observation import summarize_post_goal_observation
+        navigation_active = False
+        observation_start = float(timeline.get_current_time())
+        observation = sample_stopping_sweep(state_reader=state, step=step,
+            clearance_reader=independent_clearance,
+            frame_count=math.ceil(args.post_goal_observation_seconds / stationary.PHYSICS_DT))
+        post_goal_observation = summarize_post_goal_observation(stopping_sweep, observation,
+            goal_xy=GOAL, goal_tolerance=waypoint.config.position_tolerance)
+        post_goal_observation.update(source_start_seconds=observation_start,
+            source_end_seconds=float(timeline.get_current_time()),
+            original_braking_report='stopping-sweep.json', observation=observation)
+        save_json('post-goal-observation.json', post_goal_observation)
+        final_state = np.array(post_goal_observation['final_state'])
+        stop_drift = post_goal_observation['translation_drift_m']
+        minimum_clearance = min(minimum_clearance, post_goal_observation['minimum_clearance_m'])
     if human is not None and human.carry is not None:
         minimum_clearance = min(minimum_clearance, min(
             r["independent_robot_clearance_m"] for r in human.records
@@ -2344,6 +2366,7 @@ def main():
         and len(live_fields) >= 10
         and moving_field_count >= 10
     )
+    completed = completed and (post_goal_observation is None or post_goal_observation['passed'])
     human_validation = None
     passing_validation = None
     person_relative_validation = None
@@ -2530,6 +2553,7 @@ def main():
         if not math.isfinite(minimum_cbf_margin)
         else minimum_cbf_margin,
         "stop_drift_m": stop_drift,
+        "post_goal_observation": post_goal_observation,
         "last_state": final_state.tolist(),
         "live_field_count": len(live_fields),
         "live_field_record_storage": "full history in live-fields.jsonl; live-fields.json is latest-five checkpoint"

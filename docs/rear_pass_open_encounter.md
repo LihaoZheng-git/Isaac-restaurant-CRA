@@ -71,3 +71,26 @@ No freely parked/braking or navigation claim follows from the mounted result.
 The first two isolated helper attempts produced no valid result; the second
 captured a pose-output parsing error. Both are retained separately from accepted
 diagnostics.
+
+## Mounted native component passed
+
+At cf5be51, the full mounted native human/sensor benchmark PASSED with zero
+wheel commands and zero robot drift: 9 fresh idle and 24 moving associations,
+median world-velocity error 0.087218 m/s, actual actor speed 0.522254 m/s,
+minimum furniture clearance 0.284770 m and maximum collider error 2.87e-8 m.
+Articulation, crossing, upper departure, grounding and video checks passed.
+Original report SHA256: bb840439c5632e7bed92d2380d54f5495b1f0048f4072f718a78424daaadfe67.
+This is the separately approved mounted perception benchmark, not a pass of
+the freely parked drift test, free braking or coupled rear navigation.
+
+The coupled lower-aisle recipe may explicitly request a 12-second post-goal
+zero-command observation. Planning/inference are closed after actual arrival;
+this tail merely records the continuing pedestrian's upper-aisle departure.
+It is not a scheduled pause during navigation, fresh perception or renewed field
+coverage. The original 60-frame stopping-sweep.json remains unchanged. A
+separate post-goal report audits all original-plus-tail poses from the ORIGINAL
+braking start, requiring clearance >0.02 m, maximum drift <0.05 m and continued
+presence in the original goal tolerance. Thus longer observation cannot hide
+intermediate contact, drift-return or lost goal. Old modes default to no tail.
+Controller/actor/perception code is unchanged from the mounted component;
+new independent FREE stationary and own60 gates precede wheel testing.
