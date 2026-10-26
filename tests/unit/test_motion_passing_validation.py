@@ -124,3 +124,21 @@ def test_native_phase_metadata_must_be_complete_and_recognized(invalid):
         truth[0]["phase"] = "unrecognized"
     with pytest.raises(ValueError, match="phase"):
         summarize_motion_passing(records, truth, moving_robot=True, nominal_goal_world_xy=(0, 4))
+
+
+@pytest.mark.parametrize('yaw', [0., 1.1])
+def test_progress_uses_actual_short_route_and_rejects_lateral_or_incomplete_displacement(yaw):
+    records, truth = example()
+    rotation = np.array([[np.cos(yaw), -np.sin(yaw)], [np.sin(yaw), np.cos(yaw)]])
+    for row in truth:
+        row['robot_xy'] = (rotation @ (np.array(row['robot_xy']) * .7)).tolist()
+    goal = rotation @ [0., 2.8]
+    result = summarize_motion_passing(records, truth, moving_robot=True, nominal_goal_world_xy=goal)
+    assert result['checks']['completed_route_progress']
+    assert result['checks']['rejoined_original_route_goal']
+    assert result['required_route_progress_m'] == pytest.approx(2.65)
+    for endpoint in ([0., 2.6], [3., 0.]):
+        truth[-1]['robot_xy'] = (rotation @ endpoint).tolist()
+        failed = summarize_motion_passing(records, truth, moving_robot=True, nominal_goal_world_xy=goal)
+        assert not failed['checks']['completed_route_progress']
+        assert not failed['checks']['rejoined_original_route_goal']

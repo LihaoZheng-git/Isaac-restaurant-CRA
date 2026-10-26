@@ -31,10 +31,11 @@ class PersonRelativeRearConfig:
     maximum_angular_velocity: float = 1.0
     minimum_current_rear_separation_m: float = 0.0
     continue_frozen_until_deadline: bool = False
+    enable_preparation: bool = False
 
     def __post_init__(self):
         for key, value in asdict(self).items():
-            if key == "continue_frozen_until_deadline":
+            if key in {"continue_frozen_until_deadline", "enable_preparation"}:
                 if not isinstance(value, bool):
                     raise ValueError("frozen-reference continuation must be explicit")
                 continue
@@ -354,6 +355,21 @@ class PersonRelativeRearMemory:
         self.reason = "no_current_selection"
         self.invalidated = False
         self.attempt_count = 0
+        self.approach_reference = None
+
+    @property
+    def active_reference(self):
+        return self.reference if self.reference is not None else self.approach_reference
+
+    def _prepare(self, **values):
+        if not self.config.enable_preparation or self.invalidated:
+            return None
+        try:
+            self.approach_reference = CurrentRearApproachReference(config=self.config, **values)
+        except ValueError:
+            return None
+        self.reason = "fresh_current_rear_approach_before_complete_passage"
+        return self.approach_reference
 
     def update(
         self,
@@ -371,6 +387,7 @@ class PersonRelativeRearMemory:
             raise ValueError("person-relative source timestamps must increase")
         gap = None if self.last_source is None else source_timestamp - self.last_source
         self.last_source = source_timestamp
+        self.approach_reference = None
         if track_id is None:
             # A rejected pre-passage attempt has no forecast/path to retain.
             # Only an actually frozen curve (or an already invalidated key)
@@ -398,7 +415,10 @@ class PersonRelativeRearMemory:
             if (self.config.minimum_current_rear_separation_m > 0 and speed > 0
                 and float((_vector(person_xy, 2) - _vector(initial, 3)[:2]) @ (motion / speed)) + 1e-9 < self.config.minimum_current_rear_separation_m):
                 self.reason = "waiting_for_current_rear_commit_separation"
-                return None
+                return self._prepare(track_id=track_id, selection_timestamp=selection_timestamp,
+                    source_timestamp=source_timestamp, initial_state=tuple(initial),
+                    nominal_goal_xy=tuple(goal), original_person_xy=tuple(person_xy),
+                    original_person_velocity=tuple(velocity_xy), route_direction=tuple(route_direction))
             for tau in np.linspace(
                 self.config.minimum_prediction_seconds,
                 self.config.maximum_prediction_seconds,
@@ -421,6 +441,11 @@ class PersonRelativeRearMemory:
                     continue
                 self.reason = "new_frozen_person_relative_reference"
                 break
+            if self.reference is None:
+                self._prepare(track_id=track_id, selection_timestamp=selection_timestamp,
+                    source_timestamp=source_timestamp, initial_state=tuple(initial),
+                    nominal_goal_xy=tuple(goal), original_person_xy=tuple(person_xy),
+                    original_person_velocity=tuple(velocity_xy), route_direction=tuple(route_direction))
         if self.reference is not None:
             try:
                 self.reference.validate_current(
@@ -434,7 +459,7 @@ class PersonRelativeRearMemory:
             except ValueError as error:
                 self.reference, self.reason = None, str(error)
                 self.invalidated = True
-        return self.reference
+        return self.active_reference
 
     def diagnostic(self):
         return dict(
@@ -444,5 +469,86 @@ class PersonRelativeRearMemory:
             fresh_attempt_count=self.attempt_count,
             invalidated=self.invalidated,
             reference=None if self.reference is None else self.reference.diagnostic(),
+            approach_reference=None if self.approach_reference is None else self.approach_reference.diagnostic(),
             scope="fresh-source search may resume only before a first frozen curve; original eight-second selection cap; invalidated/expired curves cannot restart",
         )
+
+
+@dataclass(frozen=True)
+class CurrentRearApproachReference:
+    """Fresh preparation target on the route's trailing side, no passage forecast.
+
+    A target is not necessarily behind the CURRENT person. It stays before the
+    current crossing plane; full passage requires the separate frozen curve.
+    Every candidate still needs the original exact/analytical safety checks.
+    """
+
+    track_id: int
+    selection_timestamp: float
+    source_timestamp: float
+    initial_state: tuple[float, float, float]
+    nominal_goal_xy: tuple[float, float]
+    original_person_xy: tuple[float, float]
+    original_person_velocity: tuple[float, float]
+    route_direction: tuple[float, float]
+    config: PersonRelativeRearConfig
+
+    def __post_init__(self):
+        if not isinstance(self.config, PersonRelativeRearConfig) or not self.config.enable_preparation:
+            raise ValueError('explicit current-source rear preparation required')
+        if isinstance(self.track_id, bool) or not isinstance(self.track_id, int) or self.track_id < 0:
+            raise ValueError('current positive track identity required')
+        if (any(isinstance(t, bool) or not isinstance(t, (int, float)) or not math.isfinite(t) or t < 0
+                for t in (self.source_timestamp, self.selection_timestamp))
+            or not 0 <= self.source_timestamp - self.selection_timestamp <= 8. + 1e-9):
+            raise ValueError('original source/selection epochs required')
+        for key, size in (('initial_state', 3), ('nominal_goal_xy', 2), ('original_person_xy', 2),
+                          ('original_person_velocity', 2), ('route_direction', 2)):
+            object.__setattr__(self, key, tuple(_vector(getattr(self, key), size)))
+        route = validated_route_direction(self.route_direction)
+        velocity = np.array(self.original_person_velocity)
+        speed = np.linalg.norm(velocity)
+        transverse = velocity - (velocity @ route) * route
+        person, initial, goal = map(np.array, (self.original_person_xy, self.initial_state[:2], self.nominal_goal_xy))
+        if (not .2 <= speed <= 2. or np.linalg.norm(transverse) < .6 * speed
+            or (person - initial) @ route <= .1 or (goal - person) @ route <= .1):
+            raise ValueError('current bounded transverse encounter before the goal required')
+
+    @property
+    def rear_direction(self):
+        route, velocity = np.array(self.route_direction), np.array(self.original_person_velocity)
+        transverse = velocity - (velocity @ route) * route
+        return -transverse / np.linalg.norm(transverse)
+
+    @property
+    def target(self):
+        initial, route = np.array(self.initial_state[:2]), np.array(self.route_direction)
+        lead = (np.array(self.original_person_xy) - initial) @ route
+        goal = np.array(self.nominal_goal_xy)
+        on_route = goal + ((initial - goal) @ route) * route
+        return on_route + min(self.config.path_lookahead_m, .5 * lead) * route + self.config.preferred_route_offset_m * self.rear_direction
+
+    def validate_current(self, *, track_id, selection_timestamp, source_timestamp,
+                         person_xy, velocity_xy, route_direction):
+        if (track_id != self.track_id or selection_timestamp != self.selection_timestamp
+            or source_timestamp != self.source_timestamp
+            or not np.allclose(_vector(person_xy, 2), self.original_person_xy, rtol=0, atol=1e-9)
+            or not np.allclose(_vector(velocity_xy, 2), self.original_person_velocity, rtol=0, atol=1e-9)
+            or not np.allclose(_vector(route_direction, 2), self.route_direction, rtol=0, atol=1e-9)):
+            raise ValueError('rear preparation requires its exact current source/identity/motion')
+
+    def context(self, initial):
+        _vector(initial, 3)
+        return dict(mode='rear', reason='current_source_rear_preparation',
+            target_grid_xy=self.target.tolist(), rear_direction=self.rear_direction.tolist(),
+            person_relative_phase='preparation', rear_preparation=self.diagnostic(),
+            scope='current-source maneuver preference before crossing; no future occupancy, physical evidence or passage acceptance')
+
+    def diagnostic(self):
+        return dict(track_id=self.track_id, original_source_timestamp_seconds=self.source_timestamp,
+            original_selection_timestamp_seconds=self.selection_timestamp,
+            original_person_xy=self.original_person_xy, original_person_velocity=self.original_person_velocity,
+            initial_state=self.initial_state, target_grid_xy=self.target.tolist(),
+            configuration=asdict(self.config), status='inferred',
+            basis='current_source_motion_defined_rear_side_preparation',
+            scope='new current-source target each field; no retained forecast, source renewal or completed rear pass; field/command freshness unchanged')

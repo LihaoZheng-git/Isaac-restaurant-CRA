@@ -2154,3 +2154,28 @@
   Old modes keep zero tail. Require free independent+own60 gates, strict timed/
   location/.20m arc/actual execution/goal/containment/stopping before rear claims;
   no mirrored wheels or main/long-service/PR117 hold release follows from bench.
+
+- At7a9e7ba the lower-aisle coupled trial FAILED strict rear timing/arc and one
+  body containment row, despite3/3goal25.016667s,.101086mclearance,.011998m
+  braking-plus-tail drift and15walking rear sources/131translationrows2.183333s.
+  Plane crossing was2.341872s after walking; near-person arc.037701m<.20m.
+  Max center error.256388m exceeded the unchanged.25m uncertainty prior; retain
+  original reportSHA0ed6ea8db88c51bed70800ee7472d7bb0618e322e96e1c1c54b397024404a007.
+  The user explicitly approved a NEW separately reported.30m uncertainty prior
+  (total body envelope.70m), validated stationary first, no default/score/limit/
+  acceptance change. The prospective progress metric uses actual configured
+  route chord minus unchanged.15m goal tolerance instead of hardcoded3.5m;
+  old report remains FAILED and byte unchanged.76visuals/ZERO fresh complete
+  factors; all prior/oracle/clock/renderer limitations remain.
+  Separate default-disabled --rear-preparation requires delayed person-relative
+  mode: fresh current motion/identity may propose a route-anchored trailing-side
+  approach before a complete curve is feasible. No retained forecast/occupancy
+  prediction/source renewal; original8s selection, identity and invalidation
+  gates persist. Every complete candidate keeps exact/dense/future-analytical/
+  first-CBF checks and stays before the CURRENT observed crossing plane by.05m.
+  Preparation plans never count as full rear execution. Full freeze still needs
+  original1.05m current separation/<=3s screening/deadline. Actor-only onsety6.0
+  is a separate timing recipe with unchanged route/speed/robot bounds. New free
+  independent+own60gates precede wheels; no mirrored wheels until strict success.
+  Keep mounted component separate, all failures/main/long-service/PR117 holds.
+  See docs/rear_pass_open_encounter.md; native preparation acceptance pending.

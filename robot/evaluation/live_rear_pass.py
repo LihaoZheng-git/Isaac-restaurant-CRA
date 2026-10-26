@@ -229,9 +229,12 @@ def summarize_rear_execution(plans, commands, truth, *, navigation_start_time):
         raise ValueError("complete ordered independent actor trace required")
     walking = (np.array([r.get("phase") for r in truth]) == "move") & (
         np.linalg.norm(np.gradient(positions, times, axis=0), axis=1) >= .3)
-    requests, sources = [], set()
+    requests, sources, preparation_plans = [], set(), 0
     for event in plans:
         audit = event.get("rear_pass_reference_ablation") or {}
+        if audit.get('context', {}).get('person_relative_phase') == 'preparation':
+            preparation_plans += int(event.get('accepted') is True and audit.get('selected') is True)
+            continue
         source, selection = audit.get("source_timestamp_seconds"), audit.get("original_selection_timestamp_seconds")
         if (event.get("accepted") is not True or audit.get("selected") is not True
             or source is None or selection is None or not 0 <= source-selection <= 8.+1e-9):
@@ -257,6 +260,7 @@ def summarize_rear_execution(plans, commands, truth, *, navigation_start_time):
                   verified_rear_plan_translation_during_walking=bool(joined))
     return dict(passed=all(checks.values()), checks=checks,
         accepted_rear_sources_during_walking=len(sources), verified_command_rows=len(joined),
+        accepted_preparation_plans_excluded=preparation_plans,
         verified_translation_seconds=sum(r["duration_seconds"] for r in joined),
         joined_commands=joined,
         scope="post-hoc optimizer-request-clock execution join; actor truth evaluation only; arrival/arc/clearance/stopping separate")

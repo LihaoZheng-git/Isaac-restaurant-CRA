@@ -57,6 +57,8 @@ parser.add_argument('--rear-person-relative', action='store_true',
                     help='separate frozen person-relative rear curve with bounded timing and unchanged exact safety checks')
 parser.add_argument('--rear-delayed-commit', action='store_true',
                     help='separate rear ablation: require 1.05m current motion-rear separation before freezing; retain a compatible frozen curve to its original deadline')
+parser.add_argument('--rear-preparation', action='store_true',
+                    help='separate current-source checked approach before a complete rear curve is feasible; never counted as full rear execution')
 parser.add_argument('--human-crossing-layout', choices=('legacy', 'lower-aisle'), default='legacy',
                     help='separate longer lower-aisle pedestrian encounter and obstacle-unaware robot route; authored poses are never physical evidence')
 parser.add_argument('--post-goal-observation-seconds', type=float, default=0.,
@@ -436,6 +438,8 @@ if open_crossing_layout and (not args.human_continuing_away or args.restaurant_r
     parser.error('lower-aisle layout requires the bare continuing-away human-service experiment')
 if args.rear_delayed_commit and not args.rear_person_relative:
     parser.error('delayed rear commitment requires the explicit person-relative experiment')
+if args.rear_preparation and not args.rear_delayed_commit:
+    parser.error('rear preparation requires the explicit delayed person-relative experiment')
 if (not math.isfinite(args.post_goal_observation_seconds) or not 0 <= args.post_goal_observation_seconds <= 12.
     or args.post_goal_observation_seconds and not open_crossing_layout):
     parser.error('post-goal observation requires the explicit lower-aisle layout and 0..12 seconds')
@@ -1248,6 +1252,7 @@ def main():
             person_config = PersonRelativeRearConfig(rear_distance_m=args.rear_reference_offset,
                 minimum_current_rear_separation_m=1.05 if args.rear_delayed_commit else 0.,
                 continue_frozen_until_deadline=args.rear_delayed_commit,
+                enable_preparation=args.rear_preparation,
                 maximum_linear_velocity=mpc.config.maximum_linear_velocity,
                 maximum_angular_velocity=min(mpc.config.maximum_angular_velocity, abs(mpc.config.minimum_angular_velocity)))
             perception.person_relative_rear_memory = PersonRelativeRearMemory(person_config)
@@ -2676,6 +2681,7 @@ def main():
         "rear_feasibility_start_enabled": args.rear_feasibility_start,
         "rear_person_relative_enabled": args.rear_person_relative,
         "rear_delayed_commit_enabled": args.rear_delayed_commit,
+        "rear_preparation_enabled": args.rear_preparation,
         "human_crossing_layout": args.human_crossing_layout,
         "person_relative_rear_validation": person_relative_validation,
         "checked_wait_current_pose_admissions": checked_wait_admissions,

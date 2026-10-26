@@ -13,7 +13,9 @@ import numpy as np
 
 from robot.control.unicycle_model import lookahead_control_matrix, wrap_to_pi
 from robot.safety.encounter_motion import validated_route_direction
-from robot.safety.person_relative_rear import PersonRelativeRearConfig, PersonRelativeRearReference
+from robot.safety.person_relative_rear import (
+    PersonRelativeRearConfig, PersonRelativeRearReference, CurrentRearApproachReference,
+)
 
 
 @dataclass(frozen=True)
@@ -171,7 +173,7 @@ def search_checked_rear_pass_reference(
         if person_relative_reference is None:
             if context['mode'] != 'none':
                 context.update(mode='wait', reason='no_current_person_relative_passage')
-        elif not isinstance(person_relative_reference, PersonRelativeRearReference) or person_relative_reference.config != cfg.person_relative:
+        elif not isinstance(person_relative_reference, (PersonRelativeRearReference, CurrentRearApproachReference)) or person_relative_reference.config != cfg.person_relative:
             raise ValueError("current validated person-relative reference required")
         else:
             if (cfg.person_relative.maximum_linear_velocity > mpc.config.maximum_linear_velocity+1e-9
@@ -190,6 +192,7 @@ def search_checked_rear_pass_reference(
         first_translation_rejections=0,
         first_command_checks=0,
         turn_first_fallback_candidates=0,
+        preparation_plane_rejections=0,
     )
     audit = dict(
         context=context,
@@ -242,6 +245,11 @@ def search_checked_rear_pass_reference(
         if value is None or not mpc._trajectory_is_safe(value):
             continue
         counts["exact_feasible"] += 1
+        if context.get('person_relative_phase') == 'preparation':
+            route = np.asarray(route_direction)
+            if np.max((value.chassis_states[:, :2] - obstacle) @ route) >= -.05:
+                counts['preparation_plane_rejections'] += 1
+                continue
         future_ok = True
         for j in range(mpc.config.horizon_steps):
             normal = (

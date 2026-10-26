@@ -232,7 +232,7 @@ def test_native_numeric_search_selects_translating_checked_reference_with_rotate
     assert not control.filter_command(result.first_command, np.zeros(3), f).emergency_stop_active
 
 
-@pytest.mark.parametrize('failure', [None, 'field_clock', 'stop', 'late', 'unaccepted'])
+@pytest.mark.parametrize('failure', [None, 'field_clock', 'stop', 'late', 'unaccepted', 'preparation'])
 def test_rear_execution_requires_actual_request_clock_translation_during_walking(failure):
     truth = [dict(time=10.+i*.1, actor_xyz=[i*.05, 0., 0.], phase='move' if i < 8 else 'walk_away')
              for i in range(12)]
@@ -248,8 +248,14 @@ def test_rear_execution_requires_actual_request_clock_translation_during_walking
         for c in commands:
             c['time'] += .8
             c['optimizer_candidate_source_age'] += .8
+    if failure == 'preparation':
+        for plan in plans:
+            plan['rear_pass_reference_ablation']['context'] = dict(person_relative_phase='preparation')
     result = summarize_rear_execution(plans, commands, truth, navigation_start_time=10.)
     assert result['passed'] == (failure is None)
+    if failure == 'preparation':
+        assert result['accepted_preparation_plans_excluded'] == 3
+        assert result['verified_command_rows'] == 0
     if failure is None:
         assert result['verified_translation_seconds'] == pytest.approx(.02)
         assert result['joined_commands'][0]['optimizer_request_timestamp_seconds'] == pytest.approx(10.15)

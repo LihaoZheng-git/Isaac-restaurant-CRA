@@ -94,3 +94,57 @@ presence in the original goal tolerance. Thus longer observation cannot hide
 intermediate contact, drift-return or lost goal. Old modes default to no tail.
 Controller/actor/perception code is unchanged from the mounted component;
 new independent FREE stationary and own60 gates precede wheel testing.
+
+## First coupled open-aisle result: failed rear passing and containment
+
+At frozen 7a9e7ba, the independent and own60 free stationary gates passed.
+The robot reached all three waypoints in 25.016667 simulation seconds, with
+0.101086 m minimum independent clearance, 0.011998 m braking-plus-tail drift
+and positive reported analytical margins. The post-goal observation passed.
+The full frozen rear curve actually executed: 15 accepted walking sources,
+131 verified translating rows, 2.183333 s. Nevertheless the strict rear gate
+FAILED: only 0.037701 m near-person walking arc, with plane crossing 2.341872 s
+after transverse walking ended. Arrival alone is not a rear pass.
+
+One of 249 envelope rows also FAILED containment: center error 0.256388 m
+exceeded the labeled 0.25 m uncertainty prior. A transient reduction in observed
+support coincides with a centroid/velocity excursion; that is a diagnostic,
+not a proven sole cause. Original failed report SHA256:
+0ed6ea8db88c51bed70800ee7472d7bb0618e322e96e1c1c54b397024404a007.
+There were 76 visual instances and ZERO complete fresh four-factor assessments;
+physical factor priors and all original clock/renderer limitations remain.
+
+The old progress subcheck hardcoded 3.5 m despite this configured 2.8 m route.
+The prospective correction uses route-directed progress >= configured chord
+minus the unchanged 0.15 m goal tolerance, and still requires actual goal
+rejoining. The original failed report remains unchanged; the timing/arc and
+containment failures remain failures regardless of this metric correction.
+
+## Next separately reported preparation experiment
+
+The user approved testing centroid uncertainty 0.30 m, total body-envelope
+radius 0.70 m, in a new trial after stationary validation. Defaults and old
+0.25 m reports stay unchanged. No factor score, robot limit or acceptance
+threshold changes. The actor-only onset moves to robot y6.0, with identical
+human route and speed, to allow earlier preparation.
+
+`--rear-preparation` requires the explicit delayed person-relative experiment.
+Before a complete <=3 s passage can freeze, a qualified CURRENT source may
+propose a route-anchored 0.35 m motion-trailing-side approach target, with 0.25 m
+forward lookahead. This separate maneuver preference uses no retained forecast
+or future occupancy. Every horizon remains before the current observed crossing
+plane by 0.05 m and must pass the original full exact/dense, future analytical
+and first-command checks. Field/command/current-pose gates remain unchanged.
+Preparation is rebuilt from each current qualified source, dropped on missing
+motion, and cannot restart an invalidated full curve or renew the original
+eight-second selection. A complete curve still needs its original 1.05 m
+current rear separation and three-second screening/deadline. Preparation plans
+are explicitly excluded from full rear-execution acceptance. Legacy modes stay
+disabled and unchanged. Native acceptance is pending; no mirrored wheels or
+main/long-service/PR117 hold release follows from this change.
+
+Preparation source validation: 2,790 unit tests passed in 108.93 s; 52 final
+focused tests passed in 10.49 s. Ruff across robot/scripts/tests, compilation,
+CLI help and whitespace checks passed. Trusted original left/right numeric
+snapshots reproduce the identical full command sequences with preparation
+disabled. These are source checks, not new native rear-pass acceptance.

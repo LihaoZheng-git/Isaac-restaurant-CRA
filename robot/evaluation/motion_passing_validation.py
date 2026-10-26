@@ -150,7 +150,9 @@ def summarize_motion_passing(
             raise ValueError("configured nominal goal required for bypass scoring")
         direction = goal - robot[0]
         distance = float(np.linalg.norm(direction))
-        direction = direction / max(distance, 1e-9)
+        if distance <= .15:
+            raise ValueError('nontrivial configured nominal route required for bypass scoring')
+        direction = direction / distance
         left = np.array([-direction[1], direction[0]])
         lateral = (robot - robot[0]) @ left
         velocity = np.gradient(actors, times, axis=0)
@@ -192,7 +194,7 @@ def summarize_motion_passing(
         checks.update(
             visible_trailing_side_arc=excursion >= 0.20,
             passes_behind_moving_actor=behind is not None and behind <= -0.10,
-            completed_route_progress=float(np.linalg.norm(robot[-1] - robot[0])) >= 3.5,
+            completed_route_progress=float((robot[-1] - robot[0]) @ direction) >= distance - .15,
             rejoined_original_route_goal=float(np.linalg.norm(robot[-1] - goal))
             <= 0.15,
         )
@@ -200,6 +202,7 @@ def summarize_motion_passing(
             maximum_left_excursion_during_encounter_m=excursion,
             behind_projection_at_closest_encounter_m=behind,
             nominal_route_chord_m=distance,
+            required_route_progress_m=distance - .15,
             endpoint_goal_error_m=float(np.linalg.norm(robot[-1] - goal)),
             encounter_evaluation_basis=encounter_basis,
             excluded_nonwalking_speed_threshold_rows=excluded_nonwalking_rows,

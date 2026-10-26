@@ -742,7 +742,7 @@ def assess_all_objects(worker, packet):
             rear_pass_reference_track_ids=rear_ids,
             rear_pass_route_direction_grid_xy=rear_route,
             rear_pass_policy_motion=rear_policy_motion,
-            person_relative_rear_reference=(None if person_relative_memory is None else person_relative_memory.reference),
+            person_relative_rear_reference=(None if person_relative_memory is None else person_relative_memory.active_reference),
         )
         return field, recovery
 
