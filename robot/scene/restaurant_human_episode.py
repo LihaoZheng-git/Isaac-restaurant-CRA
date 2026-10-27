@@ -33,13 +33,14 @@ class RestaurantHumanEpisode:
         crossing_y_m=8.9,
         crossing_layout="legacy",
     ):
-        if mode not in {"standing", "crossing", "continuous-crossing"}:
+        if mode not in {"standing", "crossing", "continuous-crossing", "parallel"}:
             raise ValueError("unknown human episode")
         if crossing_direction not in {"right-to-left", "left-to-right"} or (
             crossing_direction == "left-to-right" and mode != "crossing"
         ):
             raise ValueError("mirrored crossing is bounded to standalone walking")
         self.crossing_direction = crossing_direction
+        self.parallel_oncoming = mode == 'parallel'
         from robot.scene.rear_pass_encounter import validate_crossing_layout
         self.open_layout = validate_crossing_layout(crossing_layout, direction=crossing_direction,
             extension=crossing_extension_m, crossing_y=crossing_y_m)
@@ -77,14 +78,20 @@ class RestaurantHumanEpisode:
         self.navigation_start_time = None
         if not math.isfinite(speed_mps) or not 0.5 <= speed_mps <= 1.0:
             raise ValueError("bounded coupled native walking speed must be .5..1 m/s")
+        if self.parallel_oncoming and (speed_mps != .5 or continuing_away or carry_bowl
+            or upper_continuation or crossing_delay_seconds is None):
+            raise ValueError('parallel fixture requires explicit timing, bare adult and .5m/s')
         self.stage, self.mode, self.output = stage, mode, output
         with Usd.EditContext(stage, stage.GetSessionLayer()):
             self.setup = prepare_native_restaurant_human(stage, crossing_direction=crossing_direction,
                 crossing_extension_m=crossing_extension_m,crossing_y_m=crossing_y_m,
-                crossing_layout=crossing_layout)
+                crossing_layout=crossing_layout, parallel_oncoming=self.parallel_oncoming)
         self.goal = (29.8 if crossing_direction == "left-to-right" else 27.8, 8.9, 0.0)
         if self.departure is not None:
             self.goal = self.departure.goal
+        if self.parallel_oncoming:
+            from robot.scene.parallel_walk_encounter import PARALLEL_ACTOR_GOAL
+            self.goal = PARALLEL_ACTOR_GOAL
         self.speed = speed_mps
         self.phase = "idle_before"
         self.task = None
@@ -121,7 +128,10 @@ class RestaurantHumanEpisode:
         if self.agent is None:
             raise RuntimeError("native human behavior unavailable")
         self.agent.set_auto_avoidance_enabled(False)
-        if self.crossing_direction == "left-to-right":
+        if self.parallel_oncoming:
+            import carb
+            self.agent.idle(facing=carb.Float3(0, -1, 0))
+        elif self.crossing_direction == "left-to-right":
             import carb
             self.agent.idle(facing=carb.Float3(1, 0, 0))
         elif self.departure is not None:
@@ -173,10 +183,10 @@ class RestaurantHumanEpisode:
             prim.MakeMatrixXform().Set(
                 Gf.Matrix4d()
                 .SetLookAt(
-                    Gf.Vec3d(26.5, 7.7, 2.4)
+                    Gf.Vec3d(25.5, 6., 4.3) if self.parallel_oncoming else Gf.Vec3d(26.5, 7.7, 2.4)
                     if self.carry_setup is not None
                     else Gf.Vec3d(24.5, 5.5, 3.2) if self.open_layout else Gf.Vec3d(25.9, 6.7, 3.2),
-                    Gf.Vec3d(29.0, 9.5, 0.8)
+                    Gf.Vec3d(29., 8.7, .8) if self.parallel_oncoming else Gf.Vec3d(29.0, 9.5, 0.8)
                     if self.carry_setup is not None
                     else Gf.Vec3d(28.0, 7.0, 0.8) if self.open_layout else Gf.Vec3d(29.0, 8.2, 0.7),
                     Gf.Vec3d(0, 0, 1),
@@ -208,7 +218,7 @@ class RestaurantHumanEpisode:
         # This controls the scripted actor only. No actor state enters CRA.
         if (
             navigation
-            and self.mode in {"crossing", "continuous-crossing"}
+            and self.mode in {"crossing", "continuous-crossing", "parallel"}
             and self.task is None
             and self.phase == "idle_before"
             and crossing_due(now=now, robot_y=robot_xy[1], trigger_y=self.trigger_robot_y,
@@ -248,7 +258,7 @@ class RestaurantHumanEpisode:
             elif status == bh.BehaviorTaskStatus.SUCCEEDED:
                 self.task_succeeded = True
                 self.agent.idle()
-                self.phase = "away_endpoint" if self.departure is not None else "stopped_after"
+                self.phase = "away_endpoint" if self.departure is not None or self.parallel_oncoming else "stopped_after"
         xyz = self.position()
         feet = {}
         for side, i in self.feet.items():

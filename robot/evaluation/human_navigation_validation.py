@@ -54,7 +54,7 @@ def _current_contact_policy(obj):
 
 
 def summarize_human_navigation(records, truth, *, mode, upper_continuation=False, crossing_direction="right-to-left", continuing_away=False, crossing_y_m=8.9, crossing_layout="legacy"):
-    if mode not in {"standing", "crossing", "continuous-crossing"}:
+    if mode not in {"standing", "crossing", "continuous-crossing", "parallel"}:
         raise ValueError("unknown human navigation mode")
     if crossing_direction not in {"right-to-left", "left-to-right"}:
         raise ValueError("unsupported crossing evaluation direction")
@@ -209,7 +209,7 @@ def summarize_human_navigation(records, truth, *, mode, upper_continuation=False
             for o in r["objects"]
         ),
     }
-    if mode in {"crossing", "continuous-crossing"}:
+    if mode in {"crossing", "continuous-crossing", "parallel"}:
         checks.update(
             supported_moving_kinetic_rows=len(supported_moving) >= 5,
             simultaneous_motion_observed=len(simultaneous) >= 1,
@@ -233,6 +233,10 @@ def summarize_human_navigation(records, truth, *, mode, upper_continuation=False
             checks["actual_crossing_and_departure"] = summarize_departing_pedestrian(
                 truth, parked_robot=False, crossing_direction=crossing_direction,
                 crossing_y_m=crossing_y_m, crossing_layout=crossing_layout)["passed"]
+        if mode == 'parallel':
+            from robot.evaluation.parallel_walking_validation import validate_parallel_actor
+            checks.pop('actual_crossing')
+            checks['actual_parallel_walking'] = validate_parallel_actor(truth, parked_robot=False)['passed']
     else:
         checks["stationary_world_velocity_error"] = (
             bool(rows)

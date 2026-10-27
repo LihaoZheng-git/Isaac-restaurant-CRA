@@ -140,7 +140,7 @@ parser.add_argument("--restaurant-view", choices=("bowl", "pot", "counter", "fro
                     help="explicit stationary robot view; target names are evaluation metadata only")
 parser.add_argument("--restaurant-route", choices=("short", "service", "human-service"), default="short")
 parser.add_argument("--restaurant-server", action="store_true", help="explicit static-server scene opt-in; stationary actor gate required before wheels")
-parser.add_argument("--restaurant-human", choices=("standing", "crossing", "continuous-crossing"),
+parser.add_argument("--restaurant-human", choices=("standing", "crossing", "continuous-crossing", "parallel"),
                     help="native adult-human control integration; no static occupancy or shape persistence")
 parser.add_argument("--human-camera-upward-degrees", type=float, default=0.,
                     help="explicit experimental left RGB mount pitch, 0..25 degrees; actual extrinsics re-read")
@@ -400,11 +400,11 @@ if (not math.isfinite(args.human_crossing_extension) or not 0 <= args.human_cros
 if (not math.isfinite(args.human_crossing_line_y) or not 8.4 <= args.human_crossing_line_y <= 8.9
     or args.human_crossing_line_y != 8.9 and not args.human_continuing_away):
     parser.error('crossing line adjustment requires continuing-away mode and y=8.4..8.9')
-if args.motion_aware_passing and not (args.restaurant_human == "crossing" and args.persistent_object_risk_map
+if args.motion_aware_passing and not (args.restaurant_human in {"crossing", "parallel"} and args.persistent_object_risk_map
                                     and args.experiment_baseline != "geometric_velocity_cbf"):
     parser.error("bounded motion-aware passing requires the standalone crossing object-map scenario")
 if args.human_crossing_delay_seconds is not None and (
-    args.restaurant_human not in {"crossing", "continuous-crossing"}
+    args.restaurant_human not in {"crossing", "continuous-crossing", "parallel"}
     or not math.isfinite(args.human_crossing_delay_seconds)
     or not 0 <= args.human_crossing_delay_seconds <= 30
 ):
@@ -424,7 +424,7 @@ if not args.object_height_evidence and (args.height_support_margin != .12 or arg
 if not .12 <= args.human_cluster_radius <= .20 or (args.human_cluster_radius != .12 and not args.restaurant_human):
     parser.error("human 3D radius .12...20 requires a native human scenario")
 if not .5 <= args.human_walking_speed <= 1. or (
-    args.human_walking_speed != .7 and args.restaurant_human not in {"crossing", "continuous-crossing"}
+    args.human_walking_speed != .7 and args.restaurant_human not in {"crossing", "continuous-crossing", "parallel"}
 ):
     parser.error("coupled walking-speed override requires crossing mode, .5..1 m/s")
 from robot.scene.rear_pass_encounter import (
@@ -440,6 +440,12 @@ if args.rear_delayed_commit and not args.rear_person_relative:
     parser.error('delayed rear commitment requires the explicit person-relative experiment')
 if args.rear_preparation and not args.rear_delayed_commit:
     parser.error('rear preparation requires the explicit delayed person-relative experiment')
+if args.restaurant_human == 'parallel' and (args.human_walking_speed != .5
+    or args.human_crossing_delay_seconds is None or args.human_continuing_away
+    or args.human_carry_bowl or args.human_start_view != 'original'
+    or args.human_crossing_direction != 'right-to-left' or args.crossing_strategy != 'legacy'
+    or args.encounter_guidance_ablation or args.zero_tangential_bias_ablation):
+    parser.error('parallel fixture requires explicit timing, bare .5m/s adult, original selectors and normal fixed guidance')
 if (not math.isfinite(args.post_goal_observation_seconds) or not 0 <= args.post_goal_observation_seconds <= 12.
     or args.post_goal_observation_seconds and not open_crossing_layout):
     parser.error('post-goal observation requires the explicit lower-aisle layout and 0..12 seconds')
@@ -645,6 +651,12 @@ if open_crossing_layout:
     stationary.ROBOT_START_POSITION_WORLD = OPEN_ROBOT_START_WORLD
     stationary.ROBOT_START_YAW_RADIANS = OPEN_ROBOT_YAW
     ROUTE = open_robot_route_local_xy()
+    GOAL = ROUTE[-1]
+if args.restaurant_human == 'parallel':
+    from robot.scene.parallel_walk_encounter import PARALLEL_ROBOT_START, PARALLEL_ROBOT_YAW, PARALLEL_ROBOT_ROUTE
+    stationary.ROBOT_START_POSITION_WORLD = PARALLEL_ROBOT_START
+    stationary.ROBOT_START_YAW_RADIANS = PARALLEL_ROBOT_YAW
+    ROUTE = PARALLEL_ROBOT_ROUTE
     GOAL = ROUTE[-1]
 GROUND_SCOPE = "bounded separated ground sphere; observed flat plane with assumed unseen local support/landing continuity"
 PLUME_SCOPE = "bounded rendered matte sphere and opaque bright puffs; validated initial clean reference; registered object-associated visible-plume proxy only"
@@ -912,7 +924,7 @@ def main():
         layout_monitor = load_authored_layout_monitor(args.restaurant_layout_survey, restaurant_props)
         save_json("restaurant-placement-monitor.json", {"props":restaurant_props,
             "basis":"authored actual-mesh bounds for independent evaluation/abort only; no factor inputs",
-            "humans_added":int(has_server),"actor_motion_enabled":args.restaurant_human in {"crossing", "continuous-crossing"},
+            "humans_added":int(has_server),"actor_motion_enabled":args.restaurant_human in {"crossing", "continuous-crossing", "parallel"},
             "payload_added":False,"human_carried_bowl_added":args.human_carry_bowl})
         setup_footprint = RectangularRobotFootprint(stationary.ROBOT_FRONT_EXTENT,
             stationary.ROBOT_REAR_EXTENT,stationary.ROBOT_LEFT_EXTENT,
@@ -949,7 +961,7 @@ def main():
             orientations=[[math.cos(yaw/2), 0., 0., math.sin(yaw/2)]])
     else:
         stationary.position_robot_for_experiment(controller)
-    if open_crossing_layout:
+    if open_crossing_layout or args.restaurant_human == 'parallel':
         from robot.scene.rear_pass_encounter import reset_open_encounter_velocity
         reset_open_encounter_velocity(controller)
     for _ in range(stationary.SETTLE_STEPS):
@@ -2417,7 +2429,15 @@ def main():
         if human.departure is not None:
             save_json("human-departure-events.json", human.departure.events)
         save_json("human-truth-evaluation-only.json", human.records)
-        if args.motion_aware_passing:
+        if args.restaurant_human == 'parallel':
+            from robot.evaluation.parallel_walking_validation import validate_parallel_curve
+            parallel_goal = (anchor.x + math.cos(anchor.yaw)*ROUTE[-1][0] - math.sin(anchor.yaw)*ROUTE[-1][1],
+                anchor.y + math.sin(anchor.yaw)*ROUTE[-1][0] + math.cos(anchor.yaw)*ROUTE[-1][1])
+            parallel_validation = validate_parallel_curve(live_fields, human.records, goal_world_xy=parallel_goal)
+            human_validation['parallel_curve'] = parallel_validation
+            completed = completed and parallel_validation['passed']
+            save_json('parallel-walking-validation.json', parallel_validation)
+        if args.motion_aware_passing and args.restaurant_human != 'parallel':
             from robot.evaluation.motion_passing_validation import summarize_motion_passing
             passing_goal = (anchor.x + math.cos(anchor.yaw)*ROUTE[-1][0] - math.sin(anchor.yaw)*ROUTE[-1][1],
                             anchor.y + math.sin(anchor.yaw)*ROUTE[-1][0] + math.cos(anchor.yaw)*ROUTE[-1][1])

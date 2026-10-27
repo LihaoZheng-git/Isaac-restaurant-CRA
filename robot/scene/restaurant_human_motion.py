@@ -72,7 +72,7 @@ def attach_moving_human_collider(stage, rig, *, radius=0.4, height=1.7):
 
 
 def prepare_native_restaurant_human(stage, *, crossing_direction="right-to-left",
-                                    crossing_extension_m=0., crossing_y_m=8.9, crossing_layout="legacy"):
+                                    crossing_extension_m=0., crossing_y_m=8.9, crossing_layout="legacy", parallel_oncoming=False):
     import omni.client
     import omni.kit.commands
     from pxr import NavSchema, Sdf, Usd
@@ -102,6 +102,11 @@ def prepare_native_restaurant_human(stage, *, crossing_direction="right-to-left"
         server.GetAttribute("xformOp:translate").Set(Gf.Vec3d(start_x,crossing_y_m,0.))
     if open_layout:
         server.GetAttribute("xformOp:translate").Set(Gf.Vec3d(*OPEN_ACTOR_START_WORLD))
+    if parallel_oncoming:
+        from robot.scene.parallel_walk_encounter import validate_parallel_scope, PARALLEL_ACTOR_START
+        validate_parallel_scope(direction=crossing_direction, extension=crossing_extension_m,
+            crossing_y=crossing_y_m, layout=crossing_layout)
+        server.GetAttribute('xformOp:translate').Set(Gf.Vec3d(*PARALLEL_ACTOR_START))
     rigs = [p for p in Usd.PrimRange(server) if p.IsA(UsdSkel.Root)]
     skeletons = [p for p in Usd.PrimRange(server) if p.IsA(UsdSkel.Skeleton)]
     if len(rigs) != 1 or len(skeletons) != 1:
@@ -128,7 +133,7 @@ def prepare_native_restaurant_human(stage, *, crossing_direction="right-to-left"
         stage, "/World/CRAServiceActors/HumanNavMeshVolume"
     )
     volume.CreateNavVolumeTypeAttr("Include")
-    volume.CreateExtentAttr([Gf.Vec3f(25, 6, -0.2) if open_layout else Gf.Vec3f(27, 7, -0.2),
+    volume.CreateExtentAttr([Gf.Vec3f(25, 6, -0.2) if open_layout or parallel_oncoming else Gf.Vec3f(27, 7, -0.2),
                              Gf.Vec3f(31, 14, 2.5)])
     settings = configure_human_navmesh(stage)
     return {
@@ -142,4 +147,5 @@ def prepare_native_restaurant_human(stage, *, crossing_direction="right-to-left"
         "scope": "native actor motion/render/independent evaluation only; no estimator inputs",
         "authored_crossing_direction": crossing_direction,
         "authored_crossing_layout": crossing_layout,
+        "authored_parallel_oncoming": parallel_oncoming,
     }

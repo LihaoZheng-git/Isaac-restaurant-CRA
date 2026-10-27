@@ -2188,3 +2188,16 @@
   wheels or hold releases. Retain previously accepted left10s checked wait/go
   fallback and normal parallel guidance; these new failures do not validate a
   new lower-aisle or mirrored fallback. See docs/rear_pass_open_encounter.md.
+
+- The user's2026-10-27 decision selects parallel curved avoidance with normal
+  lambda1.25 and checked perpendicular stop/go, followed by separate PI demo
+  design. Validate the short existing10s crossing and explicit new oncoming-aisle
+  fixture before demo claims; no long-service or main/PR117 hold is lifted.
+  Parallel authored route/timing stays outside CRA. Use the unchanged.40+.25
+  body prior/defaults; the.30 rear-only trial is not a global prior update.
+  Require parked new-actor/sensor and independent+own60 gates before wheels,
+  >=.20m curve DURING a <=2m walking encounter, actual arrival/stop/containment
+  and all original source/exact/analytical checks. No rear reference/tracking
+  objective is enabled in the first parallel trial. Keep numeric/prior-assisted
+  completeness separate from fresh4factor perception; see
+  docs/restaurant_behavior_validation.md. Native acceptance remains pending.
