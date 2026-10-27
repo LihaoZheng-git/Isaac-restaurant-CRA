@@ -81,3 +81,37 @@ correction makes the unused crossing-plane metadata null in parallel mode;
 the exact source audit includes that single reporting expression. It changes
 no physical/control behavior or acceptance. New own60-frame gates remain
 mandatory before motion; native curved/stop-go results are still pending.
+
+## First parallel navigation result and bounded retry
+
+At frozen cf44564, `parallel-motion-v4` FAILED after17.8 navigation seconds:
+1/3 waypoints, progress timeout and only.000777m lateral excursion during the
+nearby walking window. Physical clearance was.241402m, braking drift.000872m
+and accepted-command analytical margin.381853. The actor/current-motion gate
+passed (53 distinct observed oncoming epochs, .087197m/s median steady world
+velocity error) and all active body-envelope containment checks passed. This
+does not establish arrival or curved avoidance. The launcher returned0 after
+the expected failed-acceptance RuntimeError; saved `passed=false` governs.
+
+The trusted native source14.8s replay places the robot query in occupied cells
+owned by human envelope3000000000 in both adjacent yaw slices. It returns
+`unsafe_configuration_boundary` before optimization. This is not repaired by
+waiting longer or by calling restored lambda a successful curve. The observed
+mass/contact uses remain labeled priors; potential/thermal remain configured
+priors and zero complete fresh four-factor assessments were recorded.
+
+The next bounded parallel retry may use the user's previously approved, separate
+checked Laplace-guidance-tracking ablation, beta100, with the same route, actor
+timing, lambda1.25, .40+.25m body prior and all original limits/acceptance gates.
+All other invocation arguments stay matched. This encourages an earlier checked
+turn; it changes controller preferences and must not be called the primary
+Safe-SAGE objective or a CRA advantage. It requires its own fresh60-frame gate
+before wheels. If no eligible checked reference exists, legacy fallback remains.
+Perpendicular crossing stays checked wait/go; the user's latest steering focuses
+on parallel walking. A new crossing wheel repeat and the PI demo remain pending.
+
+An evaluation-only companion for the older lower-aisle v9 rear image records
+simultaneous center separations2.122/2.763/2.919m at5cm/20cm/maximum29cm bend.
+The strongest bend happened after transverse walking ended. Its original failed
+report SHA256 remains9fe1f5a3a91ec5729716ffd4e0e14a01dbed8b3eaa50462d19c3bdfe69866fc6;
+the companion does not revise old criteria or validate close rear passing.

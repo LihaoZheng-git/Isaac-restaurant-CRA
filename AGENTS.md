@@ -2201,3 +2201,15 @@
   objective is enabled in the first parallel trial. Keep numeric/prior-assisted
   completeness separate from fresh4factor perception; see
   docs/restaurant_behavior_validation.md. Native acceptance remains pending.
+
+- The first short parallel wheel trial atcf44564 FAILED:1/3 waypoints,
+  17.8s progress timeout, .000777m nearby curve, despite.241402m physical
+  clearance, stopping/current-motion and active-envelope containment passes.
+  Native replay source14.8s rejects the initial configuration against human
+  envelope3000000000; do not relax it or report restored guidance as a curve.
+  A bounded retry may reuse the already approved separate checked guidance-
+  tracking beta100 ablation, keeping route/timing/lambda1.25/body.40+.25/limits
+  and every source/exact/analytical/arrival/stop gate. Require own60 first and
+  keep it outside the primary comparison. User retains perpendicular wait/go
+  and focuses next on parallel walking. PI demo/new crossing repeat still
+  pending; old rear failures and all holds remain. See behavior-validation doc.
