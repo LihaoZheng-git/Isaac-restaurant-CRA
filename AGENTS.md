@@ -2213,3 +2213,13 @@
   keep it outside the primary comparison. User retains perpendicular wait/go
   and focuses next on parallel walking. PI demo/new crossing repeat still
   pending; old rear failures and all holds remain. See behavior-validation doc.
+
+- The beta100 weight-only parallel retry at16c0a30 also FAILED(1/3 goals,
+  .000629m nearby bend), despite current-motion/envelope/stopping checks and
+  .238118m physical clearance. Keep original reportSHA2562c71eab84cfd2bbcc9cbe415651eea0702d941d4617f42759a72b577215627f9.
+  Its forecast reference has no proactive tangent for a parallel walker because
+  the existing passing selector is transverse-only. A bounded opt-in oncoming
+  selector/away-tangent follow-up belongs to the separately approved guidance-
+  tracking ablation, never the primary. Preserve crossing defaults, source
+  clocks, CRA/lambda/body/limits and all gates; require tests and fresh stationary
+  validation before new wheels. No parallel/demo acceptance follows yet.

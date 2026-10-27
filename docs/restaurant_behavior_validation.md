@@ -115,3 +115,22 @@ simultaneous center separations2.122/2.763/2.919m at5cm/20cm/maximum29cm bend.
 The strongest bend happened after transverse walking ended. Its original failed
 report SHA256 remains9fe1f5a3a91ec5729716ffd4e0e14a01dbed8b3eaa50462d19c3bdfe69866fc6;
 the companion does not revise old criteria or validate close rear passing.
+
+The weight-only `parallel-tracking-motion-v5` retry at16c0a30 also FAILED:
+1/3 waypoints, 24.466667s progress timeout, .000629m nearby bend, .238118m
+physical clearance, .000854m braking drift and .387222 minimum accepted-command
+analytical margin. Current motion and all active envelope checks passed;51
+oncoming epochs were supported, but zero complete fresh four-factor updates.
+Its independent+own60 stationary gates passed with zero wheels. Original report
+SHA256:2c71eab84cfd2bbcc9cbe415651eea0702d941d4617f42759a72b577215627f9.
+
+Code review explains why weight alone cannot supply proactive parallel steering:
+the forecast reference projects the nominal velocity, while the optional
+tangent is gated by the transverse-crossing selector. That selector correctly
+rejects parallel walking. The earlier source9.8s native snapshot also had
+h=1.14333, outside the activation threshold1. Later, source14.4s had h=.27226
+but no exact-safe progress reference. The separate bounded follow-up should
+explicitly select current visually associated oncoming motion and an away-side
+tangent, retain original source times, and test earlier activation as engineering
+preferences within the already approved tracking ablation. It must not change
+the default crossing selector, primary objective, CRA, lambda or geometry gates.
