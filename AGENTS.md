@@ -2301,3 +2301,21 @@
   gates retained. Keep primary, perpendicular checked wait/go, earlier failures
   and main/long-service/PR117 holds. This bounded short clip supports next PI
   demo DESIGN, not a long mission or main merge. See behavior-validation doc.
+
+- The user approved smoothing the selected parallel case. First test ONLY
+  --guidance-activation-h2->3 field-value units (not metres), retaining2m pose-only
+  guides, lambda1.25/flux-1.7/body.40+.25/factor priors/actor/limits/defaults and
+  every source/exact/analytical/physical/arrival/stop/nearby-curve gate. No new
+  planner or unsafe/stale selection reuse. The old2.383333s hold has27 fresh
+  unsafe_configuration_boundary rejections; do not claim latency as its cause.
+  New offline smoothing score uses actual translation, counts rotation/creeping
+  honestly and cannot accept missing encounters or failed native reports.
+  Prospective target: longest<.02m/s nearby-walking hold<=.5s and>=50% reduction;
+  report<.05m/s slow intervals and arrival time too. This is separate engineering
+  acceptance, never a relaxed safety gate or primary comparison. Test source,
+  then fresh independent+own60 before wheels; exact unchanged-source audit may
+  reuse parked actor/perception/selector component. Preserve baseline/failures,
+  all provenance and main/long-service/PR117 holds. See docs/parallel_smoothing.md.
+  First source freeze:2893units100.93s/85focused7.91s/RuffcompileCLI/diff PASS;
+  trusted same native selected-field replay atactivation2/3 retains exact-safe
+  success and original field bytes/epochs. Native smoothing acceptance pending.
