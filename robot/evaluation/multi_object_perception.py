@@ -547,7 +547,9 @@ def assess_all_objects(worker, packet):
                 row["boundary_flux"] = applied_guidance[key].boundary_flux
     passing = copy.deepcopy(getattr(worker, "motion_passing", None))
     passing_audit = None
-    nominal_direction = getattr(packet, 'nominal_route_direction_world_xy', None) if getattr(worker, 'encounter_motion', None) is not None else None
+    use_nominal_segment = (getattr(worker, 'encounter_motion', None) is not None
+        or passing is not None and passing.config.encounter_geometry == 'oncoming_parallel')
+    nominal_direction = getattr(packet, 'nominal_route_direction_world_xy', None) if use_nominal_segment else None
     passing_visual_evidence = copy.deepcopy(getattr(worker, "passing_visual_selection_evidence", None))
     if passing is not None:
         visual = fresh_person_selection_evidence(objects, packet.camera_timestamp_seconds,
@@ -579,7 +581,7 @@ def assess_all_objects(worker, packet):
         passing_audit["current_fresh_detector_person_track_ids"] = tuple(direct)
         if passing.encounter is None:
             passing_visual_evidence = None
-        elif passing_audit["decision"] == "selected_trailing_tangent":
+        elif passing_audit["decision"] in {"selected_trailing_tangent", "selected_parallel_away_tangent"}:
             passing_visual_evidence = copy.deepcopy((visual or {}).get(passing.encounter[0]))
         passing_audit["original_selection_visual_evidence"] = passing_visual_evidence
         passing_audit["ego_pose_reference"] = {"source":packet.pose_source,"status":packet.pose_status.value,

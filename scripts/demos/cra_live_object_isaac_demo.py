@@ -31,6 +31,8 @@ parser.add_argument("--experiment-baseline", choices=("geometric_velocity_cbf", 
                     default="continuous_cra_safe_sage", help="explicit matched restaurant comparison; physical assessments always retained")
 parser.add_argument("--motion-aware-passing", action="store_true",
                     help="opt-in current LiDAR crossing-side preference; unchanged CRA scores/lambda/safety checks")
+parser.add_argument('--parallel-guidance-ablation', action='store_true',
+                    help='separate observed oncoming-human away-tangent selector; requires explicit checked guidance tracking, not primary')
 parser.add_argument("--crossing-strategy", choices=("legacy", "rear-pass-or-yield", "yield-then-go"), default="legacy",
                     help="separate maneuver ablation; yielding requires exact predictive and analytical checks")
 parser.add_argument("--zero-tangential-bias-ablation", action="store_true",
@@ -249,6 +251,13 @@ parser.add_argument(
     help="optimizer candidate age cap; every executed horizon still needs fresh exact validation",
 )
 args = parser.parse_args()
+if args.parallel_guidance_ablation and (args.restaurant_human != 'parallel'
+    or not args.motion_aware_passing or not args.human_observed_passing_target
+    or args.guidance_tracking_weight <= 0 or args.guidance_tangent_velocity_fraction <= 0
+    or args.guidance_tangent_basis != 'selected_observed_obstacle'
+    or args.guidance_reference_mode != 'planar_forecast_velocity'
+    or args.experiment_baseline != 'continuous_cra_safe_sage'):
+    parser.error('parallel guidance ablation requires observed parallel human, positive checked forecast tracking and selected-obstacle tangent')
 if any(not math.isfinite(x) or x <= 0 for x in
        (args.route_guide_lookahead, args.route_guide_max_cross_track)):
     parser.error("route-guide lookahead/association distances must be finite and positive")
@@ -1081,6 +1090,7 @@ def main():
         ) if args.human_body_contact_prior is not None else None,
         experiment_baseline=args.experiment_baseline,
         motion_passing_config=MotionAwarePassingConfig(require_visual_person_selection=args.human_observed_passing_target,
+            encounter_geometry='oncoming_parallel' if args.parallel_guidance_ablation else 'transverse_crossing',
             maximum_identity_prior_selection_age_seconds=args.human_passing_identity_prior_max_age) if args.motion_aware_passing else None,
         human_body_envelope_config=HumanBodyEnvelopeConfig(body_radius_m=args.human_body_envelope_radius,
             centroid_uncertainty_m=args.human_envelope_centroid_uncertainty,
@@ -1386,7 +1396,7 @@ def main():
             if active_waypoint_index > 0 else np.zeros(2))
         segment_length = float(np.linalg.norm(segment))
         route_direction = None
-        if args.encounter_guidance_ablation and segment_length >= .2:
+        if (args.encounter_guidance_ablation or args.parallel_guidance_ablation) and segment_length >= .2:
             segment = segment / segment_length
             route_direction = (c*segment[0]-s*segment[1], s*segment[0]+c*segment[1])
         packet = LiveObjectPacket(
@@ -2437,6 +2447,12 @@ def main():
             human_validation['parallel_curve'] = parallel_validation
             completed = completed and parallel_validation['passed']
             save_json('parallel-walking-validation.json', parallel_validation)
+            if args.parallel_guidance_ablation:
+                from robot.evaluation.parallel_walking_validation import validate_parallel_selection
+                selection_validation = validate_parallel_selection(live_fields)
+                human_validation['parallel_selection'] = selection_validation
+                completed = completed and selection_validation['passed']
+                save_json('parallel-selection-validation.json', selection_validation)
         if args.motion_aware_passing and args.restaurant_human != 'parallel':
             from robot.evaluation.motion_passing_validation import summarize_motion_passing
             passing_goal = (anchor.x + math.cos(anchor.yaw)*ROUTE[-1][0] - math.sin(anchor.yaw)*ROUTE[-1][1],
@@ -2688,6 +2704,7 @@ def main():
         "navigation_simulation_seconds": now - start_sim,
         "controller_scope": "circular_velocity_aware_cbf_nominal_omega_no_mpc; shadow_CRA_fields_for_matched_perception" if args.experiment_baseline == "geometric_velocity_cbf" else "checked_guidance_local_path_ablation_with_exact_DTCBF_geometry_and_analytical_CBF" if args.guidance_tracking_weight > 0 else "online_unicycle_MPC_exact_DTCBF_geometry_and_analytical_CBF",
         "crossing_strategy_ablation": "live-checked-rear-or-wait" if args.checked_rear_pass_reference else args.crossing_strategy,
+        "parallel_guidance_ablation": args.parallel_guidance_ablation,
         "zero_tangential_bias_ablation": args.zero_tangential_bias_ablation,
         "encounter_guidance_ablation": args.encounter_guidance_ablation,
         "checked_wait_transition_enabled": args.checked_wait_transition,

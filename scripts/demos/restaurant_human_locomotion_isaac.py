@@ -31,6 +31,8 @@ parser.add_argument("--crossing-layout", choices=("legacy", "lower-aisle"), defa
 parser.add_argument("--mounted-perception-bench", action="store_true",
                     help="separate user-approved fixed chassis mount for lower-aisle stationary sensing only; no navigation or braking claim")
 parser.add_argument("--motion-aware-passing", action="store_true")
+parser.add_argument('--parallel-guidance-selection', action='store_true',
+                    help='zero-wheel current observed oncoming-human selector validation; no tracking commands')
 parser.add_argument("--human-body-contact-prior", type=float, default=None, metavar="SCORE",
                     help="explicit low nonzero human-body contact policy prior; legacy outline mode if omitted")
 parser.add_argument("--carry-bowl", action="store_true",
@@ -59,6 +61,8 @@ parser.add_argument(
     metavar=("KG", "LOWER", "UPPER"),
 )
 args = parser.parse_args()
+if args.parallel_guidance_selection and (not args.parallel_oncoming or not args.motion_aware_passing):
+    parser.error('parallel selection component requires explicit parallel-oncoming and motion-aware-passing')
 if args.parallel_oncoming and (not args.sensor_diagnostic or args.carry_bowl
     or args.continuing_away_crossing or args.continuous_crossing or args.speed != .5
     or args.goal_x != 29.8 or args.goal_y != 7.0 or args.robot_view != 'crossing-approach'):
@@ -410,6 +414,7 @@ def main():
             carried_object_groups=args.carried_object_groups,
             human_body_contact_prior_score=args.human_body_contact_prior,
             motion_aware_passing=args.motion_aware_passing,
+            parallel_guidance_selection=args.parallel_guidance_selection,
             camera_prim_path=CAMERA_PRIM_PATHS[args.rgb_camera],
         )
     phase = "idle_before"
@@ -665,7 +670,13 @@ def main():
         report["human_body_contact_gate"] = body_contact
         report["passed"] &= body_contact["passed"]
         save("human-body-contact-validation.json",body_contact)
-    if args.motion_aware_passing:
+    if args.parallel_guidance_selection:
+        from robot.evaluation.parallel_walking_validation import validate_parallel_selection
+        passing_report = validate_parallel_selection(sensor.records)
+        report['parallel_selection_validation'] = passing_report
+        report['passed'] &= passing_report['passed']
+        save('parallel-selection-validation.json', passing_report)
+    elif args.motion_aware_passing:
         from robot.evaluation.motion_passing_validation import summarize_motion_passing
         passing_report = summarize_motion_passing(sensor.records, records)
         report["motion_passing_validation"] = passing_report

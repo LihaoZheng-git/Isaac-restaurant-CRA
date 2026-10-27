@@ -3,6 +3,59 @@
 import numpy as np
 
 
+def validate_parallel_selection(records):
+    """Audit real sensor selection records; no actor truth or command authority."""
+    sources = set()
+    checks = dict(explicit_oncoming_scope=True, current_supported_selection=True,
+        original_visual_selection=True, original_selection_clock=True, away_side=True,
+        selected_field_side_and_lambda=True)
+    selected_rows = 0
+    for r in records:
+        a = r.get('motion_aware_passing') or r.get('diagnostics', {}).get('motion_aware_passing')
+        if not a:
+            continue
+        checks['explicit_oncoming_scope'] &= a.get('encounter_geometry') == 'oncoming_parallel'
+        preferences = a['preferences']
+        if not preferences:
+            continue
+        selected_rows += 1
+        source = r.get('time', r.get('sensor_timestamp'))
+        sources.add(source)
+        candidates = {int(c['track_id']): c for c in a['qualified_candidates']}
+        checks['original_visual_selection'] &= a['original_selection_visual_person_verified'] is True
+        started = a['encounter_selected_timestamp']
+        checks['original_selection_clock'] &= (started is not None and started <= source
+            <= started + a['configuration']['maximum_encounter_seconds'] + 1e-9)
+        objects = {o['attributes']['track_id']: o for o in r['objects']}
+        policies = r.get('applied_field_policies') or r.get('diagnostics', {}).get('applied_field_policies', ())
+        policies = {p['track_or_group_id']: p for p in policies}
+        for key, side in preferences.items():
+            key = int(key)
+            applied = policies.get(key, {})
+            checks['selected_field_side_and_lambda'] &= applied.get('applied_passing_side') == side and applied.get('lambda') == 1.25
+            if key not in objects or key not in candidates or candidates[key]['positive_lidar_point_count'] < 20:
+                checks['current_supported_selection'] = False
+                continue
+            o = objects[key]
+            v = [o['attributes']['motion'][k] for k in ('velocity_x_mps', 'velocity_y_mps')]
+            current = all(x['value'] is not None and x['status'] in {'measured', 'inferred'}
+                and abs(x['timestamp_seconds']-source) <= 1e-6 for x in v)
+            checks['current_supported_selection'] &= current
+            if not current:
+                continue
+            direction = np.array(a['route_direction_world_xy'])
+            velocity = np.array([x['value'] for x in v])
+            speed = np.linalg.norm(velocity)
+            checks['current_supported_selection'] &= .2 <= speed <= 2. and -velocity @ direction >= np.cos(np.pi/6)*speed-1e-9
+            rel = np.array(o['diagnostics']['centroid_world_xy']) - a['current_robot_world_xy']
+            lateral = direction[0]*rel[1] - direction[1]*rel[0]
+            checks['away_side'] &= abs(lateral) >= .15 and side == ('left' if lateral < 0 else 'right')
+    checks['three_distinct_current_sources'] = len(sources) >= 3
+    return dict(passed=all(checks.values()), checks={k: bool(v) for k, v in checks.items()},
+        selected_rows=selected_rows, distinct_selected_sources=len(sources),
+        scope='current visually associated oncoming selection/away tangent only; no rear passing, geometry/arrival/stopping or fresh four-factor claim')
+
+
 def validate_parallel_actor(records, *, parked_robot):
     if len(records) < 30:
         return dict(passed=False, checks=dict(enough_actual_samples=False))

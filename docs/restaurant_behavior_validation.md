@@ -134,3 +134,36 @@ explicitly select current visually associated oncoming motion and an away-side
 tangent, retain original source times, and test earlier activation as engineering
 preferences within the already approved tracking ablation. It must not change
 the default crossing selector, primary objective, CRA, lambda or geometry gates.
+
+## Opt-in observed parallel-guidance follow-up
+
+The separate `--parallel-guidance-ablation` adds oncoming-parallel selection to
+the existing checked tracking ablation. Defaults remain transverse-only. A
+selection needs one visually associated current human track, at least3 consistent
+moving observations, >=20 positive LiDAR returns, .2..2m/s speed, <=3m distance,
+<=4s constant-relative-velocity encounter and predicted separation<=1.6m.
+Observed velocity must lie within30degrees of opposite nominal-route travel,
+with >=.15m lateral separation to resolve the away side. The nominal segment
+direction is configured route context, never an obstacle-aware nominal command.
+
+An observed human to the route's right selects the left oriented tangent and
+vice versa. Current motion/geometry failures, source/identity gaps, competitors,
+passing or original8s expiry release the preference; old selection clocks never
+renew. CRA/factor provenance and numeric priors are unchanged. Selected field
+side and the existing selected-obstacle reference share this preference; every
+candidate still needs full exact checks and per-step analytical filtering.
+This does not plan a rear pass, infer free space or guarantee a side/convergence.
+
+The prospective native recipe uses beta100, activation_h2, tangent fraction1
+and `selected_observed_obstacle`, retaining all other route/timing/body/physical
+limits and fixed lambda1.25. These are explicit engineering preferences in a
+separate ablation, excluded from the primary comparison. A parked moving-human
+component now audits actual current selection and applied side/lambda before
+independent and own60-frame controller gates. Native acceptance remains pending.
+
+Final source validation for this follow-up passed2,849 unit tests in97.73s,
+71 focused tests in5.54s, repository Ruff, compilation, both CLI help checks
+and whitespace checks. Initial sandbox temporary-directory setup errors were
+resolved by using a fresh workspace-local pytest directory; no dependencies or
+environment settings were upgraded. Native component/controller results must
+still be recorded separately before any new curved-avoidance claim.

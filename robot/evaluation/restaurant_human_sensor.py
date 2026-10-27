@@ -90,15 +90,20 @@ class RestaurantHumanSensorDiagnostic:
         human_body_contact_prior_score=None,
         motion_aware_passing=False,
         camera_prim_path=None,
+        parallel_guidance_selection=False,
     ):
         self.stage, self.output = stage, output
         from robot.safety.motion_aware_passing import MotionAwarePassingConfig
-        self.passing_goal_world_xy = (28.8, 9.4) if motion_aware_passing else (30.6, 11.8)
+        if parallel_guidance_selection and not motion_aware_passing:
+            raise ValueError('parallel selection component requires motion-aware passing')
+        passing_config = MotionAwarePassingConfig(require_visual_person_selection=True,
+            encounter_geometry='oncoming_parallel') if parallel_guidance_selection else MotionAwarePassingConfig()
+        self.passing_goal_world_xy = (28.8, 10.5) if parallel_guidance_selection else (28.8, 9.4) if motion_aware_passing else (30.6, 11.8)
         if motion_aware_passing:
             self.save("motion-passing-configuration.json", {
-                "configuration":asdict(MotionAwarePassingConfig()),
+                "configuration":asdict(passing_config),
                 "nominal_waypoint_context_world_xy":self.passing_goal_world_xy,
-                "scope":"parked robot, observed crossing; hypothetical service waypoint context, zero wheels",
+                "scope":"parked robot, current observed motion selection; hypothetical service waypoint context, zero wheels",
             })
         self.carried_object_groups=carried_object_groups
         from robot.perception.human_body_contact import HumanBodyContactPriorConfig
@@ -193,7 +198,7 @@ class RestaurantHumanSensorDiagnostic:
             lookahead_distance=0.1,
         )
         self.worker = LiveObjectPerception(
-            motion_passing_config=MotionAwarePassingConfig() if motion_aware_passing else None,
+            motion_passing_config=passing_config if motion_aware_passing else None,
             segmenter=SamInstanceSegmenter(
                 SamInstanceConfig(
                     paths["sam"],

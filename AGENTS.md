@@ -2223,3 +2223,15 @@
   tracking ablation, never the primary. Preserve crossing defaults, source
   clocks, CRA/lambda/body/limits and all gates; require tests and fresh stationary
   validation before new wheels. No parallel/demo acceptance follows yet.
+
+- Separate default-disabled --parallel-guidance-ablation selects one currently
+  visually associated oncoming human using original motion/point/source gates,
+  <=30degree opposite travel and >=.15m observed lateral separation. It chooses
+  the tangent away from the human, using the obstacle-unaware nominal segment
+  for classification. Current motion/geometry failure releases it; original8s
+  selection/identity clocks remain. CRA/lambda/body/occupancy/limits are unchanged.
+  Beta100/activation_h2/tangent_fraction1 is an explicit tracking ablation, never
+  the primary or a rear-pass claim. Require parked moving-human selection/field-
+  side audit, independent+own60 and all original wheel gates; native pending.
+  Source checks passed2849units/71focused/Ruff/compile/CLI/diff before the
+  new native component; this does not itself establish wheel acceptance.

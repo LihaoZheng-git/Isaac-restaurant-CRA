@@ -29,16 +29,23 @@ class MotionAwarePassingConfig:
     minimum_transverse_fraction: float = 0.6
     maximum_encounter_seconds: float = 8.0
     passed_distance_m: float = 0.4
+    encounter_geometry: str = "transverse_crossing"
+    minimum_oncoming_alignment: float = math.cos(math.pi / 6)
+    minimum_parallel_lateral_separation_m: float = 0.15
 
     def __post_init__(self):
+        if self.encounter_geometry not in {"transverse_crossing", "oncoming_parallel"}:
+            raise ValueError("explicit transverse or oncoming encounter geometry required")
         if not isinstance(self.require_visual_person_selection, bool):
             raise TypeError("visual-person selection opt-in must be boolean")
+        if self.encounter_geometry == "oncoming_parallel" and not self.require_visual_person_selection:
+            raise ValueError("oncoming parallel selection requires observed-person mode")
         age = self.maximum_identity_prior_selection_age_seconds
         if (isinstance(age, bool) or not math.isfinite(age) or not 0 <= age <= .5
             or age > 0 and not self.require_visual_person_selection):
             raise ValueError("identity-prior selection requires observed-person mode and age in [0,.5]")
         for name, value in asdict(self).items():
-            if name in {"require_visual_person_selection", "maximum_identity_prior_selection_age_seconds"}:
+            if name in {"encounter_geometry", "require_visual_person_selection", "maximum_identity_prior_selection_age_seconds"}:
                 continue
             if isinstance(value, bool) or not math.isfinite(value) or value <= 0:
                 raise ValueError(f"{name} must be finite and positive")
@@ -48,6 +55,7 @@ class MotionAwarePassingConfig:
         if (
             self.minimum_speed_mps >= self.maximum_speed_mps
             or self.minimum_transverse_fraction > 1
+            or self.minimum_oncoming_alignment > 1
         ):
             raise ValueError("invalid motion limits")
 
@@ -178,8 +186,15 @@ class MotionAwarePassing:
             transverse = abs(float(direction[0] * v[1] - direction[1] * v[0])) / max(
                 speed, 1e-9
             )
-            if transverse < cfg.minimum_transverse_fraction:
-                reasons.append("not_transverse_crossing")
+            lateral = float(direction[0] * rel[1] - direction[1] * rel[0])
+            if cfg.encounter_geometry == "transverse_crossing":
+                if transverse < cfg.minimum_transverse_fraction:
+                    reasons.append("not_transverse_crossing")
+            else:
+                if -float(direction @ v) / max(speed, 1e-9) < cfg.minimum_oncoming_alignment:
+                    reasons.append("not_oncoming_parallel")
+                if abs(lateral) < cfg.minimum_parallel_lateral_separation_m:
+                    reasons.append("ambiguous_parallel_away_side")
             if (
                 not 0 < t_closest <= cfg.prediction_horizon_seconds
                 or separation > cfg.maximum_predicted_separation_m
@@ -188,14 +203,16 @@ class MotionAwarePassing:
             n = rel / max(float(np.linalg.norm(rel)), 1e-9)
             ccw = np.array([-n[1], n[0]])
             alignment = float(ccw @ v) / max(speed, 1e-9)
-            if abs(alignment) < 0.5:
+            if cfg.encounter_geometry == "transverse_crossing" and abs(alignment) < 0.5:
                 reasons.append("ambiguous_trailing_tangent")
             if reasons:
                 rejected[key] = reasons
             else:
-                side = PassingSide.LEFT if alignment < 0 else PassingSide.RIGHT
+                side = (PassingSide.LEFT if lateral < 0 else PassingSide.RIGHT) if cfg.encounter_geometry == "oncoming_parallel" else (
+                    PassingSide.LEFT if alignment < 0 else PassingSide.RIGHT)
                 candidates.append((key, side, t_closest, separation, alignment))
-        decision, preferences = "no_qualified_crossing", {}
+        decision = "no_qualified_parallel_encounter" if cfg.encounter_geometry == "oncoming_parallel" else "no_qualified_crossing"
+        preferences = {}
         if self.encounter is not None:
             key, side, started, original_velocity = self.encounter
             track = tracks.get(key)
@@ -208,7 +225,10 @@ class MotionAwarePassing:
             else:
                 rel = np.asarray(track.centroid_world_xy) - robot
                 v = np.asarray(track.velocity_world_xy)
-                if (
+                if cfg.encounter_geometry == "oncoming_parallel" and key in rejected:
+                    self.encounter = None
+                    decision = "released_current_parallel_motion_or_geometry"
+                elif (
                     rel @ direction < -cfg.passed_distance_m
                     or np.linalg.norm(rel) > cfg.maximum_distance_m
                     or np.linalg.norm(v) > cfg.maximum_speed_mps
@@ -240,7 +260,7 @@ class MotionAwarePassing:
             self.encounter_person_verified = cfg.require_visual_person_selection and key in fresh
             self.encounter_identity_prior = None if key in fresh else prior_evidence.get(key)
             preferences[key] = side
-            decision = "selected_trailing_tangent"
+            decision = "selected_parallel_away_tangent" if cfg.encounter_geometry == "oncoming_parallel" else "selected_trailing_tangent"
         elif self.encounter is None and len(candidates) > 1:
             decision = "ambiguous_multiple_crossings"
         elif self.encounter is None and len(candidates) == 1 and candidates[0][0] not in eligible:
@@ -250,6 +270,7 @@ class MotionAwarePassing:
             "decision": decision,
             "source_timestamp": t,
             'route_direction_world_xy': direction.tolist(),
+            'current_robot_world_xy': robot.tolist(),
             'route_direction_basis': 'active_waypoint_bearing' if nominal_route_direction_world_xy is None else 'configured_obstacle_unaware_nominal_route_segment',
             "encounter_selected_timestamp": None
             if self.encounter is None
@@ -272,12 +293,16 @@ class MotionAwarePassing:
                     "time_to_closest_seconds": tc,
                     "predicted_separation_m": sep,
                     "ccw_motion_alignment": a,
+                    "positive_lidar_point_count": tracks[key].point_count,
                 }
                 for key, side, tc, sep, a in candidates
             ],
             "rejections": rejected,
             "configuration": asdict(cfg),
+            "encounter_geometry": cfg.encounter_geometry,
             "basis": "current LiDAR geometry/inferred world velocity; constant-relative-velocity selection hypothesis",
-            "scope": "one separated crossing; latched policy preference only; no evidence retention, free-space clearing or guaranteed passing side",
+            "scope": ("one separated visually associated oncoming human; current away-side tangent preference, not rear passing; no evidence retention, free-space clearing or guaranteed passing side"
+                if cfg.encounter_geometry == "oncoming_parallel" else
+                "one separated crossing; latched policy preference only; no evidence retention, free-space clearing or guaranteed passing side"),
         }
         return preferences, audit
