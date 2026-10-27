@@ -2284,3 +2284,20 @@
   not safe navigation. New independent+own60 gates required; exact unchanged
   actor/perception/selector source audit allows prior component reuse. No general
   tracking repair, primary pooling or main/long-service/PR117 hold release.
+
+- The separately recorded2m guide-lookahead trial at3fb7e2e PASSED after fresh
+  independent+own60 zero-wheel gates: final goal/3guides21.35simsec, nearby bend
+  .222896m at1.741300m human distance, physical clearance.357913m, braking drift
+  .002377m, minacceptedanalytical.075977; current motion/37selection epochs/
+  213containment rows passed. Preserve SHA4ce3a525... and all six older failed
+  report hashes. It has a2.383333s close-encounter safety hold, ZERO scheduled
+  observation pauses and ZERO complete fresh4factor assessments. Do not call
+  it fully flowing, real-time, repeatable, causal CRA improvement or exact paper
+  equivalence. New unresolved fragment328 (not old327) remains unmerged;
+  minimum1.218681m last-centroid distance stays outside unchanged1.2m watch
+  radius, only18.7mm engineering excess, not body clearance or a tracking fix.
+  Runtime source unchanged sinceabeb768:2869units/48focused/RuffcompileCLI pass.
+  All factor/body priors, human flux-1.7/lambda1.25/limits/exact/source/physical
+  gates retained. Keep primary, perpendicular checked wait/go, earlier failures
+  and main/long-service/PR117 holds. This bounded short clip supports next PI
+  demo DESIGN, not a long mission or main merge. See behavior-validation doc.

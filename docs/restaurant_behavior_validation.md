@@ -272,3 +272,56 @@ only rejoin from the recorded post-encounter pose predicts minimum distances
 hypothesis for a gentler return, not evidence of free space or native acceptance.
 New independent and own60 gates precede its wheels. Preserve the failed1 m
 result even if the retry completes; no general fragment-tracking fix is claimed.
+
+### Accepted bounded 2 m guide-lookahead trial
+
+At3fb7e2e (runtime unchanged fromabeb768; documentation-only difference), the
+fresh independent and own60-frame zero-wheel gates passed. The separately
+recorded `motion-lookahead2-v2` PASSED all original gates:
+
+| Measurement | Native result |
+| --- | --- |
+| Final arrival / route-guide progress | Goal reached, 3/3 guides; 21.35 navigation simulation seconds |
+| Curve while human walking within2 m | 0.222896 m; human1.741300 m away at the largest scored bend |
+| Closest walking encounter | 1.162517 m center separation; robot already0.212900 m off the route chord |
+| Independent minimum physical clearance | 0.357913 m |
+| Braking drift / minimum accepted analytical margin | 0.002377 m / 0.075977 |
+| Current motion / away-side selection / body containment | PASS; 46 oncoming rows, 37 selected epochs, 213 containment rows |
+| Live fields / fields while translating | 213 / 186 |
+
+The report is
+`outputs/restaurant_parallel_route_guides/motion-lookahead2-v2/report.json`,
+SHA256`4ce3a525b28a12cbb59d9a81a6f0f764165fc09c3d6a57a9ef7cc32d746d9917`.
+The launcher exited0 without a traceback; saved `passed=true` governs.
+The exact nearby-curve metric was independently reproduced, and the generated
+plot and unmodified native video frame were visually inspected. Video capture
+cadence reconstruction matched all frames; its render read-time is not an
+independent acquisition clock. Six earlier failed reports remain byte unchanged.
+
+This is **curved avoidance with a safety hold**, not a fully flowing bypass.
+A post-run diagnostic found a2.383333 s zero-command/less-than.02 m/s interval
+while the person was walking within2 m. The diagnostic is not a new acceptance
+gate. There were zero scheduled observation pauses. At the largest scored bend,
+source18.316667 s, robot(28.575918,8.228708) and human(29.793484,6.983855) were
+1.741300 m apart; at the closest encounter, the robot had already bent21.3 cm.
+
+The new sensor trace contains a different unresolved fragment328 (7 returns at
+last source14.4 s, observed14.2/14.3/14.4), with failed whole-surface merges.
+The executed path stayed at least1.218681 m from its last observed centroid,
+outside the unchanged1.2 m watchdog radius. That small18.7 mm excess is an
+engineering-watch margin, **not body clearance**. The original fragment327 belongs
+to the failed run. The differing traces are not a causal demonstration that
+lookahead alone repairs tracking, and no observation was erased or declared free.
+
+Both factor/body priors and applied human-flux ablation remain explicit:
+adult mass70[45,100] kg, blunt contact.10, unavailable potential/thermal scores
+using configured.25 priors, body radius.40+centroid uncertainty.25 m,
+human applied flux-1.7, normal lambda1.25. ZERO complete fresh four-factor
+assessments occurred during motion; current person/kinetic and prior-assisted
+numeric policy acceptance are distinct. The source still passes2,869 units,
+48 focused checks, Ruff/compilation/CLI; the parameter retry changed no runtime
+code or acceptance threshold. This is one accepted bounded oncoming scenario,
+not repeatability, real time, calibrated human harm, exact paper equivalence,
+rear passing or causal CRA superiority. Primary comparisons, perpendicular
+checked wait/go and all main/long-service/PR117 holds remain unchanged. The short
+clip can inform the next PI-demo design discussion; no long mission is enabled.
