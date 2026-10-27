@@ -51,3 +51,24 @@ protocol rejection. Ruff, compilation, CLI help and whitespace checks passed.
 Native acceptance is pending. Exact frozen invocations and actual
 videos will be saved under `outputs/restaurant_behavior_validation/`; ignored
 local records are not automatically bundled into a PR or shared externally.
+
+## Stationary component results and overview correction
+
+At frozen eed82a1, both parked moving-actor/sensor components passed with zero
+wheel commands: parallel9idle/15movingfresh, median velocity error.049974m/s;
+crossing9idle/12movingfresh, error.149543m/s. Actual actor speeds were.516538/
+.520357m/s; minimum furniture clearances.395205/.283841m. Grounding, native
+articulation, collider readback, parked drift and structural video checks passed.
+Both independent controller gates then passed60frames/zero wheels and envelope
+containment (147.54/162.15wall seconds). These are not wheel/curve acceptance.
+
+Visual inspection found the new parallel external overview almost black at
+eye(25.5,6.0,4.3), despite its nonempty/distinct-frame structural check. Preserve
+that original report/video and distinguish it from front-RGB perception, which
+passed independently. Presentation readiness FAILED. The render-only correction
+uses the proven indoor eye(25.9,6.7,3.2), leaving the robot's actual RGB/LiDAR,
+scene/actor/route, physical models, estimators, controller and clocks unchanged.
+Repeat the parallel component and visually inspect its new overview; each motion
+trial still requires its own fresh60-frame gate. Old independent gates may be
+retained only with exact source comparison proving the two observer-eye literals
+are the sole functional difference. No physical failure is repaired by video.

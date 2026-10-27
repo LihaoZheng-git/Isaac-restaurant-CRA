@@ -183,7 +183,7 @@ class RestaurantHumanEpisode:
             prim.MakeMatrixXform().Set(
                 Gf.Matrix4d()
                 .SetLookAt(
-                    Gf.Vec3d(25.5, 6., 4.3) if self.parallel_oncoming else Gf.Vec3d(26.5, 7.7, 2.4)
+                    Gf.Vec3d(25.9, 6.7, 3.2) if self.parallel_oncoming else Gf.Vec3d(26.5, 7.7, 2.4)
                     if self.carry_setup is not None
                     else Gf.Vec3d(24.5, 5.5, 3.2) if self.open_layout else Gf.Vec3d(25.9, 6.7, 3.2),
                     Gf.Vec3d(29., 8.7, .8) if self.parallel_oncoming else Gf.Vec3d(29.0, 9.5, 0.8)

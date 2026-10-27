@@ -322,7 +322,7 @@ def main():
         camera.MakeMatrixXform().Set(
             Gf.Matrix4d()
             .SetLookAt(
-                Gf.Vec3d(25.5, 6., 4.3) if args.parallel_oncoming else Gf.Vec3d(27.7, 9.6, 2.0) if args.carry_bowl else Gf.Vec3d(24.5, 5.5, 3.2) if open_crossing_layout else Gf.Vec3d(25.9, 6.7, 3.2) if crossing_goal else Gf.Vec3d(27.7, 10.6, 2.0),
+                Gf.Vec3d(25.9, 6.7, 3.2) if args.parallel_oncoming else Gf.Vec3d(27.7, 9.6, 2.0) if args.carry_bowl else Gf.Vec3d(24.5, 5.5, 3.2) if open_crossing_layout else Gf.Vec3d(25.9, 6.7, 3.2) if crossing_goal else Gf.Vec3d(27.7, 10.6, 2.0),
                 Gf.Vec3d(29., 8.7, .8) if args.parallel_oncoming else Gf.Vec3d(29.8, 9.8, .95) if args.carry_bowl else Gf.Vec3d(28.0, 7.0, .8) if open_crossing_layout else Gf.Vec3d(29.0, 8.9, .8) if crossing_goal else Gf.Vec3d(29.8, 10.7, 0.9),
                 Gf.Vec3d(0, 0, 1),
             )
