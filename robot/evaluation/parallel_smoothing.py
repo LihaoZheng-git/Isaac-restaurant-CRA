@@ -75,6 +75,32 @@ def activation_only_command_change(baseline_command, candidate_command):
         scope='field activation values, not metres; all remaining invocation arguments identical')
 
 
+def outward_only_command_change(baseline_command, candidate_command):
+    """Require one new reference preference, never a changed physical argument."""
+    flag = '--guidance-outward-reference-fraction'
+    values, commands = [], []
+    for command in (baseline_command, candidate_command):
+        command = list(command)
+        if command.count('--output') != 1 or command.count(flag) > 1:
+            raise ValueError('one explicit output and at most one outward preference required')
+        try:
+            command[command.index('--output')+1] = '<output>'
+            value = 0.
+            if flag in command:
+                i = command.index(flag)
+                value = float(command[i+1])
+                del command[i:i+2]
+        except (IndexError, ValueError) as error:
+            raise ValueError('complete output/outward arguments required') from error
+        if not math.isfinite(value) or not 0 <= value <= 1:
+            raise ValueError('outward reference fraction must be in[0,1]')
+        values.append(value)
+        commands.append(command)
+    return dict(matched=commands[0] == commands[1] and values[1] > values[0],
+        baseline_outward_fraction=values[0], candidate_outward_fraction=values[1],
+        scope='normalized current-observed travel reference only; all remaining invocation arguments identical')
+
+
 def compare_parallel_smoothness(baseline, candidate, *, matched_configuration,
                                maximum_hold_seconds=.5, minimum_reduction_fraction=.5):
     if (not math.isfinite(maximum_hold_seconds) or maximum_hold_seconds < 0
@@ -90,4 +116,4 @@ def compare_parallel_smoothness(baseline, candidate, *, matched_configuration,
     return dict(passed=all(checks.values()), checks=checks, baseline=baseline, candidate=candidate,
         maximum_hold_seconds=maximum_hold_seconds, minimum_reduction_fraction=minimum_reduction_fraction,
         observed_hold_reduction_fraction=reduction,
-        scope='separate activation-only engineering comparison; original safety/arrival/curve gates mandatory; no relaxed geometry, primary pooling, causal CRA or general reliability claim')
+        scope='separate matched controller-reference engineering comparison; original safety/arrival/curve gates mandatory; no relaxed geometry, primary pooling, causal CRA or general reliability claim')

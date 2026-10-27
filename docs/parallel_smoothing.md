@@ -105,3 +105,52 @@ evidence about future free space. Default zero must retain the old behavior;
 current selection/identity/source failure must still disable it. Compare it
 against the accepted activation2 baseline, keeping all other parameters fixed.
 New source tests and independent+own60 gates are required before its wheels.
+
+## Wider current-observed travel reference
+
+The separate default-zero `--guidance-outward-reference-fraction` is limited to
+the explicit convex parallel route-guide ablation. For a current observed
+robot-to-human unit normal `n` and the selected oriented tangent `t`, the travel
+direction becomes `normalize(t - k*n)`, before the existing convex goal blend.
+The first bounded candidate uses`k=.35`, activation2 and the accepted2 m guide
+lookahead. This is dimensionless reference shaping, not a changed physical
+margin, density, hazard score, body envelope or future obstacle position.
+
+All reference rollouts, their converted unicycle commands and actual execution
+retain the original exact/dense/analytical checks. Default0 skips the new
+operation. Runtime still disables both tangent and outward preference locally
+when the current selection is absent, without mutating the shared planner or
+renewing evidence/identity/field clocks. Diagnostics distinguish the configured
+fraction from its effective request value. Existing primary/crossing defaults
+remain unchanged.
+
+The first snapshot hypotheses showed a tradeoff: larger outward fractions slow
+initial forward motion while the forward-only robot turns. The.35 candidate is
+a bounded compromise (about.052 m/s first command atactivation3 in the trusted
+offline selection), rather than proof of improvement. The actual next trial
+restoresactivation2 to isolate outward shaping against the accepted baseline.
+There is no oracle actor trajectory or extra occupancy in the preference.
+
+Use the same prospective actual-hold/slow-creeping metrics and native acceptance:
+
+```powershell
+python scripts/evaluation/compare_parallel_smoothing.py `
+  --variation outward `
+  --baseline outputs/restaurant_parallel_route_guides/motion-lookahead2-v2 `
+  --candidate outputs/restaurant_parallel_smoothing/motion-outward035-v1 `
+  --output outputs/restaurant_parallel_smoothing/comparison-outward035-v1.json
+```
+
+The invocation audit allows only the added outward fraction/output path. Its
+declared source-scope audit permits the tested MPC reference and demo CLI/report
+changes, with every actor/perception/selector module still fingerprinted
+unchanged for component reuse. This filename audit is not semantic equivalence
+or a safety proof; code review and tests remain necessary. Native acceptance
+is pending. Preserve activation3's failure and all earlier accepted/failed data.
+
+Wider-reference source freeze passed2,922 units in100.77 s,89 focused tests in
+6.66 s, Ruff, compilation, both CLI help paths and whitespace checks. The
+trusted baseline first-selected snapshot reproduces its complete command
+sequence atdefault0 (1e-10 tolerance); the.35 reference also passes exact
+planning with unchanged field bytes/epochs. These are source/offline checks,
+not native smoothing or perception acceptance.

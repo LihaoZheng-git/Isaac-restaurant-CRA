@@ -2333,3 +2333,20 @@
   a new safety margin, future occupancy, primary result or paper equivalence.
   New tests and independent+own60 precede wheels; component reuse needs exact
   unchanged actor/perception/selector audit. No main/long-service/PR117 release.
+
+- The wider parallel reference first usesoutward_fraction.35 atBASELINEactivation2
+  and2m pose-only guides, compared against the accepted2.383333s baseline (not
+  failedh3 as an accepted run). For CURRENT observed unit normaln, tilt the
+  selected travel tangentt to normalize(t-k*n) before existing convex blending.
+  This is a dimensionless travel preference, never geometry/risk/margin/future
+  occupancy. Default0 skips it; no current selected positive identity means
+  effective request0 with original source clocks and shared config unchanged.
+  Existing exact/unicycle/dense/future/per-step analytical/source/physical/native
+  gates remain. Comparison --variation outward verifies only preference/output
+  arguments changed; permitted source files are a DECLARED scope audit, not
+  semantic equivalence. Require full source validation and new independent+
+  own60 gates; exact unchanged actor/perception/selector hashes may reuse old
+  component. Preserve all failures/priors/primary/crossing/main/PR117 holds.
+  Wider source freeze:2922units100.77s/89focused6.66s/Ruffcompile/bothCLI/diff
+  PASS. Trusted baseline first-selected full command parity atdefault0(1e-10),
+  .35 exact-safe hypothesis and unchanged field bytes/epochs; native pending.

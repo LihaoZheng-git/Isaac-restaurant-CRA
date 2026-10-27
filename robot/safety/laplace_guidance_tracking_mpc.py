@@ -35,6 +35,7 @@ class LaplaceGuidanceTrackingConfig:
     reference_tangent_basis: str = "planar_gradient"
     minimum_reference_speed_fraction: float = 1.0
     tangent_blend_mode: str = "additive"
+    outward_reference_fraction: float = 0.0
 
     def __post_init__(self):
         if self.reference_mode not in {
@@ -84,6 +85,11 @@ class LaplaceGuidanceTrackingConfig:
                 or self.reference_mode != "planar_forecast_velocity"
                 or self.reference_tangent_basis != "selected_observed_obstacle")):
             raise ValueError("convex tangent blend requires positive forecast tracking and selected observed obstacle")
+        if not 0 <= self.outward_reference_fraction <= 1 or (
+            self.outward_reference_fraction > 0 and (self.tangent_blend_mode != "convex"
+                or self.reference_tangent_basis != "selected_observed_obstacle"
+                or self.reference_mode != "planar_forecast_velocity" or self.weight <= 0)):
+            raise ValueError("outward reference requires fraction0..1 and explicit convex selected-obstacle forecast tracking")
         # Fraction zero is permitted: runtime owns a zero-tangent configuration
         # when current selection is absent, without changing the shared planner.
 
@@ -131,6 +137,7 @@ class GuidanceTrackingDiagnostic:
     minimum_reference_speed_fraction: float = 1.0
     selected_reference_speed_fraction: float | None = None
     tangent_blend_mode: str = "additive"
+    outward_reference_fraction: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -416,6 +423,8 @@ class LaplaceGuidanceTrackingMPC(SafeSAGEUnicycleMPC):
             minimum_reference_speed_fraction=self.guidance_config.minimum_reference_speed_fraction,
             selected_reference_speed_fraction=selected[2],
             tangent_blend_mode=self.guidance_config.tangent_blend_mode,
+            outward_reference_fraction=self.guidance_config.outward_reference_fraction
+            if self.guidance_config.tangent_velocity_fraction > 0 else 0.,
         )
         return GuidanceTrackingMPCResult(
             **{
@@ -498,6 +507,11 @@ class LaplaceGuidanceTrackingMPC(SafeSAGEUnicycleMPC):
                         return None
                     normal = normal / norm
                     tangent = np.array([-normal[1], normal[0]]) * (1 if side == "left" else -1)
+                    if self.guidance_config.outward_reference_fraction > 0:
+                        # Separate travel preference using CURRENT observed
+                        # geometry. Tilt away before normalization; never add
+                        # occupancy, infer free space or change CBF acceptance.
+                        tangent = tangent - self.guidance_config.outward_reference_fraction * normal
                 else:
                     gradient = np.asarray(constraint.interpolant_gradient[:2])
                     norm = float(np.linalg.norm(gradient))

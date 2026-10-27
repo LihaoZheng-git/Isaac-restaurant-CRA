@@ -95,6 +95,8 @@ parser.add_argument("--guidance-tangent-basis", choices=("planar_gradient", "sel
                     default="planar_gradient", help="explicit reference ablation; selected observed centroid/side avoids combined-gradient orientation ambiguity")
 parser.add_argument("--guidance-tangent-blend", choices=("additive", "convex"), default="additive",
                     help="separate parallel route-guide ablation: convex blending reduces goal pull toward the current observed away tangent")
+parser.add_argument("--guidance-outward-reference-fraction", type=float, default=0.,
+                    help="separate parallel smoothing preference0..1: tilt current observed tangent outward; no geometry or safety-margin change")
 parser.add_argument("--human-positive-fragment-extent", action="store_true",
                     help="bare-human recent-coobservation/current-positive-return fragment association; no free-space or factor transfer")
 parser.add_argument("--human-positive-fragment-surface", action="store_true",
@@ -253,6 +255,11 @@ parser.add_argument(
     help="optimizer candidate age cap; every executed horizon still needs fresh exact validation",
 )
 args = parser.parse_args()
+if (not math.isfinite(args.guidance_outward_reference_fraction)
+    or not 0 <= args.guidance_outward_reference_fraction <= 1
+    or args.guidance_outward_reference_fraction > 0 and (not args.parallel_guidance_ablation
+        or args.waypoint_mode != 'guides' or args.guidance_tangent_blend != 'convex')):
+    parser.error('outward reference requires fraction0..1 and separate convex parallel route-guide ablation')
 if args.guidance_tangent_blend == 'convex' and (not args.parallel_guidance_ablation
     or args.waypoint_mode != 'guides'):
     parser.error('convex tangent blend requires the separate parallel guidance ablation with route guides')
@@ -1269,7 +1276,8 @@ def main():
                 args.guidance_reference_search_width, args.guidance_reference_search_candidates,
                 args.guidance_tangent_velocity_fraction, args.guidance_tangent_basis,
                 minimum_reference_speed_fraction=args.guidance_reference_minimum_speed_fraction,
-                tangent_blend_mode=args.guidance_tangent_blend))
+                tangent_blend_mode=args.guidance_tangent_blend,
+                outward_reference_fraction=args.guidance_outward_reference_fraction))
     control = SafeSAGEControlRuntime(mpc=mpc, backup_filter=backup, crossing_strategy=args.crossing_strategy)
     if args.checked_rear_pass_reference:
         from robot.evaluation.live_rear_pass import LiveRearPassControlRuntime
@@ -2698,6 +2706,8 @@ def main():
             "tangent_velocity_fraction": args.guidance_tangent_velocity_fraction,
             "tangent_reference_basis": args.guidance_tangent_basis,
             "tangent_blend_mode": args.guidance_tangent_blend,
+            "configured_outward_reference_fraction": args.guidance_outward_reference_fraction,
+            "outward_reference_scope": "current selected observed centroid only; normalized travel preference, not physical geometry/margin/evidence; disabled when current selection is absent",
             "tangent_runtime_gate": "current positive tracks with an existing observed-motion passing selection; no actor truth",
             "forward_speed_reference": "maximum forward speed in original obstacle-unaware nominal horizon, clipped to actuator bounds",
             "heading_reference_basis": "actual_nominal_pose_only_target; route-guide lookahead or strict checkpoint; same field frame; request-time waypoint index",
