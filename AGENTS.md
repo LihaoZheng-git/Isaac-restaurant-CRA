@@ -2361,3 +2361,15 @@
   identity-selection PRIOR, never longer/fresh or renewed8s policy/factor/field
   clocks. Require explicit provenance-aware parallel scoring/new stationary
   component before wheels; retain primary strict selector and all old failures.
+- The separate parallel identity-smoothing candidate reuses existing APPROVED
+  maxselectionage.5 only (not body30s or renewedfactor/8spolicy clocks), with
+  activation2/outward.35/guide2 unchanged. Default strict parallel audit remains
+  fresh-only and requires its configured0. Opt-in audit checks original typed
+  prior/new-selection-source proof/current envelope/positive support/unchanged
+  held record/motion/away-side/field; geometric ambiguity still releases policy.
+  New zero-wheel moving-human component explicitly uses samebody.40+.25 and
+  requires independent containment before independent+own60/motion. Compare
+  declared outward+identity changes against ACCEPTED baseline, never failed.35
+  as accepted; original native/kinetic/.20curve and.5s/50%hold gates unchanged.
+  Numeric/identity-policy acceptance is not fresh physical estimation or a
+  primary-comparison/main/long-service/PR117 release.

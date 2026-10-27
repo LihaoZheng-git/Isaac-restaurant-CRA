@@ -91,13 +91,23 @@ class RestaurantHumanSensorDiagnostic:
         motion_aware_passing=False,
         camera_prim_path=None,
         parallel_guidance_selection=False,
+        maximum_identity_prior_selection_age_seconds=0.,
+        identity_selection_body_envelope=False,
     ):
         self.stage, self.output = stage, output
         from robot.safety.motion_aware_passing import MotionAwarePassingConfig
         if parallel_guidance_selection and not motion_aware_passing:
             raise ValueError('parallel selection component requires motion-aware passing')
+        if maximum_identity_prior_selection_age_seconds and not parallel_guidance_selection:
+            raise ValueError('identity-selection component requires explicit parallel selector')
+        if maximum_identity_prior_selection_age_seconds and not identity_selection_body_envelope:
+            raise ValueError('identity-selection component requires explicit current body envelope')
+        if identity_selection_body_envelope and not parallel_guidance_selection:
+            raise ValueError('component body envelope requires explicit parallel selector')
         passing_config = MotionAwarePassingConfig(require_visual_person_selection=True,
-            encounter_geometry='oncoming_parallel') if parallel_guidance_selection else MotionAwarePassingConfig()
+            encounter_geometry='oncoming_parallel',
+            maximum_identity_prior_selection_age_seconds=maximum_identity_prior_selection_age_seconds
+            ) if parallel_guidance_selection else MotionAwarePassingConfig()
         self.passing_goal_world_xy = (28.8, 10.5) if parallel_guidance_selection else (28.8, 9.4) if motion_aware_passing else (30.6, 11.8)
         if motion_aware_passing:
             self.save("motion-passing-configuration.json", {
@@ -199,6 +209,8 @@ class RestaurantHumanSensorDiagnostic:
         )
         self.worker = LiveObjectPerception(
             motion_passing_config=passing_config if motion_aware_passing else None,
+            human_body_envelope_config=self._identity_selection_envelope_config()
+                if identity_selection_body_envelope else None,
             segmenter=SamInstanceSegmenter(
                 SamInstanceConfig(
                     paths["sam"],
@@ -281,6 +293,11 @@ class RestaurantHumanSensorDiagnostic:
         self.copied_scan = None
         self.last_capture = -math.inf
         self.last_lidar_id = -1
+
+    @staticmethod
+    def _identity_selection_envelope_config():
+        from robot.perception.human_body_envelope import HumanBodyEnvelopeConfig
+        return HumanBodyEnvelopeConfig(body_radius_m=.4, centroid_uncertainty_m=.25)
 
     def save(self, name, data):
         (self.output / name).write_text(
@@ -434,6 +451,7 @@ class RestaurantHumanSensorDiagnostic:
                     "carried_object_groups":result.diagnostics.get("carried_object_groups"),
                     "occupancy_policies":result.diagnostics.get("occupancy_policies"),
                     "motion_aware_passing":result.diagnostics.get("motion_aware_passing"),
+                    "human_body_envelope_priors":result.diagnostics.get("human_body_envelope_priors", ()),
                     "applied_field_policies":result.diagnostics.get("applied_field_policies"),
                     "objects": [
                         {

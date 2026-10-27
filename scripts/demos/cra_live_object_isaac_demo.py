@@ -2463,7 +2463,8 @@ def main():
             save_json('parallel-walking-validation.json', parallel_validation)
             if args.parallel_guidance_ablation:
                 from robot.evaluation.parallel_walking_validation import validate_parallel_selection
-                selection_validation = validate_parallel_selection(live_fields)
+                selection_validation = validate_parallel_selection(live_fields,
+                    maximum_identity_prior_selection_age_seconds=args.human_passing_identity_prior_max_age)
                 human_validation['parallel_selection'] = selection_validation
                 completed = completed and selection_validation['passed']
                 save_json('parallel-selection-validation.json', selection_validation)

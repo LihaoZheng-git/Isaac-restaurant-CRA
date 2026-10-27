@@ -33,6 +33,10 @@ parser.add_argument("--mounted-perception-bench", action="store_true",
 parser.add_argument("--motion-aware-passing", action="store_true")
 parser.add_argument('--parallel-guidance-selection', action='store_true',
                     help='zero-wheel current observed oncoming-human selector validation; no tracking commands')
+parser.add_argument('--human-passing-identity-prior-max-age', type=float, default=0.,
+                    help='separate parallel identity-selection PRIOR, at most .5s with verified current LiDAR; zero wheels')
+parser.add_argument('--identity-selection-body-envelope', action='store_true',
+                    help='explicit existing .40+.25m body PRIOR for zero-wheel parallel identity-selection validation')
 parser.add_argument("--human-body-contact-prior", type=float, default=None, metavar="SCORE",
                     help="explicit low nonzero human-body contact policy prior; legacy outline mode if omitted")
 parser.add_argument("--carry-bowl", action="store_true",
@@ -63,6 +67,13 @@ parser.add_argument(
 args = parser.parse_args()
 if args.parallel_guidance_selection and (not args.parallel_oncoming or not args.motion_aware_passing):
     parser.error('parallel selection component requires explicit parallel-oncoming and motion-aware-passing')
+if (not math.isfinite(args.human_passing_identity_prior_max_age)
+    or not 0 <= args.human_passing_identity_prior_max_age <= .5
+    or args.human_passing_identity_prior_max_age and not (
+        args.parallel_guidance_selection and args.identity_selection_body_envelope)):
+    parser.error('identity selection requires explicit parallel selector/current body envelope and age in[0,.5]')
+if args.identity_selection_body_envelope and not args.parallel_guidance_selection:
+    parser.error('component body envelope requires explicit parallel selector')
 if args.parallel_oncoming and (not args.sensor_diagnostic or args.carry_bowl
     or args.continuing_away_crossing or args.continuous_crossing or args.speed != .5
     or args.goal_x != 29.8 or args.goal_y != 7.0 or args.robot_view != 'crossing-approach'):
@@ -415,6 +426,8 @@ def main():
             human_body_contact_prior_score=args.human_body_contact_prior,
             motion_aware_passing=args.motion_aware_passing,
             parallel_guidance_selection=args.parallel_guidance_selection,
+            maximum_identity_prior_selection_age_seconds=args.human_passing_identity_prior_max_age,
+            identity_selection_body_envelope=args.identity_selection_body_envelope,
             camera_prim_path=CAMERA_PRIM_PATHS[args.rgb_camera],
         )
     phase = "idle_before"
@@ -672,10 +685,20 @@ def main():
         save("human-body-contact-validation.json",body_contact)
     if args.parallel_guidance_selection:
         from robot.evaluation.parallel_walking_validation import validate_parallel_selection
-        passing_report = validate_parallel_selection(sensor.records)
+        passing_report = validate_parallel_selection(sensor.records,
+            maximum_identity_prior_selection_age_seconds=args.human_passing_identity_prior_max_age)
         report['parallel_selection_validation'] = passing_report
         report['passed'] &= passing_report['passed']
         save('parallel-selection-validation.json', passing_report)
+        if args.identity_selection_body_envelope:
+            from robot.evaluation.human_body_envelope_validation import validate_human_body_envelopes
+            envelope_records = [dict(sensor_timestamp=r['time'], diagnostics=dict(
+                human_body_envelope_priors=r.get('human_body_envelope_priors', ()))) for r in sensor.records]
+            envelope_report = validate_human_body_envelopes(envelope_records, records,
+                reference_radius_m=setup['collision_radius_m'])
+            report['identity_selection_body_envelope_validation'] = envelope_report
+            report['passed'] &= envelope_report['passed']
+            save('identity-selection-body-envelope-validation.json', envelope_report)
     elif args.motion_aware_passing:
         from robot.evaluation.motion_passing_validation import summarize_motion_passing
         passing_report = summarize_motion_passing(sensor.records, records)

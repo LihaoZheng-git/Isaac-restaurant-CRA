@@ -1,20 +1,31 @@
 """Independent parallel-actor and curved-avoidance scoring; no runtime inputs."""
 
+import math
+
 import numpy as np
 
 
-def validate_parallel_selection(records):
+def validate_parallel_selection(records, *, maximum_identity_prior_selection_age_seconds=0.):
     """Audit real sensor selection records; no actor truth or command authority."""
+    cap = maximum_identity_prior_selection_age_seconds
+    if isinstance(cap, bool) or not math.isfinite(cap) or not 0 <= cap <= .5:
+        raise ValueError('explicit identity-selection age must be in[0,.5]')
     sources = set()
+    original_priors, prior_starts = {}, set()
+    prior_rows = 0
+    provenance_check = 'original_selection_provenance' if cap else 'original_visual_selection'
     checks = dict(explicit_oncoming_scope=True, current_supported_selection=True,
-        original_visual_selection=True, original_selection_clock=True, away_side=True,
-        selected_field_side_and_lambda=True)
+        original_selection_clock=True, away_side=True,
+        selected_field_side_and_lambda=True, identity_prior_opt_in_matches_configuration=True)
+    checks[provenance_check] = True
     selected_rows = 0
     for r in records:
         a = r.get('motion_aware_passing') or r.get('diagnostics', {}).get('motion_aware_passing')
         if not a:
             continue
         checks['explicit_oncoming_scope'] &= a.get('encounter_geometry') == 'oncoming_parallel'
+        checks['identity_prior_opt_in_matches_configuration'] &= a['configuration'].get(
+            'maximum_identity_prior_selection_age_seconds', 0.) == cap
         preferences = a['preferences']
         if not preferences:
             continue
@@ -22,7 +33,7 @@ def validate_parallel_selection(records):
         source = r.get('time', r.get('sensor_timestamp'))
         sources.add(source)
         candidates = {int(c['track_id']): c for c in a['qualified_candidates']}
-        checks['original_visual_selection'] &= a['original_selection_visual_person_verified'] is True
+        checks['current_supported_selection'] &= len(candidates) == len(preferences) == 1
         started = a['encounter_selected_timestamp']
         checks['original_selection_clock'] &= (started is not None and started <= source
             <= started + a['configuration']['maximum_encounter_seconds'] + 1e-9)
@@ -31,6 +42,35 @@ def validate_parallel_selection(records):
         policies = {p['track_or_group_id']: p for p in policies}
         for key, side in preferences.items():
             key = int(key)
+            prior = a.get('original_selection_identity_prior')
+            if prior is None:
+                checks[provenance_check] &= a['original_selection_visual_person_verified'] is True
+            else:
+                from robot.perception.human_body_envelope import HumanIdentitySelectionPrior, HUMAN_ENVELOPE_SOURCE
+                try:
+                    evidence = HumanIdentitySelectionPrior(**{name: prior[name]
+                        for name in HumanIdentitySelectionPrior.__dataclass_fields__})
+                    signature = (key, started)
+                    original = original_priors.setdefault(signature, prior.copy())
+                    detail = r.get('diagnostics', r)
+                    current = [e for e in detail.get('human_body_envelope_priors', ())
+                        if e['track_id'] == key]
+                    valid = (0 < cap <= .5 and evidence.age_seconds <= cap + 1e-9
+                        and evidence.track_id == key and evidence.lidar_timestamp_seconds == started
+                        and prior.get('source') == HUMAN_ENVELOPE_SOURCE and prior.get('status') == 'prior'
+                        and a['original_selection_visual_person_verified'] is False and prior == original
+                        and len(current) == 1 and current[0]['lidar_timestamp_seconds'] == source
+                        and current[0]['source'] == HUMAN_ENVELOPE_SOURCE and current[0]['status'] == 'prior'
+                        and current[0]['current_support_count'] >= 3)
+                    if source == started:
+                        selected = a.get('current_identity_prior_selection_evidence', {})
+                        valid &= selected.get(key, selected.get(str(key))) == prior
+                        if valid:
+                            prior_starts.add(signature)
+                except (ValueError, TypeError, KeyError):
+                    valid = False
+                checks[provenance_check] &= valid
+                prior_rows += 1
             applied = policies.get(key, {})
             checks['selected_field_side_and_lambda'] &= applied.get('applied_passing_side') == side and applied.get('lambda') == 1.25
             if key not in objects or key not in candidates or candidates[key]['positive_lidar_point_count'] < 20:
@@ -51,9 +91,14 @@ def validate_parallel_selection(records):
             lateral = direction[0]*rel[1] - direction[1]*rel[0]
             checks['away_side'] &= abs(lateral) >= .15 and side == ('left' if lateral < 0 else 'right')
     checks['three_distinct_current_sources'] = len(sources) >= 3
+    checks['original_prior_selection_source_recorded'] = set(original_priors) <= prior_starts
     return dict(passed=all(checks.values()), checks={k: bool(v) for k, v in checks.items()},
         selected_rows=selected_rows, distinct_selected_sources=len(sources),
-        scope='current visually associated oncoming selection/away tangent only; no rear passing, geometry/arrival/stopping or fresh four-factor claim')
+        identity_prior_selected_rows=prior_rows, identity_prior_selections=len(original_priors),
+        maximum_identity_prior_selection_age_seconds=cap,
+        scope=('separate bounded identity-selection PRIOR with current LiDAR envelope, original photo/selection clocks; '
+            if cap else 'current visually associated oncoming selection; ')
+            + 'away tangent only; no rear passing, geometry/arrival/stopping or fresh four-factor claim')
 
 
 def validate_parallel_actor(records, *, parked_robot):

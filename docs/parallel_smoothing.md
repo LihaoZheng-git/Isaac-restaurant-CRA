@@ -181,3 +181,32 @@ same-frame selector, physical-factor retention, body geometry or acceptance
 thresholds. A provenance-aware independent parallel audit must explicitly
 distinguish this mode and a new stationary component must precede its wheels.
 Retain both failed smoothing trials and the accepted baseline unchanged.
+
+## Separate short-identity-prior retry
+
+The next bounded candidate keeps activation2/outward.35/guide2 and changes only
+`--human-passing-identity-prior-max-age 0` to`.5`. This reuses the existing,
+previously approved runtime eligibility policy; the passing selector, body
+continuity, ambiguity, physical-factor and source-clock algorithms are unchanged.
+In particular, a competing geometric candidate still releases the preference.
+The hypothesis is that a new, currently supported selection can recover after
+that ambiguity clears, before the original visual cue exceeds.5 s. It is not
+permission to retain that cue indefinitely or renew any policy/evidence clock.
+
+The independent parallel selector audit now requires an explicit matching
+age configuration. Default0 retains the fresh-only criterion. The separate
+positive-age mode validates the original typed identity record, actual original
+selection-source proof, current positive body-envelope support, unchanged held
+record and eight-second clock, plus all existing motion/away-side/field gates.
+Reports count prior selections and held rows separately from fresh selections.
+An enabled option with no actual prior selection is not natural prior-path
+validation. Primary comparisons still reject the enabled variant.
+
+A zero-wheel moving-human component explicitly uses the same.40+.25 m body
+prior and`.5` identity option; it must pass actor, perception, selection and
+independent envelope containment before independent+own60 stationary gates and
+new navigation. No new mass model, perception retention or body radius is used.
+The `outward_identity` comparison declares both changes from the accepted
+baseline; the failed outward-only run remains an intermediate diagnostic,
+never an accepted smoothness baseline. The original.5 s/50% actual-hold target
+and every native safety/arrival/curve/kinetic gate remain unchanged.

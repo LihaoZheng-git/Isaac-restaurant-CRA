@@ -101,6 +101,31 @@ def outward_only_command_change(baseline_command, candidate_command):
         scope='normalized current-observed travel reference only; all remaining invocation arguments identical')
 
 
+def outward_identity_command_change(baseline_command, candidate_command):
+    """Audit the separately declared reference AND short identity-policy variant."""
+    flag = '--human-passing-identity-prior-max-age'
+    ages, commands = [], []
+    for command in (baseline_command, candidate_command):
+        command = list(command)
+        if command.count(flag) != 1:
+            raise ValueError('one explicit identity-selection age required')
+        try:
+            i = command.index(flag)
+            age = float(command[i+1])
+            del command[i:i+2]
+        except (IndexError, ValueError) as error:
+            raise ValueError('complete identity-selection argument required') from error
+        if not math.isfinite(age) or not 0 <= age <= .5:
+            raise ValueError('identity-selection age must be in[0,.5]')
+        ages.append(age)
+        commands.append(command)
+    result = outward_only_command_change(*commands)
+    result.update(matched=result['matched'] and ages[0] == 0 and ages[1] > 0,
+        baseline_identity_prior_age_seconds=ages[0], candidate_identity_prior_age_seconds=ages[1],
+        scope='separate outward reference plus bounded identity-selection PRIOR; every other invocation argument identical; excluded from primary comparison')
+    return result
+
+
 def compare_parallel_smoothness(baseline, candidate, *, matched_configuration,
                                maximum_hold_seconds=.5, minimum_reduction_fraction=.5):
     if (not math.isfinite(maximum_hold_seconds) or maximum_hold_seconds < 0
