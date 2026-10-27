@@ -78,6 +78,7 @@ def assess_all_objects(worker, packet):
     ownership = copy.deepcopy(getattr(worker, "object_ownership_bounds", {}))
     envelope_memory = copy.deepcopy(getattr(worker, "human_body_envelope", None))
     fragment_memory = copy.deepcopy(getattr(worker, "human_fragment_coverage", None))
+    prediction_memory = copy.deepcopy(getattr(worker, "predictive_human_geometry", None))
     tracking = tracker.update(
         packet.obstacle_xyz[:, :2],
         robot_position_world_xy=np.array(packet.robot_position_world_xy),
@@ -514,6 +515,10 @@ def assess_all_objects(worker, packet):
             track = next(t for t in tracks if t.track_id == original)
             semantics.append(SemanticObstacle(replace(track, track_id=key,
                 point_count=int(np.count_nonzero(extra_ids == key))), "unknown", 0., HUMAN_ENVELOPE_SOURCE))
+    prediction, prediction_audit = None, None
+    if prediction_memory is not None:
+        prediction, prediction_audit = prediction_memory.update(tracking, envelope_audit,
+            sensor_frame_id=packet.sensor_frame_id, anchor=worker.anchor, anchor_yaw=worker.anchor_yaw)
     from robot.evaluation.restaurant_baselines import applied_field_policies
     visual_part_groups = []
     if getattr(worker, "human_visual_fragment_association", False):
@@ -745,6 +750,7 @@ def assess_all_objects(worker, packet):
             rear_pass_route_direction_grid_xy=rear_route,
             rear_pass_policy_motion=rear_policy_motion,
             person_relative_rear_reference=(None if person_relative_memory is None else person_relative_memory.active_reference),
+            predictive_human_geometry=prediction,
         )
         return field, recovery
 
@@ -796,6 +802,8 @@ def assess_all_objects(worker, packet):
         worker.human_body_envelope = envelope_memory
     if fragment_memory is not None:
         worker.human_fragment_coverage = fragment_memory
+    if prediction_memory is not None:
+        worker.predictive_human_geometry = prediction_memory
     worker.temporal_recovery_baseline = None
     if carried_state is not None:
         worker.carried_runtime_state=carried_state
@@ -823,6 +831,7 @@ def assess_all_objects(worker, packet):
         "checked_wait_transition": transition_audit,
         "motion_passing_reference_track_ids": field.motion_passing_reference_track_ids,
         "human_body_envelope_priors": envelope_audit,
+        "predictive_human_geometry": prediction_audit,
         "current_visual_body_part_associations": visual_part_groups,
         "human_fragment_coverage_prior": fragment_audit,
         "object_count": len(objects),

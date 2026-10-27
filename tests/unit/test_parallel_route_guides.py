@@ -111,7 +111,8 @@ def test_invalid_convex_config_is_rejected(changes):
         replace(planner().guidance_config, **changes)
 
 
-def test_live_planner_uses_actual_pose_only_guide_target_instead_of_passed_checkpoint():
+@pytest.mark.parametrize('predictive', [False, True])
+def test_live_planner_uses_actual_pose_only_guide_target_instead_of_passed_checkpoint(predictive):
     # Exercise the actual submit expression without importing Isaac or the demo.
     # This catches a valid pose-only guide command paired with the old checkpoint
     # target in MPC, which would pull a detour back toward an already passed guide.
@@ -122,7 +123,10 @@ def test_live_planner_uses_actual_pose_only_guide_target_instead_of_passed_check
         and isinstance(n.func.value, ast.Name) and n.func.value.id == "planner"]
     assert len(submit) == 1
     packet = next(k.value for k in submit[0].keywords if k.arg == "packet")
-    expression = compile(ast.Expression(packet.elts[-1]), str(script), "eval")
+    # The explicit prediction request adds its actual state epoch at index5;
+    # both legacy and predictive requests must retain the pose-only goal at4.
+    packet = packet.body if predictive else packet.orelse
+    expression = compile(ast.Expression(packet.elts[4]), str(script), "eval")
     for guides in (False, True):
         waypoint = WaypointController([Waypoint(1, 0), Waypoint(2, 0), Waypoint(3.5, 0)],
             route_start=Waypoint(0, 0),

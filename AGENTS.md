@@ -2420,3 +2420,20 @@
   explicit future body-envelope propagation is new, not already validated.
   Validate predictor stationary against independent evaluation-only actor truth
   before any new wheels; do not promise smoother passage or new safety theorem.
+- Separate default-disabled predictive human geometry uses a planning-only
+  .8s current positive-LiDAR centroid fit (min6/.5s, maxgap.25/residual.1m/
+  speed2mps/min20points), not changed CRA kinetic evidence. Future body centers
+  are constant-velocity PRIORS, original radius.40+.25 plus explicit .25mps
+  uncertainty growth. Horizon1.2s plus actual source age<=.5 (maxpropagation1.7s);
+  never renew epochs. Hard extra exact rectangular geometry rows have NO elastic
+  slack in QP/rescue; original field/DTCBF/dense/analytical/physical checks remain.
+  Missing current fits stop prediction-enabled planning/revalidation; memory
+  commits only with the accepted physical field. Shared MPC/defaults unchanged.
+  Raw instantaneous-velocity development replay missed stopping transitions;
+  preserve it, do not claim a general motion bound. New actual-frame zero-wheel
+  future-containment component plus independent+own60 precede wheels; score
+  actual native arrival and unchanged .5s/50%hold gate, not just a nicer path.
+  All reference-only failures/priors/primary/main/long-service/PR117 holds remain.
+  See docs/predictive_human_geometry.md; native prediction acceptance pending.
+  Source freeze:3018units108.67s/60focused7.97s/Ruffcompile2CLI/diff PASS;
+  independent geometry/QP/rescue Jacobian and between-step collision gates pass.

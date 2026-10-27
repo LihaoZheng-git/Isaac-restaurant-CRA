@@ -159,8 +159,8 @@ def _wrap(angle):
 class _ReferenceTrackingMPC(SafeSAGEUnicycleMPC):
     """One-solve owned command reference, shared by every cost path."""
 
-    def __init__(self, paper_filter, config, commands, weights):
-        super().__init__(paper_filter, config)
+    def __init__(self, paper_filter, config, commands, weights, **kwargs):
+        super().__init__(paper_filter, config, **kwargs)
         self.reference_commands = np.array(commands, dtype=np.float64, copy=True)
         self.reference_weights = np.array(weights, dtype=np.float64, copy=True)
         self.reference_commands.setflags(write=False)
@@ -379,6 +379,8 @@ class LaplaceGuidanceTrackingMPC(SafeSAGEUnicycleMPC):
                 ),
                 best.commands,
                 command_weights,
+                predictive_geometry=self.predictive_geometry,
+                predictive_source_age_seconds=self.predictive_source_age_seconds,
             )
             kwargs["target_chassis_states_grid"] = best.chassis_states
             kwargs["initial_command_guess"] = best.commands

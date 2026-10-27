@@ -33,6 +33,8 @@ parser.add_argument("--motion-aware-passing", action="store_true",
                     help="opt-in current LiDAR crossing-side preference; unchanged CRA scores/lambda/safety checks")
 parser.add_argument('--parallel-guidance-ablation', action='store_true',
                     help='separate observed oncoming-human away-tangent selector; requires explicit checked guidance tracking, not primary')
+parser.add_argument('--predictive-human-geometry-ablation', action='store_true',
+                    help='separate current-LiDAR constant-velocity body-envelope PRIOR; adds hard future MPC geometry, never changes primary CRA/field')
 parser.add_argument("--crossing-strategy", choices=("legacy", "rear-pass-or-yield", "yield-then-go"), default="legacy",
                     help="separate maneuver ablation; yielding requires exact predictive and analytical checks")
 parser.add_argument("--zero-tangential-bias-ablation", action="store_true",
@@ -257,6 +259,10 @@ parser.add_argument(
     help="optimizer candidate age cap; every executed horizon still needs fresh exact validation",
 )
 args = parser.parse_args()
+if args.predictive_human_geometry_ablation and (not args.parallel_guidance_ablation
+    or args.human_body_envelope_radius is None or args.human_observed_occupancy_only
+    or args.mpc_horizon_steps != 6 or args.waypoint_mode != 'guides'):
+    parser.error('predictive human geometry requires the separate parallel route-guide ablation, active body prior and explicit six-step horizon')
 if (not math.isfinite(args.guidance_turn_translation_fraction)
     or not 0 <= args.guidance_turn_translation_fraction <= 1
     or args.guidance_turn_translation_fraction > 0 and (not args.parallel_guidance_ablation
@@ -364,6 +370,7 @@ if (not math.isfinite(args.human_passing_identity_prior_max_age)
     parser.error("identity-prior passing requires observed-human/envelope mode and age in [0,.5]")
 if args.human_body_envelope_radius is not None:
     from robot.perception.human_body_envelope import HumanBodyEnvelopeConfig
+    from robot.safety.predictive_human_geometry import HumanGeometryForecastConfig
     try:
         HumanBodyEnvelopeConfig(body_radius_m=args.human_body_envelope_radius,
             centroid_uncertainty_m=args.human_envelope_centroid_uncertainty,
@@ -1096,6 +1103,7 @@ def main():
     from robot.perception.human_body_envelope import HumanBodyEnvelopeConfig
 
     perception = LiveObjectPerception(
+        predictive_human_geometry_config=HumanGeometryForecastConfig() if args.predictive_human_geometry_ablation else None,
         segmenter=segmenter,
         mass_estimator=mass,
         contact_detector=contact,
@@ -1691,6 +1699,10 @@ def main():
             if args.actor_shape == "upright_capsule" else "sphere/support/plume fixture evidence gate")
         gate["passed"] = stationary_ready = bool(stationary_ready and gate["bounded_fixture_checks"] and all(gate["bounded_fixture_checks"].values()))
         save_json("stationary-object-validation.json", object_summary)
+    if args.predictive_human_geometry_ablation:
+        prediction = latest.field.predictive_human_geometry
+        gate['predictive_geometry_ready'] = bool(prediction is not None and prediction.ready and prediction.forecasts)
+        gate['passed'] = stationary_ready = bool(stationary_ready and gate['predictive_geometry_ready'])
     save_json("stationary-gate.json", gate)
     print(json.dumps({key: value for key, value in gate.items() if key != "last_objects"}, default=json_default), flush=True)
     if not stationary_ready:
@@ -1956,6 +1968,7 @@ def main():
             data[1],
             data[2],
             initial_command_guess=data[3],
+            **({'prediction_state_timestamp_seconds': data[5]} if args.predictive_human_geometry_ablation else {}),
             **({"nominal_goal_grid_xy": data[4]} if args.guidance_tracking_weight > 0 or args.checked_rear_pass_reference else {}),
             profile_path=args.output / "profiles" / f"planner-{data[2].sensor_frame_id}.pstats"
             if args.profile_runtime else None,
@@ -2267,6 +2280,10 @@ def main():
                     sensor_timestamp_seconds=now,
                     packet=(current.copy(), sequence, latest.field, warm,
                         np.array([nominal.target_waypoint.x, nominal.target_waypoint.y], dtype=float)
+                        if args.checked_rear_pass_reference or args.guidance_tracking_weight > 0 else None,
+                        now) if args.predictive_human_geometry_ablation else
+                        (current.copy(), sequence, latest.field, warm,
+                        np.array([nominal.target_waypoint.x, nominal.target_waypoint.y], dtype=float)
                         if args.checked_rear_pass_reference or args.guidance_tracking_weight > 0 else None),
                 )
                 plan_waypoints[plan_id] = waypoint.current_waypoint_index
@@ -2296,13 +2313,16 @@ def main():
                 # state against each newly accepted field, with identical exact
                 # DTCBF and dense geometry gates. This performs no new solve.
                 if active_plan_lease.needs_validation(now, buffer.generation):
-                    valid = mpc.revalidate_commands(
+                    valid = (not args.predictive_human_geometry_ablation or latest.field.predictive_human_geometry is not None) and mpc.revalidate_commands(
                         current,
                         active_plan.command_sequence,
                         configuration_space=latest.field.pipeline.configuration_space,
                         h_full=latest.field.pipeline.h_full,
                         guidance_fields=latest.field.pipeline.guidance_fields,
                         temporal_safety_derivative=latest.field.temporal_safety_derivative,
+                        **({'predictive_geometry': latest.field.predictive_human_geometry,
+                            'predictive_source_age_seconds': now-latest.field.sensor_timestamp_seconds}
+                            if args.predictive_human_geometry_ablation else {}),
                     )
                     active_plan_lease.record_validation(
                         now, buffer.generation, accepted=valid
@@ -2461,6 +2481,13 @@ def main():
         if human.departure is not None:
             save_json("human-departure-events.json", human.departure.events)
         save_json("human-truth-evaluation-only.json", human.records)
+        if args.predictive_human_geometry_ablation:
+            from robot.evaluation.predictive_human_geometry_validation import validate_predictive_human_geometry
+            prediction_validation = validate_predictive_human_geometry(live_fields, human.records,
+                reference_radius_m=human.setup['collision_radius_m'])
+            human_validation['predictive_geometry'] = prediction_validation
+            completed = completed and prediction_validation['passed']
+            save_json('live-predictive-human-geometry-validation.json', prediction_validation)
         if args.restaurant_human == 'parallel':
             from robot.evaluation.parallel_walking_validation import validate_parallel_curve
             parallel_goal = (anchor.x + math.cos(anchor.yaw)*ROUTE[-1][0] - math.sin(anchor.yaw)*ROUTE[-1][1],
@@ -2752,6 +2779,7 @@ def main():
         "checked_wait_current_pose_admissions": checked_wait_admissions,
         "encounter_comparison": args.encounter_comparison,
         "physical_CRA_lambda": 1.25,
+        "predictive_human_geometry_ablation": args.predictive_human_geometry_ablation,
         "fixed_lambda": None if args.encounter_guidance_ablation else 0. if args.zero_tangential_bias_ablation else 1.25,
         "plume_control": args.plume_control,
         "restaurant_scene": str(SCENE_PATH) if args.restaurant_scene else None,

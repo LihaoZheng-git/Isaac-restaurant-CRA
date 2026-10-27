@@ -28,6 +28,8 @@ def planner_result_diagnostic(result):
         ),
         "solver_success": None if result is None else result.success,
         "solver_fallback_active": None if result is None else result.fallback_active,
+        **({"predictive_human_geometry_ablation": result.predictive_geometry}
+           if result is not None and getattr(result, "predictive_geometry", None) is not None else {}),
         **({"guidance_tracking_ablation": asdict(result.guidance_tracking)}
            if result is not None and hasattr(result, "guidance_tracking") else {}),
         **({"crossing_maneuver_ablation": result.crossing_maneuver}

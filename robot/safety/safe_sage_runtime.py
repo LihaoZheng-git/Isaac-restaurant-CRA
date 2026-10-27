@@ -275,6 +275,7 @@ class SafeSAGERuntimeField:
     rear_pass_route_direction_grid_xy: tuple[float, float] | None = None
     rear_pass_policy_motion: tuple[EncounterPolicyMotion, ...] = ()
     person_relative_rear_reference: PersonRelativeRearReference | CurrentRearApproachReference | None = None
+    predictive_human_geometry: object | None = None
 
     def __post_init__(self) -> None:
         frame_id = _nonnegative_integer(
@@ -285,6 +286,12 @@ class SafeSAGERuntimeField:
             self.sensor_timestamp_seconds,
             name="sensor_timestamp_seconds",
         )
+        if self.predictive_human_geometry is not None:
+            from robot.safety.predictive_human_geometry import PredictiveHumanGeometry
+            if not isinstance(self.predictive_human_geometry, PredictiveHumanGeometry):
+                raise TypeError("typed predictive human geometry required")
+            self.predictive_human_geometry.validate_source(frame_id, sensor_time,
+                self.anchor_position_world_xy, self.anchor_yaw)
         all_count = _nonnegative_integer(
             self.all_obstacle_point_count,
             name="all_obstacle_point_count",
@@ -304,6 +311,15 @@ class SafeSAGERuntimeField:
             )
         if not isinstance(self.tracking_result, ObstacleTrackingResult):
             raise TypeError("tracking_result must be an ObstacleTrackingResult.")
+        if self.predictive_human_geometry is not None:
+            tracks = {t.track_id: t for t in self.tracking_result.tracked_obstacles}
+            prediction = self.predictive_human_geometry
+            if (self.tracking_result.timestamp_seconds != sensor_time
+                or not set(prediction.required_track_ids) <= tracks.keys()
+                or any(tracks[f.track_id].point_count < prediction.config.minimum_points
+                    or not np.allclose(f.centroids_world_xy[-1], tracks[f.track_id].centroid_world_xy,
+                    rtol=0, atol=1e-9) for f in prediction.forecasts)):
+                raise ValueError('predictions require their original current positive track identities/centroids')
         reference_ids = tuple(self.motion_passing_reference_track_ids)
         current_ids = {t.track_id for t in self.tracking_result.tracked_obstacles if t.point_count >= 3}
         if (any(isinstance(k, bool) or not isinstance(k, int) or k not in current_ids for k in reference_ids)
@@ -1189,6 +1205,7 @@ class SafeSAGEControlRuntime:
         initial_command_guess: Sequence[float] | np.ndarray | None = None,
         preferred_lateral_direction_grid_y: float | None = None,
         nominal_goal_grid_xy: Sequence[float] | np.ndarray | None = None,
+        prediction_state_timestamp_seconds: float | None = None,
     ) -> SafeSAGEUnicycleMPCResult:
         """Run predictive filtering against one accepted field snapshot."""
 
@@ -1205,6 +1222,16 @@ class SafeSAGEControlRuntime:
             mpc = LaplaceGuidanceTrackingMPC(mpc.paper_filter, mpc.config,
                 guidance_config=replace(mpc.guidance_config, tangent_velocity_fraction=0.))
         extra = {}
+        prediction = getattr(field, "predictive_human_geometry", None)
+        if prediction_state_timestamp_seconds is not None and prediction is None:
+            raise ValueError('prediction request has no current field forecast; no legacy fallback')
+        if prediction is not None:
+            if prediction_state_timestamp_seconds is None:
+                raise ValueError("predictive geometry requires the actual planning-state epoch")
+            mpc = copy.copy(mpc)
+            mpc.predictive_geometry = prediction
+            mpc.predictive_source_age_seconds = _finite_real(prediction_state_timestamp_seconds,
+                name='actual prediction planning-state epoch')-field.sensor_timestamp_seconds
         if (isinstance(mpc, LaplaceGuidanceTrackingMPC)
             and mpc.guidance_config.reference_tangent_basis == "selected_observed_obstacle"
             and mpc.guidance_config.tangent_velocity_fraction > 0):

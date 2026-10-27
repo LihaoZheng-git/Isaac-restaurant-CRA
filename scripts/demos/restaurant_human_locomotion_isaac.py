@@ -37,6 +37,8 @@ parser.add_argument('--human-passing-identity-prior-max-age', type=float, defaul
                     help='separate parallel identity-selection PRIOR, at most .5s with verified current LiDAR; zero wheels')
 parser.add_argument('--identity-selection-body-envelope', action='store_true',
                     help='explicit existing .40+.25m body PRIOR for zero-wheel parallel identity-selection validation')
+parser.add_argument('--predictive-human-geometry', action='store_true',
+                    help='separate zero-wheel LiDAR source-window motion/geometry PRIOR benchmark; future actor truth only scores it')
 parser.add_argument("--human-body-contact-prior", type=float, default=None, metavar="SCORE",
                     help="explicit low nonzero human-body contact policy prior; legacy outline mode if omitted")
 parser.add_argument("--carry-bowl", action="store_true",
@@ -65,6 +67,8 @@ parser.add_argument(
     metavar=("KG", "LOWER", "UPPER"),
 )
 args = parser.parse_args()
+if args.predictive_human_geometry and not args.identity_selection_body_envelope:
+    parser.error('prediction bench requires the explicit parallel selection/current body-envelope component')
 if args.parallel_guidance_selection and (not args.parallel_oncoming or not args.motion_aware_passing):
     parser.error('parallel selection component requires explicit parallel-oncoming and motion-aware-passing')
 if (not math.isfinite(args.human_passing_identity_prior_max_age)
@@ -428,6 +432,7 @@ def main():
             parallel_guidance_selection=args.parallel_guidance_selection,
             maximum_identity_prior_selection_age_seconds=args.human_passing_identity_prior_max_age,
             identity_selection_body_envelope=args.identity_selection_body_envelope,
+            predictive_human_geometry=args.predictive_human_geometry,
             camera_prim_path=CAMERA_PRIM_PATHS[args.rgb_camera],
         )
     phase = "idle_before"
@@ -705,6 +710,13 @@ def main():
         report["motion_passing_validation"] = passing_report
         report["passed"] &= passing_report["passed"]
         save("motion-passing-validation.json", passing_report)
+    if args.predictive_human_geometry:
+        from robot.evaluation.predictive_human_geometry_validation import validate_predictive_human_geometry
+        prediction_report = validate_predictive_human_geometry(sensor.records, records,
+            reference_radius_m=setup['collision_radius_m'])
+        report['predictive_human_geometry_validation'] = prediction_report
+        report['passed'] &= prediction_report['passed']
+        save('predictive-human-geometry-validation.json', prediction_report)
     save("validation.json", report)
     print(json.dumps(report), flush=True)
     if not report["passed"]:

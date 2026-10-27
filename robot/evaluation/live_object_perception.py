@@ -254,6 +254,7 @@ class LiveObjectPerception:
         human_fresh_person_policy=False,
         zero_tangential_bias_ablation=False,
         encounter_motion_config=None,
+        predictive_human_geometry_config=None,
     ):
         self.segmenter, self.mass_estimator, self.contact_detector = (
             segmenter,
@@ -314,6 +315,13 @@ class LiveObjectPerception:
         if human_observed_occupancy_only and human_fragment_coverage_config is not None:
             raise ValueError("observed-only geometry cannot cover fragments with an unoccupied prior disk")
         self.human_observed_occupancy_only = human_observed_occupancy_only
+        from robot.safety.predictive_human_geometry import HumanGeometryForecastConfig, PredictiveHumanGeometryMemory
+        if predictive_human_geometry_config is not None and (
+            not isinstance(predictive_human_geometry_config, HumanGeometryForecastConfig)
+            or self.human_body_envelope is None or human_observed_occupancy_only):
+            raise ValueError("prediction requires an explicit active verified human body-envelope prior")
+        self.predictive_human_geometry = (None if predictive_human_geometry_config is None
+            else PredictiveHumanGeometryMemory(predictive_human_geometry_config))
         if not isinstance(human_prior_geometry_associations, bool) or (
             human_prior_geometry_associations and (human_observed_occupancy_only
                 or self.human_body_envelope is None or person_detector is None

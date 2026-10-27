@@ -18,8 +18,8 @@ from robot.safety.safe_sage_runtime import SafeSAGEControlRuntime
 
 
 def save_planner_replay(directory, control, request, result):
-    if not isinstance(control, SafeSAGEControlRuntime) or len(request) != 5:
-        raise TypeError("planner replay requires the native runtime and five-part request")
+    if not isinstance(control, SafeSAGEControlRuntime) or len(request) not in (5, 6):
+        raise TypeError("planner replay requires the native runtime and five/six-part request")
     field = request[2]
     control._validate_field(field)
     directory = Path(directory)
@@ -37,6 +37,7 @@ def save_planner_replay(directory, control, request, result):
         sha256=hashlib.sha256(payload).hexdigest(),
         sensor_frame_id=field.sensor_frame_id,
         sensor_timestamp_seconds=field.sensor_timestamp_seconds,
+        prediction_state_timestamp_seconds=request[5] if len(request) == 6 else None,
         initial_chassis_state_grid=np.asarray(request[0]).tolist(),
         nominal_first_command=(nominal[0] if nominal.ndim == 2 else nominal).tolist(),
         nominal_goal_grid_xy=None if request[4] is None else np.asarray(request[4]).tolist(),
