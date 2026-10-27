@@ -154,3 +154,30 @@ trusted baseline first-selected snapshot reproduces its complete command
 sequence atdefault0 (1e-10 tolerance); the.35 reference also passes exact
 planning with unchanged field bytes/epochs. These are source/offline checks,
 not native smoothing or perception acceptance.
+
+## Outward .35 result: preserve failure
+
+Atd66b22c, independent and own60-frame stationary gates passed. The native
+`motion-outward035-v1` trial FAILED `progress_timeout` at17.95 navigation
+seconds, reaching only1/3 guides. Nearby walking excursion was.106335 m,
+below the unchanged.20 m curve requirement. Human motion/kinetic (6 supported
+moving rows), current selection and all179 body-containment rows passed, but
+those component successes do not establish successful navigation.
+
+Minimum independent physical clearance was.127172 m, stopping drift.00000983 m
+and minimum accepted analytical margin.051063. The actual near-human hold
+increased to2.95 s (slow interval2.966667 s). The matched-invocation/source-scope
+audit passed; both native and smoothing acceptance failed. Report SHA256:
+`edcdd489498bd0f3df199bf357617bc46f254f6e3006bf20f4ce3ce17ec8373d`.
+
+Selection records show transient geometric ambiguity atsource13.5 s and no
+fresh visual qualification at13.6--13.9, despite a currently supported human
+envelope with its original image at13.183333 s. Guidance correctly disabled
+the extra preference rather than treating retained identity as fresh. The
+next separate configuration may use the **already approved <=.5 s identity
+selection PRIOR**, with current envelope/competitor checks and original image,
+selection and eight-second policy clocks. This is not a change to the primary
+same-frame selector, physical-factor retention, body geometry or acceptance
+thresholds. A provenance-aware independent parallel audit must explicitly
+distinguish this mode and a new stationary component must precede its wheels.
+Retain both failed smoothing trials and the accepted baseline unchanged.

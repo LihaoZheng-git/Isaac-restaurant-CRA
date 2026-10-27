@@ -2350,3 +2350,14 @@
   Wider source freeze:2922units100.77s/89focused6.66s/Ruffcompile/bothCLI/diff
   PASS. Trusted baseline first-selected full command parity atdefault0(1e-10),
   .35 exact-safe hypothesis and unchanged field bytes/epochs; native pending.
+- Atd66b22c outward.35 FAILED progress_timeout17.95s/1of3guides, .106335m
+  nearbycurve<.20, actualhold2.95s (baseline2.383333), slow2.966667. Independent+
+  own60 passed; 6supportedmovingkinetic/selection/179bodycontainment rows pass,
+  .127172mphysicalclearance/.00000983mdrift/.051063analytical do not establish
+  arrival or smoothing. Preserve reportSHAedcdd489498bd0f3df199bf357617bc46f254f6e3006bf20f4ce3ce17ec8373d.
+  Source13.5 transient geometric ambiguity released selection;13.6--13.9
+  lacked fresh visual eligibility despite current body continuity and original
+  image13.183333. Next separate bounded retry may use ALREADY approved<=.5s
+  identity-selection PRIOR, never longer/fresh or renewed8s policy/factor/field
+  clocks. Require explicit provenance-aware parallel scoring/new stationary
+  component before wheels; retain primary strict selector and all old failures.
