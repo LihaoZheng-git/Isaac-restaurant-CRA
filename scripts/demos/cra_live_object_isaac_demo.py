@@ -93,6 +93,8 @@ parser.add_argument("--guidance-tangent-velocity-fraction", type=float, default=
                     help="separate proactive tangent-velocity reference, 0..1; runtime requires a current observed-motion passing selection")
 parser.add_argument("--guidance-tangent-basis", choices=("planar_gradient", "selected_observed_obstacle"),
                     default="planar_gradient", help="explicit reference ablation; selected observed centroid/side avoids combined-gradient orientation ambiguity")
+parser.add_argument("--guidance-tangent-blend", choices=("additive", "convex"), default="additive",
+                    help="separate parallel route-guide ablation: convex blending reduces goal pull toward the current observed away tangent")
 parser.add_argument("--human-positive-fragment-extent", action="store_true",
                     help="bare-human recent-coobservation/current-positive-return fragment association; no free-space or factor transfer")
 parser.add_argument("--human-positive-fragment-surface", action="store_true",
@@ -251,6 +253,9 @@ parser.add_argument(
     help="optimizer candidate age cap; every executed horizon still needs fresh exact validation",
 )
 args = parser.parse_args()
+if args.guidance_tangent_blend == 'convex' and (not args.parallel_guidance_ablation
+    or args.waypoint_mode != 'guides'):
+    parser.error('convex tangent blend requires the separate parallel guidance ablation with route guides')
 if args.parallel_guidance_ablation and (args.restaurant_human != 'parallel'
     or not args.motion_aware_passing or not args.human_observed_passing_target
     or args.guidance_tracking_weight <= 0 or args.guidance_tangent_velocity_fraction <= 0
@@ -1263,7 +1268,8 @@ def main():
                 args.guidance_turn_first_minimum_cap, args.guidance_reference_mode,
                 args.guidance_reference_search_width, args.guidance_reference_search_candidates,
                 args.guidance_tangent_velocity_fraction, args.guidance_tangent_basis,
-                minimum_reference_speed_fraction=args.guidance_reference_minimum_speed_fraction))
+                minimum_reference_speed_fraction=args.guidance_reference_minimum_speed_fraction,
+                tangent_blend_mode=args.guidance_tangent_blend))
     control = SafeSAGEControlRuntime(mpc=mpc, backup_filter=backup, crossing_strategy=args.crossing_strategy)
     if args.checked_rear_pass_reference:
         from robot.evaluation.live_rear_pass import LiveRearPassControlRuntime
@@ -2244,8 +2250,8 @@ def main():
                     frame_id=plan_id,
                     sensor_timestamp_seconds=now,
                     packet=(current.copy(), sequence, latest.field, warm,
-                        np.array([nominal.target_waypoint.x, nominal.target_waypoint.y]) if args.checked_rear_pass_reference
-                        else np.array(ROUTE[waypoint.current_waypoint_index], dtype=float) if args.guidance_tracking_weight > 0 else None),
+                        np.array([nominal.target_waypoint.x, nominal.target_waypoint.y], dtype=float)
+                        if args.checked_rear_pass_reference or args.guidance_tracking_weight > 0 else None),
                 )
                 plan_waypoints[plan_id] = waypoint.current_waypoint_index
                 plan_id += 1
@@ -2691,9 +2697,10 @@ def main():
             "reference_mode": args.guidance_reference_mode,
             "tangent_velocity_fraction": args.guidance_tangent_velocity_fraction,
             "tangent_reference_basis": args.guidance_tangent_basis,
+            "tangent_blend_mode": args.guidance_tangent_blend,
             "tangent_runtime_gate": "current positive tracks with an existing observed-motion passing selection; no actor truth",
             "forward_speed_reference": "maximum forward speed in original obstacle-unaware nominal horizon, clipped to actuator bounds",
-            "heading_reference_basis": "active_obstacle_unaware_waypoint; same field frame; request-time waypoint index",
+            "heading_reference_basis": "actual_nominal_pose_only_target; route-guide lookahead or strict checkpoint; same field frame; request-time waypoint index",
             "scope": "separate checked local guidance-path tracking objective; primary nominal unchanged; not paper equivalence"},
         "immediate_replan_after_invalidations": args.immediate_replan,
         "verified_command_interval_seconds": mpc.config.time_step,

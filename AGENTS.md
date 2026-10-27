@@ -2252,3 +2252,20 @@
   tests and independent+own60 stationary validation precede its wheels. Keep
   perpendicular checked wait/go, all failures and main/long-service/PR117 holds.
   See docs/restaurant_behavior_validation.md for exact reports and scope.
+
+- The user-approved stronger parallel variant explicitly selects route guides
+  and --guidance-tangent-blend convex. Additive/checkpoint defaults stay intact.
+  Convex mixing reduces goal pull by the SAME bounded current away-tangent
+  activation; no new occupancy, factor evidence, source time or safety authority.
+  MPC receives the actual pose-only nominal guide target, never authored actor
+  geometry. No current selection still disables tangent per request without
+  mutating the shared configuration. Final goal, .20m nearby walking curve,
+  lambda1.25/body.40+.25/limits and every exact/source/physical/stopping gate
+  remain mandatory. Keep this separate from the primary comparison; source
+  tests and fresh independent+own60 gates precede wheels. Component reuse
+  requires exact unchanged actor/perception/selector source audit. Native
+  acceptance pending; all old failures and main/long-service/PR117 holds remain.
+  Source freeze:2869units107.39s/48focused7.13s/RuffcompileCLI/diff PASS.
+  Two trusted local native selected-field offline comparisons retain exact-safe
+  plan success and unchanged field bytes/epochs; stronger convex rotation is
+  within existing limits. Offline references are not native wheel acceptance.

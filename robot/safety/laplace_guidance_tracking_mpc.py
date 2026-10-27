@@ -34,6 +34,7 @@ class LaplaceGuidanceTrackingConfig:
     tangent_velocity_fraction: float = 0.0
     reference_tangent_basis: str = "planar_gradient"
     minimum_reference_speed_fraction: float = 1.0
+    tangent_blend_mode: str = "additive"
 
     def __post_init__(self):
         if self.reference_mode not in {
@@ -41,7 +42,7 @@ class LaplaceGuidanceTrackingConfig:
         }:
             raise ValueError("unknown guidance reference mode")
         for name, value in vars(self).items():
-            if name in {"reference_mode", "reference_tangent_basis"}:
+            if name in {"reference_mode", "reference_tangent_basis", "tangent_blend_mode"}:
                 continue
             if (
                 isinstance(value, bool)
@@ -78,6 +79,13 @@ class LaplaceGuidanceTrackingConfig:
         if self.reference_tangent_basis not in {"planar_gradient", "selected_observed_obstacle"} or (
             self.reference_tangent_basis == "selected_observed_obstacle" and self.reference_search_width > 0):
             raise ValueError("selected observed tangent requires an explicit supported basis and no legacy reference search")
+        if self.tangent_blend_mode not in {"additive", "convex"} or (
+            self.tangent_blend_mode == "convex" and (self.weight <= 0
+                or self.reference_mode != "planar_forecast_velocity"
+                or self.reference_tangent_basis != "selected_observed_obstacle")):
+            raise ValueError("convex tangent blend requires positive forecast tracking and selected observed obstacle")
+        # Fraction zero is permitted: runtime owns a zero-tangent configuration
+        # when current selection is absent, without changing the shared planner.
 
     def reference_speed_fractions(self):
         """At most four explicit candidate speeds; default retains one."""
@@ -122,6 +130,7 @@ class GuidanceTrackingDiagnostic:
     reference_tangent_basis: str = "planar_gradient"
     minimum_reference_speed_fraction: float = 1.0
     selected_reference_speed_fraction: float | None = None
+    tangent_blend_mode: str = "additive"
 
 
 @dataclass(frozen=True)
@@ -406,6 +415,7 @@ class LaplaceGuidanceTrackingMPC(SafeSAGEUnicycleMPC):
             reference_tangent_basis=self.guidance_config.reference_tangent_basis,
             minimum_reference_speed_fraction=self.guidance_config.minimum_reference_speed_fraction,
             selected_reference_speed_fraction=selected[2],
+            tangent_blend_mode=self.guidance_config.tangent_blend_mode,
         )
         return GuidanceTrackingMPCResult(
             **{
@@ -499,7 +509,14 @@ class LaplaceGuidanceTrackingMPC(SafeSAGEUnicycleMPC):
                     activation = math.sqrt(float(np.clip(1 - constraint.sampled_safety_value
                         / self.guidance_config.activation_safety_value, 0, 1)))
                     fade = min(1., distance / self.guidance_config.guidance_fade_distance_m) ** 2
-                    preferred = preferred + speed * fraction * activation * fade * tangent / tangent_norm
+                    strength = fraction * activation * fade
+                    if self.guidance_config.tangent_blend_mode == "convex":
+                        # A separately reported travel-reference preference:
+                        # reduce goal pull as the current away tangent activates.
+                        # This grants no safety authority or future free space.
+                        preferred = (1 - strength) * preferred + speed * strength * tangent / tangent_norm
+                    else:
+                        preferred = preferred + speed * strength * tangent / tangent_norm
                     preferred *= min(1., speed / max(1e-9, float(np.linalg.norm(preferred))))
                 magnitude = float(np.linalg.norm(preferred))
                 if magnitude <= 1e-9:

@@ -203,3 +203,41 @@ change to the primary comparison, CRA, physical priors or acceptance gates.
 It requires source tests and new stationary controller validation before wheels.
 Perpendicular crossing remains checked wait/go; all main/long-service/PR117
 holds and earlier failed records remain.
+
+## Separate stronger route-guide variant
+
+The next default-disabled variant uses `--waypoint-mode guides` and
+`--guidance-tangent-blend convex` with the observed parallel selector. The
+existing pose-only route guide supplies a 1 m lookahead target; intermediate
+planes may be passed off the chord within its existing association bound. Only
+the final goal must be reached within the original tolerance. The MPC now uses
+that actual nominal target rather than a conflicting static checkpoint. Strict
+checkpoint callers still receive the same target as before.
+
+The legacy additive reference is `v_goal + a * v_tangent`, clipped to the
+original reference speed. The separate convex preference is
+`(1-a) * v_goal + a * v_tangent`, where
+`a = fraction * sqrt(clip(1-h/activation_h,0,1)) * goal_fade`.
+It reduces competing goal pull as the currently observed away tangent becomes
+active. This is an engineering travel reference in the approved tracking
+ablation, not the paper's unchanged objective or a safety margin. No current
+qualified selection means a request-local zero tangent, with no shared planner
+mutation, old trajectory reuse or source-clock renewal.
+
+The recipe retains beta100, activation_h2, tangent fraction1, original 3 s actor
+onset, route, lambda1.25, body.40+.25m prior, physical/solver limits, freshness,
+exact DTCBF/dense geometry, analytical filtering, independent clearance,
+containment, stopping and the 0.20 m curve within a 2 m walking encounter gate.
+Report route-guide progress separately from exact checkpoint visits. New
+independent and own60-frame zero-wheel controller gates are mandatory. Actor,
+perception and selector component reuse requires an exact source audit proving
+those modules unchanged from the accepted native component. Native acceptance
+is pending; all earlier failures and primary-comparison holds remain.
+
+Source validation passed2,869 units in107.39 s, 48 focused tests in7.13 s,
+repository Ruff, compilation, CLI help and whitespace checks. Two trusted local
+native selected-field snapshots also retained exact-safe plan success under
+both additive and convex route-guide references. Convex requested stronger
+away rotation within the same .8 rad/s limit; original field bytes/epochs were
+unchanged. This is offline same-input reference evidence, not counterfactual
+navigation or a substitute for the new native stationary/motion gates.
