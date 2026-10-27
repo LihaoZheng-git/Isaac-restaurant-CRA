@@ -2557,7 +2557,7 @@ def main():
         "human_crossing_direction": args.human_crossing_direction,
         "human_continuing_away_fixture": args.human_continuing_away,
         "human_crossing_extension_metres": args.human_crossing_extension,
-        "human_crossing_line_world_y": 7.0 if open_crossing_layout else args.human_crossing_line_y,
+        "human_crossing_line_world_y": None if args.restaurant_human == 'parallel' else 7.0 if open_crossing_layout else args.human_crossing_line_y,
         "motion_aware_passing_config": asdict(perception.motion_passing.config) if perception.motion_passing is not None else None,
         "actor_trigger_basis": "exogenous_navigation_elapsed_time" if args.human_crossing_delay_seconds is not None else "robot_world_y",
         "human_requested_walking_speed_mps": args.human_walking_speed,

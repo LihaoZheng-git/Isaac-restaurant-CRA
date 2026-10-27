@@ -72,3 +72,12 @@ Repeat the parallel component and visually inspect its new overview; each motion
 trial still requires its own fresh60-frame gate. Old independent gates may be
 retained only with exact source comparison proving the two observer-eye literals
 are the sole functional difference. No physical failure is repaired by video.
+
+The corrected parallel component passed again at a470065 (289.98wall seconds,
+9idle/13movingfresh associations, .048418m/s median velocity error). Its actual
+overview was visually inspected and shows both native human and robot. All
+original physical/sensor checks still passed. Before wheel trials, a report-only
+correction makes the unused crossing-plane metadata null in parallel mode;
+the exact source audit includes that single reporting expression. It changes
+no physical/control behavior or acceptance. New own60-frame gates remain
+mandatory before motion; native curved/stop-go results are still pending.
