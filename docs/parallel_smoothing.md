@@ -236,3 +236,38 @@ affine projection and full exact checks. The offline original first-selected
 snapshot accepts a.75 nominal-speed preference (.150129 m/s versus.118309),
 without changing the nominal, field bytes/epochs or limits. This is not an
 executed speed floor, a relaxed safety constraint or a native result.
+
+## Turning translation preference
+
+The separate default-zero`--guidance-turn-translation-fraction` is available
+only in the explicit convex selected-obstacle parallel guide ablation. The
+first candidate uses`.75` with the **accepted baseline activation2, outward0,
+identity-selection0 and guide2**. Thus only this new reference/output option
+differs from the accepted baseline invocation; the failed identity/outward
+variants are not pooled into the comparison.
+
+During a translating reference turn, when both desired-heading error and
+goal-heading error are less than90 degrees, request at least the configured
+fraction of nominal speed **before** the existing control-space affine CBF
+projection. Turn-first references, headings away from the goal, goal arrival
+and missing current selected identity keep their original behavior. The
+projection may lower the preference to zero. All actuator clipping, predicted
+field/temporal checks, exact DTCBF/dense geometry, candidate/execution freshness,
+per-step analytical filtering and independent physical/stopping gates remain.
+It is a candidate-generation preference, never an enforced minimum velocity.
+
+The integrated trusted first-native-field replay reproduces the complete old
+command sequence atdefault0 within1e-10. At`.75` the first planned forward
+command increases from.118309 to.150129 m/s with an unchanged.79956 rad/s
+turn, original field bytes/epochs and exact-safe planning. Neither this one
+offline field nor a visibly larger curve proves smooth navigation. A fresh
+strict-selection zero-wheel component, independent+own60 gates and unchanged
+native/actual-hold evaluation are required. Use comparison`--variation
+translation`; original native failures and all primary/main/long-service/PR117
+holds remain in force.
+
+Translation-reference source freeze passed2,983 units in107.50 s,113 focused
+tests in7.58 s, Ruff, compilation, CLI help and whitespace checks. A real
+box/halfspace projection test lowers the.15 m/s preference below.02 m/s,
+confirming the preference cannot become a post-projection minimum command.
+Native acceptance is pending.

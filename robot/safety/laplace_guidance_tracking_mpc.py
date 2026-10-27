@@ -36,6 +36,7 @@ class LaplaceGuidanceTrackingConfig:
     minimum_reference_speed_fraction: float = 1.0
     tangent_blend_mode: str = "additive"
     outward_reference_fraction: float = 0.0
+    turn_translation_fraction: float = 0.0
 
     def __post_init__(self):
         if self.reference_mode not in {
@@ -92,6 +93,11 @@ class LaplaceGuidanceTrackingConfig:
             raise ValueError("outward reference requires fraction0..1 and explicit convex selected-obstacle forecast tracking")
         # Fraction zero is permitted: runtime owns a zero-tangent configuration
         # when current selection is absent, without changing the shared planner.
+        if not 0 <= self.turn_translation_fraction <= 1 or (
+            self.turn_translation_fraction > 0 and (self.tangent_blend_mode != "convex"
+                or self.reference_tangent_basis != "selected_observed_obstacle"
+                or self.reference_mode != "planar_forecast_velocity" or self.weight <= 0)):
+            raise ValueError("turn translation requires fraction0..1 and explicit convex selected-obstacle forecast tracking")
 
     def reference_speed_fractions(self):
         """At most four explicit candidate speeds; default retains one."""
@@ -138,6 +144,7 @@ class GuidanceTrackingDiagnostic:
     selected_reference_speed_fraction: float | None = None
     tangent_blend_mode: str = "additive"
     outward_reference_fraction: float = 0.0
+    turn_translation_fraction: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -425,6 +432,8 @@ class LaplaceGuidanceTrackingMPC(SafeSAGEUnicycleMPC):
             tangent_blend_mode=self.guidance_config.tangent_blend_mode,
             outward_reference_fraction=self.guidance_config.outward_reference_fraction
             if self.guidance_config.tangent_velocity_fraction > 0 else 0.,
+            turn_translation_fraction=self.guidance_config.turn_translation_fraction
+            if self.guidance_config.tangent_velocity_fraction > 0 else 0.,
         )
         return GuidanceTrackingMPCResult(
             **{
@@ -604,6 +613,14 @@ class LaplaceGuidanceTrackingMPC(SafeSAGEUnicycleMPC):
             # current heading points away from the configured goal.
             # This is reference generation, not a new executable constraint.
             forward = preferred_speed * max(math.cos(error), 0.0)
+            if (self.guidance_config.turn_translation_fraction > 0
+                and self.guidance_config.tangent_velocity_fraction > 0 and not turn_first
+                and abs(error) < math.pi / 2 and radial_alignment > 0):
+                # Candidate preference only: a forward-only robot can otherwise
+                # spend its approach rotating with too little lateral travel.
+                # The unchanged affine projection below may reduce this value
+                # to zero; every horizon still needs full exact safety checks.
+                forward = max(forward, speed * self.guidance_config.turn_translation_fraction)
             if self.guidance_config.reference_mode == "bounded_field_heading":
                 forward = min(forward, distance * radial_alignment / self.config.time_step)
             else:

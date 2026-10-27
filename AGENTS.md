@@ -2385,3 +2385,18 @@
   reference hypothesis returns strictidentity0/outward0 and prefers moderate
   forward travel during a checked turn BEFORE affine projection/exact checks,
   never an executed minimum speed or hidden geometry/factor/clock relaxation.
+- The next separate parallel smoothing reference uses turn_translation_fraction
+  .75 at BASELINEactivation2/outward0/strictidentity0/guide2. Default0 retains
+  complete old first-native-field command parity(1e-10); integrated.75 firstv
+  .150129 vs.118309, samefield/epoch and full exact planning, OFFLINE only.
+  Positive fraction is a nominal-speed PREFERENCE before unchanged affine CBF
+  projection; projection may reduce it to ZERO. No floor for turn-first,
+  >=90deg desired/goal errors, arrival or absent current selected person.
+  Keep actuator/source/temporal/exact/dense/per-stepanalytical/geometry/physical/
+  stopping/kinetic/.20nearcurve/.5sactualhold+50%reduction gates. Revalidate strict
+  stationary moving-human component plus independent+own60 before wheels.
+  Compare only translation/output option against accepted baseline; no primary,
+  causal/realtime/freshfourfactor or main/long-service/PR117 release.
+- Turning-reference source freeze passed2983units107.50s/113focused7.58s,
+  Ruff/compile/CLI/diff. Real box-halfspace projection test reduces.15preference
+  below.02, proving no post-projection executed floor. Native pending.

@@ -126,6 +126,32 @@ def outward_identity_command_change(baseline_command, candidate_command):
     return result
 
 
+def translation_only_command_change(baseline_command, candidate_command):
+    """Audit one turning-reference option with unchanged identity/geometry policy."""
+    flag = '--guidance-turn-translation-fraction'
+    values, commands = [], []
+    for command in (baseline_command, candidate_command):
+        command = list(command)
+        if command.count('--output') != 1 or command.count(flag) > 1:
+            raise ValueError('one output and at most one turn-translation preference required')
+        try:
+            command[command.index('--output')+1] = '<output>'
+            value = 0.
+            if flag in command:
+                i = command.index(flag)
+                value = float(command[i+1])
+                del command[i:i+2]
+        except (IndexError, ValueError) as error:
+            raise ValueError('complete output/translation arguments required') from error
+        if not math.isfinite(value) or not 0 <= value <= 1:
+            raise ValueError('turn-translation preference must be in[0,1]')
+        values.append(value)
+        commands.append(command)
+    return dict(matched=commands[0] == commands[1] and values[0] == 0 and values[1] > 0,
+        baseline_turn_translation_fraction=values[0], candidate_turn_translation_fraction=values[1],
+        scope='turning-reference preference only before original affine/exact safety checks; all remaining invocation arguments identical')
+
+
 def compare_parallel_smoothness(baseline, candidate, *, matched_configuration,
                                maximum_hold_seconds=.5, minimum_reduction_fraction=.5):
     if (not math.isfinite(maximum_hold_seconds) or maximum_hold_seconds < 0
