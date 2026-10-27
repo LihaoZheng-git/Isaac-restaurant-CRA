@@ -210,3 +210,29 @@ The `outward_identity` comparison declares both changes from the accepted
 baseline; the failed outward-only run remains an intermediate diagnostic,
 never an accepted smoothness baseline. The original.5 s/50% actual-hold target
 and every native safety/arrival/curve/kinetic gate remain unchanged.
+
+Atcb45e5f the new zero-wheel component PASSED: one natural prior selection,
+28 held-prior rows,115 containment rows (maximum centre error.180435 m),
+actor/mass/motion/contact/numeric-policy checks and zero wheels. Independent
+and own60-frame gates also passed. The motion trial nevertheless FAILED
+`nearby_track_lost` at16.533333 navigation seconds,1/3 guides. Track323's
+unresolved positive region was last seen at14.3 s; at24.6 s its distance was
+1.196227 m, inside the unchanged1.2 m guard. Do not delete it or call it free.
+
+The trial's nearby curve was.136190 m, hold3.266667 s and slow interval
+3.283333 s. Physical clearance.121744 m, stopping drift.004416 m, analytical
+margin.170324, five supported moving-kinetic rows and164 passing containment
+rows do not establish navigation or smoothing acceptance. Motion used37 held
+fresh-origin selections and **zero prior selections**: the parked prior-path
+success must not be attributed to this motion trajectory. Original report SHA:
+`a06756c82e9e3e32e72007ed9a5d34c94057e327c1db46d85ceb10c029c28b5a`.
+
+All2,960 units,159 focused tests, Ruff, compilation/three CLI paths and the
+original native fresh-selection regression audit passed before source freeze.
+The accepted baseline and both older failed smoothing trials are unchanged.
+The next reference hypothesis returns to strict identity0/outward0 and tests
+maintaining moderate forward preference while turning, before the existing
+affine projection and full exact checks. The offline original first-selected
+snapshot accepts a.75 nominal-speed preference (.150129 m/s versus.118309),
+without changing the nominal, field bytes/epochs or limits. This is not an
+executed speed floor, a relaxed safety constraint or a native result.

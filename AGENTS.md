@@ -2373,3 +2373,15 @@
   as accepted; original native/kinetic/.20curve and.5s/50%hold gates unchanged.
   Numeric/identity-policy acceptance is not fresh physical estimation or a
   primary-comparison/main/long-service/PR117 release.
+- Atcb45e5f identity.5/outward.35 FAILED nearby_track_lost16.533333s/1of3guides:
+  unresolved323 original14.3s, current24.6s distance1.196227<unchanged1.2guard.
+  .136190nearbycurve,3.266667hold/3.283333slow,.121744clearance/.004416drift/
+  .170324analytical,5movingkinetic/164containmentPASS do not establish arrival.
+  Zero-wheel component naturally exercised1priorselection/28heldrows/115body
+  rows(maxerror.180435), but motion had37FRESH-origin rows/ZEROpriorselections;
+  never attribute the parked prior-path result to motion. Independent+own60PASS.
+  Preserve reportSHAa06756c82e9e3e32e72007ed9a5d34c94057e327c1db46d85ceb10c029c28b5a.
+  2960units/159focused/Ruff/compile3CLI/legacyreportauditPASS. Next bounded
+  reference hypothesis returns strictidentity0/outward0 and prefers moderate
+  forward travel during a checked turn BEFORE affine projection/exact checks,
+  never an executed minimum speed or hidden geometry/factor/clock relaxation.
