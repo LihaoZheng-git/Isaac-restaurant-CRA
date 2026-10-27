@@ -2235,3 +2235,20 @@
   side audit, independent+own60 and all original wheel gates; native pending.
   Source checks passed2849units/71focused/Ruff/compile/CLI/diff before the
   new native component; this does not itself establish wheel acceptance.
+
+- At18a19f7, the native parked parallel selector/sensor/actor component PASSED
+  with25 distinct current selections and zero wheels; independent+own60 gates
+  passed before motion. Original-onset tracking reached3/3 goals in21.9167s,
+  but nearby walking bend.101554m FAILED the unchanged.20m gate. Clearance
+  .201984m/drift.002345m/current motion/selection/envelope passed. The actor-only
+  onset0 repeat FAILED0/3 at15.9s progress timeout, bend.100632m, despite
+  .211270m clearance/.000441m drift and current motion/selection/containment.
+  Preserve report SHAs9047627f... and0ed725db... and no fresh4factor/real-time
+  claim. The user explicitly approved a SEPARATE stronger guide variant:
+  intermediate waypoints as pose-only guides, final goal mandatory, stronger
+  away-tangent reference influence. Primary/default checkpoint/additive behavior,
+  CRA/lambda1.25/body.40+.25/robot limits/source/exact/dense/analytical/physical/
+  containment/stopping and .20m within2m walking gates stay unchanged. New source
+  tests and independent+own60 stationary validation precede its wheels. Keep
+  perpendicular checked wait/go, all failures and main/long-service/PR117 holds.
+  See docs/restaurant_behavior_validation.md for exact reports and scope.

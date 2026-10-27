@@ -167,3 +167,39 @@ and whitespace checks. Initial sandbox temporary-directory setup errors were
 resolved by using a fresh workspace-local pytest directory; no dependencies or
 environment settings were upgraded. Native component/controller results must
 still be recorded separately before any new curved-avoidance claim.
+
+### Native observed-selection results at 18a19f7
+
+The freely parked native component passed (292.17 wall seconds, 25 distinct
+current away-side selections, all actor/sensor/geometry/zero-wheel checks).
+Its overview was inspected and shows the native human and robot. The independent
+60-frame controller gate passed, followed by each motion run's own 60-frame gate.
+
+| Separate tracking trial | Arrival | Nearby walking bend | Clearance / braking drift | Result |
+| --- | --- | --- | --- | --- |
+| Original 3 s actor onset | 3/3 checkpoints, 21.9167 s | 0.101554 m | 0.201984 / 0.002345 m | FAILED 0.20 m curve gate |
+| Actor onset changed only to 0 s | 0/3, 15.9 s progress timeout | 0.100632 m | 0.211270 / 0.000441 m | FAILED curve and arrival |
+
+Both runs passed current human motion, original-clock away-side selection,
+fixed lambda1.25, active body-envelope containment, physical clearance and
+stopping checks. The first run had 36 distinct selected sources; the earlier-onset
+repeat had 37. The first run's largest nearby bend occurred with the human
+1.592782 m away at source18.3 s, so the person was nearby but the bend was mild.
+Earlier onset alone did not solve this. No complete fresh four-factor perception
+or real-time performance is established. Launcher exit0 with a gate-failure
+RuntimeError remains a failed trial.
+
+Original reports, retained byte unchanged:
+
+- `outputs/restaurant_parallel_guidance/motion-v1/report.json`, SHA256
+  `9047627f29658b78ddf293b39a2ae7f9756ba8bbd3f637dbf68a4404a6e0760b`.
+- `outputs/restaurant_parallel_guidance/motion-onset0-v1/report.json`, SHA256
+  `0ed725dbf20cb406e49870a9c0722cba62b2406e3a4b9384d5d9c79417938e51`.
+
+The user approved a further separate variant: intermediate waypoints become
+pose-only route guides (final goal remains mandatory), with stronger away-side
+reference influence. This is an explicit controller/reference ablation, not a
+change to the primary comparison, CRA, physical priors or acceptance gates.
+It requires source tests and new stationary controller validation before wheels.
+Perpendicular crossing remains checked wait/go; all main/long-service/PR117
+holds and earlier failed records remain.
