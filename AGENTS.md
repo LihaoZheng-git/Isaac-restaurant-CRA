@@ -2269,3 +2269,18 @@
   Two trusted local native selected-field offline comparisons retain exact-safe
   plan success and unchanged field bytes/epochs; stronger convex rotation is
   within existing limits. Offline references are not native wheel acceptance.
+
+- Stronger convex guide trial atabeb768 FAILED overall: nearby bend.207672m
+  passed, but nearby_track_lost stopped1/3 guides after13.5333s. Clearance
+  .306906m/drift.004370m/current motion/selection/envelope passed; ZERO fresh
+  complete factors. Preserve original reportSHAdae02c4a... . A16-return track327
+  observed once at14.3s remains unresolved; whole-positive coverage/history
+  gates fail and its.223076m original 3D gap exceeds existing.20m clustering.
+  Do not erase it, renew clocks or widen association to manufacture arrival.
+  The next bounded parameter retry may change ONLY pose-only guide lookahead
+  1->2m for a gentler rejoin, retaining unknown-track guard/all physical gates,
+  actor/lambda/body/limits and .20m nearby walking curve+final arrival. Offline
+  nominal-only min distance1.170440/1.222557m to the retained point is a hypothesis,
+  not safe navigation. New independent+own60 gates required; exact unchanged
+  actor/perception/selector source audit allows prior component reuse. No general
+  tracking repair, primary pooling or main/long-service/PR117 hold release.

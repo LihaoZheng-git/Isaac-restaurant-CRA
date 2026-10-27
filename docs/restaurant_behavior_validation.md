@@ -241,3 +241,34 @@ both additive and convex route-guide references. Convex requested stronger
 away rotation within the same .8 rad/s limit; original field bytes/epochs were
 unchanged. This is offline same-input reference evidence, not counterfactual
 navigation or a substitute for the new native stationary/motion gates.
+
+### First convex guide result and bounded rejoin retry
+
+At frozen abeb768, the independent and own60-frame zero-wheel gates passed.
+`outputs/restaurant_parallel_route_guides/motion-v1/report.json` FAILED overall:
+1/3 route guides, 13.5333 navigation seconds, `nearby_track_lost`, despite a
+0.207672 m bend during the nearby walking window. Current human motion,
+away-side selection (37 distinct epochs), body containment, 0.306906 m minimum
+physical clearance, 0.118516 minimum accepted analytical margin and 0.004370 m
+braking drift passed. No complete fresh four-factor updates occurred. Original
+report SHA256 remains
+`dae02c4a1c3f67cbc5fab338db6d546627071a19c898be431be44173752efab2`.
+
+The stop is justified by unresolved track327: 16 positive returns observed once
+at source14.3 s, centroid(29.863761,9.002218). At source21.6 s the returning robot
+entered its unchanged1.2 m watch radius. Whole-surface positive correspondence
+failed (maximum distance0.214581 m versus0.10 m limit); the child lacked the
+history needed for bounded missing-fragment coverage. Its original 3D minimum
+gap to the main human cluster was0.223076 m, outside even the existing0.20 m
+clustering option. The original RGB frame visibly truncates the person at the
+image edge. Neither class membership, a wider arbitrary cluster, expiry, nor
+the human's later departure can erase this unresolved observation.
+
+A separate bounded parameter retry changes only the pose-only route-guide
+lookahead from1 to2 m. It keeps the fragment, guard, source clocks, actor,
+lambda, priors and all safety/acceptance limits unchanged. An offline nominal-
+only rejoin from the recorded post-encounter pose predicts minimum distances
+1.170440/1.222557 m to the retained point for1/2 m lookahead. This is a geometric
+hypothesis for a gentler return, not evidence of free space or native acceptance.
+New independent and own60 gates precede its wheels. Preserve the failed1 m
+result even if the retry completes; no general fragment-tracking fix is claimed.
