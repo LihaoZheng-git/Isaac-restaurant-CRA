@@ -77,3 +77,31 @@ A trusted locally generated first-selected native snapshot retained exact-safe
 plan success at both activation2 and3, with unchanged nominal/goal/field bytes
 and original source epoch. The3 reference requests more outward turning within
 unchanged limits; this is an offline hypothesis, not a navigation result.
+
+## Activation3 result: preserve failure
+
+At6f87de6, independent and own60-frame zero-wheel gates passed. The matched
+`motion-h3-v1` trial reached its goal/3 guides in21.633333 simulation seconds,
+with.224664 m nearby curve,.374017 m physical clearance,.002406 m braking drift,
+and.230701 minimum accepted analytical margin. Selection and all active body
+containment checks passed. It nevertheless FAILED native acceptance: only4
+supported moving-kinetic rows were recorded against the unchanged minimum5.
+Its actual translation hold was2.55 s (baseline2.383333 s), and its slow interval
+was2.566667 s. Both native and smoothing failures remain explicit; goal arrival
+alone is not a pass. Original report SHA256:
+`d942427d925fa40444de43030264cb61ec9ab7cca12480f4390b725f91bcb2e5`.
+
+The activation-only comparison passed its matched-invocation/runtime-source
+audit but FAILED its prospective smoothness target. Preserve this report and
+the original accepted baseline unchanged. No further activation increase is
+justified by this result alone.
+
+The next already approved wider-reference step returns activation to the
+accepted baseline2. It will separately add a small outward current-centroid
+normal component to the selected travel tangent, before the existing blending,
+normalization, unicycle conversion and exact checks. This is a configurable
+travel preference, not new obstacle geometry, a larger safety margin, or
+evidence about future free space. Default zero must retain the old behavior;
+current selection/identity/source failure must still disable it. Compare it
+against the accepted activation2 baseline, keeping all other parameters fixed.
+New source tests and independent+own60 gates are required before its wheels.

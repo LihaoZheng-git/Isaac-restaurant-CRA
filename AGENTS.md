@@ -2319,3 +2319,17 @@
   First source freeze:2893units100.93s/85focused7.91s/RuffcompileCLI/diff PASS;
   trusted same native selected-field replay atactivation2/3 retains exact-safe
   success and original field bytes/epochs. Native smoothing acceptance pending.
+
+- Activation3 at6f87de6 FAILED smoothing and native acceptance despite goal/3guides
+  21.633333simsec,.224664m curve,.374017m clearance,.002406m drift and selection/
+  containment passes. Actual hold2.55s worsened baseline2.383333; only4 supported
+  moving-kinetic rows against unchanged minimum5. Preserve reportSHAd942427d...;
+  never call goal arrival a pass. Keep baseline and all failures byte unchanged.
+  Proceed with the user's approved wider-reference step separately: restore
+  baselineactivation2, add bounded outward CURRENT observed-centroid normal to
+  selected travel tangent only, default0, no changed physical geometry/risk/
+  clocks/selection/limits/exact/analytical/native gates. No current selection
+  means no outward preference. This is an engineering reference ablation, not
+  a new safety margin, future occupancy, primary result or paper equivalence.
+  New tests and independent+own60 precede wheels; component reuse needs exact
+  unchanged actor/perception/selector audit. No main/long-service/PR117 release.
