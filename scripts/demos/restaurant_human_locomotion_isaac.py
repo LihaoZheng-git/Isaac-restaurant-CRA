@@ -39,6 +39,8 @@ parser.add_argument('--identity-selection-body-envelope', action='store_true',
                     help='explicit existing .40+.25m body PRIOR for zero-wheel parallel identity-selection validation')
 parser.add_argument('--predictive-human-geometry', action='store_true',
                     help='separate zero-wheel LiDAR source-window motion/geometry PRIOR benchmark; future actor truth only scores it')
+parser.add_argument('--human-prediction-uncertainty-rate', type=float, default=.25,
+                    help='explicit additional forecast-radius growth PRIOR in m/s; original current body radius unchanged')
 parser.add_argument("--human-body-contact-prior", type=float, default=None, metavar="SCORE",
                     help="explicit low nonzero human-body contact policy prior; legacy outline mode if omitted")
 parser.add_argument("--carry-bowl", action="store_true",
@@ -67,6 +69,9 @@ parser.add_argument(
     metavar=("KG", "LOWER", "UPPER"),
 )
 args = parser.parse_args()
+if (not math.isfinite(args.human_prediction_uncertainty_rate) or not .25 <= args.human_prediction_uncertainty_rate <= 1.
+    or args.human_prediction_uncertainty_rate != .25 and not args.predictive_human_geometry):
+    parser.error('forecast uncertainty growth requires explicit prediction and rate in[.25,1]m/s')
 if args.predictive_human_geometry and not args.identity_selection_body_envelope:
     parser.error('prediction bench requires the explicit parallel selection/current body-envelope component')
 if args.parallel_guidance_selection and (not args.parallel_oncoming or not args.motion_aware_passing):
@@ -433,6 +438,7 @@ def main():
             maximum_identity_prior_selection_age_seconds=args.human_passing_identity_prior_max_age,
             identity_selection_body_envelope=args.identity_selection_body_envelope,
             predictive_human_geometry=args.predictive_human_geometry,
+            human_prediction_uncertainty_rate=args.human_prediction_uncertainty_rate,
             camera_prim_path=CAMERA_PRIM_PATHS[args.rgb_camera],
         )
     phase = "idle_before"

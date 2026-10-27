@@ -35,6 +35,8 @@ parser.add_argument('--parallel-guidance-ablation', action='store_true',
                     help='separate observed oncoming-human away-tangent selector; requires explicit checked guidance tracking, not primary')
 parser.add_argument('--predictive-human-geometry-ablation', action='store_true',
                     help='separate current-LiDAR constant-velocity body-envelope PRIOR; adds hard future MPC geometry, never changes primary CRA/field')
+parser.add_argument('--human-prediction-uncertainty-rate', type=float, default=.25,
+                    help='explicit additional forecast-radius growth PRIOR in m/s, separate from unchanged current human body margin')
 parser.add_argument("--crossing-strategy", choices=("legacy", "rear-pass-or-yield", "yield-then-go"), default="legacy",
                     help="separate maneuver ablation; yielding requires exact predictive and analytical checks")
 parser.add_argument("--zero-tangential-bias-ablation", action="store_true",
@@ -259,6 +261,9 @@ parser.add_argument(
     help="optimizer candidate age cap; every executed horizon still needs fresh exact validation",
 )
 args = parser.parse_args()
+if (not math.isfinite(args.human_prediction_uncertainty_rate) or not .25 <= args.human_prediction_uncertainty_rate <= 1.
+    or args.human_prediction_uncertainty_rate != .25 and not args.predictive_human_geometry_ablation):
+    parser.error('forecast uncertainty growth requires explicit predictive geometry and rate in[.25,1]m/s')
 if args.predictive_human_geometry_ablation and (not args.parallel_guidance_ablation
     or args.human_body_envelope_radius is None or args.human_observed_occupancy_only
     or args.mpc_horizon_steps != 6 or args.waypoint_mode != 'guides'):
@@ -1103,7 +1108,8 @@ def main():
     from robot.perception.human_body_envelope import HumanBodyEnvelopeConfig
 
     perception = LiveObjectPerception(
-        predictive_human_geometry_config=HumanGeometryForecastConfig() if args.predictive_human_geometry_ablation else None,
+        predictive_human_geometry_config=HumanGeometryForecastConfig(
+            velocity_uncertainty_prior_mps=args.human_prediction_uncertainty_rate) if args.predictive_human_geometry_ablation else None,
         segmenter=segmenter,
         mass_estimator=mass,
         contact_detector=contact,
@@ -2780,6 +2786,7 @@ def main():
         "encounter_comparison": args.encounter_comparison,
         "physical_CRA_lambda": 1.25,
         "predictive_human_geometry_ablation": args.predictive_human_geometry_ablation,
+        "human_prediction_uncertainty_rate_mps": args.human_prediction_uncertainty_rate if args.predictive_human_geometry_ablation else None,
         "fixed_lambda": None if args.encounter_guidance_ablation else 0. if args.zero_tangential_bias_ablation else 1.25,
         "plume_control": args.plume_control,
         "restaurant_scene": str(SCENE_PATH) if args.restaurant_scene else None,

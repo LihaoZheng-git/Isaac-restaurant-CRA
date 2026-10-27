@@ -68,7 +68,7 @@ def test_geometry_is_invariant_under_rigid_world_frame_changes():
         np.testing.assert_allclose(left, right, atol=1e-12, rtol=0)
 
 
-@pytest.mark.parametrize('times', [[-.01], [1.71], [np.nan]])
+@pytest.mark.parametrize('times', [[-.01], [1.56], [np.nan]])
 def test_no_extrapolation_beyond_the_declared_prediction_horizon(times):
     with pytest.raises(ValueError):
         geometry().constraints(np.zeros((1, 3)), np.array(times), FOOTPRINT, .1)
@@ -147,3 +147,10 @@ def test_invalid_current_envelope_is_transactional_and_duplicate_time_rejected()
 def test_unbounded_invalid_configuration_rejected(changes):
     with pytest.raises(ValueError):
         HumanGeometryForecastConfig(**changes)
+
+
+def test_prediction_source_age_tracks_field_freshness_not_the_optimizer_candidate_lease():
+    from robot.safety.safe_sage_live_field import SafeSAGELiveFieldConfig
+    assert HumanGeometryForecastConfig().maximum_source_age_seconds == SafeSAGELiveFieldConfig().maximum_field_age_seconds == .35
+    with pytest.raises(ValueError):
+        HumanGeometryForecastConfig(maximum_source_age_seconds=.5)

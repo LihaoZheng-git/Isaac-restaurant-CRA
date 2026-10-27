@@ -24,10 +24,15 @@ is inferred planning evidence; future centers are priors, never measurements.
 The original RGB identity, LiDAR source window and frame are retained.
 
 The forecast translates the current body circle and adds radius growth
-`.25 m/s * elapsed source time`. The .25 m/s uncertainty is a new explicit,
-uncalibrated planning prior. It is not substituted into CRA kinetic inputs.
+`configured uncertainty rate * elapsed source time`. The default .25 m/s and
+separately selected .30 m/s candidate are explicit, uncalibrated planning
+priors. Neither is substituted into CRA kinetic inputs. The separate
+`--human-prediction-uncertainty-rate` option requires prediction opt-in.
 The 1.2 s planning horizon includes the actual field age separately, up to
-the unchanged .5 s age bound: maximum propagation from source is1.7 s.
+the unchanged .35 s FIELD age bound: maximum propagation from source is1.55 s.
+The .5 s optimizer candidate lease is a different clock and grants no extra
+field or forecast freshness. The first prototype mistakenly used .5 s for
+the forecast cap; the stricter field cap is now enforced explicitly.
 No source clock is renewed. Missing fits stay unavailable and reject a
 prediction-enabled plan/revalidation; the original physical field/history
 can still commit transactionally so a valid source window can recover.
@@ -61,7 +66,7 @@ zero velocity or an unlabelled legacy plan in this explicit experiment.
    containment again, then score actual hold<=.5 s and>=50% reduction. Failure
    to meet either native acceptance or smoothing remains a failure.
 
-The forecast audit tests source offsets0,.2,...1.6,1.7 s. Sufficient containment
+The current forecast audit tests source offsets0,.2,...1.4,1.55 s. Sufficient containment
 of the independent reference body by either original-current or predicted disk
 is required; both constraints remain active in MPC. It reports warmup, missing
 fits, source errors, unrecorded future tails and every coverage miss separately.
@@ -87,6 +92,26 @@ for geometry/QP/rescue Jacobians, a crossing collision between safe endpoints,
 current-forecast revalidation, missing-fit stops and unchanged default commands.
 This source validation is not native acceptance.
 
-Native acceptance and smoothing are pending. Keep all previous failures,
+The first frozen native parked run atd5b7d37 FAILED forecast acceptance:
+108 forecast sources/1,000 queries, six future coverage misses, worst shortfall
+.0467965 m. Actor, sensor, selection and current-body containment gates passed;
+the robot received zero wheel commands. Five misses occurred at start-up
+(1.6/1.7 s offsets) and one at stopping (1.7 s). Original report SHA256:
+`3662a3afe59c98f24ae8d59bcf14c1493581a15e1d77f522806b73eb57cf78d2`.
+Its1.7 s audit included the initial .5 s forecast-cap assumption; preserve it
+as a failed prototype, not a retroactive pass after the source-clock correction.
+
+A separate offline DEVELOPMENT replay of those same observations with .30 m/s
+growth covered all1,000 original1.7 s queries (minimum union margin.0240134 m).
+It motivates a fresh native .30 candidate under the correct .35 s field-age
+cap, not an independent/general calibration or permission for wheels. Original
+current body .65 m, CRA, actuator limits and every gate remain unchanged.
+
+Native acceptance of the corrected .30 candidate and smoothing are pending. Keep all previous failures,
 perpendicular checked wait-and-go, primary comparison and main/long-service/
 PR117 holds unchanged.
+
+The corrected candidate source passed3,018 full unit tests in108.37 s,
+63 focused tests in8.33 s, Ruff, compilation, both CLI help paths and whitespace
+checks. The focused source-age test explicitly distinguishes the unchanged
+.35 s field freshness from the separate optimizer lease.

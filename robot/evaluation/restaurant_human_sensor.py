@@ -94,6 +94,7 @@ class RestaurantHumanSensorDiagnostic:
         maximum_identity_prior_selection_age_seconds=0.,
         identity_selection_body_envelope=False,
         predictive_human_geometry=False,
+        human_prediction_uncertainty_rate=.25,
     ):
         self.stage, self.output = stage, output
         from robot.safety.motion_aware_passing import MotionAwarePassingConfig
@@ -212,7 +213,8 @@ class RestaurantHumanSensorDiagnostic:
             lookahead_distance=0.1,
         )
         self.worker = LiveObjectPerception(
-            predictive_human_geometry_config=HumanGeometryForecastConfig() if predictive_human_geometry else None,
+            predictive_human_geometry_config=HumanGeometryForecastConfig(
+                velocity_uncertainty_prior_mps=human_prediction_uncertainty_rate) if predictive_human_geometry else None,
             motion_passing_config=passing_config if motion_aware_passing else None,
             human_body_envelope_config=self._identity_selection_envelope_config()
                 if identity_selection_body_envelope else None,

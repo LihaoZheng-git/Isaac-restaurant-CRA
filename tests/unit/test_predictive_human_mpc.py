@@ -97,10 +97,10 @@ def test_revalidation_uses_current_forecast_and_original_field_age_without_mutat
     far = geometry(prediction(center=(4., 1.), velocity=(0., 0.)))
     command = np.tile([.2, 0.], (6, 1))
     assert shared.revalidate_commands(np.zeros(3), command, predictive_geometry=far,
-        predictive_source_age_seconds=.4, **inputs())
+        predictive_source_age_seconds=.3, **inputs())
     assert not shared.revalidate_commands(np.zeros(3), command, predictive_geometry=geometry(),
-        predictive_source_age_seconds=.4, **inputs())
-    for age in (-.01, .5001, np.nan):
+        predictive_source_age_seconds=.3, **inputs())
+    for age in (-.01, .3501, np.nan):
         assert not shared.revalidate_commands(np.zeros(3), command, predictive_geometry=far,
             predictive_source_age_seconds=age, **inputs())
     assert shared.predictive_geometry is None and shared.predictive_source_age_seconds == 0.

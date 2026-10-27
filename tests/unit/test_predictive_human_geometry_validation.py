@@ -31,7 +31,7 @@ def test_independent_future_audit_preserves_source_epochs_and_scores_all_availab
     result = validate_predictive_human_geometry(records, truth, reference_radius_m=.4)
     assert result['passed'] and result['forecast_source_count'] == 41
     assert result['failed_query_count'] == 0
-    assert max(r['offset_seconds'] for r in result['rows']) == pytest.approx(1.7)
+    assert max(r['offset_seconds'] for r in result['rows']) == pytest.approx(1.55)
     assert records == before
 
 
@@ -56,12 +56,14 @@ def test_warmup_and_end_of_record_are_reported_without_future_extrapolation():
     assert reasons == {'no_ready_current_human_forecast', 'future_beyond_recorded_actor_window'}
 
 
-@pytest.mark.parametrize('script,flag', [
-    ('cra_live_object_isaac_demo.py', '--predictive-human-geometry-ablation'),
-    ('restaurant_human_locomotion_isaac.py', '--predictive-human-geometry')])
-def test_cli_rejects_unlabeled_prediction_before_native_imports(script, flag, tmp_path):
+@pytest.mark.parametrize('script,flags', [
+    ('cra_live_object_isaac_demo.py', ['--predictive-human-geometry-ablation']),
+    ('restaurant_human_locomotion_isaac.py', ['--predictive-human-geometry']),
+    ('cra_live_object_isaac_demo.py', ['--human-prediction-uncertainty-rate', '.30']),
+    ('restaurant_human_locomotion_isaac.py', ['--human-prediction-uncertainty-rate', '.30'])])
+def test_cli_rejects_unlabeled_prediction_before_native_imports(script, flags, tmp_path):
     source = Path(__file__).resolve().parents[2]/'scripts/demos'/script
-    command = [sys.executable, str(source), '--output', str(tmp_path/'unused'), flag]
+    command = [sys.executable, str(source), '--output', str(tmp_path/'unused'), *flags]
     if script == 'restaurant_human_locomotion_isaac.py':
         command += ['--scene', 'unused.usda', '--layout-survey', 'unused.json']
     process = subprocess.run(command, text=True, capture_output=True)

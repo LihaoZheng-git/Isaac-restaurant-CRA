@@ -2424,7 +2424,7 @@
   .8s current positive-LiDAR centroid fit (min6/.5s, maxgap.25/residual.1m/
   speed2mps/min20points), not changed CRA kinetic evidence. Future body centers
   are constant-velocity PRIORS, original radius.40+.25 plus explicit .25mps
-  uncertainty growth. Horizon1.2s plus actual source age<=.5 (maxpropagation1.7s);
+  uncertainty growth. Horizon1.2s plus actual FIELD source age<=.35 (max1.55s);
   never renew epochs. Hard extra exact rectangular geometry rows have NO elastic
   slack in QP/rescue; original field/DTCBF/dense/analytical/physical checks remain.
   Missing current fits stop prediction-enabled planning/revalidation; memory
@@ -2437,3 +2437,13 @@
   See docs/predictive_human_geometry.md; native prediction acceptance pending.
   Source freeze:3018units108.67s/60focused7.97s/Ruffcompile2CLI/diff PASS;
   independent geometry/QP/rescue Jacobian and between-step collision gates pass.
+- First predictive parked native atd5b7d37 FAILED6/1000future queries from108
+  sources, worstshortfall.0467965m; actor/sensor/selection/currentbodyPASS,
+  ZEROwheels. Preserve failedreportSHA3662a3afe59c98f24ae8d59bcf14c1493581a15e1d77f522806b73eb57cf78d2.
+  Initialprototype forecastcap.5 confused optimizer age with actualfieldcap.35;
+  corrected strictcap.35 never renews clocks. Separate explicit forecastgrowth
+  candidate.30 (currentbody.65 unchanged) covers original1000queries OFFLINE
+  only, minunionmargin.0240134; fresh zero-wheel acceptance still mandatory.
+  Do not rewrite the failed prototype or silently change defaultgrowth.25.
+  Corrected source freeze:3018units108.37s/63focused8.33s/Ruffcompile2CLI/diff
+  PASS. Fresh .30growth component, independent+own60 and wheel acceptance pending.

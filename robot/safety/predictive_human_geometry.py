@@ -35,7 +35,7 @@ def _xy(value, name):
 @dataclass(frozen=True)
 class HumanGeometryForecastConfig:
     horizon_seconds: float = 1.2
-    maximum_source_age_seconds: float = .5
+    maximum_source_age_seconds: float = .35
     velocity_uncertainty_prior_mps: float = .25
     history_window_seconds: float = .8
     minimum_span_seconds: float = .5
@@ -54,7 +54,7 @@ class HumanGeometryForecastConfig:
                 raise ValueError('source fit requires at least three samples/points')
         if (not self.minimum_span_seconds < self.history_window_seconds <= 1.
             or not .2 <= self.horizon_seconds <= 1.2 or self.maximum_gap_seconds > .25
-            or self.maximum_source_age_seconds > .5):
+            or self.maximum_source_age_seconds > .35):
             raise ValueError('forecast requires bounded source window <=1s and horizon in[.2,1.2]s')
 
 
