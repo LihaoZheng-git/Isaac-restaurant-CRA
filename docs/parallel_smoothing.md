@@ -1,5 +1,13 @@
 # Separate parallel-walking smoothing experiment
 
+**Current result: reference-only smoothing is NOT accepted.** The original
+baseline remains valid with its2.383333 s yield. Two turning-reference variants
+passed navigation but retained longer holds; no safety check was weakened.
+The user subsequently approved a separate short-horizon predictive-human-geometry
+ablation, using current LiDAR motion and explicitly labeled geometry/motion
+priors. That is new work; it is not part of the primary controller or an
+already validated prediction model.
+
 The accepted 2 m guide-lookahead trial reached its final goal with a22.3 cm
 nearby curve, but held zero velocity for2.383333 s while the person was close.
 Its command/planner records contain27 consecutive fresh
@@ -271,3 +279,33 @@ tests in7.58 s, Ruff, compilation, CLI help and whitespace checks. A real
 box/halfspace projection test lowers the.15 m/s preference below.02 m/s,
 confirming the preference cannot become a post-projection minimum command.
 Native acceptance is pending.
+
+At61d9c0e, the strict parked component (27 fresh-origin selection rows),
+independent and own60 gates passed. The`.75`/activation2 native trial PASSED
+goal/3 guides in21.283333 s, nearby curve.230668 m, clearance.405661 m,
+drift.002443 m, minimum accepted analytical margin.102331, six supported
+moving-kinetic rows and212 containment rows (maximum centre error.167662 m).
+Its actual hold2.516667 s and slow interval2.566667 s FAILED the unchanged
+smoothing target. Report SHA256:
+`e0159b2bde930ba707582d296a2f4cdf1cee9e7fee512913450f41a7a701459e`.
+
+A separately declared **two-option** trial at the same frozen source used
+activation3 plus translation1 (strict identity0, outward0, guide2 unchanged).
+Independent and own60 gates passed. Native acceptance PASSED goal/3 guides in
+21.55 s, curve.228779 m, clearance.162942 m, drift.002432 m, analytical
+margin.428904, five supported moving-kinetic and215 containment rows (maximum
+centre error.215043 m within the unchanged.25 prior). Smoothing FAILED:
+hold3.45 s, slow interval3.50 s. Report SHA256:
+`e3633d32188a9b36609d384bb778989f7c63b2c29517a69a4f095962f8238367`.
+The two invocation audits explicitly separate the changed activation and
+translation arguments; this is not a single-variable or causal comparison.
+
+The later trial's first passing-selection snapshot had no accepted guidance
+reference; an offline lateral-reference-ranking probe made no difference at
+that snapshot and was **not integrated**. The current MPC samples one current
+configuration-space geometry and first-order temporal safety values. It does
+not explicitly propagate the human body envelope through the horizon. The
+approved next branch will test that additional assumption separately, keeping
+original fields, factor policies, source clocks, exact/dense/analytical checks,
+physical limits and all prior failures. Forecasts are not future measurements
+or a new safety guarantee; stationary forecast validation must precede wheels.

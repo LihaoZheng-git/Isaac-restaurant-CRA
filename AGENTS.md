@@ -2400,3 +2400,23 @@
 - Turning-reference source freeze passed2983units107.50s/113focused7.58s,
   Ruff/compile/CLI/diff. Real box-halfspace projection test reduces.15preference
   below.02, proving no post-projection executed floor. Native pending.
+- At61d9c0e translation.75/h2 PASSEDnavigation21.283333s/3guides/.230668curve/
+  .405661clearance/.002443drift/.102331analytical/6movingkinetic/212containment,
+  BUT smoothingFAILEDhold2.516667/slow2.566667 vsbaseline2.383333. Preserve
+  reporte0159b2bde930ba707582d296a2f4cdf1cee9e7fee512913450f41a7a701459e.
+  Same-source combinedtranslation1/h3 PASSEDnavigation21.55s/3guides/.228779
+  curve/.162942clearance/.002432drift/.428904analytical/5movingkinetic/215
+  containment(maxerror.215043<.25), BUT hold3.45/slow3.50 FAILEDsmoothing.
+  Preserve reporte3633d32188a9b36609d384bb778989f7c63b2c29517a69a4f095962f8238367.
+  Both independent+own60 passed; strict parkedcomponent27freshrows passed.
+  Do not call source tests/nativearrival proof of smoothing, freshfourfactors,
+  primary superiority or realtime. Offline lateral-ranking probe had no effect
+  at first-selected snapshot (no usable reference); NOT integrated.
+- The user's later explicit decision APPROVES a SEPARATE short-horizon human
+  predictive-geometry ablation using current LiDAR-derived motion, labeled
+  motion/geometry PRIORS with original source epochs and unchanged all margins/
+  exact,dense,analytical/physical/arrival/stopping gates. Primary remains unchanged.
+  Current MPC only has current geometry plus first-order field-time forecast;
+  explicit future body-envelope propagation is new, not already validated.
+  Validate predictor stationary against independent evaluation-only actor truth
+  before any new wheels; do not promise smoother passage or new safety theorem.
