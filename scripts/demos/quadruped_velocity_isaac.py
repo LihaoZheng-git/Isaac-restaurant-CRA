@@ -91,6 +91,8 @@ def main():
         if result != omni.client.Result.OK or hashlib.sha256(bytes(content)).hexdigest() != assets[usd_name]['sha256']:
             raise ValueError('runtime quadruped root USD differs from audited asset')
         stage = omni.usd.get_context().get_stage()
+        if UsdGeom.GetStageMetersPerUnit(stage) != 1. or UsdGeom.GetStageUpAxis(stage) != UsdGeom.Tokens.z:
+            raise ValueError('bench requires measured stage metadata of one metre per unit and Z up')
         UsdPhysics.Scene.Define(stage, '/World/PhysicsScene')
         floor = UsdGeom.Cube.Define(stage, '/World/Floor')
         floor.CreateSizeAttr(1.)
@@ -125,15 +127,18 @@ def main():
         # usd_path branch has an uninitialized is_newton local; do not patch it.
         spot, drive = None, None
         if args.robot == 'carter':
-            initial_height = .07382
+            initial_height = 0.
             prim = UsdGeom.Xform.Define(stage, '/World/Robot')
             prim.GetPrim().GetReferences().AddReference(root_url)
             transform = UsdGeom.Xformable(prim)
             transform.ClearXformOpOrder()
             transform.AddTransformOp(opSuffix='benchStart').Set(Gf.Matrix4d().SetTranslate(Gf.Vec3d(0, 0, initial_height)))
+            wheel = UsdGeom.Cylinder(stage.GetPrimAtPath('/World/Robot/wheel_left/Colliders/Cylinder_02'))
+            if not wheel or abs(wheel.GetRadiusAttr().Get()-.14) > 1e-6:
+                raise ValueError('audited Carter drive-wheel geometry changed')
             drive = NovaCarterController(robot_prim_path='/World/Robot')
             robot = drive.robot
-            height_bounds = dict(minimum_base_height_m=.03, maximum_base_height_m=.2)
+            height_bounds = dict(minimum_base_height_m=-.02, maximum_base_height_m=.1)
             axes = ('forward', 'yaw')
         else:
             policy_class = SpotFlatTerrainPolicy if args.robot == 'spot' else Go2FlatTerrainPolicy
@@ -237,7 +242,7 @@ def main():
                         phase_elapsed=now-(boundaries[index-1] if index else 0.),
                         command_body=cmd.tolist(), position_world=position.tolist(),
                         roll_pitch_yaw=angles, velocity_body=[*velocity[:2], angular_body[2]]))
-                    if (not np.isfinite(position).all() or position[2] < (.02 if drive is not None else .25)
+                    if (not np.isfinite(position).all() or position[2] < (-.02 if drive is not None else .25)
                         or max(abs(a) for a in angles[:2]) > math.radians(25)):
                         failures.append('unsafe_or_nonfinite_root_state')
                         finished = True
@@ -277,6 +282,7 @@ def main():
             physics_engine=SimulationManager.get_active_physics_engine(), physics_dt=physics_dt, policy_decimation=decimation,
             asset_root_url=root_url, used_usd_layers=[layer.identifier for layer in stage.GetUsedLayers()],
             root_state_clock='SimulationManager.get_simulation_time at physics callback',
+            stage_meters_per_unit=UsdGeom.GetStageMetersPerUnit(stage), stage_up_axis=str(UsdGeom.GetStageUpAxis(stage)),
             evaluated_axes=list(axes), unsupported_axes=['lateral', 'combined'] if drive is not None else [],
             scope='Separate freely standing/walking open-space interface bench; no robot replacement, CRA, perception or navigation acceptance')
         (args.output/'records.json').write_text(json.dumps(records))

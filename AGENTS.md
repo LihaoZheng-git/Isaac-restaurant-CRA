@@ -2654,3 +2654,10 @@
   reports and require matching fresh independent/own gates. No human/SafeSAGE/
   sensor/CRA/platformreplacement acceptance follows from an interface bench.
   Expandedcomparison source3118units108.79s/elevenfocused/RuffcompileCLI/diffPASS.
+- Carter standing-carter-v1 61d8716 stopped onincorrectrootheightguard before
+  standing. Zero-motion audit verifies1m/unit/Zup and drivewheel cylinders
+  z~0...28 atroot0/radius.14; restaurantspawnz.07382 is not flat-floor rootrest.
+  Corrected separatebench root0/zgate-.02...1; Spotbounds/XY/yaw/tracking/stop
+  gates unchanged. Rootz is frameconvention, not clearance/fallheight. Check
+  units/Zup/wheelradius at runtime. AuditrawcasterBBoxextentsare stale/huge,
+  unusableasphysicalenvelope; neverfeedintoCRA/control orclaimfullfootprintaudit.

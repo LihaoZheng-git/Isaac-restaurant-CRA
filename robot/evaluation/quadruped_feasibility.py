@@ -26,7 +26,7 @@ def root_observation(*, time, phase_elapsed, phase, command_body, position_world
 
 def _height_limits(minimum, maximum):
     if (any(isinstance(v, bool) or not math.isfinite(v) for v in (minimum, maximum))
-        or not 0 <= minimum < maximum):
+        or not minimum < maximum):
         raise ValueError('explicit ordered finite platform root-height bounds required')
     return minimum, maximum
 

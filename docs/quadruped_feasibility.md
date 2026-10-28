@@ -185,3 +185,20 @@ independent/own standing gates at the new source before movement.
 The expanded comparison source passed all 3,118 unit tests in 108.79 s,
 including eleven focused interface/evaluation tests. Ruff, compilation,
 CLI help and whitespace checks passed before its native source freeze.
+
+The first Carter attempt (`standing-carter-v1`, `61d8716`) stopped on its
+incorrect height guard before observation. The zero-motion geometry audit
+confirms the new stage is 1 m/unit and Z-up. Carter's authored drive-wheel
+collision cylinders span approximately z=0..0.28 at root z=0: its wheel radius
+is 0.14 m. The restaurant's 0.07382 m initial placement is not the root resting
+height on this separately authored z=0 flat floor. The corrected bench starts
+Carter at root z=0 and explicitly checks root z in -0.02..0.1 m; Spot's bounds
+and every XY/yaw/tracking/stopping limit stay unchanged. Root z is a frame
+convention, not physical body clearance or fall height. Runtime checks stage
+units/up-axis and the audited Carter drive-wheel radius before moving.
+
+The audit also found stale enormous caster-cylinder BBox extents; its raw
+all-collider minimum is invalid as a physical robot envelope. Do not feed that
+diagnostic into control or claim a completed swept-footprint audit. The actual
+drive-wheel cylinders and configured radius establish only this flat-ground
+root convention. Previous failed reports are preserved, not re-scored.

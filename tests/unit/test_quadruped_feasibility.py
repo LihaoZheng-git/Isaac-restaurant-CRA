@@ -94,6 +94,9 @@ def test_platform_height_convention_is_explicit_and_cannot_change_xy_gate():
         row['position_world'][2] = .074
     assert not summarize_standing(data)['passed']
     assert summarize_standing(data, minimum_base_height_m=.03, maximum_base_height_m=.2)['passed']
+    for row in data:
+        row['position_world'][2] = 0.
+    assert summarize_standing(data, minimum_base_height_m=-.02, maximum_base_height_m=.1)['passed']
     data[-1]['position_world'][0] = .021
     assert not summarize_standing(data, minimum_base_height_m=.03, maximum_base_height_m=.2)['passed']
     with pytest.raises(ValueError):
