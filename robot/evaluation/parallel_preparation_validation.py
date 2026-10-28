@@ -63,6 +63,7 @@ def validate_parallel_preparation(records):
             used_for_reference=a['used_for_reference']))
     checks['three_distinct_used_preparation_sources'] = len(used_sources) >= 3
     checks['finite_original_epochs'] = all(math.isfinite(r['source_timestamp']) for r in rows)
+    checks = {key: bool(value) for key, value in checks.items()}
     return dict(passed=all(checks.values()), checks=checks, used_source_count=len(used_sources),
         original_selection_count=len(originals), rows=rows,
         scope='separate current-person preparation policy audit; static geometry is not future walking intent; original actor/factor/geometry/arrival/stop gates remain')

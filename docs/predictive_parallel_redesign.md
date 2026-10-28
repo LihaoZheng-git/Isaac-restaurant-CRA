@@ -81,3 +81,18 @@ compilation, both CLI help paths and whitespace checks. The parked component
 now supplies its configured nominal robot-route direction explicitly; it
 never uses the actor's authored motion as a planning input. Native acceptance
 is pending.
+
+The first native component at5c56a8c recorded109 forecast sources/1,274 future
+queries/zero misses, minmargin.0691675 m, but FAILED execution while exporting
+the preparation report: a NumPy Boolean was not strict-JSON serializable.
+No overall validation report was saved; do not label this a completed native
+pass. Preserve `component-preparation-horizon2-growth050-v1/execution.json`
+and its traceback. The serializer normalizes audit checks to Python booleans
+and a strict JSON round-trip regression covers it. This changes reporting only;
+a fresh zero-wheel repeat is still required before motion.
+
+The preserved observations pass the repaired preparation audit offline
+(52 used source updates, one original selection); this companion does not
+replace the failed execution or create a native overall pass. The reporting
+fix passed3,047 full unit tests in103.64 s, Ruff, compilation and whitespace
+checks before the fresh repeat.

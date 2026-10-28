@@ -2489,3 +2489,10 @@
   See docs/predictive_parallel_redesign.md; no main/longservice/PR117 release.
   Sourcefreeze3047units101.43s/Ruffcompile2CLI/diffPASS. Parkedcomponent supplies
   configured NOMINAL robot-route direction explicitly, not authoredactor motion.
+- First redesigned component5c56a8c FAILED final report export (NumPy Boolean
+  not strictJSON serializable), despite109sources/1274futurequeries/0misses/
+  minmargin.0691675. No overallvalidation report exists; keep execution/traceback,
+  do not retroactively pass it. Normalize audit checks to Pythonbool and require
+  JSON round-trip regression plus fresh zero-wheel repeat before navigation.
+  Offlineexport-repair companionpasses52usedsources/1originalselection, not a
+  native overallpass. Reportingfix3047units103.64s/Ruffcompile/diffPASS.

@@ -1,4 +1,5 @@
 from copy import deepcopy
+import json
 
 import pytest
 from test_parallel_preparation import current, step
@@ -26,6 +27,7 @@ def test_native_and_live_layouts_accept_only_the_original_current_preparation_pr
         diagnostics={k: v for k, v in r.items() if k not in ['time', 'sensor_frame_id']}) for r in rows]
     assert validate_parallel_preparation(live)['passed']
     assert validate_parallel_preparation(rows)['original_selection_count'] == 1
+    assert json.loads(json.dumps(validate_parallel_preparation(rows), allow_nan=False))['passed']
 
 
 @pytest.mark.parametrize('failure', ['wrong_frame', 'renewed_selection', 'wrong_visual', 'missing_start',
