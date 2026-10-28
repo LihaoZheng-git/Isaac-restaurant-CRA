@@ -28,6 +28,8 @@ def planner_result_diagnostic(result):
         ),
         "solver_success": None if result is None else result.success,
         "solver_fallback_active": None if result is None else result.fallback_active,
+        **({'tapered_rescue_seed': result.tapered_rescue_seed}
+           if result is not None and getattr(result, 'tapered_rescue_seed', None) is not None else {}),
         **({"predictive_human_geometry_ablation": result.predictive_geometry}
            if result is not None and getattr(result, "predictive_geometry", None) is not None else {}),
         **({"guidance_tracking_ablation": asdict(result.guidance_tracking)}

@@ -78,3 +78,62 @@ Grid refinement plus mass retention is a declared **two-option** candidate,
 not a single-variable causal comparison. New no-preparation mass component,
 fine-grid independent and own60 gates precede its wheels. Native outcome is
 pending; early/rear preparation and predictive geometry/redesign stay disabled.
+
+## Finer-grid result and numerical rescue follow-up
+
+At `a1e5c11`, the fresh no-preparation component passed, including85 retained
+mass updates from26 original accepted priors. The independent and own60-frame
+fine-grid gates passed. Native `motion-mass-grid005-v2` **PASSED navigation and
+evidence**:3/3 goals in21.216667 simulation seconds,22 supported moving-kinetic
+rows,0.214108 m nearby bend,0.371309 m physical clearance,0.002367 m stop drift,
+0.322381 minimum analytical margin and211 fields. Source stayed clean through
+shutdown. Report SHA:
+`c7a4d90ac0848bae496bd7c9a4bbc9cc202d4e98e7ba918f806320b39e5f2e2b`.
+
+It **FAILED smoothing**:2.466667 s actual hold, versus original2.383333 s.
+Grid refinement did not fix smoothness. Preserve that failure and its plot;
+neither the component counterfactual nor successful arrival overrides it.
+
+The first low-progress native input at source14.4 is still initially free.
+Its original planner returned a stop. A broader OFFLINE six-dimensional search
+found a moving horizon under unchanged exact DTCBF/dense/current-analytical
+checks; this establishes a search limitation on this specific input, not
+global feasibility or an executable stored route. A fixed1,050-candidate
+three-phase actuator pool found no exact-safe candidate, but its closest
+infeasible seed let **one original20-iteration nonlinear rescue** find a fully
+safe moving horizon. No solver budget, constraint, uncertainty prior or cost
+was changed. The first command changed from(0,0) to(0.167417,-0.006957), and
+the actual analytical filter left it unchanged (margin0.174595). Full-horizon
+minimum DTCBF margin was0.000014241; revalidation passed with unchanged field
+bytes and original timestamps. This is a design regression, not a native result.
+Original trusted input SHA:
+`29d31598651d08321c3d8a80a52ea8e2d32f1f791786b17a5bd209573e1e4935`.
+
+The optional `--mpc-tapered-rescue-seed` initializes the EXISTING nonlinear
+rescue after the original SQP restoration fails. Its data-independent pool
+scales only the existing actuator bounds and horizon: three phases with
+forward speed tapered toward braking and small turns of both signs. Candidates
+must satisfy the original current analytical halfspace; ranking uses existing
+exact constraint violation then the unchanged objective. Endpoint-only ranking
+cannot override dense geometry. A selected infeasible seed is only a numerical
+starting point, never permission to execute. One original-budget rescue and
+all existing final/current-field/analytical/source/physical checks remain.
+The option defaults off for every legacy caller. Early preparation stays off.
+
+Reproduce the archived numeric counterexample (explicit trusted LOCAL pickle
+only; matching repository/environment required):
+
+```powershell
+python scripts/evaluation/replay_carter_rescue_seed.py `
+  --replay-directory outputs/carter_feasible_turning/motion-mass-grid005-v2/planner-replays `
+  --output outputs/carter_feasible_turning/integrated-tapered-replay-v1.json `
+  --trusted-local-replay
+```
+
+The command refuses existing output and hash mismatches. Default full-command
+parity and the enabled exact revalidation are recorded separately. The third
+native candidate adds ONLY this flag to the fine-grid/mass-retention invocation,
+with a source audit and new independent/own60 gates; the unchanged mass/actor/
+perception component can be reused only by exact fingerprint proof. Outcome
+is pending. All original smoothness, evidence, curve, arrival/stopping and
+primary/main/PI/long-service/PR117 holds remain.

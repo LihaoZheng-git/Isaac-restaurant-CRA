@@ -41,6 +41,7 @@ The module has no Isaac Sim dependency.
 """
 
 import copy
+import itertools
 import math
 from collections.abc import Sequence
 from dataclasses import dataclass, field, replace
@@ -53,6 +54,7 @@ from scipy.optimize import minimize
 
 from robot.control.unicycle_model import (
     integrate_unicycle_euler,
+    lookahead_control_matrix,
     lookahead_state,
     wrap_to_pi,
 )
@@ -162,6 +164,7 @@ class SafeSAGEUnicycleMPCConfig:
     enable_progress_seeds: bool = False
     enable_recovery_cost_pruning: bool = False
     enable_recovery_feasibility_pruning: bool = False
+    enable_tapered_rescue_seed: bool = False
     progress_seed_linear_fraction: float = 0.25
     configuration_position_padding_m: float = 0.0
     configuration_yaw_padding_radians: float = 0.0
@@ -170,6 +173,8 @@ class SafeSAGEUnicycleMPCConfig:
     def __post_init__(self) -> None:
         if not isinstance(self.enable_progress_seeds, bool):
             raise TypeError("enable_progress_seeds must be a boolean.")
+        if not isinstance(self.enable_tapered_rescue_seed, bool):
+            raise TypeError('enable_tapered_rescue_seed must be a boolean.')
         if not isinstance(self.enable_recovery_cost_pruning, bool):
             raise TypeError("enable_recovery_cost_pruning must be a boolean.")
         if not isinstance(self.enable_recovery_feasibility_pruning, bool):
@@ -209,6 +214,8 @@ class SafeSAGEUnicycleMPCConfig:
             ),
         }
         integration_count = integer_values["integration_substeps_per_interval"]
+        if self.enable_tapered_rescue_seed and integer_values['horizon_steps'] < 3:
+            raise ValueError('tapered rescue seed requires at least three intervals')
         safety_count = integer_values["safety_substeps_per_interval"]
         if integration_count > 1 and integration_count % safety_count:
             raise ValueError(
@@ -365,6 +372,7 @@ class SafeSAGEUnicycleMPCResult:
     status: str
 
     predictive_geometry: dict | None = field(default=None, kw_only=True)
+    tapered_rescue_seed: dict | None = field(default=None, kw_only=True)
 
     @property
     def first_command(self) -> tuple[float, float]:
@@ -616,6 +624,7 @@ class SafeSAGEUnicycleMPC:
                 seed_restoration_used = True
 
         total_qp_iterations = 0
+        tapered_rescue_diagnostic = None
         completed_sqp_iterations = 0
         guidance_failure: str | None = None
 
@@ -762,9 +771,16 @@ class SafeSAGEUnicycleMPC:
                         "exact_qp_restoration_exhausted; "
                         f"minimum_margin={float(np.min(reference.margins)):.3e}"
                     )
+                rescue_reference = reference
+                if self.config.enable_tapered_rescue_seed:
+                    rescue_reference, tapered_rescue_diagnostic = self._select_tapered_rescue_seed(
+                        reference, initial_state=initial_state, nominal_sequence=nominal_sequence,
+                        target_chassis_states=target_states, configuration_space=configuration_space,
+                        h_full=h_full, guidance_fields=guidance_fields,
+                        temporal_safety_derivative=temporal_derivative)
                 rescue, rescue_iterations, rescue_status = (
                     self._solve_exact_nonlinear_rescue(
-                        reference,
+                        rescue_reference,
                         initial_state=initial_state,
                         nominal_sequence=nominal_sequence,
                         target_chassis_states=target_states,
@@ -775,6 +791,12 @@ class SafeSAGEUnicycleMPC:
                     )
                 )
                 total_qp_iterations += rescue_iterations
+                if (rescue is None and rescue_reference is not reference
+                    and self._trajectory_is_safe(rescue_reference)):
+                    # Preserve an already exact-safe numerical seed if the
+                    # original bounded rescue fails to improve it safely.
+                    rescue = rescue_reference
+                    rescue_status = 'exact_safe_tapered_rescue_seed_retained'
                 if rescue is None:
                     recovery, recovery_status = self._recover_feasible_command_horizon(
                         reference,
@@ -798,6 +820,7 @@ class SafeSAGEUnicycleMPC:
                             ),
                             sqp_iterations=completed_sqp_iterations,
                             solver_iterations=total_qp_iterations,
+                            tapered_rescue_seed=tapered_rescue_diagnostic,
                         )
                     reference = recovery
                     feasibility_recovery_status = recovery_status
@@ -870,6 +893,7 @@ class SafeSAGEUnicycleMPC:
             fallback_active=False,
             restoration_used=restoration_used or seed_restoration_used,
             predictive_geometry=self._predictive_diagnostic(reference),
+            tapered_rescue_seed=tapered_rescue_diagnostic,
             status=(
                 feasibility_recovery_status
                 or (
@@ -1330,6 +1354,81 @@ class SafeSAGEUnicycleMPC:
             + distance * math.cos(yaw) * normal[1]
             + normal[2]
         )
+
+    def _select_tapered_rescue_seed(
+        self, reference, *, initial_state, nominal_sequence, target_chassis_states,
+        configuration_space, h_full, guidance_fields, temporal_safety_derivative,
+    ):
+        """Improve numerical initialization; no seed is execution authority.
+
+        Sample 1,050 three-phase advance/brake commands within the ORIGINAL
+        actuator bounds. Rank by exact constraint violation, then the existing
+        objective. This happens only after the original SQP restoration fails;
+        the original nonlinear rescue still runs once with its original budget.
+        No actor intention, authored curve, future truth or new cost enters.
+        """
+        before = self._maximum_violation(reference)
+        diagnostic = dict(basis='bounded_tapered_numerical_rescue_initialization',
+            enabled=True, selected=False, tested_candidates=0, analytical_first_rejections=0,
+            finite_ranked_candidates=0, dense_seed_rejections=0,
+            reference_maximum_violation=before if math.isfinite(before) else None,
+            reference_violation_status='finite' if math.isfinite(before) else 'unavailable_infinite_or_geometry',
+            original_nonlinear_iteration_limit=self.config.maximum_nonlinear_rescue_iterations,
+            scope='numerical seed only; unchanged objective/limits/epochs; full exact acceptance and analytical execution still mandatory')
+        if self._trajectory_is_safe(reference) or self.config.maximum_linear_velocity <= 0:
+            return reference, diagnostic
+        normal = lookahead_control_matrix(float(initial_state[2]),
+            lookahead_distance=self.config.lookahead_distance).T @ reference.samples.guidance_normals[0]
+        rhs = (-self.paper_filter.config.gamma * max(0., reference.safety_values[0])
+            - reference.samples.scaled_temporal_derivatives[0])
+        if not np.isfinite(normal).all() or not math.isfinite(rhs):
+            return reference, diagnostic
+        count = self.config.horizon_steps // 3
+        counts = (count, count, self.config.horizon_steps - 2 * count)
+        kwargs = dict(configuration_space=configuration_space, h_full=h_full,
+            guidance_fields=guidance_fields, temporal_safety_derivative=temporal_safety_derivative)
+        def turn(fraction):
+            limit = (self.config.maximum_angular_velocity if fraction >= 0
+                else abs(self.config.minimum_angular_velocity))
+            return fraction * limit
+        ranked = []
+        for first, middle, tail, rate, last_rate in itertools.product(
+            (1., .8), (.6, .5, .4), (.2, .12, .1, .08, .05),
+            (-.25, -.125, 0., .125, .25), (-.5, -.375, -.25, 0., .25, .375, .5),
+        ):
+            diagnostic['tested_candidates'] += 1
+            v = self.config.maximum_linear_velocity
+            commands = np.repeat(np.array([[v * first, turn(rate)],
+                [v * middle, turn(rate)], [v * tail, turn(last_rate)]]), counts, axis=0)
+            if normal @ commands[0] < rhs - self.paper_filter.config.numerical_tolerance:
+                diagnostic['analytical_first_rejections'] += 1
+                continue
+            candidate = self._evaluate_trajectory(initial_state, commands,
+                check_dense_geometry=False, **kwargs)
+            if candidate is None:
+                continue
+            violation = self._maximum_violation(candidate)
+            if not math.isfinite(violation) or violation >= before - self.config.constraint_tolerance:
+                continue
+            cost = self._objective_value(commands, nominal_sequence,
+                chassis_states=candidate.chassis_states, target_chassis_states=target_chassis_states)
+            ranked.append((violation, cost, commands))
+        diagnostic['finite_ranked_candidates'] = len(ranked)
+        for _, _, commands in sorted(ranked, key=lambda item: item[:2]):
+            # Endpoint-only ranking is never permission to skip dense geometry.
+            candidate = self._evaluate_trajectory(initial_state, commands, **kwargs)
+            if candidate is None:
+                diagnostic['dense_seed_rejections'] += 1
+                continue
+            violation = self._maximum_violation(candidate)
+            if not math.isfinite(violation) or violation >= before - self.config.constraint_tolerance:
+                diagnostic['dense_seed_rejections'] += 1
+                continue
+            diagnostic.update(selected=True, selected_maximum_violation=float(violation),
+                seed_commands=candidate.commands.tolist(),
+                seed_exact_safe=self._trajectory_is_safe(candidate))
+            return candidate, diagnostic
+        return reference, diagnostic
 
     def _solve_exact_nonlinear_rescue(
         self,
@@ -2493,6 +2592,7 @@ class SafeSAGEUnicycleMPC:
         status: str,
         sqp_iterations: int = 0,
         solver_iterations: int = 0,
+        tapered_rescue_seed: dict | None = None,
     ) -> SafeSAGEUnicycleMPCResult:
         """Return a deterministic fail-closed stop trajectory."""
 
@@ -2531,6 +2631,7 @@ class SafeSAGEUnicycleMPC:
             restoration_used=False,
             status=status,
             predictive_geometry=self._predictive_diagnostic(),
+            tapered_rescue_seed=tapered_rescue_seed,
         )
 
     def _predictive_diagnostic(self, trajectory=None):

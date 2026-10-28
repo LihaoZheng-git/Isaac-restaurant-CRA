@@ -24,6 +24,8 @@ parser.add_argument("--output", type=Path, required=True)
 parser.add_argument("--motion", action="store_true")
 parser.add_argument('--grid-resolution', type=float, choices=(.05, .1), default=.1,
                     help='explicit numerical field-grid comparison in metres; .1 preserves legacy; physical margins and all observed occupancy stay unchanged')
+parser.add_argument('--mpc-tapered-rescue-seed', action='store_true',
+                    help='separate bounded advance/brake numerical rescue initialization; original objective, solver budgets and all exact checks remain')
 parser.add_argument("--waypoint-mode", choices=("checkpoints", "guides"), default="checkpoints",
                     help="separate pose-only route-guide variant; final-goal arrival and stopping remain mandatory")
 parser.add_argument("--route-guide-lookahead", type=float, default=1.0)
@@ -1310,6 +1312,7 @@ def main():
             enable_progress_seeds=True,
             enable_recovery_cost_pruning=True,
             enable_recovery_feasibility_pruning=True,
+            enable_tapered_rescue_seed=args.mpc_tapered_rescue_seed,
             maximum_solver_iterations=args.qp_iteration_limit,
             maximum_nonlinear_rescue_iterations=args.nonlinear_rescue_iterations,
             progress_seed_linear_fraction=args.progress_seed_fraction,

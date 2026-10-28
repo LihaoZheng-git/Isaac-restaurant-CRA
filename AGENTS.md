@@ -24,6 +24,23 @@
   needs new mass/no-prep component and fine-grid independent+own60 before wheels.
   No early/rear preparation or predictive redesign, no relaxed five-row/.5s
   smoothness/arrival/stop gate or main/PI/longservice/PR117 release. See report.
+- At a1e5c11 fine-grid+mass NO-PREPARATION trial NATIVEPASS3goals21.216667s,
+  22kinetic/.214108nearcurve/.371309clearance/.002367stopdrift/.322381analytical/
+  211fields. Separate smoothing FAILED2.466667hold vsoriginal2.383333; grid
+  refinement is NOT a smoothness fix. Preserve SHA
+  c7a4d90ac0848bae496bd7c9a4bbc9cc202d4e98e7ba918f806320b39e5f2e2b.
+  Exact native source14.4 input29d31598... remains initiallyfree but oldplanner
+  stopped. OFFLINE one ORIGINAL20iteration rescue with better1050-pool seed
+  produces exactsafe moving(.167417,-.006957), minDT1.424124e-5, actualanalytical
+  unchanged/.174595margin. Not native/real-time acceptance. Separate default-OFF
+  --mpc-tapered-rescue-seed ranks data-independent3phase actuator seeds by
+  exact violation then ORIGINAL objective; currentanalytical first gate and
+  full dense seed check. Infeasible seed is numericalONLY, never executable.
+  ONE originalbudget rescue/alloriginal exact/currentfield/analytical/clocks/
+  physical/evidence/arrival/stop gates remain. Preserve olddefault fullcommand
+  parity; no earlypreparation/new motionprior/cost/limits. New source audit and
+  independent+own60 before wheels; original mass/actor/perception component
+  reusable only if exact unchanged fingerprints. See docs/carter_feasible_turning.md.
 
 - Keep waypoint nominal control obstacle-unaware; MPC and analytical CBF create online intervention.
 - Runtime CRA uses visual/physical estimation without language or VLM reasoning.
