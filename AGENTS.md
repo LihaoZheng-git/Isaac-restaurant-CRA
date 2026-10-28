@@ -1,5 +1,15 @@
 # CRA repository guidance
 
+- First observed-motion ZERO-wheel component4f14a79 FAILED only the new audit:
+  it misclassified existing held_current_track_policy_preference as unselected;
+  original actor/sensor/selection/body/mass gates passed. Preserve native SHA
+  c71d7e67f47cd616e6c96942825d47c4aa3bcb70917d3296e333e8c61c7804a7.
+  Twenty-six advisory/89quiet-unselected current records pass repaired audit
+  OFFLINE only. Repair must check both original selector modes with verified
+  original visual proof, current epoch/id/side and original <=8s policy lease;
+  renewing a held origin rejects. No new policy permission/lease or model
+  control change. Keep original failure and require FRESH component plus
+  independent+own60 before wheels. See docs/observed_motion_reference.md.
 - The user approved further observed-motion improvement after the no-prep
   2.50s-yield result. Separate default-OFF --observed-motion-reference uses only
   a current motion-selected human's positive LiDAR centroid/inferred velocity

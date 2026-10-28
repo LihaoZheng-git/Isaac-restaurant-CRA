@@ -263,5 +263,8 @@ class ObservedHumanMotionReference:
         return dict(
             **asdict(self),
             status="prior",
+            centroid_basis="inferred_current_positive_LiDAR_cluster_centroid",
+            velocity_basis="inferred_current_filtered_LiDAR_track_velocity",
+            radius_basis="configured_current_human_body_and_centroid_uncertainty_PRIORS",
             scope="advisory reference only; no hard future containment claim; original occupancy/CRA/1.2s exact horizon/analytical checks unchanged",
         )

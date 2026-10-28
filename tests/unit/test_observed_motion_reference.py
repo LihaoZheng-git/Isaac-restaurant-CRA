@@ -258,15 +258,52 @@ def test_component_gate_accepts_only_distinct_current_sources_and_audits_all_row
                 motion_aware_passing=dict(
                     decision="selected_parallel_away_tangent"
                     if i >= 10
-                    else "no_encounter"
+                    else "no_encounter",
+                    source_timestamp=t,
+                    encounter_selected_timestamp=t,
+                    original_selection_visual_person_verified=True,
+                    encounter_geometry="oncoming_parallel",
+                    configuration=dict(maximum_encounter_seconds=8.0),
+                    preferences={"7": "right"},
                 ),
             )
         )
     assert validate_observed_motion_reference(rows)["passed"]
+    held = deepcopy(rows)
+    for row in held[11:]:
+        row["motion_aware_passing"]["decision"] = "held_current_track_policy_preference"
+        row["motion_aware_passing"]["encounter_selected_timestamp"] = 2.0
+    assert validate_observed_motion_reference(held)["passed"]
+    held[-1]["motion_aware_passing"]["encounter_selected_timestamp"] = 3.8
+    assert not validate_observed_motion_reference(held)["passed"]
     for key in ["radius_prior_m", "sensor_timestamp_seconds", "current_support_count"]:
         bad = deepcopy(rows)
         bad[-1]["observed_motion_reference"][key] += 0.01
         assert not validate_observed_motion_reference(bad)["passed"]
+
+
+@pytest.mark.parametrize(
+    "change",
+    [
+        dict(encounter_selected_timestamp=4.0),
+        dict(encounter_selected_timestamp=-1.0),
+        dict(original_selection_visual_person_verified=False),
+    ],
+)
+def test_held_current_selector_preserves_original_lease_and_visual_proof(change):
+    from robot.evaluation.observed_motion_reference_validation import _current_selection
+
+    s = dict(
+        decision="held_current_track_policy_preference",
+        source_timestamp=3.0,
+        encounter_selected_timestamp=1.0,
+        original_selection_visual_person_verified=True,
+        encounter_geometry="oncoming_parallel",
+        configuration=dict(maximum_encounter_seconds=8.0),
+        preferences={7: "left"},
+    )
+    assert _current_selection(s, 3.0, 7)
+    assert not _current_selection(s | change, 3.0, 7)
 
 
 def current_runtime_field():

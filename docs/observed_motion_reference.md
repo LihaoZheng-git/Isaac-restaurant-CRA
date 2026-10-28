@@ -92,6 +92,31 @@ option disabled and the earlier corrected-Jacobian checked result enabled.
 Filtered velocity can lag actual starts/stops; the advisory forecast is not
 claimed to cover every future actor position.
 
+The first zero-wheel component at4f14a79 **FAILED** the new validator. All old
+actor/sensor/selection/body/mass gates passed, with26 distinct advisory sources
+and89 quiet/unselected observations. The validator incorrectly treated the
+existing `held_current_track_policy_preference` decision as unselected even
+though its current source/body values matched. Preserve original report SHA
+`c71d7e67f47cd616e6c96942825d47c4aa3bcb70917d3296e333e8c61c7804a7`.
+No wheels followed this failure.
+
+The correction audits both existing fresh and held-current selector modes.
+Held mode must retain its original verified visual selection and bounded
+original lease (at most8 s), current source epoch, selected identity and side;
+renewing a held origin is rejected. Current body/velocity/source checks remain.
+An offline companion recomputation passes the original26 sources, but it does
+not replace the failed native report. A fresh component and stationary gates
+remain mandatory. The diagnostic also names inferred centroid/velocity and
+configured body/centroid priors separately; the controller method is unchanged.
+
+The correction passed3,170 full unit tests in113.92 s,23 focused tests in5.31 s,
+Ruff, compilation and diff checks. On the original failed component data, a
+separate descriptive truth audit measured median1.2 s predicted-center error
+0.166634 m and maximum0.406306 m (26 sources,208 total offset queries). The
+configured advisory growth disk covered those queries; this is reused
+development data, not a calibrated bound or permission for hard prediction.
+Fresh corrected-source native validation remains pending.
+
 No primary/main/PI-demo/long-service/PR117 hold is released. A successful selected
 trial would not establish real time, general human prediction, causal CRA
 superiority, exact Safe-SAGE equivalence or elimination of all safety yields.
