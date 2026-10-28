@@ -10,7 +10,7 @@ watchdog or claim that its association failures are repaired.
 
 The new explicit `--predictive-parallel-redesign` requires the existing separate
 parallel route-guide/guidance-tracking and predictive-geometry ablations. Its
-candidate uses ten .2 s MPC steps (2 s), original field age<=.35 s, and an
+first candidate uses ten .2 s MPC steps (2 s), original field age<=.35 s, and an
 explicit .50 m/s forecast-radius-growth PRIOR. Maximum source propagation is
 2.35 s. The original current body radius .40+.25 m, rectangle/margin, physical
 CRA/kinetic estimates, lambda1.25, human flux-1.7, all actuator and solver
@@ -96,3 +96,47 @@ The preserved observations pass the repaired preparation audit offline
 replace the failed execution or create a native overall pass. The reporting
 fix passed3,047 full unit tests in103.64 s, Ruff, compilation and whitespace
 checks before the fresh repeat.
+
+## Native result and shorter-horizon follow-up
+
+The fresh reporting-fixed component atd15843f PASSED109 forecast sources /
+1,274 queries / zero misses (minimum union margin .0697412 m), all original
+actor/sensor/selection/body/zero-wheel gates, and preparation52 used sources /
+one original selection. Independent and own60-frame parked gates also passed.
+
+The subsequent two-second-horizon live run FAILED `progress_timeout` after
+16.033333 simulation seconds, reaching zero of three guides. It produced159
+fields,42 while translating, .311459 m minimum physical clearance,
+.002698 m stop drift and .823131 minimum analytical margin. Future coverage
+PASSED159 sources/2,025 queries/zero misses/minmargin .0938011 m. Preparation
+PASSED103 used sources/two original selections; current body containment also
+passed. The .456636 m nearby bend did not establish arrival: the actual nearby
+hold was4.0 s, worse than the accepted baseline's2.383333 s. There were zero
+simultaneous supported moving-kinetic rows. Preserve the failed native report:
+`outputs/restaurant_predictive_redesign/motion-preparation-horizon2-growth050-v2/report.json`,
+SHA256 `b6d805d6bcf9566b091545bb4bcbe207088b422ccdc9367c648fe773f2f7ae4a`.
+
+Trusted same-input offline probes found no safe constant-command escape in a
+small declared velocity/turn grid. At the rejected14.9 s source, however,
+shortening both forecast and MPC to six .2 s steps produced an exactly checked
+restoration (.208428 m/s, -.251187 rad/s) with the original current field,
+uncertainty growth, source age and all checks retained. The two-second version
+failed with a negative future-geometry margin. On the first8.1 s source, six
+steps selected .799808 rad/s rather than .399909 rad/s at the same .20 m/s
+preference. Outward.15/.30 alternatives did not change those decisions. These
+are input-specific numeric probes, not a closed-loop success or proof of a
+sole cause. See `horizon-reference-development-v1.json` and `seed-probe-v1.json`.
+
+The next explicit candidate therefore retains early preparation but returns
+to the six-step1.2 s planning horizon, with unchanged .50 m/s forecast growth
+and .35 s source cap (maximum propagation1.55 s). The redesign CLI accepts
+only six or ten steps and constructs the matching physical forecast horizon;
+the older prediction-only ablation still requires six. This is a new reported
+variant, not a retroactive pass or weaker current safety constraint. It needs
+a fresh matching1.2 s component plus independent+own60 gates before wheels,
+then the same actual arrival, coverage, kinetic, physical, stopping, nearby
+curve and .5 s/50% hold gates. The previous two-second results stay immutable.
+
+The six/ten-step source contract passed3,053 unit tests in103.74 s,47 focused
+tests in6.03 s, Ruff, compilation, CLI help and whitespace checks. No new
+native outcome follows from these source checks.

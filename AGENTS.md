@@ -2496,3 +2496,20 @@
   JSON round-trip regression plus fresh zero-wheel repeat before navigation.
   Offlineexport-repair companionpasses52usedsources/1originalselection, not a
   native overallpass. Reportingfix3047units103.64s/Ruffcompile/diffPASS.
+- At d15843f redesigned2s/.50growth fresh component PASSED109sources/1274queries/
+  0misses; preparation52used/1selection; independent+own60PASS. Live FAILED
+  progress_timeout16.033333s/0guides,159fields42translating,.311459clearance/
+  .002698drift/.823131analytical. Futurecoverage159sources2025queries0misses,
+  preparation103used/2selections and currentbodyPASS, but .456636nearcurve and
+  4sactualhold do not establish arrival/smoothing; ZERO simultaneous kinetic.
+  Preserve reportSHAb6d805d6bcf9566b091545bb4bcbe207088b422ccdc9367c648fe773f2f7ae4a.
+  Same-input offline14.9source 6steps restored exactfeasibility(.208428,-.251187),
+  while10steps failed; first8.1source6steps selected.799808turn vs10steps.399909.
+  Outward.15/.30 did not alter those decisions. Probes are not native acceptance.
+  The separate next preparation variant uses6steps/1.2s/.50growth (maxsource1.55),
+  unchanged body/CRA/lambda/limits/budgets/source/exact/analytical/physical gates.
+  CLI accepts only6or10redesign steps and matching forecast duration; legacy
+  prediction-only remains6. Fresh matchingcomponent+independent/own60 precede
+  wheels. Preserve allfailedreports and original actualarrival/stop/kinetic/
+  .20nearcurve/.5s+50%hold targets; no main/longservice/PR117 release.
+  Sourcefreeze3053units103.74s/47focused6.03s/RuffcompileCLI/diffPASS.

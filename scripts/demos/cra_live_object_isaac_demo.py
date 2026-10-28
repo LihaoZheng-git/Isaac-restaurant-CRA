@@ -38,7 +38,7 @@ parser.add_argument('--predictive-human-geometry-ablation', action='store_true',
 parser.add_argument('--human-prediction-uncertainty-rate', type=float, default=.25,
                     help='explicit additional forecast-radius growth PRIOR in m/s, separate from unchanged current human body margin')
 parser.add_argument('--predictive-parallel-redesign', action='store_true',
-                    help='separate early current-person preparation and explicit 10-step/2s predictive MPC ablation; primary unchanged')
+                    help='separate early current-person preparation with explicit 6-step/1.2s or 10-step/2s predictive MPC; primary unchanged')
 parser.add_argument("--crossing-strategy", choices=("legacy", "rear-pass-or-yield", "yield-then-go"), default="legacy",
                     help="separate maneuver ablation; yielding requires exact predictive and analytical checks")
 parser.add_argument("--zero-tangential-bias-ablation", action="store_true",
@@ -270,8 +270,8 @@ if (not math.isfinite(args.human_prediction_uncertainty_rate) or not .25 <= args
     parser.error('forecast uncertainty growth requires explicit predictive geometry and rate in[.25,1]m/s')
 if args.predictive_human_geometry_ablation and (not args.parallel_guidance_ablation
     or args.human_body_envelope_radius is None or args.human_observed_occupancy_only
-    or args.mpc_horizon_steps != (10 if args.predictive_parallel_redesign else 6) or args.waypoint_mode != 'guides'):
-    parser.error('predictive human geometry requires the separate parallel route-guide ablation, active body prior and explicit six-step (redesign: ten-step) horizon')
+    or args.mpc_horizon_steps not in ((6, 10) if args.predictive_parallel_redesign else (6,)) or args.waypoint_mode != 'guides'):
+    parser.error('predictive human geometry requires the separate parallel route-guide ablation, active body prior and explicit six-step (redesign: six/ten-step) horizon')
 if (not math.isfinite(args.guidance_turn_translation_fraction)
     or not 0 <= args.guidance_turn_translation_fraction <= 1
     or args.guidance_turn_translation_fraction > 0 and (not args.parallel_guidance_ablation
@@ -1114,7 +1114,7 @@ def main():
 
     perception = LiveObjectPerception(
         predictive_human_geometry_config=HumanGeometryForecastConfig(
-            horizon_seconds=2. if args.predictive_parallel_redesign else 1.2,
+            horizon_seconds=round(args.mpc_horizon_steps * .2, 10),
             velocity_uncertainty_prior_mps=args.human_prediction_uncertainty_rate) if args.predictive_human_geometry_ablation else None,
         parallel_preparation_config=ParallelPreparationConfig() if args.predictive_parallel_redesign else None,
         segmenter=segmenter,

@@ -1,8 +1,10 @@
 from copy import deepcopy
 from dataclasses import replace
+import ast
 from pathlib import Path
 import subprocess
 import sys
+from types import SimpleNamespace
 
 import numpy as np
 import pytest
@@ -71,3 +73,27 @@ def test_cli_rejects_unlabeled_prediction_before_native_imports(script, flags, t
     process = subprocess.run(command, text=True, capture_output=True)
     assert process.returncode == 2 and 'requires' in process.stderr
     assert not (tmp_path/'unused').exists()
+
+
+@pytest.mark.parametrize('redesign,steps,accepted', [
+    (False, 6, True), (False, 10, False), (True, 6, True),
+    (True, 10, True), (True, 8, False), (True, 12, False)])
+def test_live_prediction_and_mpc_horizons_match_explicit_bounded_variant(redesign, steps, accepted):
+    # Exercise the real CLI guard and live forecast-construction expression
+    # without importing Isaac. A mismatch would invalidate every exact horizon.
+    source = Path(__file__).resolve().parents[2]/'scripts/demos/cra_live_object_isaac_demo.py'
+    tree = ast.parse(source.read_text())
+    guard = next(n for n in tree.body if isinstance(n, ast.If)
+        and ast.unparse(n.test).startswith('args.predictive_human_geometry_ablation and'))
+    args = SimpleNamespace(predictive_human_geometry_ablation=True,
+        parallel_guidance_ablation=True, human_body_envelope_radius=.4,
+        human_observed_occupancy_only=False, mpc_horizon_steps=steps,
+        predictive_parallel_redesign=redesign, waypoint_mode='guides')
+    rejected = eval(compile(ast.Expression(guard.test), str(source), 'eval'), {'args': args})
+    assert rejected is not accepted
+    if accepted:
+        call = next(n for n in ast.walk(tree) if isinstance(n, ast.Call)
+            and isinstance(n.func, ast.Name) and n.func.id == 'HumanGeometryForecastConfig')
+        expression = next(k.value for k in call.keywords if k.arg == 'horizon_seconds')
+        horizon = eval(compile(ast.Expression(expression), str(source), 'eval'), {'args': args})
+        assert horizon == pytest.approx(steps*.2)
