@@ -257,6 +257,7 @@ class LiveObjectPerception:
         predictive_human_geometry_config=None,
         parallel_preparation_config=None,
         human_mass_body_identity_retention=False,
+        observed_motion_reference=False,
     ):
         self.segmenter, self.mass_estimator, self.contact_detector = (
             segmenter,
@@ -331,6 +332,12 @@ class LiveObjectPerception:
             raise ValueError("prediction requires an explicit active verified human body-envelope prior")
         self.predictive_human_geometry = (None if predictive_human_geometry_config is None
             else PredictiveHumanGeometryMemory(predictive_human_geometry_config))
+        if (not isinstance(observed_motion_reference, bool) or observed_motion_reference and (
+            self.human_body_envelope is None or human_observed_occupancy_only
+            or predictive_human_geometry_config is not None or parallel_preparation_config is not None
+            or motion_passing_config is None or motion_passing_config.encounter_geometry != 'oncoming_parallel')):
+            raise ValueError('observed-motion advisory requires current oncoming human/body scope without preparation or hard prediction')
+        self.observed_motion_reference = observed_motion_reference
         from robot.safety.parallel_preparation import ParallelPreparation, ParallelPreparationConfig
         if parallel_preparation_config is not None and (
             not isinstance(parallel_preparation_config, ParallelPreparationConfig)

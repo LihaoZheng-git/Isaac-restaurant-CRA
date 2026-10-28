@@ -39,6 +39,8 @@ parser.add_argument('--identity-selection-body-envelope', action='store_true',
                     help='explicit existing .40+.25m body PRIOR for zero-wheel parallel identity-selection validation')
 parser.add_argument('--predictive-human-geometry', action='store_true',
                     help='separate zero-wheel LiDAR source-window motion/geometry PRIOR benchmark; future actor truth only scores it')
+parser.add_argument('--observed-motion-reference', action='store_true',
+                    help='current-source advisory forecast dataflow only; no hard future geometry or quiet preparation')
 parser.add_argument('--human-prediction-uncertainty-rate', type=float, default=.25,
                     help='explicit additional forecast-radius growth PRIOR in m/s; original current body radius unchanged')
 parser.add_argument('--human-prediction-uncertainty-floor', type=float, default=None,
@@ -95,6 +97,9 @@ if (not math.isfinite(args.human_prediction_uncertainty_rate) or not .25 <= args
     parser.error('forecast uncertainty growth requires explicit prediction and rate in[.25,1]m/s')
 if args.predictive_human_geometry and not args.identity_selection_body_envelope:
     parser.error('prediction bench requires the explicit parallel selection/current body-envelope component')
+if args.observed_motion_reference and (not args.identity_selection_body_envelope
+    or not args.parallel_guidance_selection or args.predictive_human_geometry or args.parallel_preparation):
+    parser.error('observed-motion advisory requires current parallel/body scope without preparation/hard prediction')
 if args.parallel_guidance_selection and (not args.parallel_oncoming or not args.motion_aware_passing):
     parser.error('parallel selection component requires explicit parallel-oncoming and motion-aware-passing')
 if (not math.isfinite(args.human_passing_identity_prior_max_age)
@@ -465,6 +470,7 @@ def main():
             parallel_preparation=args.parallel_preparation,
             parallel_preparation_exit_lateral=args.parallel_preparation_exit_lateral,
             human_mass_body_identity_retention=args.human_mass_body_identity_retention,
+            observed_motion_reference=args.observed_motion_reference,
             camera_prim_path=CAMERA_PRIM_PATHS[args.rgb_camera],
         )
     phase = "idle_before"
@@ -749,6 +755,12 @@ def main():
         report['predictive_human_geometry_validation'] = prediction_report
         report['passed'] &= prediction_report['passed']
         save('predictive-human-geometry-validation.json', prediction_report)
+    if args.observed_motion_reference:
+        from robot.evaluation.observed_motion_reference_validation import validate_observed_motion_reference
+        advisory_report = validate_observed_motion_reference(sensor.records)
+        report['observed_motion_reference_validation'] = advisory_report
+        report['passed'] &= advisory_report['passed']
+        save('observed-motion-reference-validation.json', advisory_report)
     if args.parallel_preparation:
         from robot.evaluation.parallel_preparation_validation import validate_parallel_preparation
         preparation_report = validate_parallel_preparation(sensor.records)

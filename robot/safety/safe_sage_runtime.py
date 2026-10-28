@@ -276,6 +276,7 @@ class SafeSAGERuntimeField:
     rear_pass_policy_motion: tuple[EncounterPolicyMotion, ...] = ()
     person_relative_rear_reference: PersonRelativeRearReference | CurrentRearApproachReference | None = None
     predictive_human_geometry: object | None = None
+    observed_motion_forecast: object | None = None
 
     def __post_init__(self) -> None:
         frame_id = _nonnegative_integer(
@@ -286,6 +287,13 @@ class SafeSAGERuntimeField:
             self.sensor_timestamp_seconds,
             name="sensor_timestamp_seconds",
         )
+        if self.observed_motion_forecast is not None:
+            from robot.safety.observed_motion_reference import ObservedHumanMotionReference
+            if not isinstance(self.observed_motion_forecast, ObservedHumanMotionReference):
+                raise TypeError('typed observed-motion advisory required')
+            self.observed_motion_forecast.validate_current(self.tracking_result, frame_id, sensor_time)
+            if self.motion_passing_reference_track_ids != (self.observed_motion_forecast.track_id,):
+                raise ValueError('observed-motion advisory needs one current motion-selected human')
         if self.predictive_human_geometry is not None:
             from robot.safety.predictive_human_geometry import PredictiveHumanGeometry
             if not isinstance(self.predictive_human_geometry, PredictiveHumanGeometry):
@@ -1223,8 +1231,19 @@ class SafeSAGEControlRuntime:
                 guidance_config=replace(mpc.guidance_config, tangent_velocity_fraction=0.))
         extra = {}
         prediction = getattr(field, "predictive_human_geometry", None)
-        if prediction_state_timestamp_seconds is not None and prediction is None:
+        advisory = getattr(field, 'observed_motion_forecast', None)
+        advisory_enabled = (isinstance(mpc, LaplaceGuidanceTrackingMPC)
+            and mpc.guidance_config.motion_forecast_maximum_outward_fraction > 0)
+        if prediction_state_timestamp_seconds is not None and prediction is None and not advisory_enabled:
             raise ValueError('prediction request has no current field forecast; no legacy fallback')
+        if advisory_enabled:
+            if prediction_state_timestamp_seconds is None:
+                raise ValueError('observed-motion preference requires actual planning-state epoch')
+            age = _finite_real(prediction_state_timestamp_seconds, name='advisory state epoch')-field.sensor_timestamp_seconds
+            if not 0 <= age <= .35+1e-9:
+                raise ValueError('advisory field source age exceeds unchanged freshness')
+            extra.update(observed_motion_forecast=advisory, observed_motion_source_age_seconds=age,
+                observed_motion_anchor=(*field.anchor_position_world_xy, field.anchor_yaw))
         if prediction is not None:
             if prediction_state_timestamp_seconds is None:
                 raise ValueError("predictive geometry requires the actual planning-state epoch")

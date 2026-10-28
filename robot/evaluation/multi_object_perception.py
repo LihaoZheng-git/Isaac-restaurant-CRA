@@ -693,6 +693,11 @@ def assess_all_objects(worker, packet):
         },
     )
     pipeline_started = time.perf_counter()
+    motion_reference = None
+    if getattr(worker, 'observed_motion_reference', False):
+        from robot.safety.observed_motion_reference import ObservedHumanMotionReference
+        motion_reference = ObservedHumanMotionReference.from_current(tracking, envelope_audit,
+            tuple(sorted(normal_sides)), frame=packet.sensor_frame_id)
     def build_candidate(guidance_parameters):
         pipeline = build_safe_sage_field_pipeline(
             grid,
@@ -773,6 +778,7 @@ def assess_all_objects(worker, packet):
             rear_pass_policy_motion=rear_policy_motion,
             person_relative_rear_reference=(None if person_relative_memory is None else person_relative_memory.active_reference),
             predictive_human_geometry=prediction,
+            observed_motion_forecast=motion_reference,
         )
         return field, recovery
 
@@ -860,6 +866,7 @@ def assess_all_objects(worker, packet):
         "human_body_envelope_priors": envelope_audit,
         "human_mass_body_identity_retention": human_mass_audit,
         "predictive_human_geometry": prediction_audit,
+        "observed_motion_reference": None if motion_reference is None else motion_reference.diagnostic(),
         "parallel_preparation": preparation_audit,
         "current_visual_body_part_associations": visual_part_groups,
         "human_fragment_coverage_prior": fragment_audit,

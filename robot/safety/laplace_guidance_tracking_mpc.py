@@ -37,6 +37,8 @@ class LaplaceGuidanceTrackingConfig:
     tangent_blend_mode: str = "additive"
     outward_reference_fraction: float = 0.0
     turn_translation_fraction: float = 0.0
+    motion_forecast_maximum_outward_fraction: float = 0.0
+    motion_forecast_growth_prior_mps: float = 0.5
 
     def __post_init__(self):
         if self.reference_mode not in {
@@ -98,6 +100,13 @@ class LaplaceGuidanceTrackingConfig:
                 or self.reference_tangent_basis != "selected_observed_obstacle"
                 or self.reference_mode != "planar_forecast_velocity" or self.weight <= 0)):
             raise ValueError("turn translation requires fraction0..1 and explicit convex selected-obstacle forecast tracking")
+        if (not 0 <= self.motion_forecast_maximum_outward_fraction <= 1
+            or not .25 <= self.motion_forecast_growth_prior_mps <= .5
+            or self.motion_forecast_maximum_outward_fraction > 0 and (
+                self.tangent_blend_mode != 'convex' or self.weight <= 0
+                or self.reference_mode != 'planar_forecast_velocity'
+                or self.reference_tangent_basis != 'selected_observed_obstacle')):
+            raise ValueError('observed-motion preference requires explicit convex selected-obstacle tracking')
 
     def reference_speed_fractions(self):
         """At most four explicit candidate speeds; default retains one."""
@@ -145,6 +154,7 @@ class GuidanceTrackingDiagnostic:
     tangent_blend_mode: str = "additive"
     outward_reference_fraction: float = 0.0
     turn_translation_fraction: float = 0.0
+    observed_motion_forecast: dict | None = None
 
 
 @dataclass(frozen=True)
@@ -203,6 +213,9 @@ class LaplaceGuidanceTrackingMPC(SafeSAGEUnicycleMPC):
         *,
         nominal_goal_grid_xy=None,
         selected_passing_tangents=(),
+        observed_motion_forecast=None,
+        observed_motion_source_age_seconds=None,
+        observed_motion_anchor=None,
         **kwargs,
     ):
         if self.guidance_config.weight == 0:
@@ -233,6 +246,25 @@ class LaplaceGuidanceTrackingMPC(SafeSAGEUnicycleMPC):
         kwargs["guidance_fields"] = tuple(kwargs["guidance_fields"])
         reference_kwargs = dict(kwargs, selected_passing_tangents=references)
         nominal = self._nominal_sequence(nominal_command)
+        motion_audit = None
+        if self.guidance_config.motion_forecast_maximum_outward_fraction > 0:
+            motion_audit = dict(active=False, reason='unavailable_current_motion_reference', status='unavailable')
+            if observed_motion_forecast is not None:
+                from robot.safety.observed_motion_reference import ObservedHumanMotionReference
+                if (not isinstance(observed_motion_forecast, ObservedHumanMotionReference)
+                    or len(references) != 1 or references[0][0] != observed_motion_forecast.track_id
+                    or observed_motion_anchor is None or observed_motion_source_age_seconds is None):
+                    raise ValueError('advisory prediction requires its selected current source/anchor')
+                clipped_nominal = self._clip_commands(nominal)
+                states = self._rollout(initial, clipped_nominal)
+                dense, times = self._dense_chassis_queries(states, clipped_nominal)
+                fraction, motion_audit = observed_motion_forecast.preference(dense, times,
+                    anchor=np.asarray(observed_motion_anchor[:2]), anchor_yaw=observed_motion_anchor[2],
+                    footprint=kwargs['configuration_space'].footprint, lookahead=self.config.lookahead_distance,
+                    source_age=observed_motion_source_age_seconds,
+                    maximum_outward_fraction=self.guidance_config.motion_forecast_maximum_outward_fraction,
+                    growth_prior_mps=self.guidance_config.motion_forecast_growth_prior_mps)
+                reference_kwargs['motion_outward_fraction'] = max(self.guidance_config.outward_reference_fraction, fraction)
         speed = float(
             np.clip(
                 np.max(nominal[:, 0]),
@@ -436,6 +468,7 @@ class LaplaceGuidanceTrackingMPC(SafeSAGEUnicycleMPC):
             if self.guidance_config.tangent_velocity_fraction > 0 else 0.,
             turn_translation_fraction=self.guidance_config.turn_translation_fraction
             if self.guidance_config.tangent_velocity_fraction > 0 else 0.,
+            observed_motion_forecast=motion_audit,
         )
         return GuidanceTrackingMPCResult(
             **{
@@ -518,11 +551,12 @@ class LaplaceGuidanceTrackingMPC(SafeSAGEUnicycleMPC):
                         return None
                     normal = normal / norm
                     tangent = np.array([-normal[1], normal[0]]) * (1 if side == "left" else -1)
-                    if self.guidance_config.outward_reference_fraction > 0:
+                    outward = field.get('motion_outward_fraction', self.guidance_config.outward_reference_fraction)
+                    if outward > 0:
                         # Separate travel preference using CURRENT observed
                         # geometry. Tilt away before normalization; never add
                         # occupancy, infer free space or change CBF acceptance.
-                        tangent = tangent - self.guidance_config.outward_reference_fraction * normal
+                        tangent = tangent - outward * normal
                 else:
                     gradient = np.asarray(constraint.interpolant_gradient[:2])
                     norm = float(np.linalg.norm(gradient))

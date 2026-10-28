@@ -1,5 +1,23 @@
 # CRA repository guidance
 
+- The user approved further observed-motion improvement after the no-prep
+  2.50s-yield result. Separate default-OFF --observed-motion-reference uses only
+  a current motion-selected human's positive LiDAR centroid/inferred velocity
+  and original applied body/visual identity PRIORS. A 1.2s nominal forecast
+  with explicit advisory .50mps growth can tilt the checked reference outward
+  at most .35, normalized by existing .25m centroid uncertainty. Quiet/receding/
+  crossing/ambiguous/missing context cannot activate it; actual source age
+  remains[0,.35] without clock renewal. It supplies NO hard future-containment,
+  free-space or CRA-factor evidence. All original current-field first-order
+  temporal/DTCBF/dense/analytical/fragment/physical/arrival/stop gates still
+  apply over six.2s intervals; no early preparation, horizon shortening, new
+  physical margin or minimum execution speed. Old failed hard prediction stays
+  OFF. Fresh moving-human ZERO-wheel dataflow component (20distinct selected/
+  10quiet-unselected/no source or body mismatch), independent+own60 required
+  before matched wheels. This validates current inputs, not a future-motion
+  bound. Preserve original .5s+50% hold/5kinetic/.20nearcurve gates and all
+  primary/main/PI/longservice/PR117 holds. See docs/observed_motion_reference.md;
+  native outcome pending, no promised smoothness fix.
 - At2c84436 the fourth no-preparation Carter trial PASSED native navigation:
   three route guides/final arrival21.233333s,19supported moving-kinetic rows,
   .239824nearby bend/.429644physical clearance/.002434stop drift/.255855analytical,

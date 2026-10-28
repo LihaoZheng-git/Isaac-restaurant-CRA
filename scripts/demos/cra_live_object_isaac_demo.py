@@ -89,6 +89,12 @@ parser.add_argument('--encounter-comparison', action='store_true',
                     help='explicit variant comparison: arrival/safety/source gates required, curved-bypass metrics reported separately for every variant')
 parser.add_argument("--guidance-tracking-weight", type=float, default=0.0,
                     help="separate checked Laplace local-path MPC ablation; zero preserves primary")
+parser.add_argument('--observed-motion-reference', action='store_true',
+                    help='advisory approaching-human forecast shapes checked guidance reference; original1.2s hard checks remain')
+parser.add_argument('--motion-forecast-outward-fraction', type=float, default=.35,
+                    help='bounded advisory reference preference only; no physical margin or executed minimum')
+parser.add_argument('--motion-forecast-growth-prior-mps', type=float, default=.5,
+                    help='uncalibrated radius-growth hypothesis for advisory reference only, never hard geometry')
 parser.add_argument("--mpc-horizon-steps", type=int,
                     help="separate 6..30-step prediction-horizon ablation; omitted preserves the controller default and .2 s command interval")
 parser.add_argument("--guidance-activation-h", type=float, default=1.0,
@@ -318,6 +324,15 @@ if any(not math.isfinite(x) or x <= 0 for x in
     parser.error("route-guide lookahead/association distances must be finite and positive")
 if args.mpc_horizon_steps is not None and not 6 <= args.mpc_horizon_steps <= 30:
     parser.error("explicit MPC horizon ablation must use 6..30 unchanged .2 s intervals")
+if args.observed_motion_reference and (not args.parallel_guidance_ablation or not args.identity_selection_body_envelope
+    or args.predictive_human_geometry_ablation or args.predictive_parallel_redesign or args.rear_preparation
+    or args.mpc_horizon_steps not in (None, 6) or args.guidance_tracking_weight <= 0
+    or args.guidance_tangent_basis != 'selected_observed_obstacle' or args.guidance_tangent_blend != 'convex'):
+    parser.error('observed-motion advisory needs separate parallel tracking/body identity, original six steps and no preparation/hard prediction')
+if (not math.isfinite(args.motion_forecast_outward_fraction) or not 0 < args.motion_forecast_outward_fraction <= 1
+    or not math.isfinite(args.motion_forecast_growth_prior_mps) or not .25 <= args.motion_forecast_growth_prior_mps <= .5
+    or not args.observed_motion_reference and (args.motion_forecast_outward_fraction != .35 or args.motion_forecast_growth_prior_mps != .5)):
+    parser.error('advisory parameters require explicit opt-in, fraction(0,1] and growth[.25,.5]m/s')
 if (not math.isfinite(args.guidance_tangent_velocity_fraction)
     or not 0 <= args.guidance_tangent_velocity_fraction <= 1
     or args.guidance_tangent_velocity_fraction > 0 and (not args.motion_aware_passing
@@ -1142,6 +1157,7 @@ def main():
             horizon_seconds=round(args.mpc_horizon_steps * .2, 10),
             velocity_uncertainty_floor_prior_mps=args.human_prediction_uncertainty_floor,
             velocity_uncertainty_prior_mps=args.human_prediction_uncertainty_rate) if args.predictive_human_geometry_ablation else None,
+        observed_motion_reference=args.observed_motion_reference,
         parallel_preparation_config=ParallelPreparationConfig(exit_lateral_separation_m=args.parallel_preparation_exit_lateral)
             if args.predictive_parallel_redesign else None,
         segmenter=segmenter,
@@ -1335,7 +1351,9 @@ def main():
                 minimum_reference_speed_fraction=args.guidance_reference_minimum_speed_fraction,
                 tangent_blend_mode=args.guidance_tangent_blend,
                 outward_reference_fraction=args.guidance_outward_reference_fraction,
-                turn_translation_fraction=args.guidance_turn_translation_fraction))
+                turn_translation_fraction=args.guidance_turn_translation_fraction,
+                motion_forecast_maximum_outward_fraction=args.motion_forecast_outward_fraction if args.observed_motion_reference else 0.,
+                motion_forecast_growth_prior_mps=args.motion_forecast_growth_prior_mps))
     control = SafeSAGEControlRuntime(mpc=mpc, backup_filter=backup, crossing_strategy=args.crossing_strategy)
     if args.checked_rear_pass_reference:
         from robot.evaluation.live_rear_pass import LiveRearPassControlRuntime
@@ -2022,7 +2040,7 @@ def main():
             data[1],
             data[2],
             initial_command_guess=data[3],
-            **({'prediction_state_timestamp_seconds': data[5]} if args.predictive_human_geometry_ablation else {}),
+            **({'prediction_state_timestamp_seconds': data[5]} if args.predictive_human_geometry_ablation or args.observed_motion_reference else {}),
             **({"nominal_goal_grid_xy": data[4]} if args.guidance_tracking_weight > 0 or args.checked_rear_pass_reference else {}),
             profile_path=args.output / "profiles" / f"planner-{data[2].sensor_frame_id}.pstats"
             if args.profile_runtime else None,
@@ -2335,7 +2353,7 @@ def main():
                     packet=(current.copy(), sequence, latest.field, warm,
                         np.array([nominal.target_waypoint.x, nominal.target_waypoint.y], dtype=float)
                         if args.checked_rear_pass_reference or args.guidance_tracking_weight > 0 else None,
-                        now) if args.predictive_human_geometry_ablation else
+                        now) if args.predictive_human_geometry_ablation or args.observed_motion_reference else
                         (current.copy(), sequence, latest.field, warm,
                         np.array([nominal.target_waypoint.x, nominal.target_waypoint.y], dtype=float)
                         if args.checked_rear_pass_reference or args.guidance_tracking_weight > 0 else None),
@@ -2542,6 +2560,12 @@ def main():
             human_validation['predictive_geometry'] = prediction_validation
             completed = completed and prediction_validation['passed']
             save_json('live-predictive-human-geometry-validation.json', prediction_validation)
+        if args.observed_motion_reference:
+            from robot.evaluation.observed_motion_reference_validation import validate_observed_motion_reference
+            advisory_validation = validate_observed_motion_reference(live_fields)
+            human_validation['observed_motion_reference'] = advisory_validation
+            completed = completed and advisory_validation['passed']
+            save_json('live-observed-motion-reference-validation.json', advisory_validation)
         if args.predictive_parallel_redesign:
             from robot.evaluation.parallel_preparation_validation import validate_parallel_preparation
             preparation_validation = validate_parallel_preparation(records+live_fields)
@@ -2847,6 +2871,12 @@ def main():
         "physical_CRA_lambda": 1.25,
         "field_grid_configuration": field_grid_diagnostic,
         "predictive_human_geometry_ablation": args.predictive_human_geometry_ablation,
+        "observed_motion_reference_ablation": args.observed_motion_reference,
+        "observed_motion_reference_configuration": None if not args.observed_motion_reference else {
+            "maximum_outward_fraction": args.motion_forecast_outward_fraction,
+            "radius_growth_prior_mps": args.motion_forecast_growth_prior_mps,
+            "horizon_seconds": 1.2,
+            "scope": "advisory from current raw LiDAR velocity; no hard future containment claim or changed safety/CRA policy"},
         "predictive_parallel_redesign": args.predictive_parallel_redesign,
         "parallel_preparation_exit_lateral_m": args.parallel_preparation_exit_lateral,
         "human_mass_body_identity_retention": args.human_mass_body_identity_retention,

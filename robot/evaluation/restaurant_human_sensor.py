@@ -100,6 +100,7 @@ class RestaurantHumanSensorDiagnostic:
         parallel_preparation=False,
         parallel_preparation_exit_lateral=None,
         human_mass_body_identity_retention=False,
+        observed_motion_reference=False,
     ):
         self.stage, self.output = stage, output
         from robot.safety.motion_aware_passing import MotionAwarePassingConfig
@@ -225,6 +226,7 @@ class RestaurantHumanSensorDiagnostic:
             lookahead_distance=0.1,
         )
         self.worker = LiveObjectPerception(
+            observed_motion_reference=observed_motion_reference,
             human_mass_body_identity_retention=human_mass_body_identity_retention,
             predictive_human_geometry_config=HumanGeometryForecastConfig(
                 horizon_seconds=human_prediction_horizon_seconds,
@@ -483,6 +485,7 @@ class RestaurantHumanSensorDiagnostic:
                     "human_body_envelope_priors":result.diagnostics.get("human_body_envelope_priors", ()),
                     "human_mass_body_identity_retention":result.diagnostics.get("human_mass_body_identity_retention"),
                     "predictive_human_geometry":result.diagnostics.get("predictive_human_geometry"),
+                    "observed_motion_reference":result.diagnostics.get("observed_motion_reference"),
                     "parallel_preparation":result.diagnostics.get("parallel_preparation"),
                     "motion_passing_reference_track_ids":result.field.motion_passing_reference_track_ids,
                     "motion_passing_reference_source_timestamp_seconds":result.field.motion_passing_reference_source_timestamp_seconds,
