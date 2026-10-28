@@ -97,3 +97,23 @@ separate retry may use explicit `--settle-seconds 10` before the unchanged
 3.2 s observation and acceptance gates. The legacy 2 s default stays. This
 tests an initialization transient, not relaxed tolerances or a passed old run.
 Tracking requires the same explicit settling period as its independent gate.
+
+`standing-v3` at `be93e9c` also failed yaw after 10 s settling: 160 samples,
+XY drift 0.003892 m, yaw drift 0.045683 rad, tilt 0.003937 rad. Do not relax the
+0.03 rad limit or send locomotion commands based on this result. The second
+installed candidate is `Go2FlatTerrainPolicy`, also with 48 observations and
+body `(vx,vy,wz)`. Its matching official PhysX configuration uses dt 0.005 s
+and decimation 4 (200 Hz physics / 50 Hz policy), preserved separately from
+Spot's timing. An explicit `--robot go2` must match its own manifest and
+independent standing report. Sampling remains 50 Hz on either candidate.
+
+The Go2 audit is `outputs/quadruped_feasibility/go2-asset-audit-v1/`:
+
+- `physx_policy.pt`: `984c802b8acd68c3199605ff36603f91ac9f3192eb1ebcfd80b0e764831abe0f`
+- `physx_env.yaml`: `da282802fc3bec2f4d1a80818276680b91f73a716e26069bfee52e3fdf4d19af`
+- `go2.usda`: `29405c5d2a29b1a80e268df5de23898cb8f48ce95646352c25aeca512bfcb3df`
+
+These are unmodified NVIDIA asset-root files; the root USD references further
+Menagerie payloads. Keep used-layer identities in native reports and do not
+describe this root-file audit as a complete dependency/texture license audit.
+Neither candidate has sensor or navigation acceptance yet.

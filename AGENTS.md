@@ -2623,3 +2623,9 @@
   explicit10s settling retry, unchanged3.2s observation/2cm/.03rad gates.
   Legacysettle2s remains; track bench must match independent source/assets/settle.
   Preserve oldfailedreports; no locomotion acceptance or replacement yet.
+- Spot standing-v3 be93e9c with10ssettle also FAILEDyaw.045683>.03rad despite
+  .003892mXYdrift/160rows. Test second bundled Go2 only with its separately
+  audited weights/config/rootUSD; explicitrobot/manifest/priorreport mustmatch.
+  Preserve Go2training200Hzphysics/50Hzpolicy vsSpot500/50, alloriginalbench
+  tolerances and source/asset gates. Root-fileaudit not complete dependency/
+  texturelicense audit; no sensor/navigation/replacement acceptance yet.

@@ -1,4 +1,4 @@
-"""Separate official-Spot velocity interface bench; never commands Carter.
+"""Separate official quadruped velocity interface bench; never commands Carter.
 
 Standing is mandatory before tracking. No CRA, obstacle avoidance, restaurant
 navigation, or ideal reduced-order tracking is claimed by this bench.
@@ -22,6 +22,7 @@ def parse_args():
     parser.add_argument('--asset-manifest', type=Path, required=True)
     parser.add_argument('--standing-report', type=Path)
     parser.add_argument('--settle-seconds', type=float, default=2.)
+    parser.add_argument('--robot', choices=('spot', 'go2'), default='spot')
     return parser.parse_args()
 
 
@@ -38,7 +39,14 @@ def main():
     if args.output.exists():
         raise ValueError('fresh output directory required; preserve earlier failures')
     manifest = json.loads(args.asset_manifest.read_text())
+    if manifest.get('robot', 'spot') != args.robot:
+        raise ValueError('explicit robot differs from audited asset manifest')
     assets = {Path(x['path']).name: x for x in manifest['files']}
+    specification = {
+        'spot': ('/Isaac/Robots/BostonDynamics/spot/spot.usd', 'spot.usd', 'spot_policy.pt', 'spot_env.yaml', .002, 10),
+        'go2': ('/Isaac/Samples/Mujoco_Menagerie/unitree_go2/go2/go2.usda', 'go2.usda', 'physx_policy.pt', 'physx_env.yaml', .005, 4),
+    }[args.robot]
+    usd_relative, usd_name, policy_name, env_name, physics_dt, decimation = specification
     for entry in assets.values():
         if hashlib.sha256(Path(entry['path']).read_bytes()).hexdigest() != entry['sha256']:
             raise ValueError('asset bytes differ from audited official download')
@@ -47,6 +55,7 @@ def main():
             raise ValueError('independent standing report required before tracking')
         prior = json.loads(args.standing_report.read_text())
         if (not prior['passed'] or prior['stage'] != 'standing'
+            or prior.get('robot') != args.robot
             or prior.get('settle_seconds') != args.settle_seconds
             or prior['asset_sha256'] != {k: v['sha256'] for k, v in assets.items()}
             or prior['source_files_sha256'] != source_hashes()):
@@ -67,16 +76,17 @@ def main():
         from isaacsim.core.simulation_manager import SimulationManager
         from isaacsim.core.simulation_manager.impl.isaac_events import IsaacEvents
         from isaacsim.robot.policy.examples.robots.spot import SpotFlatTerrainPolicy
+        from isaacsim.robot.policy.examples.robots.go2 import Go2FlatTerrainPolicy
         from isaacsim.storage.native import get_assets_root_path
         from pxr import Gf, UsdGeom, UsdLux, UsdPhysics, UsdShade
         from robot.control.planar_velocity_command import bounded_body_velocity
         from robot.evaluation.quadruped_feasibility import root_observation, summarize_standing, summarize_tracking
 
         torch = import_module('torch')
-        root_url = get_assets_root_path()+'/Isaac/Robots/BostonDynamics/spot/spot.usd'
+        root_url = get_assets_root_path()+usd_relative
         result, _, content = omni.client.read_file(root_url)
-        if result != omni.client.Result.OK or hashlib.sha256(bytes(content)).hexdigest() != assets['spot.usd']['sha256']:
-            raise ValueError('runtime Spot root USD differs from audited asset')
+        if result != omni.client.Result.OK or hashlib.sha256(bytes(content)).hexdigest() != assets[usd_name]['sha256']:
+            raise ValueError('runtime quadruped root USD differs from audited asset')
         stage = omni.usd.get_context().get_stage()
         UsdPhysics.Scene.Define(stage, '/World/PhysicsScene')
         floor = UsdGeom.Cube.Define(stage, '/World/Floor')
@@ -103,15 +113,16 @@ def main():
         rgb.attach([render])
         SimulationManager.set_backend('numpy')
         SimulationManager.set_physics_sim_device('cpu')
-        SimulationManager.set_physics_dt(.002)
+        SimulationManager.set_physics_dt(physics_dt)
         RenderingManager.set_dt(.02)
         # Use the stock official USD path. This installed wrapper's explicit
         # usd_path branch has an uninitialized is_newton local; do not patch it.
-        spot = SpotFlatTerrainPolicy(prim_path='/World/Spot', position=[0., 0., .8],
-            policy_path=str(Path(assets['spot_policy.pt']['path']).resolve()),
-            env_config_path=str(Path(assets['spot_env.yaml']['path']).resolve()))
-        if spot._dt != .002 or spot._decimation != 10:
-            raise ValueError('policy timing differs from audited 500Hz/50Hz training contract')
+        policy_class = SpotFlatTerrainPolicy if args.robot == 'spot' else Go2FlatTerrainPolicy
+        spot = policy_class(prim_path='/World/Quadruped', position=[0., 0., .8],
+            policy_path=str(Path(assets[policy_name]['path']).resolve()),
+            env_config_path=str(Path(assets[env_name]['path']).resolve()))
+        if spot._dt != physics_dt or spot._decimation != decimation:
+            raise ValueError('policy timing differs from audited physics/policy-rate contract')
         timeline = omni.timeline.get_timeline_interface()
         phases = [('settle', args.settle_seconds, [0., 0., 0.]), ('standing', 3.2, [0., 0., 0.])]
         if args.stage == 'tracking':
@@ -154,7 +165,7 @@ def main():
                         return
                 cmd = bounded_body_velocity(command)
                 spot.forward(dt, torch.tensor(cmd, dtype=torch.float32))
-                if ticks % 10 == 0:
+                if ticks % decimation == 0:
                     position, orientation = spot.robot.get_world_poses()
                     linear, angular = spot.robot.get_velocities()
                     position, quat = position.numpy()[0], orientation.numpy()[0]
@@ -196,11 +207,11 @@ def main():
         tracking = summarize_tracking(records) if args.stage == 'tracking' and own_standing and own_standing['passed'] and not failures else None
         report = dict(stage=args.stage, passed=bool(own_standing and own_standing['passed'] and not failures
                 and (args.stage == 'standing' or tracking and tracking['passed'])),
-            settle_seconds=args.settle_seconds,
+            settle_seconds=args.settle_seconds, robot=args.robot,
             standing=own_standing, tracking=tracking, failures=failures,
             asset_sha256={k: v['sha256'] for k, v in assets.items()},
-            source_files_sha256=source_hashes(), policy_class='stock SpotFlatTerrainPolicy',
-            physics_engine=SimulationManager.get_active_physics_engine(), physics_dt=.002, policy_decimation=10,
+            source_files_sha256=source_hashes(), policy_class=type(spot).__name__,
+            physics_engine=SimulationManager.get_active_physics_engine(), physics_dt=physics_dt, policy_decimation=decimation,
             asset_root_url=root_url, used_usd_layers=[layer.identifier for layer in stage.GetUsedLayers()],
             scope='Separate freely standing/walking open-space interface bench; no robot replacement, CRA, perception or navigation acceptance')
         (args.output/'records.json').write_text(json.dumps(records))
