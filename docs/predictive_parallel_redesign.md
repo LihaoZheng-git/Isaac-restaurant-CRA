@@ -140,3 +140,37 @@ curve and .5 s/50% hold gates. The previous two-second results stay immutable.
 The six/ten-step source contract passed3,053 unit tests in103.74 s,47 focused
 tests in6.03 s, Ruff, compilation, CLI help and whitespace checks. No new
 native outcome follows from these source checks.
+
+The fresh1.2 s component PASSED109 sources/918 future queries/zero misses,
+minmargin .0693443 m, preparation52 used sources/one selection, and all old
+actor/sensor/selection/body/zero-wheel gates. Independent+own60 also passed.
+The live run reached all three guides in22.083333 simulation seconds with
+.669718 m nearby bend, .943865 m minimum physical clearance, .002748 m stop
+drift and .441681 minimum analytical margin. It recorded220 fields,205 while
+translating. Future coverage PASSED220 sources/1,972 queries/zero misses/
+minmargin .102440 m; preparation103 used sources/three selections, normal
+selection and current body containment passed.
+
+Overall native acceptance still FAILED: only one qualifying supported moving
+kinetic row was available (five required). Actual nearby hold improved to
+.816667 s, a65.73% reduction, but still exceeded .5 s. The unchanged overall
+failure must not be relabeled as a pass because arrival succeeded. Preserve
+`motion-preparation-horizon12-growth050-v3/report.json`, SHA256
+`2d7d77d29010d30430f7f6ac5d267e003c93502268aecd98c95b71ac0e23f6e5`.
+
+The actual motion audit has62 steady-human rows:60 have unavailable mass,
+despite61 having positive owned returns. Only two have an evidence-supported
+kinetic factor, and only one meets the qualifying positive-return gate.
+Current velocity alone cannot substitute for mass. The generic property cache
+often reports no accepted original property; do not weaken that generic guard
+or reclassify those rows as physical estimation. The next separate bounded
+association option should retain an actually accepted adult-mass PRIOR only
+with current verified human-body identity, original source/frame and unchanged
+three-second expiry, leaving other factors and generic callers untouched.
+
+Offline DEVELOPMENT hypotheses for future planning (not integrated) tested a
+fixed .45 growth and a .30+.norm(raw-minus-fit) growth capped .50. Each covered
+all available queries in four old datasets. These are design inputs, not new
+native validation or general uncertainty bounds. Preserve them separately in
+`adaptive-growth-development-v1.json`. The fixed .50 native runs above remain
+unchanged; neither smoothing nor PI-demo readiness is established yet.
