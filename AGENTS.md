@@ -1,5 +1,20 @@
 # CRA repository guidance
 
+- First observed-motion motion-v3 at9a7d4b3 NATIVEPASS finalgoal/3guides22.483333s,
+  .252364clearance/.203984nearcurve/.002440stop/.180277analytical/224fields,
+  28selected196quiet-unselected advisorysource auditPASS, BUT SMOOTHFAIL2.633333s
+  hold vsoriginal2.383333/latest2.50. Preserve SHA
+  3a3ca0efe473f06139f496f6d2db614055f31a1726682ad9c7888c4a715fc721.
+  Five inactive conflict records prove a route-basis defect: oncoming goal
+  cosine>.979 with strictly negative upper bound on relative-closing dot for
+  ANY original bounded nominal velocity; nominal-rollout heading changed the
+  class while Carter evaded. Correct eligibility to nominal GOAL direction,
+  keep actual nominal velocity in closing test. No new margin/uncertainty/cost/
+  horizon/clock change. Full3179units114.64s/32focused4.93s; late14.2same-input
+  replay still yields same low-speed checkedcommand, so no solecause/native
+  smoothness claim. Reuse component onlyexact source/AST proof of unchanged
+  perception/context methods and unused MPC preference methods; fresh
+  independent+own60 and matched motion mandatory. See docs/observed_motion_reference.md.
 - Fresh observed-motion componentae8d18d PASSED27current advisory/88quiet-
   unselected/zero mismatch and all old actor/sensor/selection/body/mass gates,
   ZEROwheels. First stationary-v2 launch FAILED before Isaac (CLI guard used

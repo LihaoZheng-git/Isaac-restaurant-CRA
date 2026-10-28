@@ -262,6 +262,7 @@ class LaplaceGuidanceTrackingMPC(SafeSAGEUnicycleMPC):
                     anchor=np.asarray(observed_motion_anchor[:2]), anchor_yaw=observed_motion_anchor[2],
                     footprint=kwargs['configuration_space'].footprint, lookahead=self.config.lookahead_distance,
                     source_age=observed_motion_source_age_seconds,
+                    nominal_route_direction_grid_xy=goal-initial[:2],
                     maximum_outward_fraction=self.guidance_config.motion_forecast_maximum_outward_fraction,
                     growth_prior_mps=self.guidance_config.motion_forecast_growth_prior_mps)
                 reference_kwargs['motion_outward_fraction'] = max(self.guidance_config.outward_reference_fraction, fraction)

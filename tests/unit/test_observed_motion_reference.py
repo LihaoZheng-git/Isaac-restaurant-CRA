@@ -40,6 +40,7 @@ def sample(c=None, **kwargs):
         source_age=0.1,
         maximum_outward_fraction=0.35,
         growth_prior_mps=0.5,
+        nominal_route_direction_grid_xy=(1.0, 0.0),
     )
     return (c or context()).preference(states, times, **(defaults | kwargs))
 
@@ -90,6 +91,30 @@ def test_rigid_world_frame_change_preserves_forecast():
     assert a[1]["minimum_nominal_predicted_margin_m"] == pytest.approx(
         b[1]["minimum_nominal_predicted_margin_m"], abs=1e-12
     )
+
+
+@pytest.mark.parametrize("heading", [0.7, 0.9, 1.1])
+def test_oncoming_classification_uses_nominal_route_despite_temporary_evasion_heading(
+    heading,
+):
+    t = np.linspace(0.0, 1.2, 73)
+    states = np.column_stack(
+        (0.2 * t * np.cos(heading), 0.2 * t * np.sin(heading), np.full(len(t), heading))
+    )
+    _, a = context(center=(2.0, -0.8)).preference(
+        states,
+        t,
+        anchor=np.zeros(2),
+        anchor_yaw=0.0,
+        footprint=FOOTPRINT,
+        lookahead=0.1,
+        source_age=0.1,
+        maximum_outward_fraction=0.35,
+        growth_prior_mps=0.5,
+        nominal_route_direction_grid_xy=(1.0, 0.0),
+    )
+    assert a["active"]
+    assert a["hypothesis_basis"].startswith("current_raw_LiDAR")
 
 
 def observed(t=1.0, *, velocity=(-0.5, 0.0), points=100, matched=True):

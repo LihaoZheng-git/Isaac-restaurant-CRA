@@ -37,7 +37,9 @@ The original obstacle-unaware nominal is rolled out over six0.2 s intervals,
 using the original dense integration samples. The original oriented chassis
 rectangle and0.05 m physical margin are evaluated against the advisory human
 positions over the full1.2 s plus actual source age. Approaching/oncoming motion
-is checked again against the nominal travel direction. Crossing and receding
+is checked again against the obstacle-unaware nominal goal direction. The
+actual nominal forecast velocity still supplies the relative-closing test;
+temporary avoidance heading does not redefine the route. Crossing and receding
 motion cannot activate this parallel preference.
 
 Predicted overlap produces a continuous outward fraction, normalized by the
@@ -138,7 +140,51 @@ The passedae8d18d component may be reused only after exact source fingerprints
 prove all component/perception/runtime files unchanged, with the sole demo
 exception verified as this one CLI expression. A fresh independent stationary
 run and own60 gate are still required at the corrected live source. Preserve
-the failed launch and every previous report; no wheel trial has run yet.
+the failed launch and every previous report; no wheel trial had run at that point.
+
+## First navigation result and route-classification correction
+
+At9a7d4b3, independent and own60 gates passed. `motion-v3` **PASSED native
+navigation/evidence**: final arrival after three route guides in22.483333 s,
+0.252364 m minimum physical clearance,0.203984 m nearby walking bend,
+0.002440 m stop drift,0.180277 minimum analytical margin and224 live fields.
+The new dataflow audit passed28 selected and196 quiet/unselected sources.
+Original report SHA:
+`3a3ca0efe473f06139f496f6d2db614055f31a1726682ad9c7888c4a715fc721`.
+
+**Smoothing failed**:2.633333 s actual hold, worse than the original2.383333 s
+and latest no-advisory2.50 s. Preserve this result; it is not an improvement.
+The matched invocation, original1.2 s horizon, MPC configuration, fixed lambda
+and preparation exclusions were independently checked. A first positive-advice
+request was retained by a read-only export observer; neither the observer nor
+offline diagnostics supplied commands. These are single development runs,
+not statistical or real-time comparisons.
+
+Five plan records exposed an eligibility defect: advice switched off with
+heading0.85--0.93 rad, although the human remained oncoming relative to the
+nominal goal (cosine0.980--1.000) and predicted conflict remained. The original
+test used the nominal **rollout displacement**, which rotates while Carter
+turns back toward its route, to classify human motion. Independent Cauchy
+bounds on relative closing remain negative even for any allowed robot velocity
+at those states; receding motion cannot explain those five deactivations.
+See `motion-v3/route-gating-bound-v2.json`.
+
+The correction uses the configured current nominal goal direction for the
+oncoming classification, retaining actual nominal velocity in the closing
+test and every other model/physical gate. Three turning-heading regressions
+cover this distinction. Source validation passed3,179 full unit tests in114.64 s
+and32 focused tests in4.93 s. This is not a new physical uncertainty policy.
+All body/centroid/velocity inputs, margins, weights, priors and source clocks
+remain unchanged. The component's source reuse requires exact fingerprints
+and AST proof that changes touch only unused MPC reference/preference methods
+and the already tested live CLI expression.
+
+A trusted same-input replay of the late14.2 s native request reproduces the
+original full command sequence and still returns the same checked low-speed
+command after the classification correction. Thus the defect is real but is
+not established as the sole yield cause. A fresh independent stationary gate
+and matched wheel run are still required to test the corrected earlier path.
+No smoother-motion claim or hold release follows from source tests alone.
 
 No primary/main/PI-demo/long-service/PR117 hold is released. A successful selected
 trial would not establish real time, general human prediction, causal CRA

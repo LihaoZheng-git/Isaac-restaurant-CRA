@@ -149,16 +149,20 @@ class ObservedHumanMotionReference:
         source_age,
         maximum_outward_fraction,
         growth_prior_mps,
+        nominal_route_direction_grid_xy,
     ):
         """Score the unchanged nominal's 1.2s forecast, never constrain execution."""
         states, times = np.asarray(states, float), np.asarray(times, float)
         anchor = np.asarray(anchor, float)
+        route = np.asarray(nominal_route_direction_grid_xy, float)
         from robot.safety.safe_sage_configuration_space import RectangularRobotFootprint
 
         if not isinstance(footprint, RectangularRobotFootprint):
             raise TypeError("original rectangular footprint required")
         if (
             anchor.shape != (2,)
+            or route.shape != (2,)
+            or not np.isfinite(route).all()
             or not np.isfinite(anchor).all()
             or any(
                 isinstance(v, (bool, np.bool_))
@@ -199,9 +203,11 @@ class ObservedHumanMotionReference:
         length = np.linalg.norm(direction)
         delta = center - states[0, :2]
         nominal_velocity = direction / times[-1]
+        route_length = float(np.linalg.norm(route))
         active = bool(
             length > 1e-9
-            and velocity @ (direction / length)
+            and route_length > 1e-9
+            and velocity @ (route / max(route_length, 1e-12))
             <= -math.cos(math.pi / 6) * np.linalg.norm(velocity)
             and delta @ (velocity - nominal_velocity) < 0
         )
