@@ -117,3 +117,13 @@ These are unmodified NVIDIA asset-root files; the root USD references further
 Menagerie payloads. Keep used-layer identities in native reports and do not
 describe this root-file audit as a complete dependency/texture license audit.
 Neither candidate has sensor or navigation acceptance yet.
+
+The first Go2 run (`standing-go2-v1`, source `4c7ebca`) stopped during startup
+at base height 0.248827 m, before a standing observation window. This reused
+the Spot example's 0.8 m spawn height; the audited Go2 training initial height
+is 0.4 m (Spot's is 0.5 m). Do not call that attempt a stationary-policy
+comparison or relax its abort threshold. The next source uses each policy's
+audited training initial height and verifies it from the loaded configuration.
+It also explicitly matches the documented multiply friction/restitution
+combine modes, instead of leaving PhysX's default combine mode implicit.
+Both setup changes are recorded; old results remain failed and unchanged.

@@ -78,7 +78,7 @@ def main():
         from isaacsim.robot.policy.examples.robots.spot import SpotFlatTerrainPolicy
         from isaacsim.robot.policy.examples.robots.go2 import Go2FlatTerrainPolicy
         from isaacsim.storage.native import get_assets_root_path
-        from pxr import Gf, UsdGeom, UsdLux, UsdPhysics, UsdShade
+        from pxr import Gf, PhysxSchema, UsdGeom, UsdLux, UsdPhysics, UsdShade
         from robot.control.planar_velocity_command import bounded_body_velocity
         from robot.evaluation.quadruped_feasibility import root_observation, summarize_standing, summarize_tracking
 
@@ -100,6 +100,9 @@ def main():
         physics_material.CreateStaticFrictionAttr(1.)
         physics_material.CreateDynamicFrictionAttr(1.)
         physics_material.CreateRestitutionAttr(0.)
+        physx_material = PhysxSchema.PhysxMaterialAPI.Apply(material.GetPrim())
+        physx_material.CreateFrictionCombineModeAttr('multiply')
+        physx_material.CreateRestitutionCombineModeAttr('multiply')
         UsdShade.MaterialBindingAPI.Apply(floor.GetPrim()).Bind(material, materialPurpose='physics')
         light = UsdLux.DomeLight.Define(stage, '/World/Light')
         light.CreateIntensityAttr(1500)
@@ -118,11 +121,14 @@ def main():
         # Use the stock official USD path. This installed wrapper's explicit
         # usd_path branch has an uninitialized is_newton local; do not patch it.
         policy_class = SpotFlatTerrainPolicy if args.robot == 'spot' else Go2FlatTerrainPolicy
-        spot = policy_class(prim_path='/World/Quadruped', position=[0., 0., .8],
+        initial_height = .5 if args.robot == 'spot' else .4
+        spot = policy_class(prim_path='/World/Quadruped', position=[0., 0., initial_height],
             policy_path=str(Path(assets[policy_name]['path']).resolve()),
             env_config_path=str(Path(assets[env_name]['path']).resolve()))
         if spot._dt != physics_dt or spot._decimation != decimation:
             raise ValueError('policy timing differs from audited physics/policy-rate contract')
+        if spot.policy_env_params['scene']['robot']['init_state']['pos'][2] != initial_height:
+            raise ValueError('spawn height differs from audited training initial state')
         timeline = omni.timeline.get_timeline_interface()
         phases = [('settle', args.settle_seconds, [0., 0., 0.]), ('standing', 3.2, [0., 0., 0.])]
         if args.stage == 'tracking':
@@ -208,6 +214,7 @@ def main():
         report = dict(stage=args.stage, passed=bool(own_standing and own_standing['passed'] and not failures
                 and (args.stage == 'standing' or tracking and tracking['passed'])),
             settle_seconds=args.settle_seconds, robot=args.robot,
+            initial_base_height_m=initial_height, ground_friction_combine='multiply',
             standing=own_standing, tracking=tracking, failures=failures,
             asset_sha256={k: v['sha256'] for k, v in assets.items()},
             source_files_sha256=source_hashes(), policy_class=type(spot).__name__,

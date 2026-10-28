@@ -2629,3 +2629,8 @@
   Preserve Go2training200Hzphysics/50Hzpolicy vsSpot500/50, alloriginalbench
   tolerances and source/asset gates. Root-fileaudit not complete dependency/
   texturelicense audit; no sensor/navigation/replacement acceptance yet.
+- First Go2 standing-go2-v1 4c7ebca stopped duringstartup atz.248827<.25,
+  beforestanding; common.8mspawn differed fromaudited Go2training.4m/Spot.5m.
+  Separate retry matches eachtraining initialheight and explicit multiply
+  friction/restitution combine modes. Preserveabort/standing limits and all
+  failedreports; do not attribute incorrectinitialsetup to provenpolicy failure.
