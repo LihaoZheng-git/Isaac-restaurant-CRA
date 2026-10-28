@@ -1,213 +1,162 @@
-# Separate quadruped feasibility comparison
+# Quadruped command-interface feasibility comparison
 
-The user approved a comparison with a laterally moving quadruped, rather than
-replacing Carter immediately. The motivation is the control interface: Carter
-executes `(v, omega)` through unicycle dynamics; a legged velocity policy may
-accept `(vx, vy, omega)`. An arbitrary planar velocity is still an idealized
-command until actual tracking is validated. Existing Carter results, source
-clocks, CRA uncertainty policy, safety checks and merge holds remain unchanged.
-The latest user preference is to demonstrate passing in response to observed
-approaching motion and a predicted encounter, rather than carrying the separate
-quiet-person early-preparation policy into the preferred demonstration.
+The tested stock Spot policy is **not ready to replace Carter at the current
+low navigation speeds**. It accepts body `(vx,vy,wz)` commands, but this
+installation/setup did not track the tested 0.15–0.20 m/s translation commands
+closely enough and exceeded the unchanged 2 cm stopping gate. This is a
+bounded interface result, not a claim about every quadruped or a proven
+internal policy deadband. No quadruped CRA/Safe-SAGE navigation was enabled.
 
-## Candidate and provenance
+## Final native result
 
-The installed Isaac Sim is `6.0.1-rc.7+release.42383.32955d8d.gl`, with
-`isaacsim.robot.policy.examples` version 5.2.12. Its stock
-`SpotFlatTerrainPolicy` observes 48 values and accepts body-frame
-`(vx, vy, wz)`. It outputs twelve joint-position targets. The official matching
-configuration specifies physics dt 0.002 s, decimation 10, action scale 0.2,
-and flat-ground friction 1.0. No environment upgrade or training is used.
+Frozen source: `f3e6479e7c41fc467aebf5f7b728160cb55ae808`.
 
-Downloaded unmodified files from the configured official asset root
-`https://omniverse-content-production.s3-us-west-2.amazonaws.com/Assets/Isaac/6.0`:
+The independent `standing-spot-v7` and tracking run's own standing gates passed
+with 15 s initial settling, then 160 distinct observations over approximately
+3.2 s: maximum XY drift 0.000100 m, yaw drift 0.000114 rad and tilt 0.034062 rad.
+The robot was freely standing, with no mount. This settling occurs before
+assessment/movement; no scheduled navigation observation pause was introduced.
+
+| Movement phase | Requested body command (m/s, m/s, rad/s) | Settled XY RMSE (m/s) | Yaw RMSE (rad/s) | Following zero-command displacement (m) |
+| --- | --- | --- | --- | --- |
+| Forward | (0.20, 0, 0) | 0.201330 | 0.015031 | 0.075126 |
+| Lateral | (0, 0.15, 0) | 0.149853 | 0.006587 | 0.042998 |
+| Yaw | (0, 0, 0.30) | 0.065857 | 0.036255 | 0.019379 |
+| Combined | (0.15, 0.10, 0) | 0.179748 | 0.008178 | 0.064007 |
+
+Translation RMSE acceptance remains <=0.08 m/s, yaw <=0.15 rad/s, stopping
+<=0.02 m. Forward/lateral/combined tracking and their stopping phases failed;
+yaw and its stopping phase passed. Settled median translation was near zero
+in the failed moving phases. The trace retains the initial response and
+subsequent drift. Stop displacement starts at the first zero-command sample,
+including braking; it is not only late settled drift. All requested axes were
+exercised. No speed floor, policy-command boost or relaxed stopping threshold
+was used to improve the result. The exact cause requires further investigation.
+
+The final report SHA-256 is
+`8fd6fd250dbb46beaf871729e6a4af83267e01af14b266b13b757dd016bc1b4b`.
+Local artifacts are under
+`outputs/quadruped_feasibility/tracking-spot-v7/`: `report.json`, `records.json`,
+`native.mp4`, `native-current.png`, `command-tracking-v1.png` and its immutable
+report-hash companion. The sibling invocation/launch files preserve the actual
+command and source. Saved reports, not launcher exit codes, establish results.
+
+## What was and was not compared
+
+Carter's already accepted restaurant run remains unchanged: three goals,
+0.922686 m minimum independent clearance, 0.002754 m stopping drift, and a
+separate smoothing failure at a 0.70 s nearby hold. It is a **historical
+navigation reference**, not a matched actuation experiment or causal platform
+comparison. See `predictive_guidance_continuity.md`.
+
+A new Carter flat-floor bench did not earn a standing gate. Its first two
+attempts stopped on root-height setup guards. A strictly non-accepting geometry
+diagnostic later recorded XY drift 0.005490 m and yaw drift 0.044622 rad
+(>0.03) during its observation window. No Carter tracking trial was authorized
+by that diagnostic. Carter's inability to execute lateral velocity is explicit;
+its bench supports only forward/yaw phases and never projects a lateral command
+onto the wheels. No new matched human-passing comparison has been completed.
+
+Go2 has no accepted standing gate here: attempts stopped during startup, most
+recently at root z=0.249937 m. The common height envelope is not a calibrated
+Go2 fall detector; do not infer general Go2 instability from this setup.
+
+Before quadruped navigation, a low-speed-capable locomotion policy or separately
+reported tracking adapter must pass command/stop gates, then body-mounted RGB
+and LiDAR need standing and walking validation, a swept-footprint/tracking-error
+treatment, and the original CRA/field/freshness/continuity/MPC/analytical/
+clearance/arrival/stopping gates. Existing Carter and CRA modules are unchanged.
+No primary/main/PI-demo/long-service/PR117 hold is released.
+
+The latest user preference remains observed approaching motion/predicted
+encounter for pronounced passing. Quiet-person early preparation is a separate
+ablation; no such policy was added to a quadruped. The waypoint nominal must
+remain obstacle-unaware and runtime CRA must remain visual/physical.
+
+## Audited candidates and implementation
+
+Installed Isaac Sim: `6.0.1-rc.7+release.42383.32955d8d.gl`;
+`isaacsim.robot.policy.examples` 5.2.12. Stock Spot and Go2 wrappers use 48
+observations and output twelve joint-position targets. Spot's audited config
+uses 500 Hz physics / 50 Hz policy (dt .002, decimation 10, action scale .2).
+Go2 uses 200 Hz / 50 Hz (.005, 4). Carter uses its unchanged controller and
+60 Hz physics. Different plant/timing configurations are explicit, not a matched
+latency benchmark. No package upgrade, new training or installed-source patch.
+
+Official root:
+`https://omniverse-content-production.s3-us-west-2.amazonaws.com/Assets/Isaac/6.0`.
 
 | File | SHA-256 |
 | --- | --- |
-| `Isaac/Samples/Policies/Spot_Policies/spot_policy.pt` | `d95d675e8b080d5c84a2a2779d165ff7ecd3e34d24b233c083242e615a3d589a` |
-| `Isaac/Samples/Policies/Spot_Policies/spot_env.yaml` | `397440818604ca7cf0cb79c6012325f2bba292029ad0c2d5df5fd64b531d2dbc` |
-| `Isaac/Robots/BostonDynamics/spot/spot.usd` | `dbe17178d8507aa31a82e8f8582606c2da5694ea8d2e24c77e50f1ff149689cb` |
+| Spot `spot_policy.pt` | `d95d675e8b080d5c84a2a2779d165ff7ecd3e34d24b233c083242e615a3d589a` |
+| Spot `spot_env.yaml` | `397440818604ca7cf0cb79c6012325f2bba292029ad0c2d5df5fd64b531d2dbc` |
+| Spot `spot.usd` | `dbe17178d8507aa31a82e8f8582606c2da5694ea8d2e24c77e50f1ff149689cb` |
+| Go2 `physx_policy.pt` | `984c802b8acd68c3199605ff36603f91ac9f3192eb1ebcfd80b0e764831abe0f` |
+| Go2 `physx_env.yaml` | `da282802fc3bec2f4d1a80818276680b91f73a716e26069bfee52e3fdf4d19af` |
+| Go2 `go2.usda` | `29405c5d2a29b1a80e268df5de23898cb8f48ce95646352c25aeca512bfcb3df` |
+| Carter `nova_carter.usd` | `462c3e91703c2f3aead2f15520a76c026bca1327fa61c40b268688d8711f938f` |
 
-The local manifest is under `outputs/quadruped_feasibility/asset-audit-v1/`.
-Runtime verifies the root USD against these actual downloaded bytes. The stock
-Python source headers specify Apache-2.0, while its package license notice is
-proprietary. Do not describe all weights/assets as Apache-2.0 or redistribute
-them. This bench imports the installed wrapper and uses NVIDIA assets locally
-under the existing Isaac installation's terms; downloaded assets stay ignored.
-See the [official example](https://docs.isaacsim.omniverse.nvidia.com/6.0.1/robot_simulation/ext_isaacsim_robot_policy_example.html)
+Local manifests live in `asset-audit-v1`, `go2-asset-audit-v1` and
+`carter-asset-audit-v1` under the experiment output directory. Runtime verifies
+the root USD against its downloaded original. Go2 references further Menagerie
+payloads; used USD-layer identities are retained, not a complete dependency or
+texture-license audit. Python source headers specify Apache-2.0, while the
+package license notice is proprietary. Do not describe all weights/assets as
+Apache or redistribute them; assets stay ignored and the installed wrapper is
+imported. See the [official example](https://docs.isaacsim.omniverse.nvidia.com/6.0.1/robot_simulation/ext_isaacsim_robot_policy_example.html)
 and [additional materials terms](https://www.nvidia.com/en-us/agreements/enterprise-software/isaac-sim-additional-software-and-materials-license/).
 
-The installed Spot wrapper has an uninitialized `is_newton` local in its
-explicit-USD-path branch. Use its stock default official USD path with verified
-bytes, not an installed-source patch. Policy/config paths point to the local
-audited originals. Compatibility is not established merely by finding files.
+`robot/control/planar_velocity_command.py` rotates fixed-frame velocity using
+current yaw and rejects out-of-domain commands (translation norm .25 m/s,
+yaw .8 rad/s) rather than silently clipping. It is not integrated into the
+safety controller and cannot send arbitrary planar commands to Carter wheels.
+`robot/evaluation/quadruped_feasibility.py` validates strict-JSON root samples,
+source ordering, phase completeness, platform root conventions and gates.
+The standalone bench requires a fresh output path and a matching independently
+passed standing report/source/assets/settling duration before tracking, and
+repeats its own standing gate. External camera and root truth are evaluation
+only, not robot sensing, mass, CRA or navigation input.
 
-## Gates and comparison scope
+## Setup diagnostics and preserved failures
 
-`scripts/demos/quadruped_velocity_isaac.py` runs a separate open-space bench.
-Its external camera and root-state samples are evaluation information only;
-they are not the robot's perception system or CRA inputs. First settle for 2 s,
-then observe at least 3 s at zero velocity commands, requiring <=2 cm root XY
-drift, <=0.03 rad yaw drift, <=10 degree tilt and base height 0.3..0.8 m.
-This is a freely standing robot, not a fixed mount.
+All output cases below remain unchanged. The experiment inventory stores their
+original report hashes and source revisions, including missing-report failures.
 
-Tracking requires an independent passed standing report with matching asset
-and source hashes and repeats its own standing gate before movement. Four
-bounded body-command phases exercise forward `(0.2,0,0)`, lateral `(0,0.15,0)`,
-yaw `(0,0,0.3)` and combined `(0.15,0.1,0)` commands. Every phase is followed by
-zero commands. Settled tracking RMSE limits are 0.08 m/s and 0.15 rad/s; these
-are explicit engineering acceptance limits, not calibrated error bounds. The
-2 cm stopping gate includes braking displacement from the first zero-command
-sample, not just late settled drift. Whole phases retain upright/height checks.
-Zero command is a gait-policy command, not a promise of zero physical motion.
+| Case | Source | Outcome |
+| --- | --- | --- |
+| `standing-v1` | `bd09473` | Video saved, result report missing; launcher zero is not acceptance. Exact failure lacked traceback. |
+| `standing-v2` | `dd2cf43` | Failed yaw .074433 rad after 2 s settling. |
+| `standing-v3` | `be93e9c` | Failed yaw .045683 rad after 10 s settling. |
+| `standing-go2-v1` | `4c7ebca` | Startup abort using common .8 m spawn; not a valid policy comparison. |
+| `standing-spot-v4`, `standing-go2-v2` | `22bfe17` | Startup aborts after training-height/material correction. |
+| `standing-spot-v5` | `c1b3eae` | After one startup restore, failed XY .030279 m / yaw .062681 rad with 10 s settling. |
+| `standing-go2-v3` | `c1b3eae` | Startup root-height abort; no movement gate. |
+| `standing-spot-v6`, `tracking-spot-v6` | `c1b3eae` | Standing passed at 15 s; movement suite failed; older render-timeline samples retained. |
+| `standing-carter-v1` | `61d8716` | Incorrect root-height setup guard, no observation acceptance. |
+| `standing-carter-v2` | `2218ed5` | Startup height abort before observation. |
+| `geometry-carter-v1` | `f3e6479` | Explicit diagnostic-only, always false; yaw gate also failed. |
+| `standing-spot-v7`, `tracking-spot-v7` | `f3e6479` | Final physics-clock standing pass / movement failure above. |
 
-`fixed_to_body_velocity` rotates fixed-frame planar commands using current
-body yaw. `bounded_body_velocity` rejects commands beyond a 0.25 m/s translation
-norm or 0.8 rad/s yaw rate; silent clipping would alter a safety-checked command.
-These helpers are not integrated into runtime Safe-SAGE and cannot command
-Carter's wheels.
+Native float32 vectors are copied into finite Python scalar lists; exceptions
+are exported before `SimulationApp.close()` so failures cannot disappear behind
+an exit zero. Initial root poses/gains/targets are restored ONCE after physics
+warm-up, with pre-restore pose/velocity and DOF ordering saved. No resets occur
+during settling, observation or movement. Training initial heights .5 m Spot /
+.4 m Go2 and explicit multiply friction/restitution modes are recorded. The
+installed Spot wrapper's explicit-USD branch has an uninitialized local, so
+its stock default official root is verified instead of patching installed code.
 
-Only after locomotion gates pass can new body-mounted RGB/LiDAR sensing be
-validated while standing and then walking. A human-passing comparison also
-needs a conservative measured/configured swept footprint, tracking-error
-treatment and the same CRA/MPC/analytical/geometry/continuity/arrival/stop gates.
-Avoidance must remain online with an obstacle-unaware waypoint nominal. Early
-preparation/guidance-tracking ablations should not be silently imported into a
-paper-style baseline. Changing platforms is not a causal CRA comparison;
-matched baseline/CRA evaluation would need to run on the selected same platform.
+The final source checks stage metadata (1 m/unit, Z-up) and samples the physics
+clock. Earlier render-timeline epochs are not rewritten. Carter's restaurant
+placement z=.07382 is not its z=0 flat-floor rest convention; audited drive-wheel
+cylinders span z~0..0.28 at root zero, radius .14. Carter's explicit root-z gate
+(-.02.. .1 m) is separate from Spot's .3.. .8 m; root z is not body clearance or
+fall height. Raw caster BBox extents were stale/huge and must never enter control
+or be advertised as a completed footprint audit. `--stage geometry` uses broad
+root monitoring only for zero-command diagnosis, always reports false and can
+never authorize tracking. No acceptance bound was relaxed to obtain movement.
 
-Native results pending. All 3,114 unit tests passed in 106.77 s, including seven
-focused interface/evaluation tests. Ruff, compilation and CLI help passed.
-No complete perception, navigation, smoother-passing or platform-replacement
-acceptance is established yet. No main/PI-demo/long-service/PR117 release.
-
-The first native standing run at `bd09473` saved images/video but no result
-report. Its wrapper exited zero; this is explicitly **not a passed gate**.
-Preserve `standing-v1` and its sibling launch/invocation files. Native
-float32 velocity components need strict-JSON conversion; the follow-up adds a
-typed observation copy and a strict JSON regression, plus exception export
-before `SimulationApp.close()` so a future failure remains visible. The first
-run's missing traceback does not independently establish its exact failure.
-
-At `dd2cf43`, `standing-v2` exported a valid **failed** report: 161 zero-command
-observations, XY drift 0.005832 m, yaw drift 0.074433 rad (>0.03), tilt
-0.004613 rad. No locomotion trial followed. Per-second median yaw rate decayed
-from about -0.047 rad/s during second 1 to -0.0165 during second 5. The next
-separate retry may use explicit `--settle-seconds 10` before the unchanged
-3.2 s observation and acceptance gates. The legacy 2 s default stays. This
-tests an initialization transient, not relaxed tolerances or a passed old run.
-Tracking requires the same explicit settling period as its independent gate.
-
-`standing-v3` at `be93e9c` also failed yaw after 10 s settling: 160 samples,
-XY drift 0.003892 m, yaw drift 0.045683 rad, tilt 0.003937 rad. Do not relax the
-0.03 rad limit or send locomotion commands based on this result. The second
-installed candidate is `Go2FlatTerrainPolicy`, also with 48 observations and
-body `(vx,vy,wz)`. Its matching official PhysX configuration uses dt 0.005 s
-and decimation 4 (200 Hz physics / 50 Hz policy), preserved separately from
-Spot's timing. An explicit `--robot go2` must match its own manifest and
-independent standing report. Sampling remains 50 Hz on either candidate.
-
-The Go2 audit is `outputs/quadruped_feasibility/go2-asset-audit-v1/`:
-
-- `physx_policy.pt`: `984c802b8acd68c3199605ff36603f91ac9f3192eb1ebcfd80b0e764831abe0f`
-- `physx_env.yaml`: `da282802fc3bec2f4d1a80818276680b91f73a716e26069bfee52e3fdf4d19af`
-- `go2.usda`: `29405c5d2a29b1a80e268df5de23898cb8f48ce95646352c25aeca512bfcb3df`
-
-These are unmodified NVIDIA asset-root files; the root USD references further
-Menagerie payloads. Keep used-layer identities in native reports and do not
-describe this root-file audit as a complete dependency/texture license audit.
-Neither candidate has sensor or navigation acceptance yet.
-
-The first Go2 run (`standing-go2-v1`, source `4c7ebca`) stopped during startup
-at base height 0.248827 m, before a standing observation window. This reused
-the Spot example's 0.8 m spawn height; the audited Go2 training initial height
-is 0.4 m (Spot's is 0.5 m). Do not call that attempt a stationary-policy
-comparison or relax its abort threshold. The next source uses each policy's
-audited training initial height and verifies it from the loaded configuration.
-It also explicitly matches the documented multiply friction/restitution
-combine modes, instead of leaving PhysX's default combine mode implicit.
-Both setup changes are recorded; old results remain failed and unchanged.
-
-At `22bfe17`, corrected-height Go2 and Spot retries stopped during startup,
-before standing windows. Go2 reached 0.244596 m height and -0.466726 rad roll;
-Spot reached 0.454342 rad roll after its body was pushed upward to about 0.88 m.
-The stock first-post-physics initialization lets warm-up advance the authored
-posture before new joint positions/gains/targets are installed. The next
-separate setup restores the audited initial root pose/zero velocity ONCE after
-warm-up, installs initial joint targets and executes the first zero-command
-policy update before the next tick. `initialization.json` preserves the actual
-pre-restore state and DOF ordering. No resets occur during the settling,
-standing or movement phases. This is an initialization hypothesis/retry, not a
-retroactive pass, mount, body-motion override or alteration of acceptance gates.
-
-## First valid Spot interface result, before the Carter comparison
-
-At `c1b3eae`, Spot's 10 s retry (`standing-spot-v5`) completed but failed XY
-0.030279 m and yaw 0.062681 rad. The terminal yaw rate had fallen to about
--0.00166 rad/s. A separately labeled 15 s settling trial (`standing-spot-v6`)
-then **passed** all unchanged gates: 160 samples, XY drift 0.000100 m, yaw drift
-0.000114 rad, maximum tilt 0.034062 rad. No source/evidence clock is renewed by
-this initial settling. It precedes any movement assessment.
-
-The independent and own standing gates passed before `tracking-spot-v6`.
-That complete open-space suite **failed** low-speed translation tracking:
-forward/lateral/combined RMSE 0.201330 / 0.149853 / 0.179669 m/s at commands
-0.2 forward / 0.15 lateral / (0.15,0.1) combined. Corresponding settled median
-body translation was close to zero. Yaw tracking at 0.3 rad/s passed
-(RMSE 0.036255 rad/s). Zero-command displacement after forward/lateral/combined
-was 0.075126 / 0.042998 / 0.063994 m, exceeding the unchanged 2 cm stopping
-gate; yaw-stop translation 0.019379 m passed. This is evidence about this
-policy/setup at these low commands, not every quadruped or a proven internal
-deadband cause. No commanded translational speed was increased to get a pass.
-
-Go2 with the one-time restore (`standing-go2-v3`) still crossed the startup
-root-height abort at 0.249937 m; it has no accepted standing or movement gate.
-The common quadruped height envelope itself is not a calibrated Go2 fall
-detector. Do not infer general Go2 instability from this failed bounded setup.
-
-The next source adds Carter on the same flat bench, using the unchanged
-`NovaCarterController`, 60 Hz physics, 0.07382 m configured initial root height,
-and only its executable forward/yaw phases. Lateral and combined phases are
-explicitly unsupported, not projected or falsely passed. Its different root
-origin requires explicit 0.03..0.2 m height bounds; this does not change Spot's
-0.3..0.8 m bounds, 2 cm XY/stop, 0.03 rad yaw or tracking gates. This is an
-interface calibration, not matched human navigation or a causal CRA comparison.
-The official Carter root SHA-256 is
-`462c3e91703c2f3aead2f15520a76c026bca1327fa61c40b268688d8711f938f`.
-
-New samples and phase switching use `SimulationManager.get_simulation_time()`
-in the physics callback. Previous bench samples used the rendering timeline,
-which can label multiple physics ticks with one render epoch. Earlier Spot
-50 Hz samples had no duplicate epochs, but the new clock is necessary for a
-60 Hz Carter comparison. Keep the older records unchanged and repeat matching
-independent/own standing gates at the new source before movement.
-
-The expanded comparison source passed all 3,118 unit tests in 108.79 s,
-including eleven focused interface/evaluation tests. Ruff, compilation,
-CLI help and whitespace checks passed before its native source freeze.
-
-The first Carter attempt (`standing-carter-v1`, `61d8716`) stopped on its
-incorrect height guard before observation. The zero-motion geometry audit
-confirms the new stage is 1 m/unit and Z-up. Carter's authored drive-wheel
-collision cylinders span approximately z=0..0.28 at root z=0: its wheel radius
-is 0.14 m. The restaurant's 0.07382 m initial placement is not the root resting
-height on this separately authored z=0 flat floor. The corrected bench starts
-Carter at root z=0 and explicitly checks root z in -0.02..0.1 m; Spot's bounds
-and every XY/yaw/tracking/stopping limit stay unchanged. Root z is a frame
-convention, not physical body clearance or fall height. Runtime checks stage
-units/up-axis and the audited Carter drive-wheel radius before moving.
-
-The audit also found stale enormous caster-cylinder BBox extents; its raw
-all-collider minimum is invalid as a physical robot envelope. Do not feed that
-diagnostic into control or claim a completed swept-footprint audit. The actual
-drive-wheel cylinders and configured radius establish only this flat-ground
-root convention. Previous failed reports are preserved, not re-scored.
-
-The corrected Carter standing attempt also reached the height abort before
-the observation window. A separate `--stage geometry` diagnostic is therefore
-allowed to settle at zero commands while logging native link transforms to
-resolve the remaining dynamic root convention. It can NEVER return a passed
-gate or authorize tracking. Its broad -2 m root diagnostic abort is not a
-standing/navigation acceptance bound; finite/upright monitoring remains. All
-standing/tracking limits stay as recorded until an independently justified
-frame correction is evaluated in a fresh run. This is not an obstacle model.
+Final source `f3e6479` passed all 3,118 unit tests in 107.37 s, including eleven
+focused interface/evaluation tests. Ruff, compilation, CLI help and whitespace
+checks passed. The earlier expanded source's 108.79 s test run is preserved
+separately. No native process remained running when results were committed.

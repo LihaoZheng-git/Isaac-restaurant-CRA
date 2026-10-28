@@ -2666,3 +2666,18 @@
   root convention. It ALWAYSreports passedfalse/diagnostic_only; cannotauthorize
   tracking. Its-2m diagnostic abort is not acceptance; standing/trackingbounds
   unchanged, no passed-oldtrial or controlgeometryclaim. Physicssourceproofkept.
+- Final f3e6479 Spot physics-clock standing-spot-v7 and ownstanding PASS after
+  15ssettle:160rows/.000100mXY/.000114radyaw. Tracking-spot-v7 FAILED XYRMSE
+  forward.201330/lateral.149853/combined.179748; yawRMSE.036255passes. Following
+  zerocommand travel.075126/.042998/.064007 exceeds2cm; yawstop.019379passes.
+  Preserve SHA8fd6fd250dbb46beaf871729e6a4af83267e01af14b266b13b757dd016bc1b4b.
+  Actualnearzero settledtranslation at testedlowcommands is not proveninternal
+  deadband or a generalquadruped failure. Carternewflatbench has NO standing/
+  trackingacceptance: diagnostic-only yaw.044622>.03 despiteXY.005490. Historical
+  Carter3goal/.70shold result is separate, not matched platform comparison.
+  NO quadruped RGB/LiDAR/CRA/SafeSAGE/human-navigation/replacement/main/PI/PR117
+  release. A low-speedcapable policy or separatelyreported trackingadapter and
+  stopping/error/sweptgeometry gates precede any such integration. Do not boost
+  speed or relaxstops to produce a pass. See docs/quadruped_feasibility.md.
+  Finalf3e6479regression3118units107.37s/elevenfocused/RuffcompileCLI/diffPASS;
+  all15nativecase reports/invocations inventoried, failedreportsunchanged.
