@@ -1,5 +1,15 @@
 # CRA repository guidance
 
+- Latest Carter demo decision: exclude quiet-person early preparation; retain
+  stationary-person occupancy and normal CRA/Safe-SAGE intervention. Improve
+  turning feasibility after observed approaching motion, not anticipation of
+  authored walking. Existing explicit guidance tracking remains a separate
+  ablation. Preserve first low-progress and initial-geometry rejected requests
+  in the opt-in trusted replay archive, with original clocks and worker timing;
+  never replay them into control. See docs/carter_feasible_turning.md. Current
+  boundary rejection is not proof that new seeds can fix the already blocked
+  initial state. All physical/source/arrival/stop gates and holds remain.
+
 - Keep waypoint nominal control obstacle-unaware; MPC and analytical CBF create online intervention.
 - Runtime CRA uses visual/physical estimation without language or VLM reasoning.
 - Preserve measured, inferred, prior, oracle, fallback, and unavailable provenance. Missing evidence is not zero. Object height and center height are not fall height.

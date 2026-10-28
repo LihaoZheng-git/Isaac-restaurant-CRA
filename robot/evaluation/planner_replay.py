@@ -67,6 +67,12 @@ def save_planner_replay(directory, control, request, result):
     # that a five-second bucket would otherwise overwrite. Export remains in
     # worker timing; these files never enter control or renew evidence clocks.
     special = []
+    if not result.success and result.status == 'unsafe_configuration_boundary':
+        special.append('first-current-geometry-rejection')
+    guidance = getattr(result, 'guidance_tracking', None)
+    if (guidance is not None and guidance.reason == 'no_exact_safe_progress_reference'
+        and np.asarray(result.first_command)[0] < .05):
+        special.append('first-no-progress-reference')
     if rear.get('context', {}).get('mode') == 'rear' and rear.get('selected') is False:
         special.append('first-rear-unavailable')
     if rear.get('selection_tier') == 'checked_turn_first_fallback':

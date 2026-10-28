@@ -95,3 +95,30 @@ def test_rear_debug_snapshot_preserves_first_failure_or_fallback_request(tmp_pat
     assert hashlib.sha256(original).hexdigest() == meta['sha256']
     restored=pickle.loads(original)  # This test generated the trusted bytes.
     np.testing.assert_array_equal(restored['request'][0],np.zeros(3))
+
+
+@pytest.mark.parametrize('name,status,guidance', [
+    ('first-current-geometry-rejection', 'unsafe_configuration_boundary', None),
+    ('first-no-progress-reference', 'diagnostic',
+     SimpleNamespace(reason='no_exact_safe_progress_reference')),
+])
+def test_turning_diagnostic_preserves_original_failure_after_bucket_is_replaced(
+    tmp_path, name, status, guidance,
+):
+    perception = make_runtime()
+    perception.initialize(make_observation(1, 1.), make_provider())
+    paper = make_filter()
+    control = SafeSAGEControlRuntime(mpc=LaplaceGuidanceTrackingMPC(paper, config()),
+        backup_filter=SafeSAGEUnicycleCBFFilter(paper))
+    result = SimpleNamespace(success=False, status=status, first_command=(0., 0.),
+        guidance_tracking=guidance)
+    request = (np.zeros(3), (.2, 0.), perception.field, None, (1., 0.))
+    save_planner_replay(tmp_path, control, request, result)
+    original = (tmp_path / f'{name}.pickle').read_bytes()
+    save_planner_replay(tmp_path, control, (np.ones(3), *request[1:]), result)
+    assert (tmp_path / f'{name}.pickle').read_bytes() == original
+    meta = json.loads((tmp_path / f'{name}.json').read_text())
+    assert hashlib.sha256(original).hexdigest() == meta['sha256']
+    restored = pickle.loads(original)  # This test generated the trusted bytes.
+    np.testing.assert_array_equal(restored['request'][0], np.zeros(3))
+    assert restored['request'][2].sensor_timestamp_seconds == 1.
