@@ -127,3 +127,15 @@ audited training initial height and verifies it from the loaded configuration.
 It also explicitly matches the documented multiply friction/restitution
 combine modes, instead of leaving PhysX's default combine mode implicit.
 Both setup changes are recorded; old results remain failed and unchanged.
+
+At `22bfe17`, corrected-height Go2 and Spot retries stopped during startup,
+before standing windows. Go2 reached 0.244596 m height and -0.466726 rad roll;
+Spot reached 0.454342 rad roll after its body was pushed upward to about 0.88 m.
+The stock first-post-physics initialization lets warm-up advance the authored
+posture before new joint positions/gains/targets are installed. The next
+separate setup restores the audited initial root pose/zero velocity ONCE after
+warm-up, installs initial joint targets and executes the first zero-command
+policy update before the next tick. `initialization.json` preserves the actual
+pre-restore state and DOF ordering. No resets occur during the settling,
+standing or movement phases. This is an initialization hypothesis/retry, not a
+retroactive pass, mount, body-motion override or alteration of acceptance gates.

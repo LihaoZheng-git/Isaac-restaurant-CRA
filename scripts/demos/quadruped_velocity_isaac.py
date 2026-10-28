@@ -140,6 +140,7 @@ def main():
         records, failures = [], []
         initialized, finished, ticks = False, False, 0
         own_standing = None
+        initialization = {}
 
         def quaternion_state(quat):
             w, x, y, z = quat/np.linalg.norm(quat)
@@ -155,7 +156,30 @@ def main():
             nonlocal initialized, finished, ticks, own_standing
             try:
                 if not initialized:
+                    old_position, old_orientation = spot.robot.get_world_poses()
+                    old_linear, old_angular = spot.robot.get_velocities()
                     spot.initialize()
+                    # Physics warm-up has already run on the authored posture.
+                    # Restore the configured initial state once, before any
+                    # assessment, and install targets before the next tick.
+                    spot.robot.set_world_poses(positions=[[0., 0., initial_height]],
+                        orientations=[[1., 0., 0., 0.]])
+                    spot.robot.set_velocities(linear_velocities=[[0., 0., 0.]],
+                        angular_velocities=[[0., 0., 0.]])
+                    spot.robot.set_dof_position_targets(spot.default_pos.detach().cpu().numpy())
+                    spot.forward(dt, torch.zeros(3, dtype=torch.float32))
+                    initialization.update(timestamp=float(timeline.get_current_time()),
+                        old_root_position=old_position.numpy()[0].tolist(),
+                        old_root_orientation=old_orientation.numpy()[0].tolist(),
+                        old_linear_velocity=old_linear.numpy()[0].tolist(),
+                        old_angular_velocity=old_angular.numpy()[0].tolist(),
+                        restored_root_position=[0., 0., initial_height],
+                        restored_root_orientation=[1., 0., 0., 0.],
+                        restored_root_velocity=[0., 0., 0., 0., 0., 0.],
+                        dof_names=list(spot.robot.dof_names),
+                        default_joint_positions=spot.default_pos.detach().cpu().numpy().tolist(),
+                        scope='one startup restore after native warm-up; no repeated state reset, mount or measurement-clock renewal')
+                    (args.output/'initialization.json').write_text(json.dumps(initialization, indent=2))
                     initialized = True
                     return
                 now = float(timeline.get_current_time())
@@ -215,6 +239,7 @@ def main():
                 and (args.stage == 'standing' or tracking and tracking['passed'])),
             settle_seconds=args.settle_seconds, robot=args.robot,
             initial_base_height_m=initial_height, ground_friction_combine='multiply',
+            initialization=initialization,
             standing=own_standing, tracking=tracking, failures=failures,
             asset_sha256={k: v['sha256'] for k, v in assets.items()},
             source_files_sha256=source_hashes(), policy_class=type(spot).__name__,

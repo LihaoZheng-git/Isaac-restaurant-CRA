@@ -2634,3 +2634,10 @@
   Separate retry matches eachtraining initialheight and explicit multiply
   friction/restitution combine modes. Preserveabort/standing limits and all
   failedreports; do not attribute incorrectinitialsetup to provenpolicy failure.
+- At22bfe17 Go2andSpot correctedheight retries stillabort beforestanding
+  (Go2z.244596/roll-.466726, Spotroll.454342/bodyz~.88). Nativewarm-up precedes
+  stock firstPOST initialization. Nextsetup may restore audited initialroot/
+  zerovelocity ONCE afterwarm-up, installjointtargets and firstzero policy
+  before nexttick. Loginitialization originalstate/DOForder; NEVER reset during
+  settling/standing/motion, renewepochs or loosenabort/gate. Hypothesisonly;
+  preserve oldfailedreports and requirefreshindependent/own standing.
