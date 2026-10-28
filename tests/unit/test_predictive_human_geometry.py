@@ -142,7 +142,7 @@ def test_invalid_current_envelope_is_transactional_and_duplicate_time_rejected()
         update(m, .1)
 
 
-@pytest.mark.parametrize('changes', [dict(horizon_seconds=1.21), dict(velocity_uncertainty_prior_mps=0.),
+@pytest.mark.parametrize('changes', [dict(horizon_seconds=2.01), dict(velocity_uncertainty_prior_mps=0.),
     dict(maximum_gap_seconds=.3), dict(minimum_samples=True), dict(maximum_fit_residual_m=np.nan)])
 def test_unbounded_invalid_configuration_rejected(changes):
     with pytest.raises(ValueError):

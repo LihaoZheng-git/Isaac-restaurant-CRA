@@ -41,6 +41,9 @@ parser.add_argument('--predictive-human-geometry', action='store_true',
                     help='separate zero-wheel LiDAR source-window motion/geometry PRIOR benchmark; future actor truth only scores it')
 parser.add_argument('--human-prediction-uncertainty-rate', type=float, default=.25,
                     help='explicit additional forecast-radius growth PRIOR in m/s; original current body radius unchanged')
+parser.add_argument('--human-prediction-horizon-seconds', type=float, choices=(1.2, 2.), default=1.2)
+parser.add_argument('--parallel-preparation', action='store_true',
+                    help='separate current-person early geometric preparation policy; no future walking-intent evidence')
 parser.add_argument("--human-body-contact-prior", type=float, default=None, metavar="SCORE",
                     help="explicit low nonzero human-body contact policy prior; legacy outline mode if omitted")
 parser.add_argument("--carry-bowl", action="store_true",
@@ -69,6 +72,9 @@ parser.add_argument(
     metavar=("KG", "LOWER", "UPPER"),
 )
 args = parser.parse_args()
+if (args.parallel_preparation and not args.predictive_human_geometry
+    or args.human_prediction_horizon_seconds != 1.2 and not args.parallel_preparation):
+    parser.error('extended preparation horizon requires explicit predictive geometry and parallel preparation')
 if (not math.isfinite(args.human_prediction_uncertainty_rate) or not .25 <= args.human_prediction_uncertainty_rate <= 1.
     or args.human_prediction_uncertainty_rate != .25 and not args.predictive_human_geometry):
     parser.error('forecast uncertainty growth requires explicit prediction and rate in[.25,1]m/s')
@@ -439,6 +445,8 @@ def main():
             identity_selection_body_envelope=args.identity_selection_body_envelope,
             predictive_human_geometry=args.predictive_human_geometry,
             human_prediction_uncertainty_rate=args.human_prediction_uncertainty_rate,
+            human_prediction_horizon_seconds=args.human_prediction_horizon_seconds,
+            parallel_preparation=args.parallel_preparation,
             camera_prim_path=CAMERA_PRIM_PATHS[args.rgb_camera],
         )
     phase = "idle_before"
@@ -723,6 +731,12 @@ def main():
         report['predictive_human_geometry_validation'] = prediction_report
         report['passed'] &= prediction_report['passed']
         save('predictive-human-geometry-validation.json', prediction_report)
+    if args.parallel_preparation:
+        from robot.evaluation.parallel_preparation_validation import validate_parallel_preparation
+        preparation_report = validate_parallel_preparation(sensor.records)
+        report['parallel_preparation_validation'] = preparation_report
+        report['passed'] &= preparation_report['passed']
+        save('parallel-preparation-validation.json', preparation_report)
     save("validation.json", report)
     print(json.dumps(report), flush=True)
     if not report["passed"]:

@@ -158,3 +158,15 @@ def test_nonlinear_rescue_uses_the_same_exact_prediction_values_and_analytic_jac
         temporal_safety_derivative=0., **inputs())
     assert len(captured['values']) == 36
     assert 'minimum_predictive_geometry_margin_m=' in status
+
+
+def test_explicit_two_second_horizon_retains_original_age_limit_and_exact_acceptance():
+    cfg = HumanGeometryForecastConfig(horizon_seconds=2., velocity_uncertainty_prior_mps=.5)
+    g = geometry(prediction(center=(5., 2.), velocity=(0., 0.), config=cfg))
+    m = SafeSAGEUnicycleMPC(make_filter(), SafeSAGEUnicycleMPCConfig(horizon_steps=10), predictive_geometry=g)
+    result = m.plan(np.zeros(3), (.2, 0.), **inputs())
+    assert result.success and result.command_sequence.shape == (10, 2)
+    assert m.revalidate_commands(np.zeros(3), result.command_sequence, predictive_geometry=g,
+        predictive_source_age_seconds=.3, **inputs())
+    assert not m.revalidate_commands(np.zeros(3), result.command_sequence, predictive_geometry=g,
+        predictive_source_age_seconds=.36, **inputs())

@@ -95,6 +95,8 @@ class RestaurantHumanSensorDiagnostic:
         identity_selection_body_envelope=False,
         predictive_human_geometry=False,
         human_prediction_uncertainty_rate=.25,
+        human_prediction_horizon_seconds=1.2,
+        parallel_preparation=False,
     ):
         self.stage, self.output = stage, output
         from robot.safety.motion_aware_passing import MotionAwarePassingConfig
@@ -108,7 +110,10 @@ class RestaurantHumanSensorDiagnostic:
             raise ValueError('component body envelope requires explicit parallel selector')
         if predictive_human_geometry and not identity_selection_body_envelope:
             raise ValueError('prediction bench requires an explicit current body envelope')
+        if parallel_preparation and not predictive_human_geometry:
+            raise ValueError('early preparation requires explicit predictive geometry')
         from robot.safety.predictive_human_geometry import HumanGeometryForecastConfig
+        from robot.safety.parallel_preparation import ParallelPreparationConfig
         passing_config = MotionAwarePassingConfig(require_visual_person_selection=True,
             encounter_geometry='oncoming_parallel',
             maximum_identity_prior_selection_age_seconds=maximum_identity_prior_selection_age_seconds
@@ -214,7 +219,9 @@ class RestaurantHumanSensorDiagnostic:
         )
         self.worker = LiveObjectPerception(
             predictive_human_geometry_config=HumanGeometryForecastConfig(
+                horizon_seconds=human_prediction_horizon_seconds,
                 velocity_uncertainty_prior_mps=human_prediction_uncertainty_rate) if predictive_human_geometry else None,
+            parallel_preparation_config=ParallelPreparationConfig() if parallel_preparation else None,
             motion_passing_config=passing_config if motion_aware_passing else None,
             human_body_envelope_config=self._identity_selection_envelope_config()
                 if identity_selection_body_envelope else None,
@@ -427,6 +434,9 @@ class RestaurantHumanSensorDiagnostic:
             self.passing_goal_world_xy,
             pose_source=epoch.lidar_pose.source,
             pose_status=epoch.lidar_pose.status,
+            nominal_route_direction_world_xy=(tuple((np.asarray(self.passing_goal_world_xy)-self.worker.anchor)
+                / np.linalg.norm(np.asarray(self.passing_goal_world_xy)-self.worker.anchor))
+                if self.worker.parallel_preparation is not None else None),
         )
         self.copied_scan = None
         # Cadence limits successful packets, not rejected/duplicate attempts.
@@ -461,6 +471,9 @@ class RestaurantHumanSensorDiagnostic:
                     "motion_aware_passing":result.diagnostics.get("motion_aware_passing"),
                     "human_body_envelope_priors":result.diagnostics.get("human_body_envelope_priors", ()),
                     "predictive_human_geometry":result.diagnostics.get("predictive_human_geometry"),
+                    "parallel_preparation":result.diagnostics.get("parallel_preparation"),
+                    "motion_passing_reference_track_ids":result.field.motion_passing_reference_track_ids,
+                    "motion_passing_reference_source_timestamp_seconds":result.field.motion_passing_reference_source_timestamp_seconds,
                     "applied_field_policies":result.diagnostics.get("applied_field_policies"),
                     "objects": [
                         {

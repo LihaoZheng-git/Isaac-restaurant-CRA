@@ -2466,3 +2466,26 @@
   proof; see docs/predictive_human_geometry.md. No smoothing fix is established.
   Finaltelemetry/result source:3021units108.31s/Ruffcompile/diffPASS. Reports and
   baselinehashesunchanged; no active native. DraftPR190 remainsunmerged/defaultOFF.
+- The user explicitly prioritizes a BROADER predictive-planning redesign before
+  PI-demo preparation. Separate --predictive-parallel-redesign candidate uses
+  explicit10steps/.2s (2s), growth.50mps PRIORS, originalfieldage<=.35 (max2.35s),
+  activation_h4/turntranslation1/outward0/guide2. Primary/defaults/body.40+.25/
+  physicalkinetic/CRA/lambda1.25/flux-1.7/limits/budgets/all exact,analytical,
+  source,physical,arrival,stop and .20nearcurve/.5s+50%hold gates stay unchanged.
+  New current-person preparation requires fresh same-frame initial visual cue,
+  ready current positive-LiDAR fit, one unambiguous forwardperson<=3.8m with
+  .15..1.6lateral; quietfit or currentoncoming only. Quiet geometry is NOT future
+  walking intent. It changes field/reference preference only. Normal motion
+  selector retains precedence. Holding keeps original8s visual/policy clocks,
+  currentfit/body/side/source<=.35; failed/expired releases, newfreshcue required
+  for later reselection. No factor/identity/occupancy/free-space/clock invention.
+  Preserve unresolved fragment guards; wider approach may avoid their nearwatch,
+  never erase or relabel unknown geometry. Native NEW forecast/preparation plus
+  oldactor/sensor/selection/body component and independent+own60 precede wheels.
+  Developmentreplay2.35s/.50:parked1261/moving972queries,ZEROmisses, not newnative
+  or general bounds. Longhorizon alone still near-stops in first-selected replay;
+  outward.35 recovery turn was rejected as design choice. Currentfield+linear
+  temporal forecast still retained, not a time-indexed futurefield. Nativepending.
+  See docs/predictive_parallel_redesign.md; no main/longservice/PR117 release.
+  Sourcefreeze3047units101.43s/Ruffcompile2CLI/diffPASS. Parkedcomponent supplies
+  configured NOMINAL robot-route direction explicitly, not authoredactor motion.

@@ -37,6 +37,8 @@ parser.add_argument('--predictive-human-geometry-ablation', action='store_true',
                     help='separate current-LiDAR constant-velocity body-envelope PRIOR; adds hard future MPC geometry, never changes primary CRA/field')
 parser.add_argument('--human-prediction-uncertainty-rate', type=float, default=.25,
                     help='explicit additional forecast-radius growth PRIOR in m/s, separate from unchanged current human body margin')
+parser.add_argument('--predictive-parallel-redesign', action='store_true',
+                    help='separate early current-person preparation and explicit 10-step/2s predictive MPC ablation; primary unchanged')
 parser.add_argument("--crossing-strategy", choices=("legacy", "rear-pass-or-yield", "yield-then-go"), default="legacy",
                     help="separate maneuver ablation; yielding requires exact predictive and analytical checks")
 parser.add_argument("--zero-tangential-bias-ablation", action="store_true",
@@ -261,13 +263,15 @@ parser.add_argument(
     help="optimizer candidate age cap; every executed horizon still needs fresh exact validation",
 )
 args = parser.parse_args()
+if args.predictive_parallel_redesign and not args.predictive_human_geometry_ablation:
+    parser.error('predictive parallel redesign requires the separate predictive geometry ablation')
 if (not math.isfinite(args.human_prediction_uncertainty_rate) or not .25 <= args.human_prediction_uncertainty_rate <= 1.
     or args.human_prediction_uncertainty_rate != .25 and not args.predictive_human_geometry_ablation):
     parser.error('forecast uncertainty growth requires explicit predictive geometry and rate in[.25,1]m/s')
 if args.predictive_human_geometry_ablation and (not args.parallel_guidance_ablation
     or args.human_body_envelope_radius is None or args.human_observed_occupancy_only
-    or args.mpc_horizon_steps != 6 or args.waypoint_mode != 'guides'):
-    parser.error('predictive human geometry requires the separate parallel route-guide ablation, active body prior and explicit six-step horizon')
+    or args.mpc_horizon_steps != (10 if args.predictive_parallel_redesign else 6) or args.waypoint_mode != 'guides'):
+    parser.error('predictive human geometry requires the separate parallel route-guide ablation, active body prior and explicit six-step (redesign: ten-step) horizon')
 if (not math.isfinite(args.guidance_turn_translation_fraction)
     or not 0 <= args.guidance_turn_translation_fraction <= 1
     or args.guidance_turn_translation_fraction > 0 and (not args.parallel_guidance_ablation
@@ -376,6 +380,7 @@ if (not math.isfinite(args.human_passing_identity_prior_max_age)
 if args.human_body_envelope_radius is not None:
     from robot.perception.human_body_envelope import HumanBodyEnvelopeConfig
     from robot.safety.predictive_human_geometry import HumanGeometryForecastConfig
+    from robot.safety.parallel_preparation import ParallelPreparationConfig
     try:
         HumanBodyEnvelopeConfig(body_radius_m=args.human_body_envelope_radius,
             centroid_uncertainty_m=args.human_envelope_centroid_uncertainty,
@@ -1109,7 +1114,9 @@ def main():
 
     perception = LiveObjectPerception(
         predictive_human_geometry_config=HumanGeometryForecastConfig(
+            horizon_seconds=2. if args.predictive_parallel_redesign else 1.2,
             velocity_uncertainty_prior_mps=args.human_prediction_uncertainty_rate) if args.predictive_human_geometry_ablation else None,
+        parallel_preparation_config=ParallelPreparationConfig() if args.predictive_parallel_redesign else None,
         segmenter=segmenter,
         mass_estimator=mass,
         contact_detector=contact,
@@ -1709,6 +1716,12 @@ def main():
         prediction = latest.field.predictive_human_geometry
         gate['predictive_geometry_ready'] = bool(prediction is not None and prediction.ready and prediction.forecasts)
         gate['passed'] = stationary_ready = bool(stationary_ready and gate['predictive_geometry_ready'])
+    if args.predictive_parallel_redesign:
+        from robot.evaluation.parallel_preparation_validation import validate_parallel_preparation
+        preparation_gate = validate_parallel_preparation(records)
+        gate['parallel_preparation_checks'] = preparation_gate['checks']
+        gate['passed'] = stationary_ready = bool(stationary_ready and preparation_gate['passed'])
+        save_json('stationary-parallel-preparation-validation.json', preparation_gate)
     save_json("stationary-gate.json", gate)
     print(json.dumps({key: value for key, value in gate.items() if key != "last_objects"}, default=json_default), flush=True)
     if not stationary_ready:
@@ -2494,6 +2507,12 @@ def main():
             human_validation['predictive_geometry'] = prediction_validation
             completed = completed and prediction_validation['passed']
             save_json('live-predictive-human-geometry-validation.json', prediction_validation)
+        if args.predictive_parallel_redesign:
+            from robot.evaluation.parallel_preparation_validation import validate_parallel_preparation
+            preparation_validation = validate_parallel_preparation(records+live_fields)
+            human_validation['parallel_preparation'] = preparation_validation
+            completed = completed and preparation_validation['passed']
+            save_json('live-parallel-preparation-validation.json', preparation_validation)
         if args.restaurant_human == 'parallel':
             from robot.evaluation.parallel_walking_validation import validate_parallel_curve
             parallel_goal = (anchor.x + math.cos(anchor.yaw)*ROUTE[-1][0] - math.sin(anchor.yaw)*ROUTE[-1][1],
@@ -2786,6 +2805,7 @@ def main():
         "encounter_comparison": args.encounter_comparison,
         "physical_CRA_lambda": 1.25,
         "predictive_human_geometry_ablation": args.predictive_human_geometry_ablation,
+        "predictive_parallel_redesign": args.predictive_parallel_redesign,
         "human_prediction_uncertainty_rate_mps": args.human_prediction_uncertainty_rate if args.predictive_human_geometry_ablation else None,
         "fixed_lambda": None if args.encounter_guidance_ablation else 0. if args.zero_tangential_bias_ablation else 1.25,
         "plume_control": args.plume_control,

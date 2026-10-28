@@ -79,6 +79,7 @@ def assess_all_objects(worker, packet):
     envelope_memory = copy.deepcopy(getattr(worker, "human_body_envelope", None))
     fragment_memory = copy.deepcopy(getattr(worker, "human_fragment_coverage", None))
     prediction_memory = copy.deepcopy(getattr(worker, "predictive_human_geometry", None))
+    preparation_memory = copy.deepcopy(getattr(worker, "parallel_preparation", None))
     tracking = tracker.update(
         packet.obstacle_xyz[:, :2],
         robot_position_world_xy=np.array(packet.robot_position_world_xy),
@@ -552,6 +553,7 @@ def assess_all_objects(worker, packet):
                 row["boundary_flux"] = applied_guidance[key].boundary_flux
     passing = copy.deepcopy(getattr(worker, "motion_passing", None))
     passing_audit = None
+    preparation_audit, reference_selection_time = None, None
     use_nominal_segment = (getattr(worker, 'encounter_motion', None) is not None
         or passing is not None and passing.config.encounter_geometry == 'oncoming_parallel')
     nominal_direction = getattr(packet, 'nominal_route_direction_world_xy', None) if use_nominal_segment else None
@@ -591,6 +593,20 @@ def assess_all_objects(worker, packet):
         passing_audit["original_selection_visual_evidence"] = passing_visual_evidence
         passing_audit["ego_pose_reference"] = {"source":packet.pose_source,"status":packet.pose_status.value,
                                               "robot_velocity_source":"derivative of the declared ego pose history"}
+        normal_sides = dict(sides)
+        if preparation_memory is not None:
+            preparation_sides, preparation_audit = preparation_memory.update(prediction,
+                robot_xy=packet.robot_position_world_xy, route_direction_world_xy=nominal_direction,
+                visual_evidence=visual or {}, camera_timestamp_seconds=packet.camera_timestamp_seconds,
+                camera_frame_id=packet.camera_frame_id)
+            used = not sides and 'ambiguous' not in passing_audit['decision']
+            if used:
+                sides = preparation_sides
+            preparation_audit['used_for_reference'] = bool(used and sides)
+            preparation_audit['normal_motion_selector_has_precedence'] = bool(normal_sides)
+        if sides:
+            reference_selection_time = (passing.encounter[2] if normal_sides else
+                preparation_audit['original_selection']['selected_timestamp_seconds'])
         # A side preference can cover this track's unmatched returns too, but
         # their own risk/flux/unknown provenance and occupancy stay unchanged.
         for key, parameters in tuple(applied_guidance.items()):
@@ -744,7 +760,7 @@ def assess_all_objects(worker, packet):
             time.perf_counter() - started,
             motion_passing_reference_track_ids=tuple(sorted(sides)) if passing is not None else (),
             motion_passing_reference_sides=tuple(sides[k].value for k in sorted(sides)) if passing is not None else (),
-            motion_passing_reference_source_timestamp_seconds=passing.encounter[2] if passing is not None and sides else None,
+            motion_passing_reference_source_timestamp_seconds=reference_selection_time,
             crossing_yield_track_ids=yield_ids,
             rear_pass_reference_track_ids=rear_ids,
             rear_pass_route_direction_grid_xy=rear_route,
@@ -804,6 +820,8 @@ def assess_all_objects(worker, packet):
         worker.human_fragment_coverage = fragment_memory
     if prediction_memory is not None:
         worker.predictive_human_geometry = prediction_memory
+    if preparation_memory is not None:
+        worker.parallel_preparation = preparation_memory
     worker.temporal_recovery_baseline = None
     if carried_state is not None:
         worker.carried_runtime_state=carried_state
@@ -830,8 +848,10 @@ def assess_all_objects(worker, packet):
         "rear_pass_route_direction_grid_xy": rear_route,
         "checked_wait_transition": transition_audit,
         "motion_passing_reference_track_ids": field.motion_passing_reference_track_ids,
+        "motion_passing_reference_source_timestamp_seconds": field.motion_passing_reference_source_timestamp_seconds,
         "human_body_envelope_priors": envelope_audit,
         "predictive_human_geometry": prediction_audit,
+        "parallel_preparation": preparation_audit,
         "current_visual_body_part_associations": visual_part_groups,
         "human_fragment_coverage_prior": fragment_audit,
         "object_count": len(objects),

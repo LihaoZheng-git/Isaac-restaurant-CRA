@@ -255,6 +255,7 @@ class LiveObjectPerception:
         zero_tangential_bias_ablation=False,
         encounter_motion_config=None,
         predictive_human_geometry_config=None,
+        parallel_preparation_config=None,
     ):
         self.segmenter, self.mass_estimator, self.contact_detector = (
             segmenter,
@@ -322,6 +323,13 @@ class LiveObjectPerception:
             raise ValueError("prediction requires an explicit active verified human body-envelope prior")
         self.predictive_human_geometry = (None if predictive_human_geometry_config is None
             else PredictiveHumanGeometryMemory(predictive_human_geometry_config))
+        from robot.safety.parallel_preparation import ParallelPreparation, ParallelPreparationConfig
+        if parallel_preparation_config is not None and (
+            not isinstance(parallel_preparation_config, ParallelPreparationConfig)
+            or self.predictive_human_geometry is None or motion_passing_config is None
+            or motion_passing_config.encounter_geometry != 'oncoming_parallel'):
+            raise ValueError('early preparation requires explicit parallel passing and predictive human geometry')
+        self.parallel_preparation = None if parallel_preparation_config is None else ParallelPreparation(parallel_preparation_config)
         if not isinstance(human_prior_geometry_associations, bool) or (
             human_prior_geometry_associations and (human_observed_occupancy_only
                 or self.human_body_envelope is None or person_detector is None

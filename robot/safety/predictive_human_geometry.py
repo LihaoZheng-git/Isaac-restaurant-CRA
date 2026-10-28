@@ -53,9 +53,9 @@ class HumanGeometryForecastConfig:
             if getattr(self, name) < 3:
                 raise ValueError('source fit requires at least three samples/points')
         if (not self.minimum_span_seconds < self.history_window_seconds <= 1.
-            or not .2 <= self.horizon_seconds <= 1.2 or self.maximum_gap_seconds > .25
+            or not .2 <= self.horizon_seconds <= 2.0 or self.maximum_gap_seconds > .25
             or self.maximum_source_age_seconds > .35):
-            raise ValueError('forecast requires bounded source window <=1s and horizon in[.2,1.2]s')
+            raise ValueError('forecast requires bounded source window <=1s and explicit horizon in[.2,2]s')
 
 
 @dataclass(frozen=True)

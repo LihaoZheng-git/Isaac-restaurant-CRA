@@ -60,7 +60,9 @@ def test_warmup_and_end_of_record_are_reported_without_future_extrapolation():
     ('cra_live_object_isaac_demo.py', ['--predictive-human-geometry-ablation']),
     ('restaurant_human_locomotion_isaac.py', ['--predictive-human-geometry']),
     ('cra_live_object_isaac_demo.py', ['--human-prediction-uncertainty-rate', '.30']),
-    ('restaurant_human_locomotion_isaac.py', ['--human-prediction-uncertainty-rate', '.30'])])
+    ('restaurant_human_locomotion_isaac.py', ['--human-prediction-uncertainty-rate', '.30']),
+    ('cra_live_object_isaac_demo.py', ['--predictive-parallel-redesign']),
+    ('restaurant_human_locomotion_isaac.py', ['--human-prediction-horizon-seconds', '2'])])
 def test_cli_rejects_unlabeled_prediction_before_native_imports(script, flags, tmp_path):
     source = Path(__file__).resolve().parents[2]/'scripts/demos'/script
     command = [sys.executable, str(source), '--output', str(tmp_path/'unused'), *flags]
