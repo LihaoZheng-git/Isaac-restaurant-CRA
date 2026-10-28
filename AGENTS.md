@@ -2545,3 +2545,17 @@
   10retained50originalsources/zero wheels. Stationarydataflow only, no newwheel
   or smoothingacceptance. Separateplanningfollowupmustretainmasssource3s andall
   originalgates; no primary/main/longservice/PI/PR117 release.
+- Separate default-OFF adaptivehumanforecast growth uses explicit floor.30 plus
+  norm(current rawLiDARvelocity minus existing.8s windowfit), capped at explicit
+  .50mps. These are engineeringPRIORS, not calibrated humanacceleration bounds.
+  Omittedfloor retainsFIXED mode and all defaults. Preserveoriginal fit/body/
+  clocks/CRA/currentfield/objective/actuators and allhard/dense/QP/rescue/analytical/
+  physical/arrival/stop gates. Auditorrecomputesrate fromoriginal velocities;
+  missing/inconsistentadaptive diagnosticsreject. Futuretruthscoresonly.
+  Development5recordedruns5920queries0misses/min.0238051 is reuseddesign data,
+  not newnativeacceptance. Two originalnativefixed-modefullcommandhorizons
+  reproduce exactly(maxdiff0) withunchangedfields/epochs. Freshnativecomponent+
+  massprovenance+independent/own60 required beforecombinedwheels; retain5kinetic/
+  .20nearcurve/.5s+50%hold and allprimary/main/longservice/PI/PR117 holds.
+  See docs/adaptive_human_prediction.md; nativepending.
+  Sourcefreeze3097units104.13s/53focused7.31s/Ruffcompile2CLI/diffPASS.

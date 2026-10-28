@@ -66,6 +66,8 @@ def test_warmup_and_end_of_record_are_reported_without_future_extrapolation():
     ('cra_live_object_isaac_demo.py', ['--predictive-parallel-redesign']),
     ('cra_live_object_isaac_demo.py', ['--human-mass-body-identity-retention']),
     ('restaurant_human_locomotion_isaac.py', ['--human-mass-body-identity-retention']),
+    ('cra_live_object_isaac_demo.py', ['--human-prediction-uncertainty-floor', '.30']),
+    ('restaurant_human_locomotion_isaac.py', ['--human-prediction-uncertainty-floor', '.30']),
     ('restaurant_human_locomotion_isaac.py', ['--human-prediction-horizon-seconds', '2'])])
 def test_cli_rejects_unlabeled_prediction_before_native_imports(script, flags, tmp_path):
     source = Path(__file__).resolve().parents[2]/'scripts/demos'/script
@@ -99,3 +101,21 @@ def test_live_prediction_and_mpc_horizons_match_explicit_bounded_variant(redesig
         expression = next(k.value for k in call.keywords if k.arg == 'horizon_seconds')
         horizon = eval(compile(ast.Expression(expression), str(source), 'eval'), {'args': args})
         assert horizon == pytest.approx(steps*.2)
+
+
+@pytest.mark.parametrize('tamper', [None, 'missing', 'forged'])
+def test_adaptive_audit_recomputes_current_source_disagreement_instead_of_trusting_reported_growth(tamper):
+    records, truth = fixture()
+    for record in records:
+        d = record['predictive_human_geometry']
+        d['configuration'].update(velocity_uncertainty_floor_prior_mps=.3, velocity_uncertainty_prior_mps=.5)
+        for f in d['forecasts']:
+            f['config'] = d['configuration'].copy()
+            f['effective_uncertainty_growth_prior_mps'] = .3  # exact constant-velocity fixture
+            f['uncertainty_growth_basis'] = 'bounded_prior_from_current_raw_minus_window_fit_velocity'
+    if tamper == 'missing':
+        del records[0]['predictive_human_geometry']['forecasts'][0]['effective_uncertainty_growth_prior_mps']
+    if tamper == 'forged':
+        records[0]['predictive_human_geometry']['forecasts'][0]['effective_uncertainty_growth_prior_mps'] = .1
+    report = validate_predictive_human_geometry(records, truth, reference_radius_m=.4)
+    assert report['passed'] is (tamper is None)

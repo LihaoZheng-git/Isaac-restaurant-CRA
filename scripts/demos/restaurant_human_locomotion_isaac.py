@@ -41,6 +41,8 @@ parser.add_argument('--predictive-human-geometry', action='store_true',
                     help='separate zero-wheel LiDAR source-window motion/geometry PRIOR benchmark; future actor truth only scores it')
 parser.add_argument('--human-prediction-uncertainty-rate', type=float, default=.25,
                     help='explicit additional forecast-radius growth PRIOR in m/s; original current body radius unchanged')
+parser.add_argument('--human-prediction-uncertainty-floor', type=float, default=None,
+                    help='separate bounded current raw/window velocity disagreement growth PRIOR; fixed by default')
 parser.add_argument('--human-prediction-horizon-seconds', type=float, choices=(1.2, 2.), default=1.2)
 parser.add_argument('--parallel-preparation', action='store_true',
                     help='separate current-person early geometric preparation policy; no future walking-intent evidence')
@@ -74,6 +76,10 @@ parser.add_argument(
     metavar=("KG", "LOWER", "UPPER"),
 )
 args = parser.parse_args()
+if args.human_prediction_uncertainty_floor is not None and (not args.predictive_human_geometry
+    or not args.parallel_preparation or not math.isfinite(args.human_prediction_uncertainty_floor)
+    or not .3 <= args.human_prediction_uncertainty_floor <= args.human_prediction_uncertainty_rate <= 1.):
+    parser.error('adaptive uncertainty requires explicit prediction/preparation and .30<=floor<=ceiling<=1m/s')
 if args.human_mass_body_identity_retention and not args.identity_selection_body_envelope:
     parser.error('adult mass identity retention requires explicit current body identity')
 if (args.parallel_preparation and not args.predictive_human_geometry
@@ -449,6 +455,7 @@ def main():
             identity_selection_body_envelope=args.identity_selection_body_envelope,
             predictive_human_geometry=args.predictive_human_geometry,
             human_prediction_uncertainty_rate=args.human_prediction_uncertainty_rate,
+            human_prediction_uncertainty_floor=args.human_prediction_uncertainty_floor,
             human_prediction_horizon_seconds=args.human_prediction_horizon_seconds,
             parallel_preparation=args.parallel_preparation,
             human_mass_body_identity_retention=args.human_mass_body_identity_retention,

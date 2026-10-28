@@ -44,9 +44,12 @@ class HumanGeometryForecastConfig:
     maximum_fit_residual_m: float = .1
     maximum_speed_mps: float = 2.
     minimum_points: int = 20
+    velocity_uncertainty_floor_prior_mps: float | None = None
 
     def __post_init__(self):
         for name, value in asdict(self).items():
+            if name == 'velocity_uncertainty_floor_prior_mps' and value is None:
+                continue
             _real(value, name, minimum=1e-12)
         for name in ('minimum_samples', 'minimum_points'):
             _integer(getattr(self, name), name)
@@ -56,6 +59,9 @@ class HumanGeometryForecastConfig:
             or not .2 <= self.horizon_seconds <= 2.0 or self.maximum_gap_seconds > .25
             or self.maximum_source_age_seconds > .35):
             raise ValueError('forecast requires bounded source window <=1s and explicit horizon in[.2,2]s')
+        if (self.velocity_uncertainty_floor_prior_mps is not None
+            and not .3 <= self.velocity_uncertainty_floor_prior_mps <= self.velocity_uncertainty_prior_mps <= 1.):
+            raise ValueError('adaptive growth needs explicit floor>=.30 and floor<=ceiling<=1m/s')
 
 
 @dataclass(frozen=True)
@@ -111,9 +117,20 @@ class HumanEnvelopePrediction:
         a = t - t.mean()
         return a @ (p-p.mean(axis=0)) / (a @ a)
 
+    @property
+    def uncertainty_growth_prior_mps(self):
+        floor = self.config.velocity_uncertainty_floor_prior_mps
+        if floor is None:
+            return self.config.velocity_uncertainty_prior_mps
+        disagreement = float(np.linalg.norm(np.asarray(self.raw_velocity_world_xy)-self.velocity_world_xy))
+        return min(self.config.velocity_uncertainty_prior_mps, floor+disagreement)
+
     def diagnostic(self):
         return dict(**asdict(self), source_timestamp_seconds=self.source_timestamp_seconds,
             velocity_world_xy=self.velocity_world_xy.tolist(), status='prior',
+            effective_uncertainty_growth_prior_mps=self.uncertainty_growth_prior_mps,
+            uncertainty_growth_basis=('fixed_configured_prior' if self.config.velocity_uncertainty_floor_prior_mps is None
+                else 'bounded_prior_from_current_raw_minus_window_fit_velocity'),
             velocity_basis='inferred_current_LiDAR_centroid_window_fit_for_planning_only',
             forecast_basis='constant_velocity_with_configured_uncertainty_growth_PRIOR',
             scope='additional MPC geometry hypothesis; original current field still required; not CRA kinetic evidence or a general motion bound')
@@ -194,7 +211,7 @@ class PredictiveHumanGeometry:
             outside = np.maximum(q, 0.)
             distance = np.linalg.norm(outside, axis=1)
             margins[:, j] = distance + np.minimum(np.max(q, axis=1), 0.) - (
-                forecast.radius_prior_m + self.config.velocity_uncertainty_prior_mps*times)
+                forecast.radius_prior_m + forecast.uncertainty_growth_prior_mps*times)
             grad_local = np.zeros((n, 2))
             outer = distance > 1e-12
             grad_local[outer] = np.sign(centered[outer])*outside[outer]/distance[outer, None]

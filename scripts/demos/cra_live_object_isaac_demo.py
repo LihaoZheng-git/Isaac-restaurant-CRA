@@ -37,6 +37,8 @@ parser.add_argument('--predictive-human-geometry-ablation', action='store_true',
                     help='separate current-LiDAR constant-velocity body-envelope PRIOR; adds hard future MPC geometry, never changes primary CRA/field')
 parser.add_argument('--human-prediction-uncertainty-rate', type=float, default=.25,
                     help='explicit additional forecast-radius growth PRIOR in m/s, separate from unchanged current human body margin')
+parser.add_argument('--human-prediction-uncertainty-floor', type=float, default=None,
+                    help='separate adaptive growth PRIOR: floor+current raw/window velocity disagreement, capped by uncertainty-rate; fixed by default')
 parser.add_argument('--predictive-parallel-redesign', action='store_true',
                     help='separate early current-person preparation with explicit 6-step/1.2s or 10-step/2s predictive MPC; primary unchanged')
 parser.add_argument('--human-mass-body-identity-retention', action='store_true',
@@ -265,6 +267,10 @@ parser.add_argument(
     help="optimizer candidate age cap; every executed horizon still needs fresh exact validation",
 )
 args = parser.parse_args()
+if args.human_prediction_uncertainty_floor is not None and (not args.predictive_parallel_redesign
+    or not math.isfinite(args.human_prediction_uncertainty_floor)
+    or not .3 <= args.human_prediction_uncertainty_floor <= args.human_prediction_uncertainty_rate <= 1.):
+    parser.error('adaptive uncertainty requires separate predictive redesign and explicit .30<=floor<=ceiling<=1m/s')
 if args.human_mass_body_identity_retention and (not args.predictive_parallel_redesign or args.human_body_envelope_radius is None):
     parser.error('adult mass identity retention requires the separate predictive redesign and current body identity')
 if args.predictive_parallel_redesign and not args.predictive_human_geometry_ablation:
@@ -1120,6 +1126,7 @@ def main():
         human_mass_body_identity_retention=args.human_mass_body_identity_retention,
         predictive_human_geometry_config=HumanGeometryForecastConfig(
             horizon_seconds=round(args.mpc_horizon_steps * .2, 10),
+            velocity_uncertainty_floor_prior_mps=args.human_prediction_uncertainty_floor,
             velocity_uncertainty_prior_mps=args.human_prediction_uncertainty_rate) if args.predictive_human_geometry_ablation else None,
         parallel_preparation_config=ParallelPreparationConfig() if args.predictive_parallel_redesign else None,
         segmenter=segmenter,
@@ -2825,6 +2832,7 @@ def main():
         "predictive_parallel_redesign": args.predictive_parallel_redesign,
         "human_mass_body_identity_retention": args.human_mass_body_identity_retention,
         "human_prediction_uncertainty_rate_mps": args.human_prediction_uncertainty_rate if args.predictive_human_geometry_ablation else None,
+        "human_prediction_uncertainty_floor_mps": args.human_prediction_uncertainty_floor,
         "fixed_lambda": None if args.encounter_guidance_ablation else 0. if args.zero_tangential_bias_ablation else 1.25,
         "plume_control": args.plume_control,
         "restaurant_scene": str(SCENE_PATH) if args.restaurant_scene else None,

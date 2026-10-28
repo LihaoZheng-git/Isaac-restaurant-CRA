@@ -95,6 +95,7 @@ class RestaurantHumanSensorDiagnostic:
         identity_selection_body_envelope=False,
         predictive_human_geometry=False,
         human_prediction_uncertainty_rate=.25,
+        human_prediction_uncertainty_floor=None,
         human_prediction_horizon_seconds=1.2,
         parallel_preparation=False,
         human_mass_body_identity_retention=False,
@@ -113,6 +114,8 @@ class RestaurantHumanSensorDiagnostic:
             raise ValueError('prediction bench requires an explicit current body envelope')
         if parallel_preparation and not predictive_human_geometry:
             raise ValueError('early preparation requires explicit predictive geometry')
+        if human_prediction_uncertainty_floor is not None and not (parallel_preparation and predictive_human_geometry):
+            raise ValueError('adaptive growth requires explicit predictive preparation')
         from robot.safety.predictive_human_geometry import HumanGeometryForecastConfig
         from robot.safety.parallel_preparation import ParallelPreparationConfig
         passing_config = MotionAwarePassingConfig(require_visual_person_selection=True,
@@ -222,6 +225,7 @@ class RestaurantHumanSensorDiagnostic:
             human_mass_body_identity_retention=human_mass_body_identity_retention,
             predictive_human_geometry_config=HumanGeometryForecastConfig(
                 horizon_seconds=human_prediction_horizon_seconds,
+                velocity_uncertainty_floor_prior_mps=human_prediction_uncertainty_floor,
                 velocity_uncertainty_prior_mps=human_prediction_uncertainty_rate) if predictive_human_geometry else None,
             parallel_preparation_config=ParallelPreparationConfig() if parallel_preparation else None,
             motion_passing_config=passing_config if motion_aware_passing else None,

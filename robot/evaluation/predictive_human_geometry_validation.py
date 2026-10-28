@@ -39,6 +39,12 @@ def validate_predictive_human_geometry(records, actor_records, *, reference_radi
                 tuple(diagnostic['required_track_ids']), forecasts, config)
             geometry.validate_source(diagnostic['sensor_frame_id'], diagnostic['sensor_timestamp_seconds'],
                 geometry.anchor_position_world_xy, geometry.anchor_yaw)
+            if config.velocity_uncertainty_floor_prior_mps is not None and any(
+                not math.isclose(f['effective_uncertainty_growth_prior_mps'], forecast.uncertainty_growth_prior_mps,
+                    rel_tol=0, abs_tol=1e-12)
+                or f['uncertainty_growth_basis'] != 'bounded_prior_from_current_raw_minus_window_fit_velocity'
+                for f, forecast in zip(diagnostic['forecasts'], forecasts)):
+                raise ValueError('adaptive growth must preserve its current source-derived diagnostic')
             if diagnostic['status'] != 'prior':
                 raise ValueError('forecast must remain an explicit prior')
         except (KeyError, TypeError, ValueError) as error:
@@ -67,7 +73,7 @@ def validate_predictive_human_geometry(records, actor_records, *, reference_radi
                 error = float(np.linalg.norm(predicted-truth))
                 current_error = float(np.linalg.norm(center-truth))
                 current_margin = forecast.radius_prior_m-reference_radius_m-current_error
-                predicted_margin = (forecast.radius_prior_m+offset*config.velocity_uncertainty_prior_mps
+                predicted_margin = (forecast.radius_prior_m+offset*forecast.uncertainty_growth_prior_mps
                     -reference_radius_m-error)
                 # Sufficient disk containment by either member of the union.
                 # The unchanged original current field remains enforced too.
@@ -75,6 +81,7 @@ def validate_predictive_human_geometry(records, actor_records, *, reference_radi
                 walking = float(np.linalg.norm(np.asarray(b['actor_xyz'][:2])-a['actor_xyz'][:2])
                     /(epochs[index]-epochs[index-1])) >= .3
                 rows.append(dict(source_timestamp=stamp, source_frame_id=frame, track_id=forecast.track_id,
+                    uncertainty_growth_prior_mps=forecast.uncertainty_growth_prior_mps,
                     offset_seconds=offset, predicted_center_error_m=error, current_center_error_m=current_error,
                     current_containment_margin_m=current_margin, predictive_containment_margin_m=predicted_margin,
                     union_containment_margin_m=margin, walking=walking, passed=margin >= -1e-9))

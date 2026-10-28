@@ -43,9 +43,12 @@ def test_additional_prediction_rejects_a_future_collision_that_current_empty_fie
     assert not np.array_equal(result.command_sequence, nominal)
 
 
-def test_infeasible_main_reference_is_retained_for_restoration_and_hard_qp_rows_have_no_slack(monkeypatch):
+@pytest.mark.parametrize('floor', [None, .3])
+def test_infeasible_main_reference_is_retained_for_restoration_and_hard_qp_rows_have_no_slack(monkeypatch, floor):
     import robot.safety.safe_sage_unicycle_mpc as module
-    m = mpc(geometry())
+    cfg = HumanGeometryForecastConfig(velocity_uncertainty_prior_mps=.5 if floor else .25,
+        velocity_uncertainty_floor_prior_mps=floor)
+    m = mpc(geometry(prediction(config=cfg)))
     reference = m._evaluate_trajectory(np.zeros(3), np.tile([.2, 0.], (6, 1)),
         temporal_safety_derivative=0., **inputs())
     assert reference is not None and np.min(reference.predictive_margins) < 0
@@ -132,10 +135,13 @@ def test_runtime_requires_planning_epoch_and_keeps_forecast_request_local():
     assert shared.predictive_geometry is None
 
 
-def test_nonlinear_rescue_uses_the_same_exact_prediction_values_and_analytic_jacobian(monkeypatch):
+@pytest.mark.parametrize('floor', [None, .3])
+def test_nonlinear_rescue_uses_the_same_exact_prediction_values_and_analytic_jacobian(monkeypatch, floor):
     from types import SimpleNamespace
     import robot.safety.safe_sage_unicycle_mpc as module
-    m = mpc(geometry())
+    cfg = HumanGeometryForecastConfig(velocity_uncertainty_prior_mps=.5 if floor else .25,
+        velocity_uncertainty_floor_prior_mps=floor)
+    m = mpc(geometry(prediction(config=cfg)))
     reference = m._evaluate_trajectory(np.zeros(3), np.tile([.2, .05], (6, 1)),
         temporal_safety_derivative=0., **inputs())
     captured = {}
