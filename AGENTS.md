@@ -2539,3 +2539,9 @@
   smoothingfix/newmassmeasurement/primary/main/longservice/PR117 release.
   See docs/human_mass_identity_retention.md; nativepending.
   Sourcefreeze3078units108.18s/40focused5.99s/Ruffcompile2CLI/diffPASS.
+- At23c85db newmass zero-wheel component PASSED all originalfreshsensor/actor/
+  body/selection/preparation/forecast gates;90retainedupdates26originalpriors.
+  Future109sources918queries0misses/min.0693388. Independent60frame parkedPASS,
+  10retained50originalsources/zero wheels. Stationarydataflow only, no newwheel
+  or smoothingacceptance. Separateplanningfollowupmustretainmasssource3s andall
+  originalgates; no primary/main/longservice/PI/PR117 release.

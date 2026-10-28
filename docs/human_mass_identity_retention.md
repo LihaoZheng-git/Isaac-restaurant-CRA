@@ -45,3 +45,14 @@ main, long-service or PR117 hold. Native validation is pending.
 Source validation passed3,078 unit tests in108.18 s,40 focused tests in5.99 s,
 Ruff, compilation, both CLI help paths and whitespace checks. This does not
 establish stationary or moving acceptance of the new option.
+
+At23c85db the fresh zero-wheel articulated-human component PASSED all original
+actor, fresh-only sensor, body, normal selection, preparation and prediction
+gates. The new audit passed90 retained source updates from26 original accepted
+priors. Its independent future audit covered109 sources/918 queries with zero
+misses (minimum union margin .0693388 m). The separate60-frame parked gate also
+PASSED, including10 retained updates from50 original sources and zero wheel
+commands. Artifacts are under `outputs/restaurant_human_mass_identity/`.
+These establish stationary dataflow/provenance, not wheel-navigation acceptance
+or a smoothing fix. A separately reported planning follow-up will combine this
+option with fresh forecast and stationary gates before its wheel trial.
