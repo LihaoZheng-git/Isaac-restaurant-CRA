@@ -2641,3 +2641,16 @@
   before nexttick. Loginitialization originalstate/DOForder; NEVER reset during
   settling/standing/motion, renewepochs or loosenabort/gate. Hypothesisonly;
   preserve oldfailedreports and requirefreshindependent/own standing.
+- Atc1b3eae Spot15ssettle standing-spot-v6 PASSED160rows/.000100mXY/
+  .000114radyaw/.034062tilt. Independent+ownstanding preceded tracking-spot-v6,
+  which FAILEDtranslation RMSE forward.201330/lateral.149853/combined.179669
+  at .2/.15/(.15,.1) commands; settledtranslation nearzero. Yaw.3trackingPASSED
+  RMSE.036255. Stopdisplacements .075126/.042998/.063994 fail2cm; yawstop.019379
+  passes. No physical speedincrease/stoprelaxation or generalquad/deadbandclaim.
+  Go2restore retry stillstartupz.249937abort, not calibratedgeneral fall detector.
+  Separate Carterbench usesstockdrive/60Hz/rootz.07382, explicit rootbounds
+  .03...2 (notSpot.3...8), only forward/yaw executablephases; lateralunsupported.
+  Newphysics-clock samples avoidrenderer-timelineepoch ambiguity; preserveolder
+  reports and require matching fresh independent/own gates. No human/SafeSAGE/
+  sensor/CRA/platformreplacement acceptance follows from an interface bench.
+  Expandedcomparison source3118units108.79s/elevenfocused/RuffcompileCLI/diffPASS.

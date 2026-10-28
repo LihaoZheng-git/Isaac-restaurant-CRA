@@ -24,7 +24,15 @@ def root_observation(*, time, phase_elapsed, phase, command_body, position_world
     return result
 
 
-def summarize_standing(rows):
+def _height_limits(minimum, maximum):
+    if (any(isinstance(v, bool) or not math.isfinite(v) for v in (minimum, maximum))
+        or not 0 <= minimum < maximum):
+        raise ValueError('explicit ordered finite platform root-height bounds required')
+    return minimum, maximum
+
+
+def summarize_standing(rows, *, minimum_base_height_m=.3, maximum_base_height_m=.8):
+    low, high = _height_limits(minimum_base_height_m, maximum_base_height_m)
     if len(rows) < 30:
         raise ValueError("at least thirty independent standing observations required")
     t = np.array([r["time"] for r in rows], float)
@@ -43,14 +51,19 @@ def summarize_standing(rows):
         bounded_standing_translation=drift <= .02,
         bounded_standing_yaw=yaw <= .03,
         upright=tilt <= math.radians(10),
-        bounded_base_height=bool(np.all((p[:, 2] >= .3) & (p[:, 2] <= .8))))
+        bounded_base_height=bool(np.all((p[:, 2] >= low) & (p[:, 2] <= high))))
     return dict(passed=all(checks.values()), checks=checks, frames=len(t),
         maximum_xy_drift_m=drift, maximum_yaw_drift_rad=yaw, maximum_tilt_rad=tilt,
+        root_height_bounds_m=[low, high],
         scope="freely standing flat-ground zero-command policy bench; root truth is evaluation only; no sensor/CRA/navigation acceptance")
 
 
-def summarize_tracking(rows):
+def summarize_tracking(rows, *, axes=('forward', 'lateral', 'yaw', 'combined'),
+                       minimum_base_height_m=.3, maximum_base_height_m=.8):
     """Score settled tracking and each stop without hiding braking displacement."""
+    low, high = _height_limits(minimum_base_height_m, maximum_base_height_m)
+    if not axes or len(set(axes)) != len(axes) or not set(axes) <= {'forward', 'lateral', 'yaw', 'combined'}:
+        raise ValueError('explicit unique supported command axes required')
     phases = list(dict.fromkeys(r["phase"] for r in rows))
     results = []
     for phase in phases:
@@ -75,7 +88,7 @@ def summarize_tracking(rows):
         yaw_error = float(np.sqrt(np.mean(error[:, 2]**2)))
         checks = dict(translation_tracking=xy_error <= .08, yaw_tracking=yaw_error <= .15,
             upright=bool(np.max(np.abs(angles[:, :2])) <= math.radians(10)),
-            bounded_base_height=bool(np.all((position[:, 2] >= .3) & (position[:, 2] <= .8))),
+            bounded_base_height=bool(np.all((position[:, 2] >= low) & (position[:, 2] <= high))),
             constant_phase_command=bool(np.all(command == command[0])),
             phase_command_active=bool(np.any(command[0] != 0) if phase.startswith('move_') else np.all(command == 0)))
         result = dict(phase=phase, translation_rmse_mps=xy_error, yaw_rmse_rps=yaw_error)
@@ -87,8 +100,9 @@ def summarize_tracking(rows):
         results.append(result)
     if not results:
         raise ValueError("explicit movement and stopping phases required")
-    required = {prefix+axis for prefix in ('move_', 'stop_') for axis in ('forward', 'lateral', 'yaw', 'combined')}
+    required = {prefix+axis for prefix in ('move_', 'stop_') for axis in axes}
     complete = set(phases)-{'settle', 'standing'} == required
     return dict(passed=complete and all(r["passed"] for r in results), phases=results,
         complete_command_suite=complete,
+        evaluated_axes=list(axes), root_height_bounds_m=[low, high],
         scope="bounded open-space command tracking only; no navigation, perception, ideal-velocity realization or causal platform benefit claim")

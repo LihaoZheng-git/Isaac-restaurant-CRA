@@ -139,3 +139,49 @@ policy update before the next tick. `initialization.json` preserves the actual
 pre-restore state and DOF ordering. No resets occur during the settling,
 standing or movement phases. This is an initialization hypothesis/retry, not a
 retroactive pass, mount, body-motion override or alteration of acceptance gates.
+
+## First valid Spot interface result, before the Carter comparison
+
+At `c1b3eae`, Spot's 10 s retry (`standing-spot-v5`) completed but failed XY
+0.030279 m and yaw 0.062681 rad. The terminal yaw rate had fallen to about
+-0.00166 rad/s. A separately labeled 15 s settling trial (`standing-spot-v6`)
+then **passed** all unchanged gates: 160 samples, XY drift 0.000100 m, yaw drift
+0.000114 rad, maximum tilt 0.034062 rad. No source/evidence clock is renewed by
+this initial settling. It precedes any movement assessment.
+
+The independent and own standing gates passed before `tracking-spot-v6`.
+That complete open-space suite **failed** low-speed translation tracking:
+forward/lateral/combined RMSE 0.201330 / 0.149853 / 0.179669 m/s at commands
+0.2 forward / 0.15 lateral / (0.15,0.1) combined. Corresponding settled median
+body translation was close to zero. Yaw tracking at 0.3 rad/s passed
+(RMSE 0.036255 rad/s). Zero-command displacement after forward/lateral/combined
+was 0.075126 / 0.042998 / 0.063994 m, exceeding the unchanged 2 cm stopping
+gate; yaw-stop translation 0.019379 m passed. This is evidence about this
+policy/setup at these low commands, not every quadruped or a proven internal
+deadband cause. No commanded translational speed was increased to get a pass.
+
+Go2 with the one-time restore (`standing-go2-v3`) still crossed the startup
+root-height abort at 0.249937 m; it has no accepted standing or movement gate.
+The common quadruped height envelope itself is not a calibrated Go2 fall
+detector. Do not infer general Go2 instability from this failed bounded setup.
+
+The next source adds Carter on the same flat bench, using the unchanged
+`NovaCarterController`, 60 Hz physics, 0.07382 m configured initial root height,
+and only its executable forward/yaw phases. Lateral and combined phases are
+explicitly unsupported, not projected or falsely passed. Its different root
+origin requires explicit 0.03..0.2 m height bounds; this does not change Spot's
+0.3..0.8 m bounds, 2 cm XY/stop, 0.03 rad yaw or tracking gates. This is an
+interface calibration, not matched human navigation or a causal CRA comparison.
+The official Carter root SHA-256 is
+`462c3e91703c2f3aead2f15520a76c026bca1327fa61c40b268688d8711f938f`.
+
+New samples and phase switching use `SimulationManager.get_simulation_time()`
+in the physics callback. Previous bench samples used the rendering timeline,
+which can label multiple physics ticks with one render epoch. Earlier Spot
+50 Hz samples had no duplicate epochs, but the new clock is necessary for a
+60 Hz Carter comparison. Keep the older records unchanged and repeat matching
+independent/own standing gates at the new source before movement.
+
+The expanded comparison source passed all 3,118 unit tests in 108.79 s,
+including eleven focused interface/evaluation tests. Ruff, compilation,
+CLI help and whitespace checks passed before its native source freeze.

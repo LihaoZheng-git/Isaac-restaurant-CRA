@@ -86,3 +86,23 @@ def test_native_invalid_observation_cannot_be_laundered_into_report():
     data['velocity_body'][0] = float('nan')
     with pytest.raises(ValueError):
         root_observation(**data)
+
+
+def test_platform_height_convention_is_explicit_and_cannot_change_xy_gate():
+    data = rows()
+    for row in data:
+        row['position_world'][2] = .074
+    assert not summarize_standing(data)['passed']
+    assert summarize_standing(data, minimum_base_height_m=.03, maximum_base_height_m=.2)['passed']
+    data[-1]['position_world'][0] = .021
+    assert not summarize_standing(data, minimum_base_height_m=.03, maximum_base_height_m=.2)['passed']
+    with pytest.raises(ValueError):
+        summarize_standing(data, minimum_base_height_m=.3, maximum_base_height_m=.2)
+
+
+def test_wheeled_command_scope_does_not_claim_lateral_acceptance():
+    data = rows('move_forward', command=(.2, 0, 0))+rows('stop_forward')
+    data += rows('move_yaw', command=(0, 0, .3))+rows('stop_yaw')
+    result = summarize_tracking(data, axes=('forward', 'yaw'))
+    assert result['passed'] and result['evaluated_axes'] == ['forward', 'yaw']
+    assert not summarize_tracking(data)['passed']
