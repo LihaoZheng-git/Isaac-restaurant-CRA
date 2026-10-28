@@ -1498,10 +1498,15 @@ class SafeSAGEUnicycleMPC:
         minimum_margin = (
             math.nan if candidate is None else float(np.min(candidate.margins))
         )
+        predictive_status = ""
+        if self.predictive_geometry is not None:
+            predictive_minimum = (math.nan if candidate is None or not candidate.predictive_margins.size
+                else float(np.min(candidate.predictive_margins)))
+            predictive_status = f"; minimum_predictive_geometry_margin_m={predictive_minimum:.3e}"
         return (
             None,
             iteration_count,
-            f"{optimization.message}; minimum_margin={minimum_margin:.3e}",
+            f"{optimization.message}; minimum_margin={minimum_margin:.3e}{predictive_status}",
         )
 
     def _solve_sparse_subproblem(

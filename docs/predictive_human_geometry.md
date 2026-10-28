@@ -115,3 +115,64 @@ The corrected candidate source passed3,018 full unit tests in108.37 s,
 63 focused tests in8.33 s, Ruff, compilation, both CLI help paths and whitespace
 checks. The focused source-age test explicitly distinguishes the unchanged
 .35 s field freshness from the separate optimizer lease.
+
+## Corrected native results and limit
+
+At frozenbe2da97, the fresh parked .30-growth component PASSED:108 forecast
+sources,909 available future queries, zero misses, minimum union containment
+margin.0246932 m. Actor/sensor/strict visual selection/current-body containment
+and zero-wheel gates passed. Independent60 and the motion run's own60-frame
+stationary gates passed, including forecast readiness. The fresh-run offsets
+end at1.55 s; do not pool them with the older failed1.7 s prototype.
+
+The subsequent motion trial FAILED after7.933333 navigation seconds:
+`nearby_track_lost`,0/3 guides, nearby bend.040295 m. Physical clearance.201875 m,
+stop drift.0000280 m, minimum accepted analytical margin.746218 and78 current
+fields do not establish arrival. The actual near-human translation hold was
+3.15 s (slow interval3.166667 s), worse than the accepted baseline2.383333 s.
+The unchanged smoothing comparison rejects both native acceptance and its
+.5 s/50% hold target. Original motion report SHA256:
+`339444102f1224c75a8a1f997b39b5ffd4534284b8cddfb5dfe24004e4b05737`.
+
+The independent moving audit also FAILED4/696 future queries from78 sources,
+worst shortfall.0514033 m, around walking onset. Current-body containment passed.
+The constant-velocity fit can lag an abrupt start; a parked benchmark is not
+enough to validate that transition from a moving robot. Keep these misses,
+the field-age correction and the original .25/.30 growth values explicit.
+
+The final tracking stop concerns NEW fragment323, source15.8 s,34 original
+returns, missing.20 s and1.147910 m from the robot, inside the unchanged1.2 m
+watch. Its maximum original-to-current positive-surface distance.225951 m
+fails the existing association bound. Its short history cannot satisfy the
+four-observation motion/parent proof for body-prior coverage. Do not erase it,
+widen association, renew clocks or lower the coverage proof to manufacture a
+pass. The same numeric ID in an older trial is not the same historical track.
+
+Trusted same-input offline replay retained pipeline bytes and original epochs:
+at first selection11.8 s, forecast ON/OFF produced identical successful
+commands(.118387,.799558). At14.9 s both variants failed exact restoration;
+at15.8 s both rejected the current unsafe configuration. This does not isolate
+the cause of every hold or establish that prediction alone caused the failure.
+It shows that adding future geometry did not repair those current-field states.
+The failure status now labels predictive geometry margins separately from
+original DTCBF margins; this telemetry-only follow-up changes no numerical
+checks and is not a new wheel validation.
+
+Artifacts are under `outputs/restaurant_parallel_prediction/`: the fresh parked
+component, independent stationary run, failed motion, immutable
+`comparison-growth030-v2.json`, and same-input
+`motion-prediction-growth030-v2/replay-prediction-toggle-v1.json`.
+The parked plot is `component-prediction-growth030-v2/forecast-stationary-gate-v1.png`.
+
+This ablation is implemented and tested, but **not accepted for navigation or
+smoothing**. Leave it default-off and unmerged. The accepted curved baseline
+remains the usable short parallel demonstration with its honestly reported
+2.383333 s yield. Further prediction-enabled wheels require a separately
+justified start/stop motion-uncertainty policy and successful moving-source
+coverage, plus the original positive-fragment continuity proof. Those are
+research/geometry-policy decisions, not a reason to weaken safety gates.
+
+Final source validation after the telemetry-only follow-up passed3,021 full
+unit tests in108.31 s, Ruff, compilation and whitespace checks. Original
+baseline and both failed native report hashes remain unchanged. Draft PR190
+is pushed but not merged; no native simulation process remains running.

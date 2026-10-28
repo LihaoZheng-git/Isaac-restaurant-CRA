@@ -154,6 +154,7 @@ def test_nonlinear_rescue_uses_the_same_exact_prediction_values_and_analytic_jac
         return SimpleNamespace(x=x, nit=1, message='independent constraint inspection')
 
     monkeypatch.setattr(module, 'minimize', inspect)
-    m._solve_exact_nonlinear_rescue(reference, initial_state=np.zeros(3), nominal_sequence=reference.commands,
+    _, _, status = m._solve_exact_nonlinear_rescue(reference, initial_state=np.zeros(3), nominal_sequence=reference.commands,
         temporal_safety_derivative=0., **inputs())
     assert len(captured['values']) == 36
+    assert 'minimum_predictive_geometry_margin_m=' in status

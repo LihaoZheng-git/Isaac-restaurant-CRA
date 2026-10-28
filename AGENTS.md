@@ -2447,3 +2447,22 @@
   Do not rewrite the failed prototype or silently change defaultgrowth.25.
   Corrected source freeze:3018units108.37s/63focused8.33s/Ruffcompile2CLI/diff
   PASS. Fresh .30growth component, independent+own60 and wheel acceptance pending.
+- Atbe2da97 fresh .30growth parked component PASSED108sources/909queries,
+  ZEROmisses/minunionmargin.0246932m; actor/sensor/strictselection/currentbody/
+  zerowheel and independent+own60 gatesPASS. Subsequent motion FAILEDnearby_track_lost
+  7.933333s/0of3guides/.040295nearcurve/hold3.15s(slow3.166667), despite.201875m
+  clearance/.0000280drift/.746218analytical/78fields. MovingforecastFAILED4of696
+  from78sources,worstshortfall.0514033m atonset; parkedPASS is notmovingacceptance.
+  Preserve motionSHA339444102f1224c75a8a1f997b39b5ffd4534284b8cddfb5dfe24004e4b05737.
+  NEWfragment323 source15.8/34returns/missing.20/distance1.147910<1.2 stopped;
+  .225951m whole-surface gap and insufficient original motion/parent history
+  fail unchanged association/coverage. Never erase/widen/renew to make a pass.
+  Trusted same-input forecastON/OFF replay agrees atfirstselection11.8, both
+  failrestoration14.9 andunsafeconfiguration15.8; do notattributeallholdstoprediction.
+  Telemetry-only followup labels futuregeometry margins separately, no newwheel
+  acceptance. KeepablationdefaultOFF/unmerged, accepted2.383333s-yield baseline
+  and primary/crossing/main/longservice/PR117 holds. Furtherpredictivewheels need
+  justified start/stop uncertainty and moving coverage plus original continuity
+  proof; see docs/predictive_human_geometry.md. No smoothing fix is established.
+  Finaltelemetry/result source:3021units108.31s/Ruffcompile/diffPASS. Reports and
+  baselinehashesunchanged; no active native. DraftPR190 remainsunmerged/defaultOFF.
