@@ -1,10 +1,11 @@
 import math
+import json
 
 import numpy as np
 import pytest
 
 from robot.control.planar_velocity_command import bounded_body_velocity, fixed_to_body_velocity
-from robot.evaluation.quadruped_feasibility import summarize_standing, summarize_tracking
+from robot.evaluation.quadruped_feasibility import root_observation, summarize_standing, summarize_tracking
 
 
 def test_lateral_command_survives_frame_conversion():
@@ -68,3 +69,20 @@ def test_tracking_rejects_duplicate_epochs_and_missing_command_suite():
     data[10]['phase_elapsed'] = data[9]['phase_elapsed']
     with pytest.raises(ValueError):
         summarize_tracking(data)
+
+
+def test_native_float32_observations_are_strict_json_and_owned():
+    data = rows()[0]
+    for key in ('command_body', 'position_world', 'roll_pitch_yaw', 'velocity_body'):
+        data[key] = np.asarray(data[key], dtype=np.float32)
+    converted = root_observation(**data)
+    assert json.loads(json.dumps(converted, allow_nan=False)) == converted
+    data['velocity_body'][0] = .2
+    assert converted['velocity_body'][0] == 0
+
+
+def test_native_invalid_observation_cannot_be_laundered_into_report():
+    data = rows()[0]
+    data['velocity_body'][0] = float('nan')
+    with pytest.raises(ValueError):
+        root_observation(**data)

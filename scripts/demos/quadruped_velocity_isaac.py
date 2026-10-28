@@ -66,7 +66,7 @@ def main():
         from isaacsim.storage.native import get_assets_root_path
         from pxr import Gf, UsdGeom, UsdLux, UsdPhysics, UsdShade
         from robot.control.planar_velocity_command import bounded_body_velocity
-        from robot.evaluation.quadruped_feasibility import summarize_standing, summarize_tracking
+        from robot.evaluation.quadruped_feasibility import root_observation, summarize_standing, summarize_tracking
 
         torch = import_module('torch')
         root_url = get_assets_root_path()+'/Isaac/Robots/BostonDynamics/spot/spot.usd'
@@ -157,10 +157,10 @@ def main():
                     rotation, angles = quaternion_state(quat)
                     velocity = rotation.T@linear.numpy()[0]
                     angular_body = rotation.T@angular.numpy()[0]
-                    records.append(dict(time=now, phase=phase,
+                    records.append(root_observation(time=now, phase=phase,
                         phase_elapsed=now-(boundaries[index-1] if index else 0.),
                         command_body=cmd.tolist(), position_world=position.tolist(),
-                        roll_pitch_yaw=angles, velocity_body=[*velocity[:2], float(angular_body[2])]))
+                        roll_pitch_yaw=angles, velocity_body=[*velocity[:2], angular_body[2]]))
                     if (not np.isfinite(position).all() or position[2] < .25
                         or max(abs(a) for a in angles[:2]) > math.radians(25)):
                         failures.append('unsafe_or_nonfinite_root_state')
@@ -201,6 +201,12 @@ def main():
         (args.output/'records.json').write_text(json.dumps(records))
         (args.output/'report.json').write_text(json.dumps(report, indent=2))
         print(json.dumps(report), flush=True)
+    except Exception as error:
+        import traceback
+        failure = dict(stage=args.stage, passed=False, error=repr(error), traceback=traceback.format_exc(),
+            source_files_sha256=source_hashes(), scope='Native bench failed; no standing or movement acceptance')
+        (args.output/'report.json').write_text(json.dumps(failure, indent=2))
+        print(json.dumps(failure), flush=True)
     finally:
         app.close()
 

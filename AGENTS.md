@@ -2612,3 +2612,9 @@
   No native source edits/branch switches during runs, no main/PI/longservice/
   PR117 release. See docs/quadruped_feasibility.md; native pending.
   Source freeze3114units106.77s/sevenfocused/RuffcompileCLI/diffPASS.
+- First Spot standing-v1 atbd09473 saved images/video but NO resultreport;
+  launcher0 is not a pass. Preserve native/launch/execution records. Follow-up
+  converts float32 native vectors to strict-JSON owned observations and exports
+  exceptions before SimulationApp.close; original failure lacks a traceback,
+  so do not claim a proven cause or retroactively pass it. Fresh standing
+  repeat remains mandatory before any locomotion commands.

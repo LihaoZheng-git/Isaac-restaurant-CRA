@@ -80,3 +80,11 @@ Native results pending. All 3,114 unit tests passed in 106.77 s, including seven
 focused interface/evaluation tests. Ruff, compilation and CLI help passed.
 No complete perception, navigation, smoother-passing or platform-replacement
 acceptance is established yet. No main/PI-demo/long-service/PR117 release.
+
+The first native standing run at `bd09473` saved images/video but no result
+report. Its wrapper exited zero; this is explicitly **not a passed gate**.
+Preserve `standing-v1` and its sibling launch/invocation files. Native
+float32 velocity components need strict-JSON conversion; the follow-up adds a
+typed observation copy and a strict JSON regression, plus exception export
+before `SimulationApp.close()` so a future failure remains visible. The first
+run's missing traceback does not independently establish its exact failure.

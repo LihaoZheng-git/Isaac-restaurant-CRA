@@ -9,6 +9,21 @@ import math
 import numpy as np
 
 
+def root_observation(*, time, phase_elapsed, phase, command_body, position_world,
+                     roll_pitch_yaw, velocity_body):
+    """Copy typed native vectors into finite strict-JSON evaluation samples."""
+    result = dict(time=float(time), phase_elapsed=float(phase_elapsed), phase=phase)
+    if not isinstance(phase, str) or not phase or not all(math.isfinite(result[k]) for k in ('time', 'phase_elapsed')):
+        raise ValueError('finite source epoch and explicit phase required')
+    for key, value in dict(command_body=command_body, position_world=position_world,
+                          roll_pitch_yaw=roll_pitch_yaw, velocity_body=velocity_body).items():
+        vector = np.asarray(value, dtype=float)
+        if vector.shape != (3,) or not np.isfinite(vector).all():
+            raise ValueError('finite three-component native root vectors required')
+        result[key] = vector.tolist()
+    return result
+
+
 def summarize_standing(rows):
     if len(rows) < 30:
         raise ValueError("at least thirty independent standing observations required")
