@@ -165,6 +165,7 @@ class SafeSAGEUnicycleMPCConfig:
     enable_recovery_cost_pruning: bool = False
     enable_recovery_feasibility_pruning: bool = False
     enable_tapered_rescue_seed: bool = False
+    use_consistent_temporal_jacobian: bool = False
     progress_seed_linear_fraction: float = 0.25
     configuration_position_padding_m: float = 0.0
     configuration_yaw_padding_radians: float = 0.0
@@ -175,6 +176,8 @@ class SafeSAGEUnicycleMPCConfig:
             raise TypeError("enable_progress_seeds must be a boolean.")
         if not isinstance(self.enable_tapered_rescue_seed, bool):
             raise TypeError('enable_tapered_rescue_seed must be a boolean.')
+        if not isinstance(self.use_consistent_temporal_jacobian, bool):
+            raise TypeError('use_consistent_temporal_jacobian must be a boolean.')
         if not isinstance(self.enable_recovery_cost_pruning, bool):
             raise TypeError("enable_recovery_cost_pruning must be a boolean.")
         if not isinstance(self.enable_recovery_feasibility_pruning, bool):
@@ -2442,16 +2445,23 @@ class SafeSAGEUnicycleMPC:
             exact_gradients.append(evaluation.interpolant_gradient)
             temporal_terms.append(evaluation.scaled_temporal_safety_derivative)
             unsafe_configurations.append(evaluation.unsafe_reason is not None)
+        exact_gradient_array = np.asarray(exact_gradients, dtype=np.float64)
+        if self.config.use_consistent_temporal_jacobian:
+            from robot.safety.temporal_forecast_gradient import scaled_temporal_forecast_gradient
+            temporal_gradient = scaled_temporal_forecast_gradient(
+                self.paper_filter.config, safety_states,
+                configuration_space=configuration_space, h_full=h_full,
+                guidance_fields=guidance_fields,
+                temporal_safety_derivative=temporal_safety_derivative)
+            times = self.config.time_step * np.arange(len(safety_states))
+            exact_gradient_array += times[:, None] * temporal_gradient
         return _ReferenceSamples(
             safety_values=np.asarray(values, dtype=np.float64),
             guidance_normals=np.asarray(
                 guidance_normals,
                 dtype=np.float64,
             ),
-            exact_gradients=np.asarray(
-                exact_gradients,
-                dtype=np.float64,
-            ),
+            exact_gradients=exact_gradient_array,
             scaled_temporal_derivatives=np.asarray(
                 temporal_terms,
                 dtype=np.float64,

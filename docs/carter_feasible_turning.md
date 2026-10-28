@@ -137,3 +137,44 @@ with a source audit and new independent/own60 gates; the unchanged mass/actor/
 perception component can be reused only by exact fingerprint proof. Outcome
 is pending. All original smoothness, evidence, curve, arrival/stopping and
 primary/main/PI/long-service/PR117 holds remain.
+
+## Tapered-seed result and forecast-Jacobian consistency
+
+At `faf5aa7`, independent and own60 gates passed. Native
+`motion-tapered-seed-v3` **PASSED navigation/evidence**:3/3 guides/final arrival
+in21.116667 s,21 supported moving-kinetic rows,0.237685 m nearby curve,
+0.427766 m clearance,0.002453 m stop drift,0.350702 minimum analytical margin
+and207 fields. **Smoothing FAILED**:2.383333 s hold, essentially unchanged from
+the original baseline. Five selected numerical-seed attempts produced zero
+accepted plans. The offline moving witness does not establish a live benefit.
+Preserve original report SHA:
+`503c99cfacda36d999ff604802936a51f784db5239c790560542bcd1263f243b`.
+The external read-only replay observer retained the first failed attempt at
+source14.2, SHA`a708b3d8cabef1f76ae97de565d2324e253eb1a65de7ff2c5b1c081c5915f01a`;
+it captured no successful selected seed. It never changed control or source time.
+
+A separate numerical audit found a concrete derivative inconsistency. Existing
+constraint VALUES are `h(q) + t * scaled_ht(q)`, with the scaled temporal term
+sampled at each predicted state. Restoration and nonlinear rescue previously
+used only `gradient(h)` for their Jacobian. On the archived source14.4 example,
+the maximum discrepancy against finite differences was0.046266 (maximum
+numerical Jacobian entry0.144141). This is not proof of a sole stall cause.
+
+The default-off `--mpc-consistent-temporal-jacobian` adds the missing
+`t * gradient(scaled_ht)` analytically to restoration/nonlinear Jacobians.
+It differentiates the existing spatial/yaw interpolants, guidance-vector norm,
+spatial-gradient norm, regularizer, clamp branch and raw temporal field. It
+changes NO barrier values, source epochs, cost, guidance vector, uncertainty
+policy, actuator bounds or acceptance thresholds. Grid/yaw/clamp knots can
+remain nondifferentiable; derivatives follow the active branch. There are no
+finite-difference gradients in runtime (finite differences are tests only).
+
+On the same archived source14.4 input, the analytic complete Jacobian matches
+finite differences within1.06e-9 and restores a moving horizon with the same
+solver budgets, without a numerical seed. A different source14.2 example still
+failed offline, with and without seeding; retain both failures. Numerical
+consistency is not global convergence or native smoothness acceptance.
+The next separate native trial adds only the Jacobian flag to the third
+variant after new independent/own60 gates. Outcome remains pending and every
+original gate/hold remains. The replay CLI accepts `--variant temporal_jacobian`
+for an unchanged recorded baseline and preserves its other numerical options.

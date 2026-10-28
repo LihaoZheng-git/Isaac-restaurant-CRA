@@ -22,6 +22,7 @@ def main():
     parser.add_argument('--replay-directory', type=Path, required=True)
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--trusted-local-replay', action='store_true')
+    parser.add_argument('--variant', choices=('tapered_seed', 'temporal_jacobian'), default='tapered_seed')
     args = parser.parse_args()
     if not args.trusted_local_replay:
         parser.error('explicit trusted-local-replay acknowledgement required; external pickle is unsupported')
@@ -41,9 +42,13 @@ def main():
         state, nominal, field, warm, goal, *epoch = saved['request']
         control = saved['control']
         original_config = asdict(control.mpc.config)
-        control.mpc.config = replace(control.mpc.config, enable_tapered_rescue_seed=enabled)
+        option = ('enable_tapered_rescue_seed' if args.variant == 'tapered_seed'
+            else 'use_consistent_temporal_jacobian')
+        if original_config[option]:
+            parser.error('selected option must be disabled in the recorded baseline')
+        control.mpc.config = replace(control.mpc.config, **{option: enabled})
         config = asdict(control.mpc.config)
-        assert all(config[k] == v for k, v in original_config.items() if k != 'enable_tapered_rescue_seed')
+        assert all(config[k] == v for k, v in original_config.items() if k != option)
         before = pickle.dumps(field)
         result = control.plan(state, nominal, field, initial_command_guess=warm,
             **({'nominal_goal_grid_xy': goal} if goal is not None else {}),
@@ -75,7 +80,7 @@ def main():
             unchanged_solver_budgets=dict(qp=config['maximum_solver_iterations'],
                 nonlinear=config['maximum_nonlinear_rescue_iterations'])))
     args.output.parent.mkdir(parents=True, exist_ok=True)
-    args.output.write_text(json.dumps(dict(original_snapshot_sha256=meta['sha256'], rows=rows,
+    args.output.write_text(json.dumps(dict(original_snapshot_sha256=meta['sha256'], variant=args.variant, rows=rows,
         scope='Offline regression only. Default full-command parity; unchanged field bytes/epochs/solver budgets. No wheel execution, native smoothness or real-time acceptance.'), indent=2, allow_nan=False))
     assert path.read_bytes() == blob
     print(json.dumps([{k: r[k] for k in ('enabled', 'success', 'first_command', 'full_exact_revalidation')}

@@ -41,6 +41,21 @@
   parity; no earlypreparation/new motionprior/cost/limits. New source audit and
   independent+own60 before wheels; original mass/actor/perception component
   reusable only if exact unchanged fingerprints. See docs/carter_feasible_turning.md.
+- Atfaf5aa7 tapered-seed native NATIVEPASS3guides/finalarrival21.116667s,
+  21kinetic/.237685nearcurve/.427766clearance/.002453drift/.350702analytical/
+  207fields, but smoothingFAILED2.383333hold;5selectedseedattempts ZEROaccepted.
+  Offline witness is NOT live benefit. Preserve SHA
+  503c99cfacda36d999ff604802936a51f784db5239c790560542bcd1263f243b.
+  Source14.4 forecast-Jacobian audit detects missing t*gradient(scaled_ht):
+  original constraintVALUES h(q)+t*scaled_ht(q) resample temporal term, but
+  oldexactgradient linearization used onlygradienth. Gap.046266; analytic
+  completechain-rule prototype matchesFD1.06e-9. Separate default-OFF
+  --mpc-consistent-temporal-jacobian changes ONLYrestoration/nonlinear derivative,
+  not values/guidance/cost/priors/clocks/limits/acceptance. Runtimeanalytic,
+  finite differences TESTonly; grid/yaw/clamp knots remain piecewisenondiff.
+  Source14.4moving replay passes originalbudgets, another14.2stillfails; no
+  solecause/global/nativeclaim. Newindependent+own60 beforefourthwheels,
+  alloriginal gates and main/PI/longservice/PR117 holds remain. See report.
 
 - Keep waypoint nominal control obstacle-unaware; MPC and analytical CBF create online intervention.
 - Runtime CRA uses visual/physical estimation without language or VLM reasoning.
