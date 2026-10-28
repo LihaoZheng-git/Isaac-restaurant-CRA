@@ -18,7 +18,7 @@ sys.path.insert(0, str(ROOT))
 def parse_args():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--output', type=Path, required=True)
-    parser.add_argument('--stage', choices=('standing', 'tracking'), default='standing')
+    parser.add_argument('--stage', choices=('geometry', 'standing', 'tracking'), default='standing')
     parser.add_argument('--asset-manifest', type=Path, required=True)
     parser.add_argument('--standing-report', type=Path)
     parser.add_argument('--settle-seconds', type=float, default=2.)
@@ -242,7 +242,8 @@ def main():
                         phase_elapsed=now-(boundaries[index-1] if index else 0.),
                         command_body=cmd.tolist(), position_world=position.tolist(),
                         roll_pitch_yaw=angles, velocity_body=[*velocity[:2], angular_body[2]]))
-                    if (not np.isfinite(position).all() or position[2] < (-.02 if drive is not None else .25)
+                    lower_abort = -2. if args.stage == 'geometry' else (-.02 if drive is not None else .25)
+                    if (not np.isfinite(position).all() or position[2] < lower_abort
                         or max(abs(a) for a in angles[:2]) > math.radians(25)):
                         failures.append('unsafe_or_nonfinite_root_state')
                         finished = True
@@ -271,7 +272,7 @@ def main():
         if own_standing is None and len([r for r in records if r['phase'] == 'standing']) >= 30:
             own_standing = summarize_standing([r for r in records if r['phase'] == 'standing'], **height_bounds)
         tracking = summarize_tracking(records, axes=axes, **height_bounds) if args.stage == 'tracking' and own_standing and own_standing['passed'] and not failures else None
-        report = dict(stage=args.stage, passed=bool(own_standing and own_standing['passed'] and not failures
+        report = dict(stage=args.stage, passed=bool(args.stage != 'geometry' and own_standing and own_standing['passed'] and not failures
                 and (args.stage == 'standing' or tracking and tracking['passed'])),
             settle_seconds=args.settle_seconds, robot=args.robot,
             initial_base_height_m=initial_height, ground_friction_combine='multiply',
@@ -284,6 +285,9 @@ def main():
             root_state_clock='SimulationManager.get_simulation_time at physics callback',
             stage_meters_per_unit=UsdGeom.GetStageMetersPerUnit(stage), stage_up_axis=str(UsdGeom.GetStageUpAxis(stage)),
             evaluated_axes=list(axes), unsupported_axes=['lateral', 'combined'] if drive is not None else [],
+            final_link_names=list(robot.link_names),
+            final_link_transforms=robot._physics_articulation_view.get_link_transforms().numpy()[0].tolist(),
+            diagnostic_only=args.stage == 'geometry',
             scope='Separate freely standing/walking open-space interface bench; no robot replacement, CRA, perception or navigation acceptance')
         (args.output/'records.json').write_text(json.dumps(records))
         (args.output/'report.json').write_text(json.dumps(report, indent=2))

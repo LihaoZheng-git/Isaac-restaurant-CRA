@@ -2661,3 +2661,8 @@
   gates unchanged. Rootz is frameconvention, not clearance/fallheight. Check
   units/Zup/wheelradius at runtime. AuditrawcasterBBoxextentsare stale/huge,
   unusableasphysicalenvelope; neverfeedintoCRA/control orclaimfullfootprintaudit.
+- Cartercorrected standing stillheightaborts beforeobservation. Separatezero-
+  command --stage geometry maylognative linktransforms throughsettling toresolve
+  root convention. It ALWAYSreports passedfalse/diagnostic_only; cannotauthorize
+  tracking. Its-2m diagnostic abort is not acceptance; standing/trackingbounds
+  unchanged, no passed-oldtrial or controlgeometryclaim. Physicssourceproofkept.

@@ -202,3 +202,12 @@ all-collider minimum is invalid as a physical robot envelope. Do not feed that
 diagnostic into control or claim a completed swept-footprint audit. The actual
 drive-wheel cylinders and configured radius establish only this flat-ground
 root convention. Previous failed reports are preserved, not re-scored.
+
+The corrected Carter standing attempt also reached the height abort before
+the observation window. A separate `--stage geometry` diagnostic is therefore
+allowed to settle at zero commands while logging native link transforms to
+resolve the remaining dynamic root convention. It can NEVER return a passed
+gate or authorize tracking. Its broad -2 m root diagnostic abort is not a
+standing/navigation acceptance bound; finite/upright monitoring remains. All
+standing/tracking limits stay as recorded until an independently justified
+frame correction is evaluated in a fresh run. This is not an obstacle model.
