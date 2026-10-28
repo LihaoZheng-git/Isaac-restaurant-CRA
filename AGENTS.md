@@ -2559,3 +2559,15 @@
   .20nearcurve/.5s+50%hold and allprimary/main/longservice/PI/PR117 holds.
   See docs/adaptive_human_prediction.md; nativepending.
   Sourcefreeze3097units104.13s/53focused7.31s/Ruffcompile2CLI/diffPASS.
+- At50e5b1f adaptivecombined NATIVEPASS3goals22.016667s/.662147nearcurve/
+  .915047clearance/.002680drift/.125814analytical,219fields205translating;
+  23supportedmovingkinetic(19simultaneous). Forecast219sources1965queries0misses/
+  min.0234560; mass89retained62originalsources; prep109used4selections/bodyPASS.
+  Preserve SHA4cb4f466a3b911cbd8e6c005352b4237a6bc254a250bb4c4e02f26c82afde578.
+  SEPARATEsmoothing stillFAILED.816667hold/.833333slow despite65.73%reduction;
+  equalsoldN6hold, not adaptivegrowthsmoothnessbenefit. No PI/primary/main/
+  longservice/PR117release. Duringpause IDpreferencepresentmostframes, nearzero
+  futuremargins/rescues +5fieldinvalidations/4staleticks observed. Earlier1.6m
+  qualificationchurn is an additional hypothesis, not solecause. Do notremove
+  hardchecks. Newearlierpreferencecontinuity can be testedseparately; preserve
+  current/future/source/physical/arrival/stop and.5s+50%hold criteria.

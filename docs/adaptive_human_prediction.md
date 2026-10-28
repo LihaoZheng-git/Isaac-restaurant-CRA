@@ -47,3 +47,37 @@ long-service/PI/PR117 hold is released; native validation remains pending.
 Source freeze passed3,097 full unit tests in104.13 s,53 focused tests in7.31 s,
 Ruff, compilation, both CLI help paths and whitespace checks. Default fixed
 command parity on the two original native inputs was exact (maximum error0).
+
+At50e5b1f the fresh component PASSED108 sources/909 future queries/zero misses,
+minimum union margin .0485359 m,88 retained mass updates/27 original priors,
+and all original component gates. Independent+own60 parked gates passed too.
+
+The combined live run PASSED all native navigation/evidence gates:3/3 goals in
+22.016667 simulation seconds, .662147 m nearby walking bend, .915047 m minimum
+physical clearance, .002680 m stopping drift and .125814 minimum analytical
+margin. It recorded219 fields/205 while translating,23 supported moving-kinetic
+rows (19 simultaneous), and219 forecast sources/1,965 queries/zero misses
+(minimum union margin .0234560 m). The combined provenance audit passed89
+retained updates/62 original mass priors; preparation109 used sources/four
+original selections and current body/normal-selection audits passed. Preserve
+`motion-adaptive030-cap050-horizon12-v1/report.json`, SHA256
+`4cb4f466a3b911cbd8e6c005352b4237a6bc254a250bb4c4e02f26c82afde578`.
+
+The SEPARATE smoothing target still FAILED: .816667 s actual nearby hold,
+.833333 s slow interval, despite65.73% reduction from the original2.383333 s
+hold. This equals the previous shorter-horizon hold, so do not attribute a
+further smoothness benefit to adaptive growth. Native success and smoothing
+failure are distinct outcomes. All-track numeric completeness is not complete
+fresh four-factor vision or calibrated mass/heat/sharpness.
+
+Original event evidence shows several exact-restoration attempts at essentially
+zero future margin, some failed searches, five field-invalidated plans and
+four stale-field ticks in the pause window. The passing preference was present
+during most of the pause. Earlier1.6 m lateral qualification churn temporarily
+disabled the preference before it; these observations do not establish one
+sole cause. Detailed failed revalidation inputs were not preserved by the
+existing last-in-bucket snapshots. Keep `pause-events-companion-v1.json` and
+`guidance-gap-development-v1.json` separate from the immutable native report.
+An earlier avoidance-preference continuity variant may be evaluated while
+retaining every hard current/future field constraint; do not simply remove
+checks or reinterpret the unchanged .5 s target as passed.
