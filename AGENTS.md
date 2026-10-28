@@ -2598,3 +2598,17 @@
   lease/qualification gaps not solecause. Singletrial not causal/repeatability
   proof. Preserve all checks/.5target, failed reports and primary/main/longservice/
   PI/PR117 holds. See docs/predictive_guidance_continuity.md and local video/plot.
+- The user approved a separate quadruped comparison, not immediate Carter
+  replacement. Preferred future passing should respond to observed approaching
+  motion/predicted encounter; quiet-person early preparation stays a separately
+  labeled ablation. Stock installed Spot accepts body(vx,vy,wz), not exact motion.
+  Audit original weights/config/USD and keep them ignored; source Apache headers
+  do not establish an Apache weights/asset license. Preserve installed runtime,
+  500Hz/50Hz policy timing and Carter results. Freely standing zero-command gate
+  precedes tracking; independent and own standing source/asset gates mandatory.
+  Retain 2cm stopping including braking, upright/height/command-domain checks;
+  no silent clipping of safety commands. External bench camera/root truth is
+  evaluation only. Standing/tracking is not RGB/LiDAR/CRA/navigation acceptance.
+  No native source edits/branch switches during runs, no main/PI/longservice/
+  PR117 release. See docs/quadruped_feasibility.md; native pending.
+  Source freeze3114units106.77s/sevenfocused/RuffcompileCLI/diffPASS.

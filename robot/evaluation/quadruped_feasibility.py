@@ -1,0 +1,79 @@
+"""Independent root-state evaluation for a bounded locomotion interface bench.
+
+These poses are simulation evaluation truth, never CRA or navigation inputs.
+This bench does not establish perception or obstacle-avoidance acceptance.
+"""
+
+import math
+
+import numpy as np
+
+
+def summarize_standing(rows):
+    if len(rows) < 30:
+        raise ValueError("at least thirty independent standing observations required")
+    t = np.array([r["time"] for r in rows], float)
+    p = np.array([r["position_world"] for r in rows], float)
+    rpy = np.array([r["roll_pitch_yaw"] for r in rows], float)
+    commands = np.array([r["command_body"] for r in rows], float)
+    if (p.shape != (len(t), 3) or rpy.shape != p.shape or commands.shape != p.shape
+        or not all(np.isfinite(a).all() for a in (t, p, rpy, commands))
+        or np.any(np.diff(t) <= 0) or np.max(np.diff(t)) > .05+1e-9):
+        raise ValueError("finite ordered root observations with gaps <=.05s required")
+    drift = float(np.max(np.linalg.norm(p[:, :2]-p[0, :2], axis=1)))
+    yaw = float(np.max(np.abs(np.unwrap(rpy[:, 2])-rpy[0, 2])))
+    tilt = float(np.max(np.abs(rpy[:, :2])))
+    checks = dict(zero_velocity_commands=bool(np.all(commands == 0)),
+        at_least_three_seconds=bool(t[-1]-t[0] >= 3.-1e-9),
+        bounded_standing_translation=drift <= .02,
+        bounded_standing_yaw=yaw <= .03,
+        upright=tilt <= math.radians(10),
+        bounded_base_height=bool(np.all((p[:, 2] >= .3) & (p[:, 2] <= .8))))
+    return dict(passed=all(checks.values()), checks=checks, frames=len(t),
+        maximum_xy_drift_m=drift, maximum_yaw_drift_rad=yaw, maximum_tilt_rad=tilt,
+        scope="freely standing flat-ground zero-command policy bench; root truth is evaluation only; no sensor/CRA/navigation acceptance")
+
+
+def summarize_tracking(rows):
+    """Score settled tracking and each stop without hiding braking displacement."""
+    phases = list(dict.fromkeys(r["phase"] for r in rows))
+    results = []
+    for phase in phases:
+        group = [r for r in rows if r["phase"] == phase]
+        if not phase.startswith(("move_", "stop_")):
+            continue
+        elapsed = np.array([r["phase_elapsed"] for r in group], float)
+        measured = np.array([r["velocity_body"] for r in group], float)
+        command = np.array([r["command_body"] for r in group], float)
+        position = np.array([r["position_world"] for r in group], float)
+        angles = np.array([r["roll_pitch_yaw"] for r in group], float)
+        if (len(group) < 30 or measured.shape != (len(group), 3) or command.shape != measured.shape
+            or position.shape != measured.shape or angles.shape != measured.shape
+            or np.any(np.diff(elapsed) <= 0) or np.max(np.diff(elapsed)) > .05+1e-9
+            or not all(np.isfinite(a).all() for a in (elapsed, measured, command, position, angles))):
+            raise ValueError("thirty finite samples required for each tracking phase")
+        settled = elapsed >= 1.
+        if settled.sum() < 20:
+            raise ValueError("at least twenty settled samples required")
+        error = measured[settled]-command[settled]
+        xy_error = float(np.sqrt(np.mean(np.sum(error[:, :2]**2, axis=1))))
+        yaw_error = float(np.sqrt(np.mean(error[:, 2]**2)))
+        checks = dict(translation_tracking=xy_error <= .08, yaw_tracking=yaw_error <= .15,
+            upright=bool(np.max(np.abs(angles[:, :2])) <= math.radians(10)),
+            bounded_base_height=bool(np.all((position[:, 2] >= .3) & (position[:, 2] <= .8))),
+            constant_phase_command=bool(np.all(command == command[0])),
+            phase_command_active=bool(np.any(command[0] != 0) if phase.startswith('move_') else np.all(command == 0)))
+        result = dict(phase=phase, translation_rmse_mps=xy_error, yaw_rmse_rps=yaw_error)
+        if phase.startswith("stop_"):
+            # From the first zero-command sample, not after an unreported settling period.
+            result["maximum_stop_displacement_m"] = float(np.max(np.linalg.norm(position[:, :2]-position[0, :2], axis=1)))
+            checks["original_two_cm_stop_gate"] = result["maximum_stop_displacement_m"] <= .02
+        result.update(checks=checks, passed=all(checks.values()))
+        results.append(result)
+    if not results:
+        raise ValueError("explicit movement and stopping phases required")
+    required = {prefix+axis for prefix in ('move_', 'stop_') for axis in ('forward', 'lateral', 'yaw', 'combined')}
+    complete = set(phases)-{'settle', 'standing'} == required
+    return dict(passed=complete and all(r["passed"] for r in results), phases=results,
+        complete_command_suite=complete,
+        scope="bounded open-space command tracking only; no navigation, perception, ideal-velocity realization or causal platform benefit claim")
