@@ -22,6 +22,8 @@ sys.path.insert(0, str(ROOT))
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument("--output", type=Path, required=True)
 parser.add_argument("--motion", action="store_true")
+parser.add_argument('--grid-resolution', type=float, choices=(.05, .1), default=.1,
+                    help='explicit numerical field-grid comparison in metres; .1 preserves legacy; physical margins and all observed occupancy stay unchanged')
 parser.add_argument("--waypoint-mode", choices=("checkpoints", "guides"), default="checkpoints",
                     help="separate pose-only route-guide variant; final-goal arrival and stopping remain mandatory")
 parser.add_argument("--route-guide-lookahead", type=float, default=1.0)
@@ -276,8 +278,8 @@ if args.human_prediction_uncertainty_floor is not None and (not args.predictive_
     or not math.isfinite(args.human_prediction_uncertainty_floor)
     or not .3 <= args.human_prediction_uncertainty_floor <= args.human_prediction_uncertainty_rate <= 1.):
     parser.error('adaptive uncertainty requires separate predictive redesign and explicit .30<=floor<=ceiling<=1m/s')
-if args.human_mass_body_identity_retention and (not args.predictive_parallel_redesign or args.human_body_envelope_radius is None):
-    parser.error('adult mass identity retention requires the separate predictive redesign and current body identity')
+if args.human_mass_body_identity_retention and args.human_body_envelope_radius is None:
+    parser.error('adult mass identity retention requires explicit current body identity')
 if args.predictive_parallel_redesign and not args.predictive_human_geometry_ablation:
     parser.error('predictive parallel redesign requires the separate predictive geometry ablation')
 if (not math.isfinite(args.human_prediction_uncertainty_rate) or not .25 <= args.human_prediction_uncertainty_rate <= 1.
@@ -1096,7 +1098,10 @@ def main():
     )
     policies = existing.create_fixed_field_configuration()
     class_policy, guidance, grid, field_config = policies
-    grid = replace(grid, resolution=0.1)
+    grid = replace(grid, resolution=args.grid_resolution)
+    field_grid_diagnostic = {'geometry': asdict(grid),
+        'scope': 'numerical raster resolution only; unchanged physical footprint/body margins, raw occupancy, CRA policy and source clocks'}
+    save_json('field-grid-configuration.json', field_grid_diagnostic)
     field_config = replace(
         field_config,
         configuration_space_config=replace(
@@ -2834,6 +2839,7 @@ def main():
         "checked_wait_current_pose_admissions": checked_wait_admissions,
         "encounter_comparison": args.encounter_comparison,
         "physical_CRA_lambda": 1.25,
+        "field_grid_configuration": field_grid_diagnostic,
         "predictive_human_geometry_ablation": args.predictive_human_geometry_ablation,
         "predictive_parallel_redesign": args.predictive_parallel_redesign,
         "parallel_preparation_exit_lateral_m": args.parallel_preparation_exit_lateral,

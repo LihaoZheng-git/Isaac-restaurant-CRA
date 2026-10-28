@@ -9,6 +9,21 @@
   never replay them into control. See docs/carter_feasible_turning.md. Current
   boundary rejection is not proof that new seeds can fix the already blocked
   initial state. All physical/source/arrival/stop gates and holds remain.
+- At d892784 original no-preparation reproduction reached3goals21.333333s,
+  clearance.352025/stopdrift.002406/analytical.080218, but FAILED overall only
+  four supported kinetic rows<five; actual hold2.383333s. Preserve original SHA
+  135b0b8fa9bd3d9eb5f4bcf1d1aed72bc8366e3af4ea23bde6f4151e476ed4c6.
+  First blocked current pose source15.3 is owned by the human body prior.
+  Offline body-only same-radius.65/same-footprint-margin.05 comparison has
+  continuous margin.199792m, raster blocked.1m/free.05m. Excluded other occupancy
+  means this is NOT control/acceptance. No extra boundary ring exists; all
+  occupied-cell/yaw/dense checks remain. Separate explicit --grid-resolution.05
+  keeps legacy.1, bounds/physical margins/occupancy/CRA/clocks/limits unchanged.
+  Existing3s mass-current-body retention may be enabled WITHOUT preparation;
+  retain its original identity/provenance/expiry gates. Next TWO-option trial
+  needs new mass/no-prep component and fine-grid independent+own60 before wheels.
+  No early/rear preparation or predictive redesign, no relaxed five-row/.5s
+  smoothness/arrival/stop gate or main/PI/longservice/PR117 release. See report.
 
 - Keep waypoint nominal control obstacle-unaware; MPC and analytical CBF create online intervention.
 - Runtime CRA uses visual/physical estimation without language or VLM reasoning.
