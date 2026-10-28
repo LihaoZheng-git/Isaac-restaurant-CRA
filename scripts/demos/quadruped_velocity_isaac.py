@@ -21,6 +21,7 @@ def parse_args():
     parser.add_argument('--stage', choices=('standing', 'tracking'), default='standing')
     parser.add_argument('--asset-manifest', type=Path, required=True)
     parser.add_argument('--standing-report', type=Path)
+    parser.add_argument('--settle-seconds', type=float, default=2.)
     return parser.parse_args()
 
 
@@ -32,6 +33,8 @@ def source_hashes():
 
 def main():
     args = parse_args()
+    if not math.isfinite(args.settle_seconds) or not 2. <= args.settle_seconds <= 15.:
+        raise ValueError('explicit initial settling period must be within 2..15s')
     if args.output.exists():
         raise ValueError('fresh output directory required; preserve earlier failures')
     manifest = json.loads(args.asset_manifest.read_text())
@@ -44,6 +47,7 @@ def main():
             raise ValueError('independent standing report required before tracking')
         prior = json.loads(args.standing_report.read_text())
         if (not prior['passed'] or prior['stage'] != 'standing'
+            or prior.get('settle_seconds') != args.settle_seconds
             or prior['asset_sha256'] != {k: v['sha256'] for k, v in assets.items()}
             or prior['source_files_sha256'] != source_hashes()):
             raise ValueError('matching passed standing gate required; no stale contract acceptance')
@@ -109,7 +113,7 @@ def main():
         if spot._dt != .002 or spot._decimation != 10:
             raise ValueError('policy timing differs from audited 500Hz/50Hz training contract')
         timeline = omni.timeline.get_timeline_interface()
-        phases = [('settle', 2., [0., 0., 0.]), ('standing', 3.2, [0., 0., 0.])]
+        phases = [('settle', args.settle_seconds, [0., 0., 0.]), ('standing', 3.2, [0., 0., 0.])]
         if args.stage == 'tracking':
             phases += [('move_forward', 4., [.2, 0., 0.]), ('stop_forward', 2., [0., 0., 0.]),
                 ('move_lateral', 4., [0., .15, 0.]), ('stop_lateral', 2., [0., 0., 0.]),
@@ -192,6 +196,7 @@ def main():
         tracking = summarize_tracking(records) if args.stage == 'tracking' and own_standing and own_standing['passed'] and not failures else None
         report = dict(stage=args.stage, passed=bool(own_standing and own_standing['passed'] and not failures
                 and (args.stage == 'standing' or tracking and tracking['passed'])),
+            settle_seconds=args.settle_seconds,
             standing=own_standing, tracking=tracking, failures=failures,
             asset_sha256={k: v['sha256'] for k, v in assets.items()},
             source_files_sha256=source_hashes(), policy_class='stock SpotFlatTerrainPolicy',

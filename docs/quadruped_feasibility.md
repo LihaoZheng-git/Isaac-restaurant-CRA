@@ -88,3 +88,12 @@ float32 velocity components need strict-JSON conversion; the follow-up adds a
 typed observation copy and a strict JSON regression, plus exception export
 before `SimulationApp.close()` so a future failure remains visible. The first
 run's missing traceback does not independently establish its exact failure.
+
+At `dd2cf43`, `standing-v2` exported a valid **failed** report: 161 zero-command
+observations, XY drift 0.005832 m, yaw drift 0.074433 rad (>0.03), tilt
+0.004613 rad. No locomotion trial followed. Per-second median yaw rate decayed
+from about -0.047 rad/s during second 1 to -0.0165 during second 5. The next
+separate retry may use explicit `--settle-seconds 10` before the unchanged
+3.2 s observation and acceptance gates. The legacy 2 s default stays. This
+tests an initialization transient, not relaxed tolerances or a passed old run.
+Tracking requires the same explicit settling period as its independent gate.

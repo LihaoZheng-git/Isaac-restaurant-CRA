@@ -2618,3 +2618,8 @@
   exceptions before SimulationApp.close; original failure lacks a traceback,
   so do not claim a proven cause or retroactively pass it. Fresh standing
   repeat remains mandatory before any locomotion commands.
+- Spot standing-v2 dd2cf43 FAILED only yaw: .074433rad>.03 despite.005832m
+  XYdrift/.004613radtilt/161zerocommandrows. Decaying yawrate motivates separate
+  explicit10s settling retry, unchanged3.2s observation/2cm/.03rad gates.
+  Legacysettle2s remains; track bench must match independent source/assets/settle.
+  Preserve oldfailedreports; no locomotion acceptance or replacement yet.
