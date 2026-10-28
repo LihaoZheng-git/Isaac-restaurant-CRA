@@ -2585,3 +2585,16 @@
   actualarrival/stop/.5hold+50% andprimary/main/longservice/PI/PR117holds remain.
   See docs/predictive_guidance_continuity.md; nativepending.
   Sourcefreeze3107units103.40s/55focused5.98s/Ruffcompile2CLI/diffPASS.
+- At b3eb65f exit2.2 component PASSED109sources918futurequeries0misses/min.048630;
+  preparation52used1selection/mass86retained25original; independent+own60PASS.
+  Live NATIVEPASS3goals21.85s/.683653nearcurve/.922686clearance/.002754stopdrift/
+  .104314analytical,218fields205translating;39supportedmovingkinetic34simultaneous.
+  Forecast218sources1954queries0misses/min.026292; mass81retained60original;
+  prep108used3selections/body/normalselectionPASS. Preserve reportSHA
+  dc0451e4c199cb9f1d00734df261f55a94cae4bb6214fb42d8eaf54b3b83ed39.
+  SEPARATE smoothing stillFAILED.700000hold>.5 despite70.63%original reduction.
+  All7source rows duringhold had preference; exactprogress references unavailable,
+  rescues nearzero futuremargins and currentfield invalidations remain. Earlier
+  lease/qualification gaps not solecause. Singletrial not causal/repeatability
+  proof. Preserve all checks/.5target, failed reports and primary/main/longservice/
+  PI/PR117 holds. See docs/predictive_guidance_continuity.md and local video/plot.
