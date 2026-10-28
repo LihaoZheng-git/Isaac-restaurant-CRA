@@ -2526,3 +2526,16 @@
   competitor gates, otherfactors and all safety/acceptance gates remain.
   Offlineadaptive-growth hypotheses all4datasets0misses are DEVELOPMENT only,
   not integrated or nativeacceptance. No PI/primary/main/longservice/PR117 release.
+- Separate default-OFF --human-mass-body-identity-retention retains ONLY actual
+  accepted visual/SAM adultmassPRIORS with current verified positivebodyidentity
+  (>=20returns/currentepoch/centroid/observation). Original3s mass expiry remains,
+  confidencehalf-life1.5s/bounds5%persecond; no source/frame renewal by borrowing.
+  Genericproperty/competitor gates stayunchanged; their rejection is recorded.
+  Actualsameframe raw specialistresult mayseednewsource even ifgenericcache
+  freezes its oldattribute; borrowedattributes neverseed. Stagecachewithfullfield,
+  recomputeonlymass-dependent factors/currentmotion; preserveothercues/occupancy.
+  Adapterhardcap3s evenlongersession. Newprovenanceaudit plusoldfresh-onlysensor
+  and5supportedmovingkinetic gates mandatory; stationarybeforewheels. Not a
+  smoothingfix/newmassmeasurement/primary/main/longservice/PR117 release.
+  See docs/human_mass_identity_retention.md; nativepending.
+  Sourcefreeze3078units108.18s/40focused5.99s/Ruffcompile2CLI/diffPASS.

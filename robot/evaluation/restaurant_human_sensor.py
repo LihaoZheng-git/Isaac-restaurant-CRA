@@ -97,6 +97,7 @@ class RestaurantHumanSensorDiagnostic:
         human_prediction_uncertainty_rate=.25,
         human_prediction_horizon_seconds=1.2,
         parallel_preparation=False,
+        human_mass_body_identity_retention=False,
     ):
         self.stage, self.output = stage, output
         from robot.safety.motion_aware_passing import MotionAwarePassingConfig
@@ -218,6 +219,7 @@ class RestaurantHumanSensorDiagnostic:
             lookahead_distance=0.1,
         )
         self.worker = LiveObjectPerception(
+            human_mass_body_identity_retention=human_mass_body_identity_retention,
             predictive_human_geometry_config=HumanGeometryForecastConfig(
                 horizon_seconds=human_prediction_horizon_seconds,
                 velocity_uncertainty_prior_mps=human_prediction_uncertainty_rate) if predictive_human_geometry else None,
@@ -288,6 +290,7 @@ class RestaurantHumanSensorDiagnostic:
             persistent_property_config=PersistentObjectEvidenceConfig(
                 "articulating human diagnostic: fresh inputs only; no unchanged-shape or support/plume persistence",
                 retain_observed_properties=False,
+                maximum_property_age_seconds=3. if human_mass_body_identity_retention else 120.,
                 translate_instance_bounds_prior=False,
                 minimum_visual_reassessment_interval_seconds=0.2,
                 maximum_visual_tracks_per_update=2,
@@ -470,6 +473,7 @@ class RestaurantHumanSensorDiagnostic:
                     "occupancy_policies":result.diagnostics.get("occupancy_policies"),
                     "motion_aware_passing":result.diagnostics.get("motion_aware_passing"),
                     "human_body_envelope_priors":result.diagnostics.get("human_body_envelope_priors", ()),
+                    "human_mass_body_identity_retention":result.diagnostics.get("human_mass_body_identity_retention"),
                     "predictive_human_geometry":result.diagnostics.get("predictive_human_geometry"),
                     "parallel_preparation":result.diagnostics.get("parallel_preparation"),
                     "motion_passing_reference_track_ids":result.field.motion_passing_reference_track_ids,

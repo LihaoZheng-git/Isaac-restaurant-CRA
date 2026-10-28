@@ -39,6 +39,8 @@ parser.add_argument('--human-prediction-uncertainty-rate', type=float, default=.
                     help='explicit additional forecast-radius growth PRIOR in m/s, separate from unchanged current human body margin')
 parser.add_argument('--predictive-parallel-redesign', action='store_true',
                     help='separate early current-person preparation with explicit 6-step/1.2s or 10-step/2s predictive MPC; primary unchanged')
+parser.add_argument('--human-mass-body-identity-retention', action='store_true',
+                    help='separate current-body-identity adult mass PRIOR retention; original source expiry remains 3s')
 parser.add_argument("--crossing-strategy", choices=("legacy", "rear-pass-or-yield", "yield-then-go"), default="legacy",
                     help="separate maneuver ablation; yielding requires exact predictive and analytical checks")
 parser.add_argument("--zero-tangential-bias-ablation", action="store_true",
@@ -263,6 +265,8 @@ parser.add_argument(
     help="optimizer candidate age cap; every executed horizon still needs fresh exact validation",
 )
 args = parser.parse_args()
+if args.human_mass_body_identity_retention and (not args.predictive_parallel_redesign or args.human_body_envelope_radius is None):
+    parser.error('adult mass identity retention requires the separate predictive redesign and current body identity')
 if args.predictive_parallel_redesign and not args.predictive_human_geometry_ablation:
     parser.error('predictive parallel redesign requires the separate predictive geometry ablation')
 if (not math.isfinite(args.human_prediction_uncertainty_rate) or not .25 <= args.human_prediction_uncertainty_rate <= 1.
@@ -1113,6 +1117,7 @@ def main():
     from robot.perception.human_body_envelope import HumanBodyEnvelopeConfig
 
     perception = LiveObjectPerception(
+        human_mass_body_identity_retention=args.human_mass_body_identity_retention,
         predictive_human_geometry_config=HumanGeometryForecastConfig(
             horizon_seconds=round(args.mpc_horizon_steps * .2, 10),
             velocity_uncertainty_prior_mps=args.human_prediction_uncertainty_rate) if args.predictive_human_geometry_ablation else None,
@@ -1722,6 +1727,12 @@ def main():
         gate['parallel_preparation_checks'] = preparation_gate['checks']
         gate['passed'] = stationary_ready = bool(stationary_ready and preparation_gate['passed'])
         save_json('stationary-parallel-preparation-validation.json', preparation_gate)
+    if args.human_mass_body_identity_retention:
+        from robot.evaluation.human_mass_retention_validation import validate_human_mass_identity_retention
+        mass_gate = validate_human_mass_identity_retention(records)
+        gate['human_mass_identity_retention_checks'] = mass_gate['checks']
+        gate['passed'] = stationary_ready = bool(stationary_ready and mass_gate['passed'])
+        save_json('stationary-human-mass-identity-retention-validation.json', mass_gate)
     save_json("stationary-gate.json", gate)
     print(json.dumps({key: value for key, value in gate.items() if key != "last_objects"}, default=json_default), flush=True)
     if not stationary_ready:
@@ -2513,6 +2524,12 @@ def main():
             human_validation['parallel_preparation'] = preparation_validation
             completed = completed and preparation_validation['passed']
             save_json('live-parallel-preparation-validation.json', preparation_validation)
+        if args.human_mass_body_identity_retention:
+            from robot.evaluation.human_mass_retention_validation import validate_human_mass_identity_retention
+            mass_validation = validate_human_mass_identity_retention(records+live_fields)
+            human_validation['mass_body_identity_retention'] = mass_validation
+            completed = completed and mass_validation['passed']
+            save_json('live-human-mass-identity-retention-validation.json', mass_validation)
         if args.restaurant_human == 'parallel':
             from robot.evaluation.parallel_walking_validation import validate_parallel_curve
             parallel_goal = (anchor.x + math.cos(anchor.yaw)*ROUTE[-1][0] - math.sin(anchor.yaw)*ROUTE[-1][1],
@@ -2806,6 +2823,7 @@ def main():
         "physical_CRA_lambda": 1.25,
         "predictive_human_geometry_ablation": args.predictive_human_geometry_ablation,
         "predictive_parallel_redesign": args.predictive_parallel_redesign,
+        "human_mass_body_identity_retention": args.human_mass_body_identity_retention,
         "human_prediction_uncertainty_rate_mps": args.human_prediction_uncertainty_rate if args.predictive_human_geometry_ablation else None,
         "fixed_lambda": None if args.encounter_guidance_ablation else 0. if args.zero_tangential_bias_ablation else 1.25,
         "plume_control": args.plume_control,

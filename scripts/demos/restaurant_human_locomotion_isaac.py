@@ -44,6 +44,8 @@ parser.add_argument('--human-prediction-uncertainty-rate', type=float, default=.
 parser.add_argument('--human-prediction-horizon-seconds', type=float, choices=(1.2, 2.), default=1.2)
 parser.add_argument('--parallel-preparation', action='store_true',
                     help='separate current-person early geometric preparation policy; no future walking-intent evidence')
+parser.add_argument('--human-mass-body-identity-retention', action='store_true',
+                    help='separate adult mass PRIOR retention with current body identity and original 3s expiry; zero wheels')
 parser.add_argument("--human-body-contact-prior", type=float, default=None, metavar="SCORE",
                     help="explicit low nonzero human-body contact policy prior; legacy outline mode if omitted")
 parser.add_argument("--carry-bowl", action="store_true",
@@ -72,6 +74,8 @@ parser.add_argument(
     metavar=("KG", "LOWER", "UPPER"),
 )
 args = parser.parse_args()
+if args.human_mass_body_identity_retention and not args.identity_selection_body_envelope:
+    parser.error('adult mass identity retention requires explicit current body identity')
 if (args.parallel_preparation and not args.predictive_human_geometry
     or args.human_prediction_horizon_seconds != 1.2 and not args.parallel_preparation):
     parser.error('extended preparation horizon requires explicit predictive geometry and parallel preparation')
@@ -447,6 +451,7 @@ def main():
             human_prediction_uncertainty_rate=args.human_prediction_uncertainty_rate,
             human_prediction_horizon_seconds=args.human_prediction_horizon_seconds,
             parallel_preparation=args.parallel_preparation,
+            human_mass_body_identity_retention=args.human_mass_body_identity_retention,
             camera_prim_path=CAMERA_PRIM_PATHS[args.rgb_camera],
         )
     phase = "idle_before"
@@ -737,6 +742,12 @@ def main():
         report['parallel_preparation_validation'] = preparation_report
         report['passed'] &= preparation_report['passed']
         save('parallel-preparation-validation.json', preparation_report)
+    if args.human_mass_body_identity_retention:
+        from robot.evaluation.human_mass_retention_validation import validate_human_mass_identity_retention
+        mass_report = validate_human_mass_identity_retention(sensor.records)
+        report['human_mass_body_identity_retention_validation'] = mass_report
+        report['passed'] &= mass_report['passed']
+        save('human-mass-identity-retention-validation.json', mass_report)
     save("validation.json", report)
     print(json.dumps(report), flush=True)
     if not report["passed"]:

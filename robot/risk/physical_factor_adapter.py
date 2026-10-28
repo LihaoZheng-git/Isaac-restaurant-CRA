@@ -22,6 +22,7 @@ from robot.perception.physical_attributes import (
 from robot.risk.cra import PhysicalRiskProfile, RiskFactorEstimate
 from robot.perception.temporal_object_evidence import TEMPORAL_EVIDENCE_MARKER
 from robot.perception.persistent_object_evidence import PERSISTENT_PROPERTY_MARKER
+from robot.perception.human_mass_identity_retention import HUMAN_MASS_RETENTION_MARKER
 
 
 ADAPTER_SOURCE = "physical_evidence_cra_adapter"
@@ -149,6 +150,10 @@ def _effective_confidence(
 
 def _maximum_input_age(name, item, config):
     """Extend opted-in property priors, never motion or route inputs."""
+    if (item.status is EstimateStatus.PRIOR and name == 'mass_kg'
+        and HUMAN_MASS_RETENTION_MARKER in item.evidence):
+        limit = config.maximum_persistent_property_age_seconds
+        return min(3., config.maximum_evidence_age_seconds if limit is None else limit)+1e-9
     if (item.status is EstimateStatus.PRIOR
             and PERSISTENT_PROPERTY_MARKER in item.evidence
             and config.maximum_persistent_property_age_seconds is not None

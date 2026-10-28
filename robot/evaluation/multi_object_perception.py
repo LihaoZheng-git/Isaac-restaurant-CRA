@@ -80,6 +80,7 @@ def assess_all_objects(worker, packet):
     fragment_memory = copy.deepcopy(getattr(worker, "human_fragment_coverage", None))
     prediction_memory = copy.deepcopy(getattr(worker, "predictive_human_geometry", None))
     preparation_memory = copy.deepcopy(getattr(worker, "parallel_preparation", None))
+    human_mass_memory = copy.deepcopy(getattr(worker, "human_mass_identity_retention", None))
     tracking = tracker.update(
         packet.obstacle_xyz[:, :2],
         robot_position_world_xy=np.array(packet.robot_position_world_xy),
@@ -492,11 +493,16 @@ def assess_all_objects(worker, packet):
                 )
             )
     envelope_audit, envelope_origins = [], {}
+    human_mass_audit = None
     if envelope_memory is not None:
         from robot.perception.human_body_envelope import HUMAN_ENVELOPE_SOURCE, envelope_grid_points
         envelope_audit = envelope_memory.update(tracking,
             fresh_person_selection_evidence(objects, packet.camera_timestamp_seconds, packet.camera_frame_id),
             camera_timestamp_seconds=packet.camera_timestamp_seconds)
+        if human_mass_memory is not None:
+            from robot.evaluation.human_mass_runtime import apply_body_identity_mass_retention
+            objects, human_mass_audit = apply_body_identity_mass_retention(human_mass_memory,
+                envelope_memory, tracking, packet, objects, frames, policies, worker.object_factor_prior_config)
         observed_only = worker.human_observed_occupancy_only
         for item in envelope_audit:
             item["applied_to_occupancy"] = not observed_only
@@ -822,6 +828,8 @@ def assess_all_objects(worker, packet):
         worker.predictive_human_geometry = prediction_memory
     if preparation_memory is not None:
         worker.parallel_preparation = preparation_memory
+    if human_mass_memory is not None:
+        worker.human_mass_identity_retention = human_mass_memory
     worker.temporal_recovery_baseline = None
     if carried_state is not None:
         worker.carried_runtime_state=carried_state
@@ -850,6 +858,7 @@ def assess_all_objects(worker, packet):
         "motion_passing_reference_track_ids": field.motion_passing_reference_track_ids,
         "motion_passing_reference_source_timestamp_seconds": field.motion_passing_reference_source_timestamp_seconds,
         "human_body_envelope_priors": envelope_audit,
+        "human_mass_body_identity_retention": human_mass_audit,
         "predictive_human_geometry": prediction_audit,
         "parallel_preparation": preparation_audit,
         "current_visual_body_part_associations": visual_part_groups,

@@ -256,6 +256,7 @@ class LiveObjectPerception:
         encounter_motion_config=None,
         predictive_human_geometry_config=None,
         parallel_preparation_config=None,
+        human_mass_body_identity_retention=False,
     ):
         self.segmenter, self.mass_estimator, self.contact_detector = (
             segmenter,
@@ -304,6 +305,13 @@ class LiveObjectPerception:
         ):
             raise ValueError("human envelope requires standalone live person/object-map mode, without static memory")
         self.human_body_envelope = HumanBodyEnvelope(human_body_envelope_config) if human_body_envelope_config is not None else None
+        from robot.perception.human_mass_identity_retention import HumanMassIdentityRetention
+        if (not isinstance(human_mass_body_identity_retention, bool)
+            or human_mass_body_identity_retention and (self.human_body_envelope is None
+                or human_mass_prior_config is None or persistent_property_config is None
+                or persistent_property_config.maximum_property_age_seconds > 3.)):
+            raise ValueError('adult mass identity retention requires explicit body identity and at most three-second property scope')
+        self.human_mass_identity_retention = HumanMassIdentityRetention() if human_mass_body_identity_retention else None
         from robot.evaluation.restaurant_baselines import validate_human_boundary_flux
         self.human_boundary_flux = validate_human_boundary_flux(human_boundary_flux)
         if not isinstance(human_observed_occupancy_only, bool):
