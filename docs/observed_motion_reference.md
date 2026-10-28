@@ -117,6 +117,29 @@ configured advisory growth disk covered those queries; this is reused
 development data, not a calibrated bound or permission for hard prediction.
 Fresh corrected-source native validation remains pending.
 
+The fresh component atae8d18d **PASSED** all old gates and the corrected new
+audit:27 selected current sources,88 quiet/unselected sources and zero audit
+mismatches, with zero wheels and unchanged frozen source. The earlier failed
+component remains failed. A descriptive fresh-data audit has median1.2 s
+center error0.168288 m and maximum0.407628 m; it remains advisory-only evidence.
+
+The first independent stationary launch (`stationary-v2`) then failed before
+Isaac import/output acquisition: the live CLI guard referred to the component
+demo's `identity_selection_body_envelope` argument, while the live interface
+uses `human_body_envelope_radius`. No sensor or wheel acceptance follows.
+The guard is corrected to use the actual live argument. Six regression cases
+execute the real parser declarations before the guard (valid, missing body,
+hard prediction, early redesign, shortened horizon, zero weight). All29 focused
+tests pass in4.86 s; the preceding3,170-test full suite covers unchanged
+controller/perception code. The complete actual stationary invocation passes
+every pre-Isaac CLI guard without creating an output directory.
+
+The passedae8d18d component may be reused only after exact source fingerprints
+prove all component/perception/runtime files unchanged, with the sole demo
+exception verified as this one CLI expression. A fresh independent stationary
+run and own60 gate are still required at the corrected live source. Preserve
+the failed launch and every previous report; no wheel trial has run yet.
+
 No primary/main/PI-demo/long-service/PR117 hold is released. A successful selected
 trial would not establish real time, general human prediction, causal CRA
 superiority, exact Safe-SAGE equivalence or elimination of all safety yields.

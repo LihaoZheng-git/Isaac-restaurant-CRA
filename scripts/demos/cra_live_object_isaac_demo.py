@@ -324,7 +324,7 @@ if any(not math.isfinite(x) or x <= 0 for x in
     parser.error("route-guide lookahead/association distances must be finite and positive")
 if args.mpc_horizon_steps is not None and not 6 <= args.mpc_horizon_steps <= 30:
     parser.error("explicit MPC horizon ablation must use 6..30 unchanged .2 s intervals")
-if args.observed_motion_reference and (not args.parallel_guidance_ablation or not args.identity_selection_body_envelope
+if args.observed_motion_reference and (not args.parallel_guidance_ablation or args.human_body_envelope_radius is None
     or args.predictive_human_geometry_ablation or args.predictive_parallel_redesign or args.rear_preparation
     or args.mpc_horizon_steps not in (None, 6) or args.guidance_tracking_weight <= 0
     or args.guidance_tangent_basis != 'selected_observed_obstacle' or args.guidance_tangent_blend != 'convex'):

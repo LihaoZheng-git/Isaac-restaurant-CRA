@@ -1,5 +1,8 @@
 from copy import deepcopy
 from dataclasses import replace
+import ast
+from pathlib import Path
+import sys
 from types import SimpleNamespace as NS
 
 import numpy as np
@@ -406,3 +409,73 @@ def test_runtime_handoff_requires_actual_source_clock_and_never_enables_old_hard
         and captured["temporal_safety_derivative"] is f.temporal_safety_derivative
     )
     assert m.predictive_geometry is None
+
+
+@pytest.mark.parametrize(
+    "change",
+    [
+        "valid",
+        "missing_body",
+        "hard_prediction",
+        "early_redesign",
+        "short_horizon",
+        "zero_weight",
+    ],
+)
+def test_real_live_cli_parser_contract_before_isaac_import(monkeypatch, change):
+    script = (
+        Path(__file__).resolve().parents[2]
+        / "scripts/demos/cra_live_object_isaac_demo.py"
+    )
+    tree = ast.parse(script.read_text(encoding="utf-8"))
+    split = next(
+        i
+        for i, n in enumerate(tree.body)
+        if isinstance(n, ast.Assign)
+        and any(isinstance(t, ast.Name) and t.id == "args" for t in n.targets)
+    )
+    guard = next(
+        n
+        for n in tree.body
+        if isinstance(n, ast.If)
+        and ast.unparse(n.test).startswith("args.observed_motion_reference")
+    )
+    argv = [
+        str(script),
+        "--output",
+        "unused_advisory_cli_contract",
+        "--observed-motion-reference",
+        "--parallel-guidance-ablation",
+        "--guidance-tracking-weight",
+        "10",
+        "--guidance-tangent-basis",
+        "selected_observed_obstacle",
+        "--guidance-tangent-blend",
+        "convex",
+    ]
+    if change != "missing_body":
+        argv += ["--human-body-envelope-radius", ".4"]
+    argv += {
+        "hard_prediction": ["--predictive-human-geometry-ablation"],
+        "early_redesign": ["--predictive-parallel-redesign"],
+        "short_horizon": ["--mpc-horizon-steps", "4"],
+        "zero_weight": ["--guidance-tracking-weight", "0"],
+    }.get(change, [])
+    monkeypatch.setattr(sys, "argv", argv)
+    namespace = {"__file__": str(script), "__name__": "observed_motion_cli_contract"}
+    # Only standard/NumPy imports and the ACTUAL parser declarations execute.
+    exec(
+        compile(
+            ast.Module(body=tree.body[: split + 1], type_ignores=[]),
+            str(script),
+            "exec",
+        ),
+        namespace,
+    )
+    code = compile(ast.Module(body=[guard], type_ignores=[]), str(script), "exec")
+    if change == "valid":
+        exec(code, namespace)
+    else:
+        with pytest.raises(SystemExit) as error:
+            exec(code, namespace)
+        assert error.value.code == 2

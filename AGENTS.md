@@ -1,5 +1,14 @@
 # CRA repository guidance
 
+- Fresh observed-motion componentae8d18d PASSED27current advisory/88quiet-
+  unselected/zero mismatch and all old actor/sensor/selection/body/mass gates,
+  ZEROwheels. First stationary-v2 launch FAILED before Isaac (CLI guard used
+  component-only identity_selection_body_envelope instead of live
+  human_body_envelope_radius); no gate/wheel acceptance. Repair this expression
+  with real-parser tests; preserve failed launch. Reuse passed component ONLY
+  with exact unchanged source fingerprints and one-expression unused-live-CLI
+  exception proof; require fresh independent+own60 before wheels. Current
+  perception/controller behavior is unchanged. See docs/observed_motion_reference.md.
 - First observed-motion ZERO-wheel component4f14a79 FAILED only the new audit:
   it misclassified existing held_current_track_policy_preference as unselected;
   original actor/sensor/selection/body/mass gates passed. Preserve native SHA
