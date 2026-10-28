@@ -1,5 +1,28 @@
 # CRA repository guidance
 
+- At2c84436 the fourth no-preparation Carter trial PASSED native navigation:
+  three route guides/final arrival21.233333s,19supported moving-kinetic rows,
+  .239824nearby bend/.429644physical clearance/.002434stop drift/.255855analytical,
+  205fields183translating. Independent+own60 passed; frozen source stayed clean.
+  SMOOTHNESS STILL FAILED: actual hold2.500000s/slow2.550000 versus original
+  2.383333s; preserve original report SHA
+  0916a177c14a19f8af5624f383ac8aeba02af9d270fa4f81deff442bf0ad2ac1.
+  No quiet-person preparation; pre-walk lateral excursion.000433m. Generic
+  current-instance count0/fresh complete four-factor count0; separate human
+  specialist/mass-prior/current-motion audits do not establish fresh four factors.
+  Exact same native14.2 archive toggled oldJacobian OFF stops, ON reproduces
+  checked moving(.244067,.390931)/analytical unchanged. MinDT-3.116e-7 is within
+  ORIGINAL1e-6 tolerance; no new tolerance. This is an input-specific numerical
+  benefit, NOT a live smoothing fix. Later15.3 still fails original1.2s horizon;
+  offline900pool finds no full accepted candidate (not an infeasibility proof).
+  Shortened.8s offline horizon finds moving(.2,-.2) but REDUCES checked future
+  coverage; it is NOT integrated/native/original-gate acceptance. Do not change
+  CLI limits, shorten coverage, lower priors/margins or force speed for a pass.
+  Further time-indexed prediction needs justified observed-motion/start-stop/
+  association/fragment policies and stationary+live gates; old failed predictive
+  coverage cannot be silently enabled. All early-preparation exclusion, original
+  gates and primary/main/PI/long-service/PR117 holds persist. Source3147unit tests
+  passed107.45s/Ruff/compile/CLI/diff; no upgrades. See docs/carter_feasible_turning.md.
 - Latest Carter demo decision: exclude quiet-person early preparation; retain
   stationary-person occupancy and normal CRA/Safe-SAGE intervention. Improve
   turning feasibility after observed approaching motion, not anticipation of

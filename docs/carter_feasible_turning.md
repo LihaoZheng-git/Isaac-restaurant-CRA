@@ -76,8 +76,8 @@ its implementation is unchanged. The next trial enables it to address the
 reproduced evidence gap, not to lower CRA risk or change physical measurements.
 Grid refinement plus mass retention is a declared **two-option** candidate,
 not a single-variable causal comparison. New no-preparation mass component,
-fine-grid independent and own60 gates precede its wheels. Native outcome is
-pending; early/rear preparation and predictive geometry/redesign stay disabled.
+fine-grid independent and own60 gates precede its wheels. Its completed outcome
+is recorded below; early/rear preparation and predictive geometry/redesign stay disabled.
 
 ## Finer-grid result and numerical rescue follow-up
 
@@ -134,8 +134,8 @@ The command refuses existing output and hash mismatches. Default full-command
 parity and the enabled exact revalidation are recorded separately. The third
 native candidate adds ONLY this flag to the fine-grid/mass-retention invocation,
 with a source audit and new independent/own60 gates; the unchanged mass/actor/
-perception component can be reused only by exact fingerprint proof. Outcome
-is pending. All original smoothness, evidence, curve, arrival/stopping and
+perception component can be reused only by exact fingerprint proof. Its completed
+outcome follows below. All original smoothness, evidence, curve, arrival/stopping and
 primary/main/PI/long-service/PR117 holds remain.
 
 ## Tapered-seed result and forecast-Jacobian consistency
@@ -175,6 +175,105 @@ solver budgets, without a numerical seed. A different source14.2 example still
 failed offline, with and without seeding; retain both failures. Numerical
 consistency is not global convergence or native smoothness acceptance.
 The next separate native trial adds only the Jacobian flag to the third
-variant after new independent/own60 gates. Outcome remains pending and every
-original gate/hold remains. The replay CLI accepts `--variant temporal_jacobian`
+variant after new independent/own60 gates. Its completed outcome follows below;
+every original gate/hold remains. The replay CLI accepts `--variant temporal_jacobian`
 for an unchanged recorded baseline and preserves its other numerical options.
+
+## Completed fourth trial: navigation passes, smoothness still fails
+
+The independent and own60-frame stationary gates passed at frozen source
+`2c8443683107b4a4a55e00674e4ae2e0c3cf60e5`. The fourth invocation changes only
+the Jacobian option versus the third; the actor/perception/mass component was
+reused after exact unchanged-source fingerprint checks. Source remained clean
+through native shutdown. All four new native reports and the earlier accepted
+baseline retain their original hashes.
+
+| Variant | Native navigation/evidence | Actual nearby hold | Nearby bend | Minimum physical clearance |
+| --- | --- | --- | --- | --- |
+| Earlier accepted no-preparation baseline | Pass | 2.383333 s | 0.222896 m | 0.357913 m |
+| Original reproduction | **Fail: 4 kinetic rows < 5**; final arrival recorded | 2.383333 s | Separate recorded curve gate passed | 0.352025 m |
+| Fine grid + approved mass retention | Pass | 2.466667 s | 0.214108 m | 0.371309 m |
+| Add numerical rescue initialization | Pass | 2.383333 s | 0.237685 m | 0.427766 m |
+| Add complete forecast Jacobian | Pass | **2.500000 s** | 0.239824 m | 0.429644 m |
+
+The fourth run progressed three route guides and reached the mandatory final
+goal in21.233333 simulation seconds. Intermediate guides are route references,
+not three independently mandatory exact checkpoints. It recorded205 live
+fields,183 while translating,19 supported moving-kinetic rows, minimum
+analytical margin0.255855 and stopping drift0.002434 m. Native report SHA:
+`0916a177c14a19f8af5624f383ac8aeba02af9d270fa4f81deff442bf0ad2ac1`.
+Launcher exit0, no traceback, and native `passed=true` were independently checked.
+
+The separate smoothing gate **fails** both requirements: hold at most0.5 s and
+at least50% reduction from the original2.383333 s. Actual root speed stayed
+below0.02 m/s for2.5 s (source15.533333--18.033333), about4.9% longer than the
+original; the below0.05 m/s interval was2.55 s. A safe moving plan on one request
+does not establish smoother closed-loop navigation.
+
+No quiet-person preparation was used. Maximum route-relative lateral excursion
+before actual human walking was0.000433 m. Walking began at source11.3; the
+robot first exceeded2 cm of lateral excursion at source12.683333. These are
+evaluation-only root-truth measurements, not controller inputs. The largest
+nearby walking bend occurred with simultaneous center separation1.765568 m;
+center separation is distinct from the physical-clearance metric.
+
+This remains a prior-assisted, separately reported guidance-tracking/human-flux
+experiment with lambda1.25, original actuator bounds, body prior0.65 m,
+physical margin0.05 m, QP1000/nonlinear20 and original source/current-field/
+exact DTCBF/dense/analytical/physical/arrival/stopping checks. The generic
+perception counter records zero accepted current instances during motion and
+zero fresh complete four-factor updates; the separate human specialist,
+retained adult-mass prior and current motion have their own recorded audits.
+Successful navigation is not fresh four-factor perception, real time, primary
+comparison superiority or exact Safe-SAGE equivalence.
+
+## Remaining planning limitation
+
+The read-only export observer captured a successful native restoration at
+source14.2 (archive SHA
+`714cb1714fe01dd488822ad37d5fbbc76033969f72506176413d217c8ab21f28`).
+An exact same-input offline toggle reproduces the native full command sequence
+with the corrected Jacobian: first command(0.244067,0.390931), full-horizon
+revalidation passed and the actual analytical filter leaves it unchanged
+(margin0.133251). The minimum DTCBF margin is-3.11604e-7, within the original
+unchanged1e-6 numerical tolerance. Disabling only the correction returns a stop.
+Field bytes, original epochs and solver budgets remain unchanged. This isolates
+a numerical benefit on this input, not a whole-encounter smoothness benefit.
+
+At the later source15.3 request, restoration still fails full acceptance even
+though its endpoint DTCBF margins alone are within tolerance. Dense geometry
+remains mandatory. A separate900-candidate two-phase actuator search found225
+geometry-free candidates but no horizon passing all original checks. That finite
+search does not prove that every acceptable trajectory is impossible.
+
+A diagnostic shortened the checked prediction from1.2 s to1.0/0.8/0.6 s on that
+same archived request. The1.2/1.0 s variants failed;0.8 s found a moving command
+(0.2,-0.2). **This is not integrated or native validation**: shorter prediction
+reduces the future coverage being checked, so it cannot satisfy the original
+1.2 s gate by substitution. No CLI range, acceptance threshold or prediction
+policy was changed for this diagnostic.
+
+The evidence points to remaining planning/forecast limitations beyond the
+corrected derivative. The current future values are a first-order field-time
+forecast; they are not a time-indexed field with validated future human motion.
+A further prediction redesign must use observed approaching motion, preserve
+the exclusion of quiet-person preparation, justify start/stop uncertainty and
+association/fragment coverage, and pass new stationary and live validation.
+The existing extra predictive-envelope ablation previously failed live coverage
+and fragment continuity; it cannot be enabled on this result. No claim that a
+new predictor will eliminate every safety yield is justified.
+
+Validation for the runtime source: **3,147 unit tests passed in107.45 s**, including
+11 new analytic/finite-difference tests; whole-repository Ruff, compilation,
+both CLI help paths and diff checks passed. No dependencies were upgraded.
+The numerical changes remain default-off in draft stacked PR196; no main,
+primary, PI-demo, long-service or PR117 hold is released.
+
+Local native artifacts (original reports unchanged):
+
+- [Complete native report](../outputs/carter_feasible_turning/motion-temporal-jacobian-v4/report.json)
+- [Independent source/metric audit](../outputs/carter_feasible_turning/motion-temporal-jacobian-v4/final-audit-v1.json)
+- [Actual-speed comparison](../outputs/carter_feasible_turning/motion-temporal-jacobian-v4/comparison-v3.png)
+- [Synchronized trajectory and distance](../outputs/carter_feasible_turning/motion-temporal-jacobian-v4/trajectory-timing-v4.png)
+- [Native nearby-curve frame](../outputs/carter_feasible_turning/motion-temporal-jacobian-v4/native-nearby-curve.png)
+- [Navigation clip](../outputs/carter_feasible_turning/motion-temporal-jacobian-v4/navigation-only-v1.mp4): only the initial6.9 s zero-command setup prefix is omitted; all navigation pauses and final stopping remain at the original10 fps. Paced simulation is not real-time operation.
