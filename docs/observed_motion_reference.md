@@ -84,7 +84,8 @@ Score actual root motion separately: original hold target<=0.5 s and at least
 50% reduction from the accepted original2.383333 s baseline. Also report the
 latest derivative-corrected baseline2.50 s, slow speed<0.05 m/s, arrival time,
 nearby bend and clearance. No early-preparation policy is allowed. Preserve
-failed trials and their original hashes; native outcome is pending.
+failed trials and their original hashes. These were the pre-trial criteria;
+the native outcomes are recorded below.
 
 Source validation passed3,167 full unit tests in115.13 s, including20 new
 observed-motion/source/controller tests. Whole-repository Ruff, compilation,
@@ -117,7 +118,7 @@ separate descriptive truth audit measured median1.2 s predicted-center error
 0.166634 m and maximum0.406306 m (26 sources,208 total offset queries). The
 configured advisory growth disk covered those queries; this is reused
 development data, not a calibrated bound or permission for hard prediction.
-Fresh corrected-source native validation remains pending.
+At that point, fresh corrected-source native validation remained pending.
 
 The fresh component atae8d18d **PASSED** all old gates and the corrected new
 audit:27 selected current sources,88 quiet/unselected sources and zero audit
@@ -185,6 +186,68 @@ command after the classification correction. Thus the defect is real but is
 not established as the sole yield cause. A fresh independent stationary gate
 and matched wheel run are still required to test the corrected earlier path.
 No smoother-motion claim or hold release follows from source tests alone.
+
+## Corrected route-classification native result
+
+At frozen runtime2e905fdbedf9dfdff71cc6631ae3a439d41c4121, the independent
+60-frame stationary run passed in229.29 wall seconds, with zero wheel commands.
+The wheel run's own60-frame gate also passed. Reuse of the earlier moving-human
+component was proven by exact source fingerprints, the one-expression live CLI
+repair, and whole-module AST equality after removing only the unused MPC
+`plan` and advisory `preference` methods. No tracked source changed during
+either native process, and no separate offline solver ran during motion.
+
+The corrected `motion-v4` **FAILED native acceptance**. Its original report SHA is
+`13a6ff2ce7acd46ca43009cde7f9a8502ceb0aff59c80408b898f82226cebb24`.
+
+| Measurement | Result |
+| --- | --- |
+| Final arrival | Failed;2/3 route guides progressed, final goal not reached |
+| Stop reason | `repeated_inference_failure` after18.716667 navigation simulation seconds |
+| Actual nearby translation hold |2.833333 s; unchanged0.5 s target failed |
+| Nearby walking bend |0.176597 m; unchanged0.20 m curve gate failed |
+| Minimum physical clearance / stop drift |0.130204 m /0.000949 m |
+| Minimum analytical CBF margin |0.008801 |
+| Live fields / translating commits |179 /145 |
+| Current advisory source audit | Passed;26 selected,153 quiet/unselected sources |
+| Supported moving kinetic rows |24; current motion with adult-mass priors |
+| Fresh complete four-factor updates |0 |
+
+All20 recorded advisory plan diagnostics remained active with positive outward
+preference; the turning-induced oncoming deactivation was repaired. This
+correctness result did **not** produce smoother navigation. The2.833333 s
+hold is a descriptive failed-run measurement, not an eligible successful
+smoothness comparison. Single development trajectories do not establish the
+cause of their differences.
+
+After the pass, current positive LiDAR support for human track0 disappeared.
+The original identity/body-continuity gate rejected subsequent0.3--0.5 s source
+gaps, and the existing repeated-inference guard stopped the robot. These
+rejections were retained; no identity/source clock was renewed and no body
+geometry was removed to complete the route. An eventual track-retirement or
+reassociation method would require justified uncertainty/association rules and
+new stationary plus live validation. This trial supplies no permission to
+bypass the current guard.
+
+Independent root-truth evaluation found only0.000466 m maximum lateral motion
+before actual human walking at source11.30 s. The first2 cm bend occurred at
+source13.05 s. At the largest scored nearby bend, source15.433333 s, the robot
+was at(28.622398,8.028129) and the human at(29.854471,8.279545),1.257463 m apart
+by centers. Center separation is not body clearance. Authored actor truth
+remained evaluation-only and never entered control.
+
+Local artifacts are retained under`outputs/observed_motion_reference/motion-v4`:
+the immutable report, full native video including the yield/failure stop,
+`comparison-v4.json/png`, `trajectory-timing-v4.json/png`, an untouched native
+`native-nearby-curve.png` and its source/frame metadata, and
+`final-audit-v1.json`. No success-only navigation trim was created. The launcher
+returned0 but the saved report is failed and its explicit gate exception is
+recorded; process exit status does not override native acceptance.
+
+Source validation remains3,179 unit tests, including32 focused cases, plus
+whole-repository Ruff and compilation. All older report hashes remain unchanged.
+Keep this default-off experiment draft/unmerged. The earlier validated yielding
+baseline remains the preferred available demo; this candidate is not a replacement.
 
 No primary/main/PI-demo/long-service/PR117 hold is released. A successful selected
 trial would not establish real time, general human prediction, causal CRA

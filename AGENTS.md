@@ -1,5 +1,21 @@
 # CRA repository guidance
 
+- Corrected observed-motion trial at2e905fd FAILED native acceptance. Independent
+  and own60 stationary gates passed; all20 recorded advisory plans stayed active
+  (route-classification defect repaired), with26 selected/153 quiet-unselected
+  source audits passing. However motion-v4 held2.833333s, nearby bend.176597m
+  failed the unchanged.20m gate, and stopped before final arrival:2/3guides,
+  repeated_inference_failure18.716667simsec after current human LiDAR/identity
+  continuity rejected. Clearance.130204m/stopdrift.000949m/minCBF.008801 remained
+  positive; these never substitute for arrival. Preserve report SHA
+  13a6ff2ce7acd46ca43009cde7f9a8502ceb0aff59c80408b898f82226cebb24.
+  Zero fresh complete four-factor updates; no smoothing/navigation benefit or
+  release. Keep experiment defaultOFF/draft and prior accepted yielding demo.
+  Do not bypass body/source continuity to finish the route. Any retirement or
+  reassociation policy needs explicit justified uncertainty rules plus new
+  stationary/live validation. All original margins/clocks/limits/horizon and
+  primary/main/PI/longservice/PR117 holds remain. See docs/observed_motion_reference.md.
+
 - First observed-motion motion-v3 at9a7d4b3 NATIVEPASS finalgoal/3guides22.483333s,
   .252364clearance/.203984nearcurve/.002440stop/.180277analytical/224fields,
   28selected196quiet-unselected advisorysource auditPASS, BUT SMOOTHFAIL2.633333s
