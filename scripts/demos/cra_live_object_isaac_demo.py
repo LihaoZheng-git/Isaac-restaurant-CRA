@@ -41,6 +41,8 @@ parser.add_argument('--human-prediction-uncertainty-floor', type=float, default=
                     help='separate adaptive growth PRIOR: floor+current raw/window velocity disagreement, capped by uncertainty-rate; fixed by default')
 parser.add_argument('--predictive-parallel-redesign', action='store_true',
                     help='separate early current-person preparation with explicit 6-step/1.2s or 10-step/2s predictive MPC; primary unchanged')
+parser.add_argument('--parallel-preparation-exit-lateral', type=float, default=None,
+                    help='separate held-preference exit hysteresis in[1.6,2.2]m; initial1.6m gate and original8s source lease unchanged')
 parser.add_argument('--human-mass-body-identity-retention', action='store_true',
                     help='separate current-body-identity adult mass PRIOR retention; original source expiry remains 3s')
 parser.add_argument("--crossing-strategy", choices=("legacy", "rear-pass-or-yield", "yield-then-go"), default="legacy",
@@ -267,6 +269,9 @@ parser.add_argument(
     help="optimizer candidate age cap; every executed horizon still needs fresh exact validation",
 )
 args = parser.parse_args()
+if args.parallel_preparation_exit_lateral is not None and (not args.predictive_parallel_redesign
+    or not math.isfinite(args.parallel_preparation_exit_lateral) or not 1.6 <= args.parallel_preparation_exit_lateral <= 2.2):
+    parser.error('preparation exit hysteresis requires separate redesign and explicit limit in[1.6,2.2]m')
 if args.human_prediction_uncertainty_floor is not None and (not args.predictive_parallel_redesign
     or not math.isfinite(args.human_prediction_uncertainty_floor)
     or not .3 <= args.human_prediction_uncertainty_floor <= args.human_prediction_uncertainty_rate <= 1.):
@@ -1128,7 +1133,8 @@ def main():
             horizon_seconds=round(args.mpc_horizon_steps * .2, 10),
             velocity_uncertainty_floor_prior_mps=args.human_prediction_uncertainty_floor,
             velocity_uncertainty_prior_mps=args.human_prediction_uncertainty_rate) if args.predictive_human_geometry_ablation else None,
-        parallel_preparation_config=ParallelPreparationConfig() if args.predictive_parallel_redesign else None,
+        parallel_preparation_config=ParallelPreparationConfig(exit_lateral_separation_m=args.parallel_preparation_exit_lateral)
+            if args.predictive_parallel_redesign else None,
         segmenter=segmenter,
         mass_estimator=mass,
         contact_detector=contact,
@@ -2830,6 +2836,7 @@ def main():
         "physical_CRA_lambda": 1.25,
         "predictive_human_geometry_ablation": args.predictive_human_geometry_ablation,
         "predictive_parallel_redesign": args.predictive_parallel_redesign,
+        "parallel_preparation_exit_lateral_m": args.parallel_preparation_exit_lateral,
         "human_mass_body_identity_retention": args.human_mass_body_identity_retention,
         "human_prediction_uncertainty_rate_mps": args.human_prediction_uncertainty_rate if args.predictive_human_geometry_ablation else None,
         "human_prediction_uncertainty_floor_mps": args.human_prediction_uncertainty_floor,

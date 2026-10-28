@@ -5,7 +5,7 @@ import pytest
 from test_parallel_preparation import current, step
 
 from robot.evaluation.parallel_preparation_validation import validate_parallel_preparation
-from robot.safety.parallel_preparation import ParallelPreparation
+from robot.safety.parallel_preparation import ParallelPreparation, ParallelPreparationConfig
 
 
 def records():
@@ -60,3 +60,23 @@ def test_missing_or_mutated_proofs_are_rejected(failure):
     elif failure == 'lambda':
         rows[-1]['applied_field_policies'][0]['lambda'] = 0.
     assert not validate_parallel_preparation(rows)['passed']
+
+
+def test_exit_scope_is_audited_only_for_held_policy_not_new_selection():
+    m, rows = ParallelPreparation(ParallelPreparationConfig(exit_lateral_separation_m=2.2)), []
+    for i, t in enumerate((1., 1.1, 1.2)):
+        cue = dict(basis='fresh same-frame person', camera_frame_id=10, camera_timestamp_seconds=1.1)
+        g = current(t, center=(2., 1.59))
+        _, a = m.update(g, robot_xy=(0., -.02*i), route_direction_world_xy=(1., 0.),
+            visual_evidence={7: cue} if i == 0 else {}, camera_timestamp_seconds=t+.1, camera_frame_id=10+i)
+        a['used_for_reference'] = True
+        rows.append(dict(time=t, sensor_frame_id=g.sensor_frame_id, parallel_preparation=a,
+            motion_passing_reference_track_ids=(7,), motion_passing_reference_source_timestamp_seconds=1.,
+            applied_field_policies=[dict(track_or_group_id=7, applied_passing_side='right', **{'lambda': 1.25})]))
+    assert validate_parallel_preparation(rows)['passed']
+    wrong = deepcopy(rows)
+    wrong[0]['parallel_preparation']['current_lateral_limit_m'] = 2.2
+    assert not validate_parallel_preparation(wrong)['passed']
+    wrong = deepcopy(rows)
+    wrong[-1]['parallel_preparation']['qualification_mode'] = 'initial'
+    assert not validate_parallel_preparation(wrong)['passed']

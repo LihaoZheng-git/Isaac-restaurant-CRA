@@ -4,6 +4,8 @@ import math
 
 import numpy as np
 
+from robot.safety.parallel_preparation import ParallelPreparationConfig
+
 
 def validate_parallel_preparation(records):
     originals, used_sources, rows = {}, set(), []
@@ -24,6 +26,19 @@ def validate_parallel_preparation(records):
         key = selection['track_id']
         start = selection['selected_timestamp_seconds']
         cfg = a['configuration']
+        try:
+            ParallelPreparationConfig(**cfg)
+        except (TypeError, ValueError):
+            checks['current_fit_and_source'] = False
+            continue
+        mode = 'initial' if start == now else 'holding'
+        limit = (cfg.get('exit_lateral_separation_m') or cfg['maximum_lateral_separation_m']
+            if mode == 'holding' else cfg['maximum_lateral_separation_m'])
+        checks['current_fit_and_source'] &= (a.get('qualification_mode', mode) == mode
+            and a.get('current_lateral_limit_m', cfg['maximum_lateral_separation_m']) == limit
+            and (cfg.get('exit_lateral_separation_m') is None
+                or 'qualification_mode' in a and 'current_lateral_limit_m' in a)
+            and cfg['maximum_lateral_separation_m'] <= 1.6 and limit <= 2.2)
         checks['current_fit_and_source'] &= (a['current_fit_ready'] and a['source_timestamp_seconds'] == now
             and a['source_frame_id'] == source_frame and a['status'] == 'prior')
         checks['unique_positive_candidate'] &= (len(candidates) == len(preferences) == 1 and key in candidates
@@ -46,7 +61,7 @@ def validate_parallel_preparation(records):
             speed = np.linalg.norm(candidates[key]['fitted_velocity_world_xy'])
             alignment = -float(d@candidates[key]['fitted_velocity_world_xy'])/max(speed, 1e-9)
             checks['current_away_side'] &= (abs(np.linalg.norm(d)-1) < 1e-9 and p@d > 0
-                and cfg['minimum_lateral_separation_m'] <= abs(lateral) <= cfg['maximum_lateral_separation_m']
+                and cfg['minimum_lateral_separation_m'] <= abs(lateral) <= limit
                 and np.linalg.norm(p) <= cfg['maximum_distance_m']
                 and selection['side'] == ('left' if lateral < 0 else 'right')
                 and preferences.get(key, preferences.get(str(key))) == selection['side'] == candidates[key]['side']

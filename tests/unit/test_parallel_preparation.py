@@ -76,3 +76,51 @@ def test_bad_visual_epoch_and_nonunit_nominal_direction_reject_before_selection(
             visual_evidence={7: dict(camera_frame_id=10, camera_timestamp_seconds=1., basis='old')},
             camera_timestamp_seconds=1.1, camera_frame_id=11)
     assert m.encounter is None
+
+
+def test_exit_hysteresis_keeps_only_an_already_selected_preference_beyond_initial_gate():
+    cfg = ParallelPreparationConfig(exit_lateral_separation_m=2.2)
+    old, held = ParallelPreparation(), ParallelPreparation(cfg)
+    g = current(center=(2., 1.59))
+    step(old, g=g)
+    _, original = step(held, g=g)
+    # Robot moves away at .2m/s, while the observed quiet person stays fixed.
+    for i in range(1, 32):
+        t = round(1.+.1*i, 8)
+        robot = (0., -.02*i)
+        kwargs = dict(robot_xy=robot, route_direction_world_xy=(1., 0.), visual_evidence={},
+            camera_timestamp_seconds=t+.1, camera_frame_id=round(t*10))
+        sides, audit = held.update(current(t, center=(2., 1.59)), **kwargs)
+        if i == 1:
+            assert not old.update(current(t, center=(2., 1.59)), **kwargs)[0]
+        if i <= 30:
+            assert sides and audit['current_lateral_limit_m'] == 2.2
+            assert audit['original_selection'] == original['original_selection']
+        else:
+            assert not sides  #2.21m is outside the explicit exit scope
+    assert not step(ParallelPreparation(cfg), g=current(center=(2., 1.7)))[0]
+
+
+def test_exit_hysteresis_does_not_extend_original_lease_or_allow_same_frame_reselection():
+    m = ParallelPreparation(ParallelPreparationConfig(exit_lateral_separation_m=2.2, maximum_selection_seconds=.2))
+    _, original = step(m, g=current(center=(2., 1.59)))
+    _, held = step(m, 1.1, g=current(1.1, center=(2., 1.61)))
+    assert held['original_selection'] == original['original_selection']
+    assert not step(m, 1.3, g=current(1.3, center=(2., 1.61)))[0]
+    assert not step(m, 1.4, g=current(1.4, center=(2., 1.61)))[0]
+    assert step(m, 1.5, g=current(1.5, center=(2., 1.59)))[0]
+
+
+@pytest.mark.parametrize('exit_limit', [1.59, 2.21, float('nan'), True])
+def test_invalid_exit_scope_cannot_weaken_initial_side_or_clock_gates(exit_limit):
+    with pytest.raises(ValueError):
+        ParallelPreparationConfig(exit_lateral_separation_m=exit_limit)
+
+
+def test_a_second_person_in_extended_exit_scope_releases_the_held_preference():
+    m = ParallelPreparation(ParallelPreparationConfig(exit_lateral_separation_m=2.2))
+    step(m, g=current(center=(2., -1.59)))
+    a = current(1.1, center=(2., -1.59)).forecasts[0]
+    b = current(1.1, center=(2., 1.9), key=8).forecasts[0]
+    g = replace(current(1.1), required_track_ids=(7, 8), forecasts=(a, b))
+    assert not step(m, 1.1, fresh=False, g=g)[0]

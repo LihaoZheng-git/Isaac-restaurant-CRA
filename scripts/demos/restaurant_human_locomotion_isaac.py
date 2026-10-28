@@ -46,6 +46,8 @@ parser.add_argument('--human-prediction-uncertainty-floor', type=float, default=
 parser.add_argument('--human-prediction-horizon-seconds', type=float, choices=(1.2, 2.), default=1.2)
 parser.add_argument('--parallel-preparation', action='store_true',
                     help='separate current-person early geometric preparation policy; no future walking-intent evidence')
+parser.add_argument('--parallel-preparation-exit-lateral', type=float, default=None,
+                    help='separate held-preference exit hysteresis in[1.6,2.2]m; initialgate/sourcelease unchanged')
 parser.add_argument('--human-mass-body-identity-retention', action='store_true',
                     help='separate adult mass PRIOR retention with current body identity and original 3s expiry; zero wheels')
 parser.add_argument("--human-body-contact-prior", type=float, default=None, metavar="SCORE",
@@ -76,6 +78,9 @@ parser.add_argument(
     metavar=("KG", "LOWER", "UPPER"),
 )
 args = parser.parse_args()
+if args.parallel_preparation_exit_lateral is not None and (not args.parallel_preparation
+    or not math.isfinite(args.parallel_preparation_exit_lateral) or not 1.6 <= args.parallel_preparation_exit_lateral <= 2.2):
+    parser.error('preparation exit hysteresis requires explicit preparation and limit in[1.6,2.2]m')
 if args.human_prediction_uncertainty_floor is not None and (not args.predictive_human_geometry
     or not args.parallel_preparation or not math.isfinite(args.human_prediction_uncertainty_floor)
     or not .3 <= args.human_prediction_uncertainty_floor <= args.human_prediction_uncertainty_rate <= 1.):
@@ -458,6 +463,7 @@ def main():
             human_prediction_uncertainty_floor=args.human_prediction_uncertainty_floor,
             human_prediction_horizon_seconds=args.human_prediction_horizon_seconds,
             parallel_preparation=args.parallel_preparation,
+            parallel_preparation_exit_lateral=args.parallel_preparation_exit_lateral,
             human_mass_body_identity_retention=args.human_mass_body_identity_retention,
             camera_prim_path=CAMERA_PRIM_PATHS[args.rgb_camera],
         )

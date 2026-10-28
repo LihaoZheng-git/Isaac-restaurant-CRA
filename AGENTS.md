@@ -2571,3 +2571,17 @@
   qualificationchurn is an additional hypothesis, not solecause. Do notremove
   hardchecks. Newearlierpreferencecontinuity can be testedseparately; preserve
   current/future/source/physical/arrival/stop and.5s+50%hold criteria.
+- Separate default-OFF preparation exit hysteresis may hold an ALREADYselected
+  preference to explicit2.2m lateral scope. Initial1.6m/freshcue/uniquefit/body/
+  forward/side/distance gates stayunchanged. Hold original8s lease/.35sourcegap;
+  freshcues do notrenew. Competingeligiblepeople inlargerexitscope release too;
+  behind/side/fit/identity/expiry rejections unchanged. It is guidance scope,
+  not a largerbody/initialselection or weakenedphysical/futurecheck.
+  Auditorreconstructsinitialvsheldlimits. Defaultreplay279sources exactpolicy
+  parity; exit2.2 changes10sources. Trusted14.9reference-onlycounterfactual
+  changes(.184217,-.799958) to(.199635,.399797), futuremargin.049217->.138289,
+  samephysicalpipeline/epochs. This is DEVELOPMENT, notnative/smoothing proof.
+  Freshcomponent+independent/own60 beforewheels; all5kinetic/.20nearcurve/
+  actualarrival/stop/.5hold+50% andprimary/main/longservice/PI/PR117holds remain.
+  See docs/predictive_guidance_continuity.md; nativepending.
+  Sourcefreeze3107units103.40s/55focused5.98s/Ruffcompile2CLI/diffPASS.

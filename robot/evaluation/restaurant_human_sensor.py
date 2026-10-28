@@ -98,6 +98,7 @@ class RestaurantHumanSensorDiagnostic:
         human_prediction_uncertainty_floor=None,
         human_prediction_horizon_seconds=1.2,
         parallel_preparation=False,
+        parallel_preparation_exit_lateral=None,
         human_mass_body_identity_retention=False,
     ):
         self.stage, self.output = stage, output
@@ -114,6 +115,8 @@ class RestaurantHumanSensorDiagnostic:
             raise ValueError('prediction bench requires an explicit current body envelope')
         if parallel_preparation and not predictive_human_geometry:
             raise ValueError('early preparation requires explicit predictive geometry')
+        if parallel_preparation_exit_lateral is not None and not parallel_preparation:
+            raise ValueError('exit hysteresis requires explicit preparation')
         if human_prediction_uncertainty_floor is not None and not (parallel_preparation and predictive_human_geometry):
             raise ValueError('adaptive growth requires explicit predictive preparation')
         from robot.safety.predictive_human_geometry import HumanGeometryForecastConfig
@@ -227,7 +230,8 @@ class RestaurantHumanSensorDiagnostic:
                 horizon_seconds=human_prediction_horizon_seconds,
                 velocity_uncertainty_floor_prior_mps=human_prediction_uncertainty_floor,
                 velocity_uncertainty_prior_mps=human_prediction_uncertainty_rate) if predictive_human_geometry else None,
-            parallel_preparation_config=ParallelPreparationConfig() if parallel_preparation else None,
+            parallel_preparation_config=ParallelPreparationConfig(exit_lateral_separation_m=parallel_preparation_exit_lateral)
+                if parallel_preparation else None,
             motion_passing_config=passing_config if motion_aware_passing else None,
             human_body_envelope_config=self._identity_selection_envelope_config()
                 if identity_selection_body_envelope else None,
