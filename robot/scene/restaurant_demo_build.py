@@ -17,8 +17,8 @@ CHAIR_PATH = ("/World/Environment/Restaurant/assets_restaurant/Assets_Banquettes
               "Geo_TableSet_14/Chair_Array")
 DEMO_OBSERVATIONS = {
     "demo-bin": ("RoundedBin", (28.8, 5.9, .07382), 0.0),
-    "demo-rounded": ("ClosedCaddy", (29.0, 5.25, .07382), 0.0),
-    "demo-utensils": ("UtensilCaddy", (29.0, 5.65, .07382), 0.0),
+    "demo-rounded": ("ClosedCaddy", (29.4, 5.25, .07382), 0.0),
+    "demo-utensils": ("UtensilCaddy", (29.4, 5.65, .07382), 0.0),
 }
 DEMO_NAMES = ("ClearingStation", "RoundedBin", "ClosedCaddy", "UtensilCaddy")
 
@@ -76,10 +76,10 @@ def author_demo_props(stage):
         path = f"{DEMO_ROOT}/{name}"
         UsdGeom.Xform.Define(stage, path)
         # A solid visual holder is sufficient here; no authored material/mass cue.
-        _shape(stage, path+"/Holder", UsdGeom.Cylinder, (30.70, y, .865), (1, 1, 1),
+        _shape(stage, path+"/Holder", UsdGeom.Cylinder, (30.50, y, .865), (1, 1, 1),
                (.65, .70, .70), radius=.075, height=.13)
         if name == "ClosedCaddy":
-            _shape(stage, path+"/Lid", UsdGeom.Sphere, (30.70, y, .93), (1, 1, .28),
+            _shape(stage, path+"/Lid", UsdGeom.Sphere, (30.50, y, .93), (1, 1, .28),
                    (.70, .75, .75), radius=.078)
         else:
             source = ASSET_ROOT / "usd/utensil-fork.usda"
@@ -88,7 +88,7 @@ def author_demo_props(stage):
             for i, offset in enumerate((-.035, 0, .035)):
                 fork = UsdGeom.Xform.Define(stage, path+f"/Fork{i}")
                 fork.GetPrim().GetReferences().AddReference(reference)
-                fork.AddTranslateOp().Set(Gf.Vec3d(30.70, y+offset, .95))
+                fork.AddTranslateOp().Set(Gf.Vec3d(30.50, y+offset, .95))
                 fork.AddRotateYOp().Set(90.0)
                 fork.AddScaleOp().Set(Gf.Vec3d(.48))
     chair = UsdGeom.Xformable(stage.GetPrimAtPath(CHAIR_PATH))
@@ -109,9 +109,9 @@ def author_demo_payload(stage):
     if stage.GetPrimAtPath(PAYLOAD_PATH):
         raise ValueError("serving tray already exists")
     UsdGeom.Xform.Define(stage, PAYLOAD_PATH)
-    _shape(stage, PAYLOAD_PATH+"/Tray", UsdGeom.Cube, (-.33, 0, .32),
-           (.18, .15, .008), (.16, .12, .08))
-    for model, width, z in (("plate-dinner", .20, .328), ("bread", .11, .355)):
+    _shape(stage, PAYLOAD_PATH+"/Tray", UsdGeom.Cube, (-.04, 0, .447),
+           (.12, .14, .008), (.16, .12, .08))
+    for model, width, z in (("plate-dinner", .18, .455), ("bread", .08, .480)):
         source = ASSET_ROOT / f"usd/{model}.usda"
         asset = Usd.Stage.Open(str(source))
         bounds = read_world_bounds(asset, "/Asset")
@@ -120,7 +120,7 @@ def author_demo_payload(stage):
         layer_path = stage.GetEditTarget().GetLayer().realPath
         reference = str(source) if not layer_path else os.path.relpath(source, Path(layer_path).parent).replace("\\", "/")
         prim.GetPrim().GetReferences().AddReference(reference)
-        prim.AddTranslateOp().Set(Gf.Vec3d(-.33-scale*bounds.center[0],
+        prim.AddTranslateOp().Set(Gf.Vec3d(-.04-scale*bounds.center[0],
                                          -scale*bounds.center[1], z-scale*bounds.minimum[2]))
         prim.AddScaleOp().Set(Gf.Vec3d(scale))
         mesh = stage.GetPrimAtPath(str(prim.GetPath())+"/Geometry")
@@ -136,7 +136,7 @@ def payload_geometry_check(stage):
         stage.GetPrimAtPath(PAYLOAD_PATH), parent).ComputeAlignedRange()
     low, high = tuple(box.GetMin()), tuple(box.GetMax())
     within = low[0] >= -.587351 and high[0] <= .14 and low[1] >= -.2466 and high[1] <= .2466
-    if not within or low[2] < .25 or high[2] > .48:
+    if not within or low[2] < .439-1e-6 or high[2] > .515:
         raise ValueError("mounted presentation load exceeds declared footprint/height scope")
     return dict(present=True, parent_frame_bounds_min=low, parent_frame_bounds_max=high,
                 within_original_planar_footprint=within, rigid_attachment=True,
