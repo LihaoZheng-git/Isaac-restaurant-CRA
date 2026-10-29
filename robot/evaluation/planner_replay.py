@@ -17,11 +17,15 @@ import numpy as np
 from robot.safety.safe_sage_runtime import SafeSAGEControlRuntime
 
 
-def save_planner_replay(directory, control, request, result):
+def save_planner_replay(directory, control, request, result, *, source_window=None):
     if not isinstance(control, SafeSAGEControlRuntime) or len(request) not in (5, 6):
         raise TypeError("planner replay requires the native runtime and five/six-part request")
     field = request[2]
     control._validate_field(field)
+    if source_window is not None:
+        start, end = map(float, source_window)
+        if not (math.isfinite(start) and math.isfinite(end) and 0 <= start < end <= start + 5):
+            raise ValueError('replay source window must be finite, positive and at most five seconds')
     directory = Path(directory)
     directory.mkdir(parents=True, exist_ok=True)
     bucket = math.floor(field.sensor_timestamp_seconds / 5.)
@@ -48,6 +52,19 @@ def save_planner_replay(directory, control, request, result):
     temporary = directory / f"{stem}.json.tmp"
     temporary.write_text(json.dumps(metadata, indent=2, allow_nan=False), encoding="utf-8")
     temporary.replace(directory / f"{stem}.json")
+    # A bounded diagnostic window keeps every original request, including
+    # rejected iterates otherwise overwritten by the five-second checkpoint.
+    # Export stays inside worker timing and never supplies runtime inputs.
+    if source_window is not None and start <= field.sensor_timestamp_seconds <= end:
+        count = len(list(directory.glob('window-*.json')))
+        if count >= 64:
+            raise RuntimeError('bounded planner replay window exhausted 64 requests')
+        name = f'window-{count:03d}'
+        (directory / f'{name}.pickle').write_bytes(payload)
+        (directory / f'{name}.json').write_text(json.dumps(dict(metadata,
+            file=f'{name}.pickle', source_window=list(source_window),
+            snapshot_basis='every request in bounded source-time diagnostic window'),
+            indent=2, allow_nan=False), encoding='utf-8')
     # Keep the first actually requested passing-selection field too. The last
     # request in a five-second bucket may already be an unrecoverable state.
     # This diagnostic is never loaded by control and never changes source time.

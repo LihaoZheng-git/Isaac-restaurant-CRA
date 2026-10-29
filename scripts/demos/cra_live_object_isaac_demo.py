@@ -145,6 +145,8 @@ parser.add_argument("--human-passing-identity-prior-max-age", type=float, defaul
                     help="separate selection ablation: <=.5 s original person identity with current verified LiDAR envelope; zero keeps fresh-only")
 parser.add_argument("--profile-runtime", action="store_true",
                     help="diagnostic worker call profiles for jobs over 3 wall seconds; profiling timings are not performance acceptance")
+parser.add_argument('--planner-replay-source-window', nargs=2, type=float,
+    help='Keep every offline planner snapshot in this source-time window (at most 5 seconds).')
 parser.add_argument("--save-planner-replay", action="store_true",
                     help="trusted local offline numeric snapshots, latest request per five-second source-time bucket; export counts against worker age")
 parser.add_argument("--guidance-reference-search-width", type=int, choices=(0,4,8), default=0,
@@ -283,6 +285,11 @@ parser.add_argument(
     help="optimizer candidate age cap; every executed horizon still needs fresh exact validation",
 )
 args = parser.parse_args()
+if args.planner_replay_source_window is not None:
+    window_start, window_end = args.planner_replay_source_window
+    if (not args.save_planner_replay or not math.isfinite(window_start)
+        or not math.isfinite(window_end) or not 0 <= window_start < window_end <= window_start + 5):
+        parser.error('planner replay window requires --save-planner-replay and finite 0<=start<end<=start+5')
 if args.parallel_preparation_exit_lateral is not None and (not args.predictive_parallel_redesign
     or not math.isfinite(args.parallel_preparation_exit_lateral) or not 1.6 <= args.parallel_preparation_exit_lateral <= 2.2):
     parser.error('preparation exit hysteresis requires separate redesign and explicit limit in[1.6,2.2]m')
@@ -2057,7 +2064,8 @@ def main():
         )
         if args.save_planner_replay:
             from robot.evaluation.planner_replay import save_planner_replay
-            save_planner_replay(args.output / "planner-replays", control, data, result)
+            save_planner_replay(args.output / "planner-replays", control, data, result,
+                source_window=args.planner_replay_source_window)
         elapsed = time.perf_counter() - started
         if elapsed > 3.0:
             print(json.dumps({"slow_planner_compute": {

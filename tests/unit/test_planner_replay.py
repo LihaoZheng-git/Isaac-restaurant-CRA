@@ -122,3 +122,26 @@ def test_turning_diagnostic_preserves_original_failure_after_bucket_is_replaced(
     restored = pickle.loads(original)  # This test generated the trusted bytes.
     np.testing.assert_array_equal(restored['request'][0], np.zeros(3))
     assert restored['request'][2].sensor_timestamp_seconds == 1.
+
+
+def test_source_window_keeps_each_request_without_replacing_previous(tmp_path):
+    perception = make_runtime()
+    perception.initialize(make_observation(1, 1.), make_provider())
+    paper = make_filter()
+    control = SafeSAGEControlRuntime(mpc=LaplaceGuidanceTrackingMPC(paper, config()),
+        backup_filter=SafeSAGEUnicycleCBFFilter(paper))
+    result = SimpleNamespace(success=False, status='diagnostic', first_command=(0., 0.))
+    for index in range(2):
+        request = (np.full(3, index), (.2, 0.), perception.field, None, (1., 0.))
+        save_planner_replay(tmp_path, control, request, result, source_window=(.5, 1.5))
+    for index in range(2):
+        meta = json.loads((tmp_path / f'window-{index:03d}.json').read_text())
+        blob = (tmp_path / meta['file']).read_bytes()
+        assert hashlib.sha256(blob).hexdigest() == meta['sha256']
+        copied = pickle.loads(blob)  # Generated locally by this test.
+        np.testing.assert_array_equal(copied['request'][0], np.full(3, index))
+        assert meta['sensor_timestamp_seconds'] == 1.
+    save_planner_replay(tmp_path, control, request, result, source_window=(2., 3.))
+    assert len(list(tmp_path.glob('window-*.json'))) == 2
+    with pytest.raises(ValueError, match='window'):
+        save_planner_replay(tmp_path, control, request, result, source_window=(0., 6.))
