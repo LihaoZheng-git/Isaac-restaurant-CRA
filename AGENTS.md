@@ -1,5 +1,25 @@
 # CRA repository guidance
 
+- The user-authorized offline pause diagnosis distinguishes three stages in
+  candidate6ef5448: at source15.1 the guidance ablation chooses turn-first even
+  though a .20m/s,-.25rad/s arc passes full geometry/DTCBF, six forecast guidance
+  half-spaces and the current analytical filter; its selected reference overrides an
+  alternative warm start. At15.3 a diagnostic slow varying witness passes the
+  unchanged1.2s horizon, geometry/DTCBF and analytical gate; the original solver
+  initialized with it recovers~.04872m/s, but the witness fails later auxiliary
+  forecast half-spaces and is not a ready checked guidance reference.
+  At15.4/16.2/17.2 conservative first-
+  interval reachable boxes put a mandatory padded query wholly in human-owned
+  occupied cells for every allowed constant first command. This bounded current-
+  checker result is not physical collision/global infeasibility or permission to
+  shrink margins. Phi stays.683594 and positive human support remains. No new
+  wheels/controller edits/live smoothness acceptance. Never supply offline
+  trajectories to runtime; improve online checked reference generation/selection
+  before turn-first tracking, then validate across fresh fields. A new field can
+  invalidate any previous witness. Keep prior demo/PR199 defaultOFF/release holds.
+  Diagnostic180tests/Ruff and source-clock/parity checks pass; see
+  docs/mpc_plan_continuity.md and outputs/mpc_pause_diagnosis/.
+
 - MPC continuity candidate6ef5448 PASSED independent+own60 stationary and
   native3guides/finalgoal21.0833s/.429478clearance/.002452stop/.245497nearcurve/
   .130698analytical,204fields186translating/21movingkinetic. BUT smoothing
