@@ -1,5 +1,21 @@
 # CRA repository guidance
 
+- The user approved MPC continuity improvement after the .8833s computed-CRA
+  hold. Separate default-OFF --mpc-unfinished-qp-proposal admits only finite,
+  correctly shaped iteration-limited QP outputs as numerical proposals.
+  Never call them converged or executable: original exact nonlinear/dense,
+  restoration/safe-objective, current-state, source/lease and analytical checks
+  remain mandatory. Infeasible/error/nonfinite solver outputs still reject.
+  QP1000/rescue20 and original bounded SQP loops stay; total work may differ
+  when an old early abort becomes continued restoration. Keep raw status/
+  residual/proposal diagnostics separate from final acceptance. Source14.2
+  paired replay recovers a moving horizon; later15.3 geometry still rejects.
+  The bounded13.5..17.5 replay-window diagnostic intentionally stops at11s and
+  is NOT arrival acceptance. Fresh independent+own60 gates precede matched
+  wheels; original .5s/50% actual-hold target, full1.2s horizon, margins, lambda,
+  limits, priors and all primary/main/PI/longservice/PR117 holds remain.
+  See docs/mpc_plan_continuity.md; no native smoothing claim until validated.
+
 - The user approved computed human CRA plus bounded track recovery. Separate
   --human-track-recovery permits at most .6s positive-geometry reacquisition
   with unchanged residual/competitor/original identity-clock gates; new IDs

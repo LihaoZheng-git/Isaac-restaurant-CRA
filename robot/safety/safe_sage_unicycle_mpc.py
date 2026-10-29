@@ -164,6 +164,7 @@ class SafeSAGEUnicycleMPCConfig:
     enable_progress_seeds: bool = False
     enable_recovery_cost_pruning: bool = False
     enable_recovery_feasibility_pruning: bool = False
+    enable_unfinished_qp_proposal: bool = False
     enable_tapered_rescue_seed: bool = False
     use_consistent_temporal_jacobian: bool = False
     progress_seed_linear_fraction: float = 0.25
@@ -174,6 +175,8 @@ class SafeSAGEUnicycleMPCConfig:
     def __post_init__(self) -> None:
         if not isinstance(self.enable_progress_seeds, bool):
             raise TypeError("enable_progress_seeds must be a boolean.")
+        if not isinstance(self.enable_unfinished_qp_proposal, bool):
+            raise TypeError('enable_unfinished_qp_proposal must be a boolean.')
         if not isinstance(self.enable_tapered_rescue_seed, bool):
             raise TypeError('enable_tapered_rescue_seed must be a boolean.')
         if not isinstance(self.use_consistent_temporal_jacobian, bool):
@@ -376,6 +379,7 @@ class SafeSAGEUnicycleMPCResult:
 
     predictive_geometry: dict | None = field(default=None, kw_only=True)
     tapered_rescue_seed: dict | None = field(default=None, kw_only=True)
+    unfinished_qp_proposals: tuple[dict, ...] = field(default=(), kw_only=True)
 
     @property
     def first_command(self) -> tuple[float, float]:
@@ -628,6 +632,7 @@ class SafeSAGEUnicycleMPC:
 
         total_qp_iterations = 0
         tapered_rescue_diagnostic = None
+        proposal_audit = []
         completed_sqp_iterations = 0
         guidance_failure: str | None = None
 
@@ -652,6 +657,7 @@ class SafeSAGEUnicycleMPC:
                 reference, improvement_steps, improvement_iterations = (
                     self._improve_safe_warm_start(
                         reference,
+                        proposal_audit=proposal_audit,
                         initial_state=initial_state,
                         nominal_sequence=nominal_sequence,
                         target_chassis_states=target_states,
@@ -668,6 +674,7 @@ class SafeSAGEUnicycleMPC:
             reference, improvement_steps, improvement_iterations = (
                 self._improve_safe_warm_start(
                     reference,
+                    proposal_audit=proposal_audit,
                     initial_state=initial_state,
                     nominal_sequence=nominal_sequence,
                     target_chassis_states=target_states,
@@ -689,6 +696,7 @@ class SafeSAGEUnicycleMPC:
                     target_chassis_states=target_states,
                     configuration_space=configuration_space,
                     derivative_mode="guidance",
+                    proposal_audit=proposal_audit,
                 )
                 total_qp_iterations += solution.iteration_count
                 if not solution.success:
@@ -732,6 +740,7 @@ class SafeSAGEUnicycleMPC:
                     target_chassis_states=target_states,
                     configuration_space=configuration_space,
                     derivative_mode="gradient",
+                    proposal_audit=proposal_audit,
                 )
                 total_qp_iterations += solution.iteration_count
                 if not solution.success:
@@ -824,6 +833,7 @@ class SafeSAGEUnicycleMPC:
                             sqp_iterations=completed_sqp_iterations,
                             solver_iterations=total_qp_iterations,
                             tapered_rescue_seed=tapered_rescue_diagnostic,
+                            unfinished_qp_proposals=tuple(proposal_audit),
                         )
                     reference = recovery
                     feasibility_recovery_status = recovery_status
@@ -833,6 +843,7 @@ class SafeSAGEUnicycleMPC:
                         improvement_iterations,
                     ) = self._improve_safe_warm_start(
                         reference,
+                        proposal_audit=proposal_audit,
                         initial_state=initial_state,
                         nominal_sequence=nominal_sequence,
                         target_chassis_states=target_states,
@@ -897,6 +908,7 @@ class SafeSAGEUnicycleMPC:
             restoration_used=restoration_used or seed_restoration_used,
             predictive_geometry=self._predictive_diagnostic(reference),
             tapered_rescue_seed=tapered_rescue_diagnostic,
+            unfinished_qp_proposals=tuple(proposal_audit),
             status=(
                 feasibility_recovery_status
                 or (
@@ -1011,6 +1023,7 @@ class SafeSAGEUnicycleMPC:
         self,
         reference: _TrajectoryEvaluation,
         *,
+        proposal_audit: list[dict] | None = None,
         initial_state: np.ndarray,
         nominal_sequence: np.ndarray,
         target_chassis_states: np.ndarray | None = None,
@@ -1036,6 +1049,7 @@ class SafeSAGEUnicycleMPC:
                 target_chassis_states=target_chassis_states,
                 configuration_space=configuration_space,
                 derivative_mode="guidance",
+                proposal_audit=proposal_audit,
             )
             completed_steps += 1
             solver_iterations += solution.iteration_count
@@ -1619,6 +1633,7 @@ class SafeSAGEUnicycleMPC:
         target_chassis_states: np.ndarray | None = None,
         configuration_space: SafeSAGEConfigurationSpaceResult,
         derivative_mode: str,
+        proposal_audit: list[dict] | None = None,
     ) -> _SparseQPSolution:
         """Assemble and solve one sparse Safe-SAGE SQP subproblem."""
 
@@ -1807,7 +1822,12 @@ class SafeSAGEUnicycleMPC:
 
         status = str(result.info.status)
         solved = status.casefold() in {"solved", "solved inaccurate"}
-        if not solved or result.x is None:
+        unfinished = bool(self.config.enable_unfinished_qp_proposal
+            and status.casefold() == "maximum iterations reached")
+        optimizer = None if result.x is None else np.asarray(result.x, dtype=np.float64)
+        valid_vector = (optimizer is not None and optimizer.shape ==
+            (command_variable_count + slack_variable_count,) and np.isfinite(optimizer).all())
+        if not (solved or unfinished) or not valid_vector:
             return _SparseQPSolution(
                 success=False,
                 commands=reference.commands,
@@ -1815,7 +1835,6 @@ class SafeSAGEUnicycleMPC:
                 status=f"osqp_{status}",
                 maximum_cbf_slack=math.inf,
             )
-        optimizer = np.asarray(result.x, dtype=np.float64)
         commands = self._clip_commands(
             optimizer[:command_variable_count].reshape(
                 self.config.horizon_steps,
@@ -1825,11 +1844,24 @@ class SafeSAGEUnicycleMPC:
         maximum_cbf_slack = float(
             np.max(optimizer[command_variable_count:], initial=0.0)
         )
+        if unfinished and proposal_audit is not None:
+            def finite_residual(name):
+                value = float(getattr(result.info, name, math.nan))
+                return value if math.isfinite(value) else None
+            proposal_audit.append(dict(
+                basis="unfinished_QP_numerical_proposal_not_execution_permission",
+                solver_status=status, derivative_mode=derivative_mode,
+                iterations=int(result.info.iter), primal_residual=finite_residual('prim_res'),
+                dual_residual=finite_residual('dual_res'), maximum_cbf_slack=maximum_cbf_slack,
+                first_proposed_command=commands[0].tolist()))
+        # Success here means a finite numerical proposal is available. The
+        # caller must still pass exact nonlinear DTCBF, dense geometry and
+        # objective/line-search gates; solver status never authorizes execution.
         return _SparseQPSolution(
             success=True,
             commands=commands,
             iteration_count=int(result.info.iter),
-            status=status,
+            status=("unfinished_qp_numerical_proposal" if unfinished else status),
             maximum_cbf_slack=maximum_cbf_slack,
         )
 
@@ -2603,6 +2635,7 @@ class SafeSAGEUnicycleMPC:
         sqp_iterations: int = 0,
         solver_iterations: int = 0,
         tapered_rescue_seed: dict | None = None,
+        unfinished_qp_proposals: tuple[dict, ...] = (),
     ) -> SafeSAGEUnicycleMPCResult:
         """Return a deterministic fail-closed stop trajectory."""
 
@@ -2642,6 +2675,7 @@ class SafeSAGEUnicycleMPC:
             status=status,
             predictive_geometry=self._predictive_diagnostic(),
             tapered_rescue_seed=tapered_rescue_seed,
+            unfinished_qp_proposals=unfinished_qp_proposals,
         )
 
     def _predictive_diagnostic(self, trajectory=None):

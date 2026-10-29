@@ -24,6 +24,8 @@ parser.add_argument("--output", type=Path, required=True)
 parser.add_argument("--motion", action="store_true")
 parser.add_argument('--grid-resolution', type=float, choices=(.05, .1), default=.1,
                     help='explicit numerical field-grid comparison in metres; .1 preserves legacy; physical margins and all observed occupancy stay unchanged')
+parser.add_argument('--mpc-unfinished-qp-proposal', action='store_true',
+    help='separate finite iteration-limited QP proposals; unchanged exact trajectory acceptance')
 parser.add_argument('--mpc-tapered-rescue-seed', action='store_true',
                     help='separate bounded advance/brake numerical rescue initialization; original objective, solver budgets and all exact checks remain')
 parser.add_argument('--mpc-consistent-temporal-jacobian', action='store_true',
@@ -1351,6 +1353,7 @@ def main():
             use_consistent_temporal_jacobian=args.mpc_consistent_temporal_jacobian,
             maximum_solver_iterations=args.qp_iteration_limit,
             maximum_nonlinear_rescue_iterations=args.nonlinear_rescue_iterations,
+            enable_unfinished_qp_proposal=args.mpc_unfinished_qp_proposal,
             progress_seed_linear_fraction=args.progress_seed_fraction,
             configuration_position_padding_m=0.025,
             configuration_yaw_padding_radians=0.21,
@@ -2838,6 +2841,7 @@ def main():
         "recovery_feasibility_pruning": mpc.config.enable_recovery_feasibility_pruning,
         "qp_iteration_limit": mpc.config.maximum_solver_iterations,
         "nonlinear_rescue_iteration_limit": mpc.config.maximum_nonlinear_rescue_iterations,
+        "unfinished_qp_proposal_enabled": mpc.config.enable_unfinished_qp_proposal,
         "progress_seed_linear_fraction": mpc.config.progress_seed_linear_fraction,
         "mpc_configuration": asdict(mpc.config),
         "guidance_tracking_ablation": {"enabled": args.guidance_tracking_weight > 0,
