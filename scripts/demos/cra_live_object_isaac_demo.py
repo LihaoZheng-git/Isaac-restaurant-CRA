@@ -154,6 +154,8 @@ parser.add_argument("--save-planner-replay", action="store_true",
 parser.add_argument("--guidance-reference-search-width", type=int, choices=(0,4,8), default=0,
                     help="opt-in exact/guidance-checked local search only when greedy references fail; primary/default disabled")
 parser.add_argument("--guidance-reference-search-candidates", type=int, default=4800)
+parser.add_argument("--guidance-moving-arc-reference", action="store_true",
+                    help="separate current-selected-human full-horizon arc search before turn-first reference selection")
 parser.add_argument("--human-body-contact-prior", type=float,
                     help="opt-in fresh-person blunt-body contact PRIOR, e.g. .10; not measured sharpness")
 parser.add_argument("--human-body-envelope-radius", type=float,
@@ -335,6 +337,14 @@ if any(not math.isfinite(x) or x <= 0 for x in
     parser.error("route-guide lookahead/association distances must be finite and positive")
 if args.mpc_horizon_steps is not None and not 6 <= args.mpc_horizon_steps <= 30:
     parser.error("explicit MPC horizon ablation must use 6..30 unchanged .2 s intervals")
+if args.guidance_moving_arc_reference and (not args.parallel_guidance_ablation
+    or args.guidance_tracking_weight <= 0 or args.guidance_reference_mode != 'planar_forecast_velocity'
+    or args.guidance_tangent_basis != 'selected_observed_obstacle' or args.guidance_tangent_blend != 'convex'
+    or args.guidance_tangent_velocity_fraction <= 0 or not args.human_observed_passing_target
+    or not args.motion_aware_passing or args.mpc_horizon_steps not in (None, 6)
+    or args.predictive_human_geometry_ablation or args.predictive_parallel_redesign or args.rear_preparation
+    or args.observed_motion_reference or args.mpc_unfinished_qp_proposal):
+    parser.error('moving arc reference requires separate selected-human parallel forecast tracking, full horizon and original solver policy')
 if args.observed_motion_reference and (not args.parallel_guidance_ablation or args.human_body_envelope_radius is None
     or args.predictive_human_geometry_ablation or args.predictive_parallel_redesign or args.rear_preparation
     or args.mpc_horizon_steps not in (None, 6) or args.guidance_tracking_weight <= 0
@@ -1372,6 +1382,7 @@ def main():
                 tangent_blend_mode=args.guidance_tangent_blend,
                 outward_reference_fraction=args.guidance_outward_reference_fraction,
                 turn_translation_fraction=args.guidance_turn_translation_fraction,
+                moving_arc_reference=args.guidance_moving_arc_reference,
                 motion_forecast_maximum_outward_fraction=args.motion_forecast_outward_fraction if args.observed_motion_reference else 0.,
                 motion_forecast_growth_prior_mps=args.motion_forecast_growth_prior_mps))
     control = SafeSAGEControlRuntime(mpc=mpc, backup_filter=backup, crossing_strategy=args.crossing_strategy)
@@ -2858,6 +2869,7 @@ def main():
             "tangent_blend_mode": args.guidance_tangent_blend,
             "configured_outward_reference_fraction": args.guidance_outward_reference_fraction,
             "configured_turn_translation_fraction": args.guidance_turn_translation_fraction,
+            "moving_arc_reference_enabled": args.guidance_moving_arc_reference,
             "turn_translation_scope": "current selected reference only; preference before affine projection/full exact checks, not an enforced executed minimum; disabled without current selection",
             "outward_reference_scope": "current selected observed centroid only; normalized travel preference, not physical geometry/margin/evidence; disabled when current selection is absent",
             "tangent_runtime_gate": "current positive tracks with an existing observed-motion passing selection; no actor truth",

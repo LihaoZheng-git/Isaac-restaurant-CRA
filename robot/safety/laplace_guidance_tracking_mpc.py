@@ -39,6 +39,7 @@ class LaplaceGuidanceTrackingConfig:
     turn_translation_fraction: float = 0.0
     motion_forecast_maximum_outward_fraction: float = 0.0
     motion_forecast_growth_prior_mps: float = 0.5
+    moving_arc_reference: bool = False
 
     def __post_init__(self):
         if self.reference_mode not in {
@@ -46,7 +47,7 @@ class LaplaceGuidanceTrackingConfig:
         }:
             raise ValueError("unknown guidance reference mode")
         for name, value in vars(self).items():
-            if name in {"reference_mode", "reference_tangent_basis", "tangent_blend_mode"}:
+            if name in {"reference_mode", "reference_tangent_basis", "tangent_blend_mode", "moving_arc_reference"}:
                 continue
             if (
                 isinstance(value, bool)
@@ -107,6 +108,11 @@ class LaplaceGuidanceTrackingConfig:
                 or self.reference_mode != 'planar_forecast_velocity'
                 or self.reference_tangent_basis != 'selected_observed_obstacle')):
             raise ValueError('observed-motion preference requires explicit convex selected-obstacle tracking')
+        if not isinstance(self.moving_arc_reference, bool) or (self.moving_arc_reference and (
+            self.weight <= 0 or self.reference_mode != 'planar_forecast_velocity'
+            or self.reference_tangent_basis != 'selected_observed_obstacle'
+            or self.tangent_blend_mode != 'convex')):
+            raise ValueError('moving arcs require explicit convex selected-obstacle forecast tracking')
 
     def reference_speed_fractions(self):
         """At most four explicit candidate speeds; default retains one."""
@@ -155,6 +161,7 @@ class GuidanceTrackingDiagnostic:
     outward_reference_fraction: float = 0.0
     turn_translation_fraction: float = 0.0
     observed_motion_forecast: dict | None = None
+    moving_arc_search: dict | None = None
 
 
 @dataclass(frozen=True)
@@ -292,6 +299,7 @@ class LaplaceGuidanceTrackingMPC(SafeSAGEUnicycleMPC):
         displacement = None
         reason = "inactive_field_preference"
         search_audit = None
+        arc_audit = None
         if activation > 0 and speed > 0 and current.unsafe_reason is None:
             reason = "no_exact_safe_progress_reference"
             distance = float(np.linalg.norm(goal - initial[:2]))
@@ -366,8 +374,25 @@ class LaplaceGuidanceTrackingMPC(SafeSAGEUnicycleMPC):
                             gain,
                         )
                         displacement = moved
+            # Search before accepting a delayed turn-first reference. Only a
+            # currently selected encounter enables this separate ablation;
+            # runtime's quiet/unselected zero-tangent clone cannot activate it.
+            if (self.guidance_config.moving_arc_reference and references
+                and self.guidance_config.tangent_velocity_fraction > 0):
+                from robot.safety.checked_moving_arc_reference import search_checked_moving_arc
+                arc, arc_rank, arc_fraction, arc_audit = search_checked_moving_arc(
+                    self, initial, goal, speed, reference_kwargs)
+                checked += arc_audit['checked']
+                if arc is not None and (best is None or selected[1] or arc_rank > rank + 1e-6):
+                    best, rank = arc, arc_rank
+                    selected = (abs(float(arc.commands[0, 1])), False, arc_fraction)
+                    progress = distance - float(np.linalg.norm(goal - arc.chassis_states[-1, :2]))
+                    displacement = float(np.linalg.norm(arc.chassis_states[-1, :2] - initial[:2]))
+                    arc_audit['selected'] = True
             if best is not None:
                 reason = "exact_safe_local_guidance_reference"
+                if arc_audit is not None and arc_audit['selected']:
+                    reason = "exact_safe_online_moving_arc_reference"
             elif self.guidance_config.reference_search_width > 0:
                 from robot.safety.checked_guidance_reference_search import search_checked_guidance_reference
                 search = search_checked_guidance_reference(self, initial, goal, speed,
@@ -470,6 +495,7 @@ class LaplaceGuidanceTrackingMPC(SafeSAGEUnicycleMPC):
             turn_translation_fraction=self.guidance_config.turn_translation_fraction
             if self.guidance_config.tangent_velocity_fraction > 0 else 0.,
             observed_motion_forecast=motion_audit,
+            moving_arc_search=arc_audit,
         )
         return GuidanceTrackingMPCResult(
             **{

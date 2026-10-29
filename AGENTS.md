@@ -1,5 +1,19 @@
 # CRA repository guidance
 
+- The user approved online moving-arc reference selection before turn-first.
+  Separate default-OFF --guidance-moving-arc-reference searches at most132
+  full-horizon constant arcs (33 with the matched single-speed configuration)
+  only for a current selected human. Every arc needs original exact DTCBF/dense
+  padded geometry plus all forecast reference half-spaces; useful moving arcs
+  precede turn-first, otherwise use the existing progress/heading rank. This is
+  a reference-selection ablation, never an executed-speed floor. Quiet persons
+  cannot activate it. Original nominal, CRA, lambda, limits, margins, 1.2s
+  horizon, source clocks and fresh-field/analytical checks stay. QP proposal,
+  predictive/preparation and cross-plan penalty remain OFF. Archived15.1 recovers
+  ~.19960m/s vs.00017, but15.3/later still reject; no live benefit yet. Require
+  fresh independent+own60 stationary then matched wheels. Preserve all earlier
+  failures, .883333s accepted demo and release holds. See docs/moving_arc_reference.md.
+
 - The user-authorized offline pause diagnosis distinguishes three stages in
   candidate6ef5448: at source15.1 the guidance ablation chooses turn-first even
   though a .20m/s,-.25rad/s arc passes full geometry/DTCBF, six forecast guidance
