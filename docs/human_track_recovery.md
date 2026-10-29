@@ -47,6 +47,81 @@ the original 60-frame gate and matched navigation. Use the accepted no-advisory
 bounded recovery. Keep body radius 0.65 m, physical margin 0.05 m, lambda 1.25,
 six 0.2 s intervals, robot limits, QP1000/rescue20, original clocks and exact
 acceptance. No quiet-person preparation or failed predictive/advisory option.
-Native results are pending; unit recovery is not a smoothing result. Arrival,
+Unit recovery is not a smoothing result. Arrival,
 nearby bend, independent clearance/containment, stopping and the original
 0.5 s/50% hold-reduction target remain mandatory. Keep all release holds.
+
+## Validation at f6ecfac
+
+The fresh zero-wheel component passed 115 field updates, including human
+velocity, current selection, body-envelope containment and original mass-prior
+expiry. Its maximum inferred human speed was 0.7814 m/s, within the configured
+1 m/s recovery scope; this is not a general motion-bound calibration. The
+independent stationary and live run's own 60-frame gates both passed. Runtime
+source hashes and the Git revision stayed unchanged throughout all three runs.
+
+`outputs/human_track_recovery/motion-v1/report.json` passed native navigation:
+
+| Metric | Previous fixed-flux run | Computed CRA + recovery option |
+|---|---:|---:|
+| Final arrival / route guides | Yes / 3 | Yes / 3 |
+| Navigation simulation time | 21.2333 s | 19.6500 s |
+| Longest actual nearby translation hold | 2.5000 s | 0.8833 s |
+| Nearby lateral excursion | 0.2398 m | 0.2372 m |
+| Minimum independent clearance | 0.4296 m | 0.4408 m |
+| Final stopping drift | 0.002434 m | 0.002417 m |
+
+There were 193 live fields, 184 while translating, 20 supported moving-kinetic
+rows and a minimum analytical margin of 0.18733. Applied human risk equaled
+computed CRA throughout (range 0.5580–0.6836), without the fixed-flux override.
+The largest nearby curve occurred with the human 1.3603 m from the robot center.
+Maximum pre-walk lateral excursion was only 0.000448 m; human walking began at
+source 11.3000 s and the robot first exceeded a 2 cm bend at 12.6833 s.
+
+The hold decreased 64.7% against the latest 2.50 s baseline, and 62.9% against
+the original 2.3833 s target baseline. **The strict smoothness gate still fails
+because 0.8833 s exceeds 0.5 s.** The remaining yield followed current-field
+plan invalidation and unsuccessful exact solver/rescue checks, with four
+stale-field command ticks in the actual hold interval. These solver failures
+do not prove infeasibility. No tolerance, horizon, speed or physical margin was
+relaxed. See `remaining-yield-diagnosis.json`; its time alignment matches ten
+exact command pairs across the independent source and navigation clocks.
+
+No recovery event or human continuity rejection occurred in this live run.
+Consequently, do not attribute this navigation improvement to reacquisition.
+The recovery branch was separately checked with unit cases and a logged-track
+replay: two deliberately removed observations caused the legacy path to reject
+the return at 0.3 s, while the new path recovered with the original visual
+timestamp. That replay reconstructs tracking from native logged centroids,
+velocities and counts; it is not a raw-sensor or natural-occlusion experiment.
+Its deliberately near robot test position is diagnostic only. Permanent
+retirement and sustained close occlusion remain unimplemented.
+
+This remains a single prior-assisted, paced guidance-tracking experiment.
+There were zero generic fresh-instance/complete four-factor updates during
+motion; separate human identity/mass-prior and current kinetic evidence checks
+must not be presented as fresh four-factor visual perception. Human mass,
+blunt contact, unavailable potential/thermal and body geometry retain their
+declared priors. No real-time, causal CRA superiority, universal safety or
+exact-paper equivalence claim follows.
+
+Final source checks: **3,200 unit tests passed in 113.97 s; Ruff, compilation
+and `git diff --check` passed.** An initial sandbox test attempt could not create
+its temporary directory; the full suite was rerun using a new repository-local
+temporary directory. No environment changes or installs were needed.
+
+Artifacts in `outputs/human_track_recovery/motion-v1/`:
+
+- `navigation-only-v1.mp4`: original cadence; removes only the zero-command
+  setup prefix and retains the yield, full navigation and final stop.
+- `native-nearby-curve.png`: unedited native video frame at the largest nearby
+  bend, with matched human/robot source time in its JSON companion.
+- `recovery-comparison.json/png`: original acceptance, failed stricter
+  smoothness gate and measured comparison.
+- `trajectory-timing-v4.json/png`: actual same-time human/robot positions.
+
+Native report SHA256:
+`c7b8f0e8cf5197e51c9f4986bd16c4e7c19f3cf4bf7296336b4206a948e58d9e`.
+Keep PR #198 draft and all primary/main/PI/long-service holds. The bounded
+policy/dataflow change is validated; the sub-half-second smoothing goal remains
+open and should next be investigated through the rejected MPC inputs.

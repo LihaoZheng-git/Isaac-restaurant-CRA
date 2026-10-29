@@ -12,7 +12,23 @@
   higher child risk and the unknown-factor body floor remain. Fresh component,
   independent+own60 and matched wheels required; original margins/limits/
   lambda1.25/full horizon/acceptance and all release holds persist. See
-  docs/human_track_recovery.md. Native benefit is not yet established.
+  docs/human_track_recovery.md.
+- At f6ecfac the computed-CRA/recovery-option native run PASSED arrival/3guides
+  in19.65s, with.440801clearance/.002417stop/.237194nearbybend/.187330analytical,
+  193fields184translating and20supported moving-kinetic rows. Fresh component,
+  independent+own60 passed; runtime sources stayed frozen. Actual hold fell
+  from2.50s to.883333s (original2.383333s baseline reduction62.9%), but strict
+  <=.5s smoothing STILL FAILS. Applied human risk equaled CRA .5580..683594;
+  no early preparation (prewalk lateral.000448m). Preserve native SHA
+  c7b8f0e8cf5197e51c9f4986bd16c4e7c19f3cf4bf7296336b4206a948e58d9e.
+  ZERO native recovery events: do not credit reacquisition for this live gain.
+  Injected two-gap logged-track module replay recovers at.3s with original
+  visual time; legacy rejects. It is not raw-sensor/natural-occlusion validation.
+  Remaining yield is current-field plan invalidation/exact rescue failure plus
+  brief stale fields, not human-track loss in this run. No infeasibility proof.
+  Zero fresh complete four-factor updates; retain human/factor/body priors.
+  3200units113.97s/Ruff/compile/diff pass. Keep draft PR198 and all release holds;
+  short-gap exclusion is not permanent retirement or close-occlusion tracking.
 
 - Corrected observed-motion trial at2e905fd FAILED native acceptance. Independent
   and own60 stationary gates passed; all20 recorded advisory plans stayed active
