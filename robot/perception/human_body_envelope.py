@@ -78,13 +78,18 @@ class HumanBodyEnvelopeConfig:
 
 
 class HumanBodyEnvelope:
-    def __init__(self, config):
+    def __init__(self, config, *, recovery_config=None):
         if not isinstance(config, HumanBodyEnvelopeConfig):
             raise TypeError("config must be HumanBodyEnvelopeConfig")
         self.config = config
+        from robot.perception.human_track_recovery import HumanTrackRecoveryConfig
+        if recovery_config is not None and not isinstance(recovery_config, HumanTrackRecoveryConfig):
+            raise TypeError("recovery_config must be HumanTrackRecoveryConfig")
+        self.recovery_config = recovery_config
         self.identities = {}
+        self.recovery_audit = []
 
-    def update(self, tracking, fresh_person_cues, *, camera_timestamp_seconds):
+    def update(self, tracking, fresh_person_cues, *, camera_timestamp_seconds, robot_world_xy=None):
         """Return circles, or block publication rather than erase an old body.
 
         The caller works on a transaction copy. Any missing/ambiguous known
@@ -102,10 +107,38 @@ class HumanBodyEnvelope:
             raise ValueError("human envelope camera/LiDAR epoch mismatch")
         tracks = {t.track_id: t for t in tracking.tracked_obstacles}
         updated = dict(self.identities)
-        result = []
+        result, recovery_audit = [], []
+        candidates = {}
+        if self.recovery_config is not None:
+            # Only missing identities may move to a NEW, uniquely compatible
+            # positive track. Existing different identities are never merged.
+            for old, previous in self.identities.items():
+                dt = now - previous['lidar_timestamp']
+                if old in tracks or not 0 < dt <= self.recovery_config.maximum_gap_seconds + 1e-9:
+                    continue
+                predicted = previous['center'] + dt * previous['velocity']
+                candidates[old] = [t.track_id for t in tracks.values()
+                    if t.track_id not in self.identities and t.track_id not in fresh_person_cues
+                    and t.point_count >= self.config.minimum_points
+                    and np.linalg.norm(np.asarray(t.centroid_world_xy) - predicted)
+                    <= self.config.maximum_centroid_residual_m]
         for key in sorted(set(self.identities) | set(fresh_person_cues)):
+            old_key = key
+            previous = self.identities.get(key)
             track = tracks.get(key)
+            reassociated = False
+            if track is None and len(candidates.get(key, ())) == 1:
+                new = candidates[key][0]
+                if sum(new in matches for matches in candidates.values()) == 1:
+                    key, track, reassociated = new, tracks[new], True
             if track is None:
+                if self.recovery_config is not None:
+                    proof = self.recovery_config.missing_path_clearance(previous, now=now,
+                        robot_xy=robot_world_xy, body_radius_m=self.config.body_radius_m
+                        + self.config.centroid_uncertainty_m)
+                    if proof is not None and proof['clearance_m'] > 0:
+                        recovery_audit.append(dict(track_id=old_key, decision='temporarily_outside_checked_reach', **proof))
+                        continue
                 raise ValueError(
                     f"human envelope {key}: current positive LiDAR track missing"
                 )
@@ -140,7 +173,6 @@ class HumanBodyEnvelope:
                     f"human envelope {key}: ambiguous competing tracks {competitors}"
                 )
             cue = fresh_person_cues.get(key)
-            previous = self.identities.get(key)
             if cue is not None and previous is not None:
                 if cue["camera_frame_id"] < previous["camera_frame"]:
                     raise ValueError("human envelope person frame moved backwards")
@@ -161,16 +193,22 @@ class HumanBodyEnvelope:
                     center - previous["center"] - dt * previous["velocity"]
                 )
                 failed_gates = []
-                if not track.matched_previous_track:
+                if not track.matched_previous_track and not reassociated:
                     failed_gates.append("unmatched_track")
-                if track.observation_count <= previous["observation_count"]:
+                if track.observation_count <= previous["observation_count"] and not reassociated:
                     failed_gates.append("nonincreasing_observation_count")
-                if not 0 < dt <= self.config.maximum_lidar_gap_seconds + 1e-9:
+                gap_limit = (self.config.maximum_lidar_gap_seconds if self.recovery_config is None
+                             else self.recovery_config.maximum_gap_seconds)
+                if not 0 < dt <= gap_limit + 1e-9:
                     failed_gates.append("lidar_source_gap")
                 if not 0 <= age <= self.config.maximum_identity_age_seconds:
                     failed_gates.append("original_identity_age")
                 if residual > self.config.maximum_centroid_residual_m:
                     failed_gates.append("centroid_prediction_residual")
+                if self.recovery_config is not None and (
+                    np.linalg.norm(velocity) > self.recovery_config.maximum_human_speed_mps
+                    or np.linalg.norm(previous['velocity']) > self.recovery_config.maximum_human_speed_mps):
+                    failed_gates.append('recovery_motion_scope')
                 if failed_gates:
                     raise ValueError(
                         f"human envelope {key}: original identity prior expired or continuity unresolved; "
@@ -184,6 +222,16 @@ class HumanBodyEnvelope:
                 identity_basis = (
                     "retained_person_identity_prior_with_current_positive_LiDAR"
                 )
+                if reassociated or dt > self.config.maximum_lidar_gap_seconds + 1e-9:
+                    identity_basis = 'bounded_reacquired_person_identity_prior_with_current_positive_LiDAR'
+                    recovery_audit.append(dict(decision='reacquired_current_positive_geometry',
+                        previous_track_id=old_key, track_id=key, status='prior',
+                        original_person_camera_timestamp=source_time,
+                        previous_lidar_timestamp_seconds=previous['lidar_timestamp'],
+                        current_lidar_timestamp_seconds=now, source_gap_seconds=dt,
+                        centroid_prediction_residual_m=float(residual), changed_track_id=reassociated))
+            if reassociated:
+                updated.pop(old_key)
             updated[key] = dict(
                 camera_timestamp=source_time,
                 camera_frame=source_frame,
@@ -214,6 +262,7 @@ class HumanBodyEnvelope:
                 )
             )
         self.identities = updated
+        self.recovery_audit = recovery_audit
         return result
 
     def passing_selection_priors(self, tracking, *, camera_timestamp_seconds, maximum_age_seconds):

@@ -18,8 +18,9 @@ def apply_human_part_field_policy(
 ):
     """Raise only current part field risk and share its verified parent's side.
 
-    This consumes the existing current positive part proof and verified human
-    flux ablation. Physical CRA, observed class, occupancy and all source epochs
+    This consumes the current positive part proof and verified parent policy,
+    either computed CRA or the explicit fixed-flux ablation. Physical CRA,
+    observed class, occupancy and all source epochs
     stay separate. A child with higher applied risk keeps it. No association is
     retained or applied after its original current scan.
     """
@@ -47,6 +48,16 @@ def apply_human_part_field_policy(
     for proof in associations:
         child, parent = proof["child_track_id"], proof["parent_track_id"]
         identity = parents.get(parent)
+        parent_row = rows.get(parent, {})
+        control_source = parent_row.get('human_flux_ablation')
+        if control_source is None and identity is not None and (
+            parent in guidance and parent_row.get('applied_field_risk') == guidance[parent].risk
+            and parent_row.get('cra_phi') == guidance[parent].risk
+            and parent_row.get('boundary_flux') == guidance[parent].boundary_flux):
+            control_source = dict(basis='computed_CRA_current_verified_human',
+                lidar_timestamp_seconds=identity.get('lidar_timestamp_seconds'),
+                original_person_camera_timestamp=identity.get('original_person_camera_timestamp'),
+                computed_cra_phi=parent_row['cra_phi'])
         strict = (
             proof["basis"] == "fresh_person_mask_whole_positive_small_fragment"
             and proof["status"] == "inferred"
@@ -95,13 +106,11 @@ def apply_human_part_field_policy(
             or not 0 <= proof["maximum_child_to_parent_3d_distance_m"] <= 0.3
             or not 0.9 <= proof["parent_mask_coverage"] <= 1
             or not 0.5 <= proof["person_confidence"] <= 1
-            or rows[parent]
-            .get("human_flux_ablation", {})
-            .get("lidar_timestamp_seconds")
+            or (control_source or {}).get("lidar_timestamp_seconds")
             != sensor_timestamp_seconds
         ):
             raise ValueError(
-                "human-part field policy requires a current positive proof and verified parent flux"
+                "human-part field policy requires a current positive proof and verified parent policy"
             )
         a, b = guidance[child], guidance[parent]
         if (
@@ -133,7 +142,7 @@ def apply_human_part_field_policy(
                 "parent_track_id": parent,
                 "association": copy.deepcopy(proof),
                 "parent_control_source": copy.deepcopy(
-                    rows[parent]["human_flux_ablation"]
+                    control_source
                 ),
                 "child_physical_cra_phi": rows[child]["cra_phi"],
                 "scope": "current control policy only; no physical factor/class/SAM/geometry transfer or original-clock renewal",

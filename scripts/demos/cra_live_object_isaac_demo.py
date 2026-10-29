@@ -156,6 +156,8 @@ parser.add_argument("--human-body-envelope-radius", type=float,
                     help="opt-in configured body-radius occupancy PRIOR; no actor geometry is read")
 parser.add_argument("--human-envelope-centroid-uncertainty", type=float, default=0.2)
 parser.add_argument("--human-envelope-identity-max-age", type=float, default=30.0)
+parser.add_argument("--human-track-recovery", action="store_true",
+                    help="explicit .6 s positive-track recovery and full-reach missing-person exclusion prior; original visual clocks retained")
 parser.add_argument("--human-observed-occupancy-only", action="store_true",
                     help="separate ablation: retain verified human identity/domain guards but add no circular prior occupancy")
 parser.add_argument("--human-boundary-flux", type=float,
@@ -425,6 +427,9 @@ if args.human_body_envelope_radius is not None:
         parser.error(str(exc))
     if not (args.restaurant_human and args.human_mass_prior and args.persistent_object_risk_map) or args.human_carry_bowl or args.static_occupancy_memory_prior:
         parser.error("human envelope requires standalone live human/person-prior object-map mode without static memory")
+if args.human_track_recovery and (args.human_body_envelope_radius is None
+    or args.human_observed_occupancy_only or args.mpc_horizon_steps != 6):
+    parser.error("track recovery requires occupied human body prior and the full six-step horizon")
 from robot.evaluation.restaurant_baselines import validate_human_boundary_flux
 try:
     validate_human_boundary_flux(args.human_boundary_flux)
@@ -454,8 +459,8 @@ if args.human_visual_fragment_association and (not (args.human_observed_occupanc
 if args.human_fragment_mask_boundary_pixels and not args.human_visual_fragment_association:
     parser.error("mask boundary prior requires explicit visual fragment association")
 if args.human_visual_part_field_policy and (not args.human_visual_fragment_association
-    or args.human_boundary_flux is None or not args.motion_aware_passing):
-    parser.error("human-part field policy requires visual parts, verified human flux and motion passing")
+    or args.human_body_envelope_radius is None or not args.motion_aware_passing):
+    parser.error("human-part field policy requires visual parts, verified human identity and motion passing")
 if args.human_fresh_person_policy and (not (args.human_observed_occupancy_only or args.human_prior_geometry_associations)
     or not args.human_observed_passing_target or not args.motion_aware_passing
     or args.restaurant_human is None or args.human_carry_bowl):
@@ -1150,6 +1155,7 @@ def main():
     from robot.safety.motion_aware_passing import MotionAwarePassingConfig
     from robot.safety.encounter_motion import EncounterMotionConfig
     from robot.perception.human_body_envelope import HumanBodyEnvelopeConfig
+    from robot.perception.human_track_recovery import HumanTrackRecoveryConfig
 
     perception = LiveObjectPerception(
         human_mass_body_identity_retention=args.human_mass_body_identity_retention,
@@ -1179,6 +1185,10 @@ def main():
             centroid_uncertainty_m=args.human_envelope_centroid_uncertainty,
             maximum_identity_age_seconds=args.human_envelope_identity_max_age) if args.human_body_envelope_radius is not None else None,
         human_observed_occupancy_only=args.human_observed_occupancy_only,
+        human_track_recovery_config=HumanTrackRecoveryConfig(
+            robot_radius_m=math.hypot(max(stationary.ROBOT_FRONT_EXTENT, stationary.ROBOT_REAR_EXTENT) + stationary.ROBOT_SAFETY_MARGIN,
+                max(stationary.ROBOT_LEFT_EXTENT, stationary.ROBOT_RIGHT_EXTENT) + stationary.ROBOT_SAFETY_MARGIN))
+            if args.human_track_recovery else None,
         human_boundary_flux=args.human_boundary_flux,
         human_visual_fragment_association=args.human_visual_fragment_association,
         human_fragment_mask_boundary_pixels=args.human_fragment_mask_boundary_pixels,
@@ -2699,6 +2709,8 @@ def main():
             "physical_cra_unchanged": True,
             "scope": "separate geometry/flux ablation; not a primary CRA comparison"},
         "human_body_envelope_config": asdict(perception.human_body_envelope.config) if perception.human_body_envelope is not None else None,
+        "human_track_recovery_config": asdict(perception.human_body_envelope.recovery_config)
+            if perception.human_body_envelope is not None and perception.human_body_envelope.recovery_config is not None else None,
         "human_fragment_coverage_config": asdict(fragment_coverage_config) if fragment_coverage_config is not None else None,
         "human_navigation_validation": human_validation,
         "motion_passing_validation": passing_validation,

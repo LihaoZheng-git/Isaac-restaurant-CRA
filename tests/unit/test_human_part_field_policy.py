@@ -120,6 +120,19 @@ def test_higher_child_applied_risk_is_never_lowered():
     assert result[8].risk == 0.9 and result[8].boundary_flux == pytest.approx(-1.58)
 
 
+def test_computed_cra_parent_policy_needs_no_fixed_human_flux():
+    guide, audit, proofs, identities = inputs()
+    guide[7] = parameters(.75, 'left')
+    audit[0].pop('human_flux_ablation')
+    audit[0].update(cra_phi=.75, applied_field_risk=.75, boundary_flux=guide[7].boundary_flux)
+    result, rows = apply_human_part_field_policy(guide, audit, proofs, identities, sensor_timestamp_seconds=1.)
+    assert result[8].risk == .75 and result[8].boundary_flux == pytest.approx(-1.4)
+    assert result[8].tangential_strength == 1.25
+    source = rows[1]['human_part_control_policy_prior']['parent_control_source']
+    assert source['basis'] == 'computed_CRA_current_verified_human'
+    assert source['original_person_camera_timestamp'] == .8
+
+
 @pytest.mark.parametrize(
     "problem",
     [

@@ -6,7 +6,7 @@ receive their own labeled factor priors, not a nearby object's low assessment.
 """
 
 import copy
-from dataclasses import dataclass, replace
+from dataclasses import asdict, dataclass, replace
 import math
 import time
 
@@ -498,7 +498,8 @@ def assess_all_objects(worker, packet):
         from robot.perception.human_body_envelope import HUMAN_ENVELOPE_SOURCE, envelope_grid_points
         envelope_audit = envelope_memory.update(tracking,
             fresh_person_selection_evidence(objects, packet.camera_timestamp_seconds, packet.camera_frame_id),
-            camera_timestamp_seconds=packet.camera_timestamp_seconds)
+            camera_timestamp_seconds=packet.camera_timestamp_seconds,
+            robot_world_xy=packet.robot_position_world_xy)
         if human_mass_memory is not None:
             from robot.evaluation.human_mass_runtime import apply_body_identity_mass_retention
             objects, human_mass_audit = apply_body_identity_mass_retention(human_mass_memory,
@@ -864,6 +865,9 @@ def assess_all_objects(worker, packet):
         "motion_passing_reference_track_ids": field.motion_passing_reference_track_ids,
         "motion_passing_reference_source_timestamp_seconds": field.motion_passing_reference_source_timestamp_seconds,
         "human_body_envelope_priors": envelope_audit,
+        "human_track_recovery": None if envelope_memory is None else envelope_memory.recovery_audit,
+        "human_track_recovery_config": None if envelope_memory is None or envelope_memory.recovery_config is None
+            else asdict(envelope_memory.recovery_config),
         "human_mass_body_identity_retention": human_mass_audit,
         "predictive_human_geometry": prediction_audit,
         "observed_motion_reference": None if motion_reference is None else motion_reference.diagnostic(),

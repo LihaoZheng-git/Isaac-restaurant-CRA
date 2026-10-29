@@ -37,6 +37,8 @@ parser.add_argument('--human-passing-identity-prior-max-age', type=float, defaul
                     help='separate parallel identity-selection PRIOR, at most .5s with verified current LiDAR; zero wheels')
 parser.add_argument('--identity-selection-body-envelope', action='store_true',
                     help='explicit existing .40+.25m body PRIOR for zero-wheel parallel identity-selection validation')
+parser.add_argument('--human-track-recovery', action='store_true',
+                    help='explicit bounded current-positive human identity recovery; no wheel commands')
 parser.add_argument('--predictive-human-geometry', action='store_true',
                     help='separate zero-wheel LiDAR source-window motion/geometry PRIOR benchmark; future actor truth only scores it')
 parser.add_argument('--observed-motion-reference', action='store_true',
@@ -89,6 +91,8 @@ if args.human_prediction_uncertainty_floor is not None and (not args.predictive_
     parser.error('adaptive uncertainty requires explicit prediction/preparation and .30<=floor<=ceiling<=1m/s')
 if args.human_mass_body_identity_retention and not args.identity_selection_body_envelope:
     parser.error('adult mass identity retention requires explicit current body identity')
+if args.human_track_recovery and not args.identity_selection_body_envelope:
+    parser.error('track recovery requires explicit current body identity')
 if (args.parallel_preparation and not args.predictive_human_geometry
     or args.human_prediction_horizon_seconds != 1.2 and not args.parallel_preparation):
     parser.error('extended preparation horizon requires explicit predictive geometry and parallel preparation')
@@ -463,6 +467,7 @@ def main():
             parallel_guidance_selection=args.parallel_guidance_selection,
             maximum_identity_prior_selection_age_seconds=args.human_passing_identity_prior_max_age,
             identity_selection_body_envelope=args.identity_selection_body_envelope,
+            human_track_recovery=args.human_track_recovery,
             predictive_human_geometry=args.predictive_human_geometry,
             human_prediction_uncertainty_rate=args.human_prediction_uncertainty_rate,
             human_prediction_uncertainty_floor=args.human_prediction_uncertainty_floor,

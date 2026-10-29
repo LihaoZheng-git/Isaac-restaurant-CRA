@@ -244,6 +244,7 @@ class LiveObjectPerception:
         experiment_baseline=None,
         motion_passing_config=None,
         human_body_envelope_config=None,
+        human_track_recovery_config=None,
         human_fragment_coverage_config=None,
         human_observed_occupancy_only=False,
         human_boundary_flux=None,
@@ -305,7 +306,10 @@ class LiveObjectPerception:
             or carried_object_config is not None or static_occupancy_memory_prior_scope is not None
         ):
             raise ValueError("human envelope requires standalone live person/object-map mode, without static memory")
-        self.human_body_envelope = HumanBodyEnvelope(human_body_envelope_config) if human_body_envelope_config is not None else None
+        if human_track_recovery_config is not None and human_body_envelope_config is None:
+            raise ValueError('track recovery requires explicit human body geometry')
+        self.human_body_envelope = HumanBodyEnvelope(human_body_envelope_config,
+            recovery_config=human_track_recovery_config) if human_body_envelope_config is not None else None
         from robot.perception.human_mass_identity_retention import HumanMassIdentityRetention
         if (not isinstance(human_mass_body_identity_retention, bool)
             or human_mass_body_identity_retention and (self.human_body_envelope is None
@@ -367,8 +371,8 @@ class LiveObjectPerception:
         self.human_fragment_mask_boundary_pixels = human_fragment_mask_boundary_pixels
         if not isinstance(human_visual_part_field_policy, bool) or (
             human_visual_part_field_policy and (not human_visual_fragment_association
-                or human_boundary_flux is None or self.motion_passing is None)):
-            raise ValueError("human-part field policy requires current visual parts, verified human flux and passing mode")
+                or self.human_body_envelope is None or self.motion_passing is None)):
+            raise ValueError("human-part field policy requires current visual parts, verified human identity and passing mode")
         self.human_visual_part_field_policy = human_visual_part_field_policy
         if not isinstance(human_fresh_person_policy, bool) or (
             human_fresh_person_policy and (not association_scope

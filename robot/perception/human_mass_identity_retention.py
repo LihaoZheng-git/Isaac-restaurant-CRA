@@ -54,19 +54,25 @@ class HumanMassIdentityRetention:
             raise ValueError('current verified body identity and ordered aligned camera/LiDAR epochs required')
         tracks = {t.track_id: t for t in tracking.tracked_obstacles}
         identities = body_memory.identities
-        for key, identity in identities.items():
+        excluded = {r['track_id'] for r in body_memory.recovery_audit
+            if body_memory.recovery_config is not None
+            and r['decision'] == 'temporarily_outside_checked_reach'
+            and r['evaluation_timestamp_seconds'] == tracking.timestamp_seconds
+            and r['clearance_m'] > 0}
+        active_identities = {key: value for key, value in identities.items() if key not in excluded}
+        for key, identity in active_identities.items():
             track = tracks.get(key)
             count = int(np.count_nonzero(tracking.point_track_ids == key))
             if (track is None or count < 20 or identity['lidar_timestamp'] != tracking.timestamp_seconds
                 or identity['observation_count'] != track.observation_count
                 or not np.allclose(identity['center'], track.centroid_world_xy, atol=1e-9, rtol=0)):
                 raise ValueError('adult mass retention requires current positively supported body identity')
-        if not set(fresh_mass) <= identities.keys():
+        if not set(fresh_mass) <= active_identities.keys():
             raise ValueError('mass prior cannot transfer to an unverified body identity')
         sources = {key: value for key, value in self.sources.items()
             if key in identities and 0 <= now-value[0].timestamp_seconds <= self.config.maximum_age_seconds+1e-9}
         resolved, rows = {}, []
-        for key, identity in identities.items():
+        for key, identity in active_identities.items():
             fresh = fresh_mass.get(key)
             if fresh is not None:
                 if (not isinstance(fresh, ScalarEstimate) or not fresh.is_available
@@ -102,6 +108,7 @@ class HumanMassIdentityRetention:
                 current_support_count=int(np.count_nonzero(tracking.point_track_ids == key))))
         self.sources, self.last_time = sources, now
         return resolved, dict(rows=rows, camera_timestamp_seconds=now, camera_frame_id=camera_frame_id,
+            missing_geometry_mass_not_resolved=sorted(excluded),
             maximum_source_age_seconds=self.config.maximum_age_seconds,
             configuration=dict(vars(self.config)),
             scope='separate body-identity adult-mass retention PRIOR only; original three-second source expiry; generic object, contact, support, plume and motion evidence unchanged')

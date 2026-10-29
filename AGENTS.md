@@ -1,5 +1,19 @@
 # CRA repository guidance
 
+- The user approved computed human CRA plus bounded track recovery. Separate
+  --human-track-recovery permits at most .6s positive-geometry reacquisition
+  with unchanged residual/competitor/original identity-clock gates; new IDs
+  need unique one-to-one matching and receive no transferred factor properties.
+  A missing identity may be excluded only if configured 1m/s human reach and
+  full 1.2s horizon + .35s field age cannot meet the actual robot reachable disk.
+  Recheck each field; do not delete identity, renew clocks or call this free
+  space. Nearby unresolved gaps still reject. Default strict policy remains.
+  Current visual parts may share verified computed CRA without fixed -1.7 flux;
+  higher child risk and the unknown-factor body floor remain. Fresh component,
+  independent+own60 and matched wheels required; original margins/limits/
+  lambda1.25/full horizon/acceptance and all release holds persist. See
+  docs/human_track_recovery.md. Native benefit is not yet established.
+
 - Corrected observed-motion trial at2e905fd FAILED native acceptance. Independent
   and own60 stationary gates passed; all20 recorded advisory plans stayed active
   (route-classification defect repaired), with26 selected/153 quiet-unselected

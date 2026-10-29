@@ -93,6 +93,7 @@ class RestaurantHumanSensorDiagnostic:
         parallel_guidance_selection=False,
         maximum_identity_prior_selection_age_seconds=0.,
         identity_selection_body_envelope=False,
+        human_track_recovery=False,
         predictive_human_geometry=False,
         human_prediction_uncertainty_rate=.25,
         human_prediction_uncertainty_floor=None,
@@ -112,6 +113,9 @@ class RestaurantHumanSensorDiagnostic:
             raise ValueError('identity-selection component requires explicit current body envelope')
         if identity_selection_body_envelope and not parallel_guidance_selection:
             raise ValueError('component body envelope requires explicit parallel selector')
+        if human_track_recovery and not identity_selection_body_envelope:
+            raise ValueError('track recovery requires explicit body envelope')
+        from robot.perception.human_track_recovery import HumanTrackRecoveryConfig
         if predictive_human_geometry and not identity_selection_body_envelope:
             raise ValueError('prediction bench requires an explicit current body envelope')
         if parallel_preparation and not predictive_human_geometry:
@@ -237,6 +241,7 @@ class RestaurantHumanSensorDiagnostic:
             motion_passing_config=passing_config if motion_aware_passing else None,
             human_body_envelope_config=self._identity_selection_envelope_config()
                 if identity_selection_body_envelope else None,
+            human_track_recovery_config=HumanTrackRecoveryConfig() if human_track_recovery else None,
             segmenter=SamInstanceSegmenter(
                 SamInstanceConfig(
                     paths["sam"],
@@ -483,6 +488,7 @@ class RestaurantHumanSensorDiagnostic:
                     "occupancy_policies":result.diagnostics.get("occupancy_policies"),
                     "motion_aware_passing":result.diagnostics.get("motion_aware_passing"),
                     "human_body_envelope_priors":result.diagnostics.get("human_body_envelope_priors", ()),
+                    "human_track_recovery":result.diagnostics.get("human_track_recovery"),
                     "human_mass_body_identity_retention":result.diagnostics.get("human_mass_body_identity_retention"),
                     "predictive_human_geometry":result.diagnostics.get("predictive_human_geometry"),
                     "observed_motion_reference":result.diagnostics.get("observed_motion_reference"),
