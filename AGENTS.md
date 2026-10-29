@@ -1,5 +1,24 @@
 # CRA repository guidance
 
+- MPC continuity candidate6ef5448 PASSED independent+own60 stationary and
+  native3guides/finalgoal21.0833s/.429478clearance/.002452stop/.245497nearcurve/
+  .130698analytical,204fields186translating/21movingkinetic. BUT smoothing
+  REGRESSED2.35s actualhold vs accepted.883333s, and linear command variation
+  increased. Do not promote --mpc-unfinished-qp-proposal as a smoothing fix;
+  keep defaultOFF/draftPR199 and the previous accepted demo. Seven worker
+  results had numerical proposals/four accepted/five request-clock-joined
+  translating command rows, not every iterate executed. Source15.3 local audit
+  has215 padded dense queries in human-body owner3000000000 despite clear
+  unperturbed endpoints; retain all position/yaw margins. Finite1125search and
+  geometry-distance rescue prototypes fail original gates and remain OFFLINE,
+  not infeasibility proof or integrated methods. No new wheel retry without
+  a justified jointly geometry/CBF-feasible trajectory witness and stationary
+  validation. Zero fresh complete factors/prior-assisted scope, original source
+  clocks, old reports and all release holds remain. Full3216units113.35s/
+  141focused/Ruffcompile/diffPASS. Candidate native SHA
+  8d815096c2a1166ee17c3178d0ab910430f7e1c390d9534f0c07bcf27fbd8803.
+  See docs/mpc_plan_continuity.md; failure is not human-track loss in this run.
+
 - The user approved MPC continuity improvement after the .8833s computed-CRA
   hold. Separate default-OFF --mpc-unfinished-qp-proposal admits only finite,
   correctly shaped iteration-limited QP outputs as numerical proposals.
