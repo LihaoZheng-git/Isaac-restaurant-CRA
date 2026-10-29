@@ -298,6 +298,8 @@ def main():
     for prop in service_props():
         b = read_world_bounds(stage, SERVICE_ROOT + "/" + prop.name)
         additions.append({"bounds_minimum": b.minimum, "bounds_maximum": b.maximum})
+    from robot.scene.restaurant_demo_build import demo_prop_records
+    additions.extend(demo_prop_records(stage))
     points, pixel_allowance, _ = load_authored_layout_monitor(
         args.layout_survey, additions
     )

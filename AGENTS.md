@@ -1,5 +1,15 @@
 # CRA repository guidance
 
+- The user now authorizes first PI service-demo construction. Keep the separate
+  demo scene layer and realistic clearing-station/bin/caddy/chair geometry out
+  of estimator inputs. New views require stationary checks; new human scenes
+  require component plus independent/own stationary gates before motion.
+  Demo chapters are separate trials until a continuous mission passes. Do not
+  imply fork-tip discrimination, moving-camera thermal acceptance, payload
+  dynamics, long-route coverage or fresh four-factor perception from scenery.
+  Preserve the primary-controller/main/PR117 holds. The validated moving-arc
+  option remains a separate ablation; perpendicular checked wait/go is separate.
+
 - Narrowed moving-arc v2 at7a1e1fc PASSED fresh independent+own60 and native
   navigation AND original smoothness gates: actualhold.30s vs accepted.883333s
   (66%less), original2.383333s(87.4%less); actualslow.35s.3/3guides/finalgoal

@@ -176,7 +176,7 @@ parser.add_argument("--restaurant-scene", type=Path,
                     help="separate dressed restaurant scene; bounded 2.2 m real-bowl component route")
 parser.add_argument("--restaurant-layout-survey", type=Path,
                     help="fingerprinted authored layout raster, independent clearance monitor only")
-parser.add_argument("--restaurant-view", choices=("bowl", "pot", "counter", "front", "server"), default="bowl",
+parser.add_argument("--restaurant-view", choices=("bowl", "pot", "counter", "front", "server", "demo-bin", "demo-rounded", "demo-utensils"), default="bowl",
                     help="explicit stationary robot view; target names are evaluation metadata only")
 parser.add_argument("--restaurant-route", choices=("short", "service", "human-service"), default="short")
 parser.add_argument("--restaurant-server", action="store_true", help="explicit static-server scene opt-in; stationary actor gate required before wheels")
@@ -742,8 +742,10 @@ ACTOR_CENTER_Z = ACTOR_HEIGHT / 2
 GOAL = (3.8 if args.fixture_spacing == "separated" else 3.5 if args.fixture_layout == "three" else 2.5, 0.0)
 SCENE_PATH = args.restaurant_scene.resolve() if args.restaurant_scene else Path(stationary.ROBOT_SCENE_PATH)
 if args.restaurant_scene:
+    from robot.scene.restaurant_demo_build import DEMO_OBSERVATIONS
+    observation_options = {**RESTAURANT_OBSERVATIONS, **DEMO_OBSERVATIONS}
     restaurant_target, restaurant_start, restaurant_yaw = (SERVER_OBSERVATION
-        if args.restaurant_view == "server" else RESTAURANT_OBSERVATIONS[args.restaurant_view])
+        if args.restaurant_view == "server" else observation_options[args.restaurant_view])
     if args.human_start_view != "original":
         restaurant_yaw = math.pi / 2
     if args.human_start_view == "crossing-approach":
@@ -1019,6 +1021,16 @@ def main():
                             puff.CreateDisplayColorAttr([Gf.Vec3f(.9)])
                             puff.MakeInvisible()
                             puffs.append(puff)
+        from robot.scene.restaurant_demo_build import demo_prop_records
+        for item in demo_prop_records(stage):
+            restaurant_props.append(item)
+            if item["name"] == restaurant_target:
+                bounds = read_world_bounds(stage, item["prim_path"])
+                fixtures.append({"name": item["name"], "center_world_xy": bounds.center[:2],
+                    "center_world_xyz": bounds.center, "monitor_radius_m": math.hypot(*bounds.size[:2])/2,
+                    "actor_shape": "restaurant_demo_mesh", "plume": False, "drop_m": None})
+        if args.restaurant_view in DEMO_OBSERVATIONS and not any(f["name"] == restaurant_target for f in fixtures):
+            raise RuntimeError("demo observation requires the matching authored demo layer")
         if has_server and human is None:
             bounds = read_world_bounds(stage,SERVER_PRIM_PATH)
             restaurant_props.append({"name":"Server","prim_path":SERVER_PRIM_PATH,

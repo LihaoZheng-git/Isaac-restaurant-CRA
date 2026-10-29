@@ -26,6 +26,7 @@ from pxr import Sdf, Usd
 from robot.scene.controlled_semantic_obstacle import read_world_bounds
 from robot.scene.restaurant_service_build import SERVICE_ROOT, service_props
 from robot.scene.restaurant_server import SERVER_PRIM_PATH
+from robot.scene.restaurant_demo_build import DEMO_ROOT, demo_prop_records
 
 
 def main():
@@ -61,6 +62,16 @@ def main():
     if has_server:
         views += (("server",(26.3,7.3,1.6),(29.8,8.9,.9),26),
                   ("server-aisle",(25.5,5.8,2.2),(29.4,8.9,.8),24))
+    demo_before = demo_prop_records(stage)
+    if stage.GetPrimAtPath(DEMO_ROOT):
+        # Interior views stay below the restaurant ceiling. No hidden geometry.
+        views = (
+            ("service-aisle", (25.9, 6.7, 3.2), (29.2, 8.3, .7), 18),
+            ("clearing-station", (28.6, 4.3, 1.8), (30.7, 5.5, .65), 38),
+            ("rounded-bin", (29.3, 6.1, 1.1), (30.65, 6.05, .35), 42),
+            ("utensil-comparison", (29.7, 5.45, 1.35), (30.7, 5.45, .95), 24),
+            ("dining-table", (28.7, 9.7, 1.7), (31.0, 9.8, .65), 32),
+        )
     with Usd.EditContext(stage, stage.GetSessionLayer()):
         for name,eye,target,focal in views:
             camera = rep.create.camera(position=eye, look_at=target, focal_length=focal, name=f"Service_{name.replace('-', '_')}")
@@ -89,10 +100,11 @@ def main():
               "source_sha256":hashes,"root_layer_unchanged":stage.GetRootLayer().ExportToString()==root_before,
               "prop_bounds_unchanged":all(read_world_bounds(stage,f"{SERVICE_ROOT}/{p.name}")==bounds_before[p.name] for p in service_props())
                   and (not has_server or read_world_bounds(stage,SERVER_PRIM_PATH)==bounds_before["Server"]),
+              "demo_prop_bounds_unchanged": demo_prop_records(stage) == demo_before,
               "in_memory_renderer_edits_allowed":True,
               "timeline_seconds":timeline.get_current_time(),"wheel_commands":0,
               "humans_added":int(has_server),"actor_motion_enabled":False,"scope":"actual Isaac RGB preview; no CRA or navigation acceptance"}
-    report["passed"] = report["source_files_unchanged"] and report["prop_bounds_unchanged"] and report["timeline_seconds"] == 0
+    report["passed"] = report["source_files_unchanged"] and report["prop_bounds_unchanged"] and report["demo_prop_bounds_unchanged"] and report["timeline_seconds"] == 0
     (args.output/"preview-report.json").write_text(json.dumps(report,indent=2)+"\n",encoding="utf-8")
     if not report["root_layer_unchanged"]:
         import difflib
