@@ -1,5 +1,21 @@
 # CRA repository guidance
 
+- Narrowed moving-arc v2 at7a1e1fc PASSED fresh independent+own60 and native
+  navigation AND original smoothness gates: actualhold.30s vs accepted.883333s
+  (66%less), original2.383333s(87.4%less); actualslow.35s.3/3guides/finalgoal
+  18.833333s,.474256clearance,.002451stop,.234823nearcurve at1.231460m human
+  center separation,.169928minCBF.187livefields/19supported movingkinetic rows.
+  Fivearcsearches/3acceptedreferences/15request-clock-joined translating rows;
+  all3savedreferences+optimizedhorizons/currentanalytical revalidate. Preserve
+  v1 failure and accepted oldbaseline. No prewalk preparation (.000429m),
+  unchanged nominal/CRA/priors/lambda1.25/margins/limits/clocks/full1.2s horizon;
+  QP proposal OFF. Original v2 SHA
+  0a22e5e0312ba7f4b383dca9527c8cf0707485612854d39e886efb4ee92f2083.
+  Zero complete fresh generic4factor updates; paced prior-assisted single-run
+  result, not pause-free/real-time/general/repeatability acceptance. Keep option
+  defaultOFF/draftPR200 and broader primary/main/PI/long-service holds.3234units
+  118.16s/178focused18.59s/RuffcompilePASS. See docs/moving_arc_reference.md.
+
 - Moving-arc v1 at1fe4185 passed independent+own60 and native3guides/goal21.15s,
   .239189clearance/.002439stop/.249465nearcurve, but hold REGRESSED2.366667s
   vs accepted.883333. Preserve original report SHA
