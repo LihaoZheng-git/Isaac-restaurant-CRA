@@ -22,11 +22,11 @@ import omni.replicator.core as rep
 import omni.timeline
 import omni.usd
 from PIL import Image
-from pxr import Sdf, Usd
+from pxr import Gf, Sdf, Usd, UsdGeom
 from robot.scene.controlled_semantic_obstacle import read_world_bounds
 from robot.scene.restaurant_service_build import SERVICE_ROOT, service_props
 from robot.scene.restaurant_server import SERVER_PRIM_PATH
-from robot.scene.restaurant_demo_build import DEMO_ROOT, demo_prop_records
+from robot.scene.restaurant_demo_build import DEMO_ROOT, demo_prop_records, payload_geometry_check
 
 
 def main():
@@ -72,6 +72,10 @@ def main():
             ("utensil-comparison", (29.7, 5.45, 1.35), (30.7, 5.45, .95), 24),
             ("dining-table", (28.7, 9.7, 1.7), (31.0, 9.8, .65), 32),
         )
+        body = stage.GetPrimAtPath("/World/Robot/chassis_link")
+        origin = UsdGeom.XformCache().GetLocalToWorldTransform(body).ExtractTranslation()
+        views += (("serving-robot", tuple(origin+Gf.Vec3d(-1.4, -1.2, 1.2)),
+                   tuple(origin+Gf.Vec3d(-.25, 0, .25)), 32),)
     with Usd.EditContext(stage, stage.GetSessionLayer()):
         for name,eye,target,focal in views:
             camera = rep.create.camera(position=eye, look_at=target, focal_length=focal, name=f"Service_{name.replace('-', '_')}")
@@ -101,6 +105,7 @@ def main():
               "prop_bounds_unchanged":all(read_world_bounds(stage,f"{SERVICE_ROOT}/{p.name}")==bounds_before[p.name] for p in service_props())
                   and (not has_server or read_world_bounds(stage,SERVER_PRIM_PATH)==bounds_before["Server"]),
               "demo_prop_bounds_unchanged": demo_prop_records(stage) == demo_before,
+              "serving_payload": payload_geometry_check(stage),
               "in_memory_renderer_edits_allowed":True,
               "timeline_seconds":timeline.get_current_time(),"wheel_commands":0,
               "humans_added":int(has_server),"actor_motion_enabled":False,"scope":"actual Isaac RGB preview; no CRA or navigation acceptance"}

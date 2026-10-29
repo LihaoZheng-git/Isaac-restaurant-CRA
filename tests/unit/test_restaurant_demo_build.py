@@ -6,6 +6,7 @@ import pytest
 
 from robot.scene.restaurant_demo_build import (
     CHAIR_PATH, DEMO_ROOT, DEMO_OBSERVATIONS, author_demo_props, demo_prop_records,
+    author_demo_payload, payload_geometry_check, PAYLOAD_PATH,
 )
 
 
@@ -47,3 +48,20 @@ def test_demo_observations_are_evaluation_views_and_legacy_scene_is_empty():
     caddies = [r for r in records if r["name"] in {"ClosedCaddy", "UtensilCaddy"}]
     assert all(r["bounds_minimum"][2] == pytest.approx(.8, abs=1e-5) for r in caddies)
     assert all(r["bounds_maximum"][2] < 1.1 for r in caddies)
+
+
+def test_mounted_tray_stays_inside_original_footprint_without_new_rigid_body():
+    stage = _stage()
+    parent = UsdGeom.Xform.Define(stage, "/World/Robot/chassis_link")
+    parent.AddTranslateOp().Set(Gf.Vec3d(4, 5, .1))
+    original = stage.GetRootLayer().ExportToString()
+    with Usd.EditContext(stage, stage.GetSessionLayer()):
+        check = author_demo_payload(stage)
+    assert stage.GetRootLayer().ExportToString() == original
+    assert check["within_original_planar_footprint"] and check["present"]
+    assert payload_geometry_check(stage) == check
+    for prim in Usd.PrimRange(stage.GetPrimAtPath(PAYLOAD_PATH)):
+        assert not prim.HasAPI(UsdPhysics.RigidBodyAPI)
+        assert not prim.HasAPI(UsdPhysics.MassAPI)
+    with pytest.raises(ValueError, match="already exists"):
+        author_demo_payload(stage)

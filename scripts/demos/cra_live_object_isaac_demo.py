@@ -1021,7 +1021,9 @@ def main():
                             puff.CreateDisplayColorAttr([Gf.Vec3f(.9)])
                             puff.MakeInvisible()
                             puffs.append(puff)
-        from robot.scene.restaurant_demo_build import demo_prop_records
+        from robot.scene.restaurant_demo_build import demo_prop_records, payload_geometry_check
+        serving_payload = payload_geometry_check(stage)
+        save_json("serving-payload-geometry.json", serving_payload)
         for item in demo_prop_records(stage):
             restaurant_props.append(item)
             if item["name"] == restaurant_target:
@@ -1042,7 +1044,8 @@ def main():
         save_json("restaurant-placement-monitor.json", {"props":restaurant_props,
             "basis":"authored actual-mesh bounds for independent evaluation/abort only; no factor inputs",
             "humans_added":int(has_server),"actor_motion_enabled":args.restaurant_human in {"crossing", "continuous-crossing", "parallel"},
-            "payload_added":False,"human_carried_bowl_added":args.human_carry_bowl})
+            "payload_added":serving_payload["present"],"serving_payload":serving_payload,
+            "human_carried_bowl_added":args.human_carry_bowl})
         setup_footprint = RectangularRobotFootprint(stationary.ROBOT_FRONT_EXTENT,
             stationary.ROBOT_REAR_EXTENT,stationary.ROBOT_LEFT_EXTENT,
             stationary.ROBOT_RIGHT_EXTENT,stationary.ROBOT_SAFETY_MARGIN)

@@ -12,6 +12,7 @@ from robot.scene.restaurant_service_build import ASSET_ROOT, audit_source_assets
 
 
 DEMO_ROOT = "/World/CRAServiceDemoV1"
+PAYLOAD_PATH = "/World/Robot/chassis_link/DemoServingTray"
 CHAIR_PATH = ("/World/Environment/Restaurant/assets_restaurant/Assets_Banquettes_Right/"
               "Geo_TableSet_14/Chair_Array")
 DEMO_OBSERVATIONS = {
@@ -99,6 +100,49 @@ def author_demo_props(stage):
     return demo_prop_records(stage)
 
 
+def author_demo_payload(stage):
+    """Rigid mounted presentation load inside the existing base footprint.
+
+    No free food dynamics or calibrated payload mass is claimed. Colliders
+    belong to the existing chassis, without introducing a new rigid body.
+    """
+    if stage.GetPrimAtPath(PAYLOAD_PATH):
+        raise ValueError("serving tray already exists")
+    UsdGeom.Xform.Define(stage, PAYLOAD_PATH)
+    _shape(stage, PAYLOAD_PATH+"/Tray", UsdGeom.Cube, (-.33, 0, .32),
+           (.18, .15, .008), (.16, .12, .08))
+    for model, width, z in (("plate-dinner", .20, .328), ("bread", .11, .355)):
+        source = ASSET_ROOT / f"usd/{model}.usda"
+        asset = Usd.Stage.Open(str(source))
+        bounds = read_world_bounds(asset, "/Asset")
+        scale = width/bounds.size[0]
+        prim = UsdGeom.Xform.Define(stage, PAYLOAD_PATH+"/"+model.replace("-", "_"))
+        layer_path = stage.GetEditTarget().GetLayer().realPath
+        reference = str(source) if not layer_path else os.path.relpath(source, Path(layer_path).parent).replace("\\", "/")
+        prim.GetPrim().GetReferences().AddReference(reference)
+        prim.AddTranslateOp().Set(Gf.Vec3d(-.33-scale*bounds.center[0],
+                                         -scale*bounds.center[1], z-scale*bounds.minimum[2]))
+        prim.AddScaleOp().Set(Gf.Vec3d(scale))
+        mesh = stage.GetPrimAtPath(str(prim.GetPath())+"/Geometry")
+        UsdPhysics.MeshCollisionAPI.Apply(mesh).CreateApproximationAttr("convexHull")
+    return payload_geometry_check(stage)
+
+
+def payload_geometry_check(stage):
+    if not stage.GetPrimAtPath(PAYLOAD_PATH):
+        return {"present": False}
+    parent = stage.GetPrimAtPath("/World/Robot/chassis_link")
+    box = UsdGeom.BBoxCache(Usd.TimeCode.Default(), ["default", "render"]).ComputeRelativeBound(
+        stage.GetPrimAtPath(PAYLOAD_PATH), parent).ComputeAlignedRange()
+    low, high = tuple(box.GetMin()), tuple(box.GetMax())
+    within = low[0] >= -.587351 and high[0] <= .14 and low[1] >= -.2466 and high[1] <= .2466
+    if not within or low[2] < .25 or high[2] > .48:
+        raise ValueError("mounted presentation load exceeds declared footprint/height scope")
+    return dict(present=True, parent_frame_bounds_min=low, parent_frame_bounds_max=high,
+                within_original_planar_footprint=within, rigid_attachment=True,
+                scope="mounted serving presentation; no free payload/food dynamics or calibrated load study")
+
+
 def build_demo_scene(output, *, base_scene):
     output, base_scene = Path(output).resolve(), Path(base_scene).resolve()
     additions = output.with_name(output.stem+"_dressing.usda")
@@ -120,12 +164,13 @@ def build_demo_scene(output, *, base_scene):
     stage.SetTimeCodesPerSecond(base.GetTimeCodesPerSecond())
     with Usd.EditContext(stage, layer):
         props = author_demo_props(stage)
+        payload = author_demo_payload(stage)
     layer.Save()
     stage.GetRootLayer().Save()
     if not all(hashlib.sha256(Path(p).read_bytes()).hexdigest() == h for p, h in sources.items()):
         raise RuntimeError("source scene changed")
     result = dict(scene=str(output), additions=str(additions), source_sha256=sources,
-                  props=props, source_files_unchanged=True, payload_added=False,
+                  props=props, source_files_unchanged=True, payload_added=True, payload=payload,
                   scope="scene construction only; no perception or navigation acceptance")
     output.with_suffix(".json").write_text(json.dumps(result, indent=2)+"\n", encoding="utf-8")
     return result
