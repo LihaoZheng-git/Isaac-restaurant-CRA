@@ -1,11 +1,24 @@
 # CRA repository guidance
 
+- Moving-arc v1 at1fe4185 passed independent+own60 and native3guides/goal21.15s,
+  .239189clearance/.002439stop/.249465nearcurve, but hold REGRESSED2.366667s
+  vs accepted.883333. Preserve original report SHA
+  c1f3b78d3ae42c8e6ebc652fc4aa8d854d2eaa582f7e6487dfab748cadc43408.
+  Broad ranking replaced an already-moving .1162m/s reference with .20m/s.
+  Narrow the option to missing/delayed first translation ONLY; preserve existing
+  moving references. No changed objective, limits, margins or clocks. Fresh
+  independent+own60/matched wheels required before new claims.17accepted arc
+  requests/143issued moving rows/5snapshot revalidations do not repair actual
+  hold failure. Offline343two-stage probes find no witness at14.2/15.3, not
+  integrated or infeasibility proof. Zero complete fresh factors/priors/release
+  holds persist; see docs/moving_arc_reference.md.
+
 - The user approved online moving-arc reference selection before turn-first.
   Separate default-OFF --guidance-moving-arc-reference searches at most132
   full-horizon constant arcs (33 with the matched single-speed configuration)
   only for a current selected human. Every arc needs original exact DTCBF/dense
-  padded geometry plus all forecast reference half-spaces; useful moving arcs
-  precede turn-first, otherwise use the existing progress/heading rank. This is
+  padded geometry plus all forecast reference half-spaces; rank checked arcs
+  with existing progress/heading score, preserving already-moving references. This is
   a reference-selection ablation, never an executed-speed floor. Quiet persons
   cannot activate it. Original nominal, CRA, lambda, limits, margins, 1.2s
   horizon, source clocks and fresh-field/analytical checks stay. QP proposal,

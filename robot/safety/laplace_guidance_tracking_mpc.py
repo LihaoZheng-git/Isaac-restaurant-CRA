@@ -374,16 +374,19 @@ class LaplaceGuidanceTrackingMPC(SafeSAGEUnicycleMPC):
                             gain,
                         )
                         displacement = moved
-            # Search before accepting a delayed turn-first reference. Only a
-            # currently selected encounter enables this separate ablation;
-            # runtime's quiet/unselected zero-tangent clone cannot activate it.
+            # Preserve an already translating reference. Re-ranking those arcs
+            # changes the approach before the diagnosed turn-first decision.
+            # Search only for a missing reference or delayed first translation;
+            # this is a reference gate, never a minimum executed-speed rule.
+            needs_moving_reference = (best is None or
+                best.commands[0, 0] <= self.config.intervention_tolerance)
             if (self.guidance_config.moving_arc_reference and references
-                and self.guidance_config.tangent_velocity_fraction > 0):
+                and self.guidance_config.tangent_velocity_fraction > 0 and needs_moving_reference):
                 from robot.safety.checked_moving_arc_reference import search_checked_moving_arc
                 arc, arc_rank, arc_fraction, arc_audit = search_checked_moving_arc(
                     self, initial, goal, speed, reference_kwargs)
                 checked += arc_audit['checked']
-                if arc is not None and (best is None or selected[1] or arc_rank > rank + 1e-6):
+                if arc is not None:
                     best, rank = arc, arc_rank
                     selected = (abs(float(arc.commands[0, 1])), False, arc_fraction)
                     progress = distance - float(np.linalg.norm(goal - arc.chassis_states[-1, :2]))

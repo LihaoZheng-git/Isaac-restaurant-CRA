@@ -168,6 +168,21 @@ def test_rotating_current_scene_preserves_arc_selection():
         np.testing.assert_allclose(commands, chosen[0], atol=1e-12)
 
 
+def test_existing_moving_reference_is_not_reranked(monkeypatch):
+    import robot.safety.checked_moving_arc_reference as module
+
+    reference = planner(moving_arc_reference=False).plan(
+        np.zeros(3), (.2, 0.), nominal_goal_grid_xy=(2., 0.),
+        selected_passing_tangents=((1, (1., -.5), 'left'),), **field())
+    assert reference.guidance_tracking.reference_commands[0][0] > .02
+    monkeypatch.setattr(module, 'search_checked_moving_arc',
+        lambda *a: pytest.fail('already moving reference must be preserved'))
+    result = planner().plan(np.zeros(3), (.2, 0.), nominal_goal_grid_xy=(2., 0.),
+        selected_passing_tangents=((1, (1., -.5), 'left'),), **field())
+    assert result.guidance_tracking.moving_arc_search is None
+    np.testing.assert_array_equal(result.command_sequence, reference.command_sequence)
+
+
 @pytest.mark.parametrize(
     "extra",
     [
