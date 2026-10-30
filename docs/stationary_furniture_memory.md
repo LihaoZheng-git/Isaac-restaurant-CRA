@@ -16,13 +16,16 @@ remains OFF. No authored layout, asset name or actor truth selects furniture.
   spanning at least .2s, within .06m in the world frame. Source gaps above .35s
   reset qualification. Matching is geometric and may cross track-ID changes;
   it never transfers an object's visual identity or factor evidence.
-- Qualified positive surfaces within2.5m are eligible for a10s original-source
+- Qualified surfaces with their track center within2.5m are eligible for a10s original-source
   lease. A missing surface is rasterized with .05m uncertainty plus .005m per
   second of age. These configurable engineering priors assume stationary
   background furniture; repeated support alone does not prove permanent rigidity.
 - Current person masks, even without accepted instance association, and validated
   body centers exclude a1m neighborhood. Tracks with at least three observations
-  and speed above .2m/s exclude their own .06m surface neighborhood. This narrower
+  and speed above .2m/s without complete repeated fixed-world surface support
+  exclude their own .06m surface neighborhood. A centroid-speed disagreement
+  with EVERY-point static support is recorded, not applied to CRA/kinetic values.
+  This narrower
   generic-motion region avoids confusing changing furniture-cluster centroids
   with a one-metre moving body. Both exclusions purge old records AND support
   history. Unrecognized people and crowded motion remain outside acceptance.
@@ -63,3 +66,29 @@ At the initial source freeze,113 focused tests and3,297 full unit tests pass
 and the full long mission are pending at this source freeze.
 All previous accepted route-only and failed long-human records remain available.
 Primary/main/PR117 holds remain; no real-time or complete fresh four-factor claim.
+
+## First native attempt and visibility correction
+
+At64037a9 all four fresh prerequisites passed: the parked native walking-human
+component (116sources,62with retention),180s zero-drift idle/release,60-frame
+route-start and60-frame near-human views. Their sources remained unchanged.
+The first long mission nevertheless FAILED nearby_track_lost10.833333s into
+navigation,75fields, before the person encounter. Clearance.579947m and
+stop drift.005066m do not establish arrival. Preserve `long-motion-v1`.
+
+Fragment17's visible returns changed from1174 to614, shifting its centroid and
+creating an inferred speed of about.78m/s. Its earlier source had ordinary low
+speed. The first qualifier treated this as physical motion and excluded memory.
+The corrected qualifier checks EVERY current raw world point against the same
+three-source/.2s/.06m support contract before interpreting centroid motion.
+It also applies the2.5m enrollment limit to the track center, retaining genuine
+outer-point history rather than creating an artificial evidence boundary inside
+a large furniture cluster. Newly moving/unmatched surfaces and people still
+reject; current kinetic evidence remains untouched. Neither the correspondence
+threshold nor the guard's whole-current-field coverage requirement is relaxed.
+New focused regressions exercise partial-visibility centroid shifts, one changed
+surface point, actual translated surfaces and large-cluster enrollment.
+Fresh native gates and a new full mission remain required after this correction.
+The correction passes116 focused and3,300 full unit tests (167.45s), Ruff and
+the same431-source replay, which still retains original fragment2045. The
+archived long-gap replay cannot validate the new motion attempt by itself.

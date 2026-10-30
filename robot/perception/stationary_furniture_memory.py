@@ -155,9 +155,8 @@ class StationaryFurnitureMemory:
         if any(np.count_nonzero(ids == k) != t.point_count for k, t in tracks.items()):
             raise ValueError("furniture memory requires original point ownership")
         people = set(excluded_track_ids)
-        moving = {k for k, t in tracks.items() if t.observation_count >= 3
-                  and np.linalg.norm(t.velocity_world_xy) > cfg.moving_track_speed_mps}
-        excluded = people | moving
+        high_centroid_speed = {k for k, t in tracks.items() if t.observation_count >= 3
+                               and np.linalg.norm(t.velocity_world_xy) > cfg.moving_track_speed_mps}
         forbidden = [points[np.isin(ids, list(people))]]
         extra = np.asarray(excluded_points, float).reshape(-1, 2)
         if not np.isfinite(extra).all():
@@ -165,39 +164,60 @@ class StationaryFurnitureMemory:
         forbidden.append(extra)
         forbidden = np.concatenate(forbidden)
         tree = cKDTree(forbidden) if len(forbidden) else None
+        def human_clear(p):
+            return (np.ones(len(p), dtype=bool) if tree is None else
+                    tree.query(p)[0] > cfg.human_exclusion_radius_m)
+
+        history = [(t, p[human_clear(p)]) for t, p in self.history
+                   if 0 < source_time - t <= 2 * cfg.maximum_sample_gap_seconds + 1e-9]
+        if self.last_time is not None and source_time - self.last_time > cfg.maximum_sample_gap_seconds + 1e-9:
+            history = []
+
+        def support_from(samples):
+            support = np.zeros(len(points), dtype=int)
+            earliest = np.full(len(points), source_time)
+            for t, p in samples:
+                if len(p):
+                    matched = cKDTree(p).query(points)[0] <= cfg.support_distance_m
+                    support += matched
+                    earliest[matched] = np.minimum(earliest[matched], t)
+            stable = (support >= 2) & (source_time - earliest >= cfg.minimum_support_seconds - 1e-9)
+            return stable, earliest
+
+        # Centroid velocity can jump when a stationary cluster loses half its
+        # visible surface. Prefer repeated support of EVERY actual world point;
+        # leave physical/kinetic velocity evidence unchanged and log disagreement.
+        world_supported, _ = support_from(history)
+        disagreement = {k for k in high_centroid_speed if world_supported[ids == k].all()}
+        moving = high_centroid_speed - disagreement
+        excluded = people | moving
         moving_points = points[np.isin(ids, list(moving))]
         moving_tree = cKDTree(moving_points) if len(moving_points) else None
 
         def allowed(p):
-            human_clear = (np.ones(len(p), dtype=bool) if tree is None else
-                           tree.query(p)[0] > cfg.human_exclusion_radius_m)
             motion_clear = (np.ones(len(p), dtype=bool) if moving_tree is None else
                             moving_tree.query(p)[0] > cfg.moving_surface_exclusion_radius_m)
-            return human_clear & motion_clear
+            return human_clear(p) & motion_clear
 
         usable = (ids >= 0) & ~np.isin(ids, list(excluded)) & allowed(points)
-        # Nearby enrollment is a resource/scope limit, not a free-space claim.
-        usable &= np.linalg.norm(points - robot_xy, axis=1) <= cfg.enrollment_distance_m
-        history = [(t, p[allowed(p)]) for t, p in self.history
-                   if 0 < source_time - t <= 2 * cfg.maximum_sample_gap_seconds + 1e-9]
-        if self.last_time is not None and source_time - self.last_time > cfg.maximum_sample_gap_seconds + 1e-9:
-            history = []
-        support = np.zeros(len(points), dtype=int)
-        earliest = np.full(len(points), source_time)
-        for t, p in history:
-            if len(p):
-                matched = cKDTree(p).query(points)[0] <= cfg.support_distance_m
-                support += matched
-                earliest[matched] = np.minimum(earliest[matched], t)
-        stable = usable & (support >= 2) & (source_time - earliest >= cfg.minimum_support_seconds - 1e-9)
+        history = [(t, p[allowed(p)]) for t, p in history]
+        world_supported, earliest = support_from(history)
+        stable = usable & world_supported
         records = {k: r for k, r in self.records.items()
                    if 0 < source_time - r.source_time <= cfg.maximum_age_seconds
                    and k not in excluded and allowed(r.points).all()}
-        enrolled = []
+        enrolled, rejected = [], []
         for key, track in tracks.items():
             owned = ids == key
             records.pop(key, None)
+            # Match the guard's centroid-based enrollment scope. Keep full raw
+            # scan history so outer points have genuine earlier support before
+            # a large furniture cluster's center enters the local watch region.
+            if np.linalg.norm(np.asarray(track.centroid_world_xy) - robot_xy) > cfg.enrollment_distance_m:
+                continue
             if owned.sum() < 3 or not stable[owned].all():
+                rejected.append(dict(track_id=int(key), original_points=int(owned.sum()),
+                    supported_points=int(stable[owned].sum()), excluded=key in excluded))
                 continue
             value = guidance[key]
             if value.tangential_strength != 1.25 or not math.isclose(value.boundary_flux, -(.5 + 1.2 * value.risk), abs_tol=1e-12):
@@ -212,6 +232,7 @@ class StationaryFurnitureMemory:
                                      tuple(r for k, r in records.items() if k not in tracks))
         audit = snapshot.diagnostic()
         audit.update(enrolled_track_ids=enrolled, stable_point_count=int(stable.sum()),
+                     rejected_tracks=rejected, centroid_surface_disagreement_track_ids=sorted(disagreement),
                      excluded_track_ids=sorted(excluded), exclusion_point_count=len(forbidden),
                      current_observed_point_count=len(points),
                      scope="repeated geometric support plus stationary-background prior; not semantic furniture recognition")

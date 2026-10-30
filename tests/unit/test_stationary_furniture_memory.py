@@ -82,6 +82,7 @@ def test_no_memory_for_unqualified_or_human_surfaces(problem):
         kwargs = {"points": POINTS + [.2, 0]} if problem == "new_surface" else {}
         if problem == "moving":
             kwargs["velocity"] = (.5, 0.)
+            kwargs["points"] = POINTS + [.15, 0.]
         if problem == "person":
             kwargs["excluded_points"] = [[1., 0.]]
         observe(m, 1.6 if problem == "gap" else 1.2, **kwargs)
@@ -92,11 +93,42 @@ def test_no_memory_for_unqualified_or_human_surfaces(problem):
 def test_new_person_or_motion_purges_previous_idle_history_and_geometry(exclusion):
     m = StationaryFurnitureMemory()
     acquire(m)
-    kwargs = {"excluded_points": [[1., 0.]]} if exclusion == "person" else {"velocity": (.5, 0.)}
+    kwargs = {"excluded_points": [[1., 0.]]} if exclusion == "person" else {
+        "velocity": (.5, 0.), "points": POINTS + [.1, 0.]}
     observe(m, 1.3, **kwargs)
     assert not missing(m, 1.4)[0].surfaces
-    # No borrowed qualification after the region is clear again.
-    assert not observe(m, 1.5)[1]["enrolled_track_ids"]
+    # No borrowed qualification of the newly moved surface.
+    assert not observe(m, 1.5, points=POINTS + [.1, 0.])[1]["enrolled_track_ids"]
+
+
+def test_changed_visibility_centroid_does_not_override_whole_static_surface_support():
+    m = StationaryFurnitureMemory()
+    big = np.vstack((POINTS, POINTS + [.5, 0.]))
+    observe(m, 1., points=big)
+    observe(m, 1.1, points=big)
+    _, audit = observe(m, 1.2, velocity=(-.7, .4))
+    assert audit["centroid_surface_disagreement_track_ids"] == [1]
+    assert audit["enrolled_track_ids"] == [1]
+    assert missing(m)[0].surfaces[0].source_time == 1.2
+
+
+def test_all_points_need_support_even_when_centroid_motion_is_a_visibility_artifact():
+    m = StationaryFurnitureMemory()
+    acquire(m)
+    changed = POINTS.copy()
+    changed[-1] += [.1, .1]
+    _, audit = observe(m, 1.3, points=changed, velocity=(-.7, .4))
+    assert not audit["centroid_surface_disagreement_track_ids"]
+    assert not missing(m)[0].surfaces
+
+
+def test_centroid_enrollment_preserves_original_support_outside_resource_radius():
+    m = StationaryFurnitureMemory()
+    big = np.vstack((POINTS + [1., 0.], POINTS + [1.6, 0.]))
+    for t in (1., 1.1, 1.2):
+        _, audit = observe(m, t, points=big)
+    assert audit["enrolled_track_ids"] == [1]
+    assert missing(m)[0].surfaces[0].points[:, 0].max() > m.config.enrollment_distance_m
 
 
 @pytest.mark.parametrize("problem", ["expired", "wrong_time", "wrong_center", "clipped", "missing_cell", "low_risk", "low_flux"])

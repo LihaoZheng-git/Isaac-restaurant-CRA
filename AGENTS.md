@@ -1,5 +1,17 @@
 # CRA repository guidance
 
+- Furniture-memory v1 at64037a9 PASSED all four fresh native prerequisites
+  (parked component116sources/62retained, startup/near60each,180s idle/release),
+  but motion FAILED nearby_track_lost10.8333s/75fields before the human.
+  Clearance.579947m/stopdrift.005066m; memory-human audits passed. Track17's
+  visible count fell1174->614 and centroid velocity falsely jumped to~.78m/s.
+  The corrected qualifier may prefer unchanged EVERY-point repeated world
+  support over that centroid velocity, recording disagreement; no kinetic/CRA
+  velocity is changed. People still exclude unconditionally. Enrollment uses
+  track center distance; actual raw scan history includes its outer points.
+  Keep .06m/three-source/.2s support and all original retention/grid/expiry
+  gates. Preserve failed v1; fresh native validation is required for correction.
+
 - The user now APPROVES bounded stationary-furniture retention through brief
   tracking gaps, with fresh command verification rather than blind old-command
   execution. Separate default-OFF --stationary-furniture-memory on the mixed
@@ -7,8 +19,9 @@
   support (>=3 scans spanning .2s, .06m correspondence), then retains the whole
   positive surface up to10s with .05m+.005m/s spatial uncertainty. This is an
   explicit stationary-background PRIOR, not furniture recognition or free space.
-  Current person masks/body centers exclude a1m region; moving-track surfaces
-  exclude their own .06m neighborhood. Purge both history and retained records
+  Current person masks/body centers exclude a1m region; high centroid-speed
+  surfaces WITHOUT complete fixed-world support exclude their .06m neighborhood.
+  Purge both history and retained records
   on contradictions. Original source/frame/policy remain; no factor refresh.
   The continuity guard may continue only if the EXACT original identity/epoch
   and whole uncertainty-expanded surface are covered in the CURRENT built grid
