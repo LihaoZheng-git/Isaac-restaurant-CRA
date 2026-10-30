@@ -178,7 +178,11 @@ parser.add_argument("--restaurant-layout-survey", type=Path,
                     help="fingerprinted authored layout raster, independent clearance monitor only")
 parser.add_argument("--restaurant-view", choices=("bowl", "pot", "counter", "front", "server", "demo-bin", "demo-rounded", "demo-utensils"), default="bowl",
                     help="explicit stationary robot view; target names are evaluation metadata only")
-parser.add_argument("--restaurant-route", choices=("short", "service", "human-service"), default="short")
+parser.add_argument("--restaurant-route", choices=("short", "service", "human-service", "long-service"), default="short")
+parser.add_argument("--rolling-local-field", action="store_true",
+                    help="opt-in translating window with original timestamps and strict temporal-overlap queries")
+parser.add_argument("--presentation-follow-camera", action="store_true",
+                    help="render-only elevated robot follow camera; never a perception source")
 parser.add_argument("--restaurant-server", action="store_true", help="explicit static-server scene opt-in; stationary actor gate required before wheels")
 parser.add_argument("--restaurant-human", choices=("standing", "crossing", "continuous-crossing", "parallel"),
                     help="native adult-human control integration; no static occupancy or shape persistence")
@@ -589,6 +593,12 @@ if args.restaurant_human and (not args.restaurant_scene or not args.restaurant_s
     parser.error("native human requires restaurant service route/server, deskew, bowl start and no plume")
 if args.restaurant_route == "human-service" and not args.restaurant_human:
     parser.error("human-service is the separate native-human centerline route")
+if args.rolling_local_field and not args.persistent_object_risk_map:
+    parser.error("rolling local field requires the transactional all-track map")
+if args.restaurant_route == "long-service" and (not args.rolling_local_field or args.restaurant_human):
+    parser.error("long-service first requires rolling coverage; human episodes have separate gates")
+if args.presentation_follow_camera and not args.restaurant_scene:
+    parser.error("presentation follow camera requires a restaurant scene")
 if args.restaurant_layout_survey and not args.restaurant_scene:
     parser.error("restaurant layout survey requires the explicit restaurant scene")
 if args.restaurant_view != "bowl" and (not args.restaurant_scene or args.motion):
@@ -753,6 +763,10 @@ if args.restaurant_scene:
         restaurant_start = (28.8, 7.4, restaurant_start[2])
     stationary.ROBOT_START_POSITION_WORLD = restaurant_start
     stationary.ROBOT_START_YAW_RADIANS = restaurant_yaw
+    if args.restaurant_route == "long-service":
+        from robot.scene.restaurant_service_build import LONG_ROUTE_WORLD_XY
+        stationary.ROBOT_START_POSITION_WORLD = (*LONG_ROUTE_WORLD_XY[0], restaurant_start[2])
+        stationary.ROBOT_START_YAW_RADIANS = 0.
     GOAL = restaurant_route_local_xy(args.restaurant_route, human_start_view=args.human_start_view)[-1]
 ROUTE = restaurant_route_local_xy(args.restaurant_route, human_start_view=args.human_start_view) if args.restaurant_scene else (GOAL,)
 if open_crossing_layout:
@@ -1299,6 +1313,9 @@ def main():
         plume_view_fov_degrees=args.plume_view_fov,
     )
     history = EgoPoseHistory()
+    if args.rolling_local_field:
+        from robot.safety.rolling_local_field import RollingLocalField
+        perception.rolling_field = RollingLocalField(grid)
     captures, rejections, records = [], [], []
     last_sensor_id = -1
     copied_scan = None
@@ -1306,9 +1323,10 @@ def main():
     sensor_archive_payloads = {}
     navigation_active = False
     global ACTIVE_SERVICE_VIDEO
-    if args.restaurant_scene and human is None and serving_payload["present"]:
+    if args.restaurant_scene and serving_payload["present"] and (human is None or args.presentation_follow_camera):
         from robot.scene.service_demo_video import ServiceDemoVideo
-        ACTIVE_SERVICE_VIDEO = ServiceDemoVideo(stage, args.output)
+        ACTIVE_SERVICE_VIDEO = ServiceDemoVideo(stage, args.output,
+            follow_pose=(anchor.x, anchor.y, anchor.yaw) if args.presentation_follow_camera else None)
 
     def state():
         pose = stationary.read_robot_pose(stage)
@@ -1324,6 +1342,9 @@ def main():
 
     def step(command=(0.0, 0.0), paced=False):
         started = time.perf_counter()
+        if ACTIVE_SERVICE_VIDEO is not None:
+            pose = stationary.read_robot_pose(stage)
+            ACTIVE_SERVICE_VIDEO.update_pose(float(timeline.get_current_time()), (pose.x, pose.y, pose.yaw))
         if actor_start_time is not None:
             offset, _, _ = actor_offset_velocity(max(0, float(timeline.get_current_time()) - actor_start_time))
             with Usd.EditContext(stage, stage.GetSessionLayer()):
@@ -1440,6 +1461,9 @@ def main():
         guard_mpc = SafeSAGEUnicycleMPC(mpc.paper_filter, mpc.config)
         perception.checked_wait_control = SafeSAGEControlRuntime(
             mpc=guard_mpc, backup_filter=backup, crossing_strategy=args.crossing_strategy)
+        staged_perception = StagedLivePerception(perception)
+    if args.rolling_local_field and staged_perception is None:
+        from robot.evaluation.live_checked_wait import StagedLivePerception
         staged_perception = StagedLivePerception(perception)
     checked_wait_admissions = []
 
@@ -1773,7 +1797,12 @@ def main():
         gate["restaurant_component_checks"] = restaurant_asset_checks(object_summary, restaurant_target)
         gate["restaurant_observation"] = args.restaurant_view
         gate["fixture_gate_scope"] = f"real {restaurant_target} mesh: owned RGB/LiDAR mass, contact proxy and motion; potential/thermal may use labeled priors; not full four-factor sensor acceptance"
-        if human is None:
+        if args.restaurant_route == "long-service":
+            from robot.evaluation.restaurant_service_validation import restaurant_route_sensor_checks
+            gate["route_start_sensor_checks"] = restaurant_route_sensor_checks(records)
+            gate["fixture_gate_scope"] = "new long-route start: current owned mass/contact/motion on at least one observed track; remote FoodBowl is diagnostic only; no tabletop hazard acceptance"
+            gate["passed"] = stationary_ready = bool(stationary_ready and all(gate["route_start_sensor_checks"].values()))
+        elif human is None:
             gate["passed"] = stationary_ready = bool(stationary_ready and all(gate["restaurant_component_checks"].values()))
         else:
             gate["other_restaurant_components_scope"] = "bowl diagnostics retained; the selected stationary component is the human; unsupported other tracks retain occupancy and labeled factor priors"

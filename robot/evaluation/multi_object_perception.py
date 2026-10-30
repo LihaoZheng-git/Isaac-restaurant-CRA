@@ -67,6 +67,12 @@ def assess_all_objects(worker, packet):
     from robot.evaluation.live_object_perception import LiveObjectResult
 
     started = time.perf_counter()
+    rolling = getattr(worker, "rolling_field", None)
+    grid_config = worker.grid_config
+    if rolling is not None:
+        c, s = math.cos(worker.anchor_yaw), math.sin(worker.anchor_yaw)
+        position = (np.asarray(packet.robot_position_world_xy) - worker.anchor) @ np.array([[c, -s], [s, c]])
+        grid_config = rolling.select(position, grid_config)
     if worker.previous is not None and (
         packet.sensor_frame_id <= worker.previous.sensor_frame_id
         or packet.sensor_timestamp_seconds <= worker.previous.sensor_timestamp_seconds
@@ -441,9 +447,9 @@ def assess_all_objects(worker, packet):
             cells = np.floor(
                 (
                     static[key]
-                    - [worker.grid_config.minimum_x, worker.grid_config.minimum_y]
+                    - [grid_config.minimum_x, grid_config.minimum_y]
                 )
-                / worker.grid_config.resolution
+                / grid_config.resolution
             ).astype(np.int64)
             _, unique = np.unique(cells, axis=0, return_index=True)
             static[key] = static[key][np.sort(unique)]
@@ -508,7 +514,7 @@ def assess_all_objects(worker, packet):
         for item in envelope_audit:
             item["applied_to_occupancy"] = not observed_only
         extra_points, extra_ids = envelope_grid_points([] if observed_only else envelope_audit,
-            grid_config=worker.grid_config, anchor_xy=worker.anchor, anchor_yaw=worker.anchor_yaw)
+            grid_config=grid_config, anchor_xy=worker.anchor, anchor_yaw=worker.anchor_yaw)
         points, point_ids = np.concatenate((points, extra_points)), np.concatenate((point_ids, extra_ids))
         for item in envelope_audit:
             if observed_only:
@@ -678,8 +684,8 @@ def assess_all_objects(worker, packet):
         field_guidance_policy, applied_guidance, baseline_audit = zero_tangential_bias(
             field_guidance_policy, applied_guidance, baseline_audit)
     cells = np.floor(
-        (points - [worker.grid_config.minimum_x, worker.grid_config.minimum_y])
-        / worker.grid_config.resolution
+        (points - [grid_config.minimum_x, grid_config.minimum_y])
+        / grid_config.resolution
     ).astype(np.int64)
     _, first = np.unique(np.column_stack((cells, point_ids)), axis=0, return_index=True)
     first = np.sort(first)
@@ -688,7 +694,7 @@ def assess_all_objects(worker, packet):
         point_track_ids=point_ids[first],
         semantic_obstacles=semantics,
         class_safety_policy=worker.class_policy,
-        config=worker.grid_config,
+        config=grid_config,
         track_safety_parameters={
             key: value.safety_parameters for key, value in applied_guidance.items()
         },
@@ -718,6 +724,7 @@ def assess_all_objects(worker, packet):
         if worker.previous is not None:
             old = worker.previous.temporal_safety_derivative
             previous_h = worker.previous.pipeline.h_full
+            previous_grid = worker.previous.pipeline.configuration_space.occupancy_grids[0].config
             previous_time = worker.previous.sensor_timestamp_seconds
             baseline = getattr(worker, "temporal_recovery_baseline", None)
             if (
@@ -726,6 +733,7 @@ def assess_all_objects(worker, packet):
                 and baseline[0] < packet.sensor_frame_id
             ):
                 previous_h, previous_time = baseline[2], baseline[1]
+                previous_grid = baseline[3] if len(baseline) > 3 else previous_grid
                 old = None
                 recovery = {
                     "used": True,
@@ -742,20 +750,31 @@ def assess_all_objects(worker, packet):
                     packet.sensor_frame_id,
                     packet.sensor_timestamp_seconds,
                     pipeline.h_full,
+                    grid_config,
                 )
                 raise ValueError(
                     "temporal source gap; unpublished recovery baseline recorded; no control field"
                 )
-            temporal = worker.temporal.estimate(
-                previous_h_full=previous_h,
-                current_h_full=pipeline.h_full,
-                grid_config=worker.grid_config,
-                time_delta_seconds=delta,
-                egomotion_translation_grid_xy=(0.0, 0.0),
-                previous_estimate=old
-                if isinstance(old, SafeSAGETemporalDerivativeResult)
-                else None,
-            )
+            if rolling is not None:
+                from robot.safety.rolling_local_field import rolling_temporal_derivative
+                temporal = rolling_temporal_derivative(
+                    worker.temporal, previous_h, pipeline.h_full,
+                    previous_grid=previous_grid, current_grid=grid_config,
+                    time_delta_seconds=delta, previous_estimate=old
+                    if isinstance(old, SafeSAGETemporalDerivativeResult) else None)
+                temporal.sample(query_position_grid_xy=position,
+                                query_yaw_radians=packet.robot_yaw - worker.anchor_yaw)
+            else:
+                temporal = worker.temporal.estimate(
+                    previous_h_full=previous_h,
+                    current_h_full=pipeline.h_full,
+                    grid_config=grid_config,
+                    time_delta_seconds=delta,
+                    egomotion_translation_grid_xy=(0.0, 0.0),
+                    previous_estimate=old
+                    if isinstance(old, SafeSAGETemporalDerivativeResult)
+                    else None,
+                )
         field = SafeSAGERuntimeField(
             packet.sensor_frame_id,
             packet.sensor_timestamp_seconds,
@@ -810,6 +829,13 @@ def assess_all_objects(worker, packet):
         applied_guidance = normal_guidance if not yield_ids else applied_guidance
     pipeline_seconds = time.perf_counter() - pipeline_started
     field = replace(field, build_wall_seconds=time.perf_counter() - started)
+    rolling_diagnostic = None if rolling is None else {
+        "previous_bounds": asdict(worker.grid_config),
+        "current_bounds": asdict(grid_config),
+        "recentered": grid_config != worker.grid_config,
+        "step_m": rolling.step_m,
+        "scope": "fixed world anchor; integer-cell translated window; original source epochs; temporal sampling requires consecutive-source overlap",
+    }
     # Transaction commit only after the whole multi-obstacle field succeeds.
     worker.tracker, worker.plume, worker.persistent_properties, worker.previous = (
         tracker,
@@ -818,6 +844,7 @@ def assess_all_objects(worker, packet):
         field,
     )
     worker.static_points, worker.object_ownership_bounds = static, ownership
+    worker.grid_config = grid_config
     if passing is not None:
         worker.motion_passing = passing
         worker.passing_visual_selection_evidence = passing_visual_evidence
@@ -922,6 +949,7 @@ def assess_all_objects(worker, packet):
         },
         "merge_equal_policy_regions": True,
         "temporal_gap_recovery": recovery,
+        "rolling_local_field": rolling_diagnostic,
         "occupancy_retention_scope": worker.static_scope,
         "field_raw_placement_count": len(points),
         "field_cell_representative_count": len(first),

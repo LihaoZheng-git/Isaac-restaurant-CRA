@@ -1,5 +1,17 @@
 # CRA repository guidance
 
+- Continuous restaurant service-demo work adds a default-OFF translating local
+  field with a fixed world anchor/yaw and integer-cell window shifts. Compare
+  actual prior/current fields only on overlapping world cells; new edge cells
+  are invalid for scalar and batched temporal control sampling until a second
+  actual source covers them. Stage grid/tracker/evidence admission together;
+  retain original clocks, gap limits, geometry margins and 120 s property expiry.
+  The follow camera is rendering only and preserves native pauses. The long
+  route's separate startup sensor gate is not remote tabletop-asset acceptance.
+  Require fresh stationary/short rolling/long-route gates before encounter
+  expansion. No continuous mission acceptance yet; primary/main/PR117 holds
+  remain. See docs/restaurant_long_service_demo.md.
+
 - First service-demo native chapters at 240cb9d PASSED their independent,
   own stationary and navigation gates: service 3 waypoints/20.50 s/1.151 m
   clearance; parallel final goal/21.73 s/.400 m clearance/.23267 m near curve;

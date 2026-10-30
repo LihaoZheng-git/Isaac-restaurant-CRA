@@ -63,9 +63,10 @@ def main():
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--stationary-source", type=Path)
     parser.add_argument("--component-source", type=Path)
+    parser.add_argument("--config", type=Path, default=Path("configs/restaurant_demo_v1.json"))
     args = parser.parse_args()
     os.chdir(ROOT)
-    config = ROOT / "configs/restaurant_demo_v1.json"
+    config = (ROOT / args.config).resolve()
     recipe = json.loads(config.read_text())
     if args.case not in recipe["commands"]:
         parser.error("unknown demo case")
@@ -88,10 +89,10 @@ def main():
     if any(scene_hashes[p] != h for p, h in manifest["source_sha256"].items()):
         parser.error("base scene changed since demo construction")
     if args.stage == "motion":
-        if args.case not in {"static", "parallel", "crossing"} or args.stationary_source is None:
+        if args.case not in {"static", "parallel", "crossing", "rolling-service", "long-service"} or args.stationary_source is None:
             parser.error("motion needs an eligible case and a same-source stationary gate")
         required = [(args.stationary_source, "stationary-gate.json", args.case)]
-        if args.case != "static":
+        if args.case in {"parallel", "crossing"}:
             if args.component_source is None:
                 parser.error("human motion needs a new-scene component gate")
             required.append((args.component_source, "native/validation.json", args.case+"-component"))

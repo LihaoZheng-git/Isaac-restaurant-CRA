@@ -34,7 +34,8 @@ class StagedLivePerception:
     """
 
     def __init__(self, worker):
-        if worker.persistent_properties is None or worker.encounter_motion is None:
+        if worker.persistent_properties is None or (
+                worker.encounter_motion is None and getattr(worker, "rolling_field", None) is None):
             raise ValueError("staged checked waiting requires encounter object-map mode")
         self.worker = worker
         self.pending = None

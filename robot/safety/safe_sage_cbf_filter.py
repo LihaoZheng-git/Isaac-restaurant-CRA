@@ -576,6 +576,10 @@ class SafeSAGECBFSafetyFilter:
             sampler.yaw_weight <= tolerance, yaw_derivative, interpolant_yaw
         )
         guidance = sampler.guidance(guidance_sequence)
+        if (isinstance(temporal, SafeSAGETemporalDerivativeResult)
+                and temporal.require_valid_samples
+                and np.any(sampler.scalar(temporal.valid_mask.astype(float)) < 1 - 1e-12)):
+            raise ValueError("temporal query has no valid consecutive-source overlap")
         temporal_values = (
             sampler.scalar(temporal.values)
             if isinstance(temporal, SafeSAGETemporalDerivativeResult)

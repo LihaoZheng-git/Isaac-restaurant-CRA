@@ -51,6 +51,10 @@ def restaurant_route_local_xy(name="short", *, human_start_view="original"):
         raise ValueError("experimental start is bounded to the human-service route")
     if name == "short":
         return (SHORT_GOAL_LOCAL_XY,)
+    if name == "long-service":
+        # A geometric route only; hazards never alter nominal waypoints.
+        start = np.asarray(LONG_ROUTE_WORLD_XY[0])
+        return tuple(map(tuple, np.asarray(LONG_ROUTE_WORLD_XY[1:]) - start))
     if name not in {"service", "human-service"}:
         raise ValueError("unknown restaurant route")
     start = np.asarray(SHORT_START_WORLD_XYZ[:2])

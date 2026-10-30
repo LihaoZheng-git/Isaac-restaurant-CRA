@@ -72,6 +72,20 @@ def test_missing_target_cannot_pass():
     assert not all(restaurant_asset_checks({"fixtures":{}}).values())
 
 
+def test_new_route_gate_requires_recent_repeated_real_component_observations():
+    from robot.evaluation.restaurant_service_validation import restaurant_route_sensor_checks
+    item = _summary()["fixtures"]["FoodBowl"]["latest"] | {"track_id": 4}
+    records = [dict(sensor_timestamp=i*.1, objects=[copy.deepcopy(item)]) for i in range(12)]
+    assert all(restaurant_route_sensor_checks(records).values())
+    for record in records[-4:]:
+        record["objects"] = []
+    assert not all(restaurant_route_sensor_checks(records).values())
+    records = [dict(sensor_timestamp=i*.1, objects=[copy.deepcopy(item)]) for i in range(12)]
+    for record in records:
+        record["objects"][0]["attributes"]["mass"]["mass_kg"]["status"] = "prior"
+    assert not all(restaurant_route_sensor_checks(records).values())
+
+
 def test_authored_clearance_respects_asymmetric_rotated_footprint_and_pixels():
     footprint=RectangularRobotFootprint(.2,.6,.25,.25,.05)
     points=np.array([[1.0,0.0],[100.,100.]])

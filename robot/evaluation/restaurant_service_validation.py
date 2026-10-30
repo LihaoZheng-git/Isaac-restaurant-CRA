@@ -78,6 +78,29 @@ def restaurant_asset_checks(summary, target_name="FoodBowl"):
     return {key: bool(value) for key, value in checks.items()}
 
 
+def restaurant_route_sensor_checks(records):
+    """New route-start sensor gate, not a remote tabletop-asset acceptance.
+
+    At least one currently visible geometric track must have three fresh owned
+    RGB/LiDAR mass/contact/motion assessments. Other tracks retain numeric priors.
+    This permits route coverage development; each featured hazard needs its own
+    asset gate before a perception claim or dynamic encounter is introduced.
+    """
+    counts, latest = {}, {}
+    for record in records:
+        for item in record.get("objects", []):
+            key = item["track_id"]
+            row = {"latest": item, "accepted_visual_updates": 3}
+            checks = restaurant_asset_checks({"fixtures": {"track": row}}, "track")
+            if all(checks.values()):
+                counts[key] = counts.get(key, 0)+1
+                latest[key] = record["sensor_timestamp"]
+    now = records[-1]["sensor_timestamp"] if records else math.inf
+    accepted = [key for key in counts if counts[key] >= 3 and 0 <= now-latest[key] <= .35]
+    return {"fresh_owned_mass_contact_motion_track": bool(accepted),
+            "at_least_twelve_real_frames": len(records) >= 12}
+
+
 def load_authored_layout_monitor(survey_path, additions):
     """Load a fingerprinted offline survey and conservatively include new props.
 
