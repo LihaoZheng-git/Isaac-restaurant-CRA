@@ -18,13 +18,21 @@ def digest(path):
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-def prerequisite_matches(meta, execution, gate, case, config_hash, hashes, scene_hashes):
+def prerequisite_matches(meta, execution, gate, case, config_hash, hashes, scene_hashes,
+                         expected_command=None):
     """Require identical simulation sources even across a launcher-only commit."""
     def runtime(values):
         return {p: h for p, h in values.items() if p != LAUNCHER}
+    if expected_command is None:
+        configuration_matches = meta.get("config_sha256") == config_hash
+    else:
+        command = meta.get("command", [])
+        configuration_matches = (command.count("--output") == 1
+            and len(command) >= 2 and command[-2] == "--output"
+            and command[:-2] == expected_command)
     return bool(gate.get("passed") and execution.get("passed")
                 and execution.get("source_unchanged") and meta.get("case") == case
-                and meta.get("config_sha256") == config_hash
+                and configuration_matches
                 and runtime(meta.get("source_sha256", {})) == runtime(hashes)
                 and meta.get("scene_sha256") == scene_hashes)
 
@@ -91,13 +99,17 @@ def main():
             meta = json.loads((folder/"invocation.json").read_text())
             execution = json.loads((folder/"execution.json").read_text())
             gate = json.loads((folder/filename).read_text())
-            if not prerequisite_matches(meta, execution, gate, case, digest(config), hashes, scene_hashes):
+            expected = ["C:/isaacsim/python.bat", "-u", *recipe["commands"][case]]
+            if not prerequisite_matches(meta, execution, gate, case, digest(config), hashes,
+                                         scene_hashes, expected_command=expected):
                 parser.error("failed/mismatched prerequisite")
             if case.endswith("-component") and not component_reports_pass(folder):
                 parser.error("every human component/source/geometry validation must pass")
             prerequisites.append(dict(path=str(folder), report_sha256=digest(folder/filename),
                 source_revision=meta["source_revision"], same_revision=meta["source_revision"] == revision,
-                runtime_config_scene_hashes_match=True,
+                runtime_scene_hashes_and_case_command_match=True,
+                original_config_sha256=meta["config_sha256"],
+                same_whole_config=meta["config_sha256"] == digest(config),
                 non_runtime_source_exclusion=LAUNCHER))
         command.append("--motion")
     output = args.output.resolve()

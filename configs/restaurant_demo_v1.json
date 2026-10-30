@@ -282,8 +282,7 @@
       "--crossing-strategy",
       "yield-then-go",
       "--encounter-guidance-ablation",
-      "--checked-wait-transition",
-      "--human-track-recovery"
+      "--checked-wait-transition"
     ],
     "static": [
       "scripts/demos/cra_live_object_isaac_demo.py",
@@ -390,8 +389,7 @@
       "--crossing-line-y",
       "8.9",
       "--crossing-layout",
-      "legacy",
-      "--human-track-recovery"
+      "legacy"
     ],
     "bin": [
       "scripts/demos/cra_live_object_isaac_demo.py",

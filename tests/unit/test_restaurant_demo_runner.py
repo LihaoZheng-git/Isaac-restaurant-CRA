@@ -46,3 +46,21 @@ def test_failed_or_unrecognized_component_report_cannot_be_ignored(tmp_path):
     assert not runner.component_reports_pass(tmp_path)
     extra.write_text(json.dumps({"unknown": True}))
     assert not runner.component_reports_pass(tmp_path)
+
+
+def test_unrelated_recipe_edit_reuses_only_exact_executed_case_command():
+    hashes={"robot/controller.py": "same"}
+    scenes={"scene.usda": "same"}
+    expected=["python", "demo.py", "--case", "parallel"]
+    meta=dict(case="parallel", config_sha256="old-config", source_sha256=hashes,
+              scene_sha256=scenes, command=expected+["--output", "previous"])
+    def matches():
+        return runner.prerequisite_matches(meta, dict(passed=True, source_unchanged=True),
+            dict(passed=True), "parallel", "new-config", hashes, scenes, expected)
+    assert matches()
+    meta['command']=expected+["--motion", "--output", "previous"]
+    assert not matches()
+    meta['command']=["python", "demo.py", "--case", "crossing", "--output", "previous"]
+    assert not matches()
+    meta['command']=expected+["--output", "previous", "--output", "second"]
+    assert not matches()
