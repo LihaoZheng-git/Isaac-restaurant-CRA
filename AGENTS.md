@@ -1,5 +1,14 @@
 # CRA repository guidance
 
+- Long parallel mission at225290b FAILED before the encounter: native idle root
+  drifted about26cm toward a chair and the unchanged .02m actor-layout guard
+  rejected. Robot progress was normal; do not call this tracking or CRA failure.
+  Long-service only now disables native agent updates after settled idle and
+  re-enables them before native walking (no teleport). Require a current-source
+  180s actor-only hold/release audit in addition to startup/near/component gates
+  before new wheels. Robot is inactive only in that actor-only audit; it is not
+  a robot perception or navigation test. Preserve failed record and all holds.
+
 - Long-service parallel integration is a separate default-OFF experiment. The
   authored native person starts only when robot world y reaches the configured
   8.8..9.2 m trigger; actor route/timing never supply control evidence. Keep

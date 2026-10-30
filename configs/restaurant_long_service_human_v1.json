@@ -334,6 +334,13 @@
       "--identity-selection-body-envelope",
       "--human-mass-body-identity-retention",
       "--human-track-recovery"
+    ],
+    "long-idle-component": [
+      "scripts/demos/restaurant_human_idle_isaac.py",
+      "--scene",
+      "scenes/generated/restaurant_demo_human_v6.usda",
+      "--layout-survey",
+      "outputs/restaurant_service/layout-monitor-v1/geometry-survey.json"
     ]
   }
 }

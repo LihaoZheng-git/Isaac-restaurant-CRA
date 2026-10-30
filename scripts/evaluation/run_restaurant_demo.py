@@ -64,6 +64,7 @@ def main():
     parser.add_argument("--stationary-source", type=Path)
     parser.add_argument("--component-source", type=Path)
     parser.add_argument("--near-stationary-source", type=Path)
+    parser.add_argument("--actor-wait-source", type=Path)
     parser.add_argument("--config", type=Path, default=Path("configs/restaurant_demo_v1.json"))
     args = parser.parse_args()
     os.chdir(ROOT)
@@ -98,9 +99,10 @@ def main():
                 parser.error("human motion needs a new-scene component gate")
             required.append((args.component_source, "native/validation.json", args.case+"-component"))
         if args.case == "long-parallel":
-            if args.near_stationary_source is None:
-                parser.error("long parallel requires a fresh near-human stationary gate")
+            if args.near_stationary_source is None or args.actor_wait_source is None:
+                parser.error("long parallel requires fresh near-human and actor-wait gates")
             required.append((args.near_stationary_source, "stationary-gate.json", "long-parallel-near"))
+            required.append((args.actor_wait_source, "native/validation.json", "long-idle-component"))
         for folder, filename, case in required:
             meta = json.loads((folder/"invocation.json").read_text())
             execution = json.loads((folder/"execution.json").read_text())
@@ -109,7 +111,7 @@ def main():
             if not prerequisite_matches(meta, execution, gate, case, digest(config), hashes,
                                          scene_hashes, expected_command=expected):
                 parser.error("failed/mismatched prerequisite")
-            if case.endswith("-component") and not component_reports_pass(folder):
+            if case.endswith("-component") and case != 'long-idle-component' and not component_reports_pass(folder):
                 parser.error("every human component/source/geometry validation must pass")
             prerequisites.append(dict(path=str(folder), report_sha256=digest(folder/filename),
                 source_revision=meta["source_revision"], same_revision=meta["source_revision"] == revision,
@@ -120,7 +122,7 @@ def main():
         command.append("--motion")
         if args.case == "long-parallel":
             command.extend(["--long-service-human-gates", str(args.component_source.resolve()),
-                            str(args.near_stationary_source.resolve())])
+                            str(args.near_stationary_source.resolve()), str(args.actor_wait_source.resolve())])
     output = args.output.resolve()
     output.mkdir(parents=True)
     command.extend(["--output", str(output/"native" if component else output)])

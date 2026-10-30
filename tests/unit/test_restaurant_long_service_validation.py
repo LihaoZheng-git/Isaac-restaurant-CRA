@@ -27,14 +27,21 @@ def test_remote_start_cannot_replace_current_source_near_human_gates(tmp_path):
     def sha(p):
         return hashlib.sha256(p.read_bytes()).hexdigest()
     folders = []
-    for case in ('long-parallel-component', 'long-parallel-near'):
+    for case in ('long-parallel-component', 'long-parallel-near', 'long-idle-component'):
         folder = tmp_path/case
         folder.mkdir()
         folders.append(folder)
         (folder/'invocation.json').write_text(json.dumps(dict(case=case,
             source_sha256={'robot/controller.py': sha(source)}, scene_sha256={str(scene): sha(scene)})))
         (folder/'execution.json').write_text(json.dumps(dict(passed=True, source_unchanged=True)))
-        if case.endswith('component'):
+        if case == 'long-idle-component':
+            native = folder/'native'
+            native.mkdir()
+            checks = {k: True for k in ('hold_at_least_180_seconds', 'held_agent_disabled',
+                'idle_drift_below_1mm', 'released_native_walking', 'native_task_completed',
+                'native_travel_over_3m', 'unchanged_geometry_guard')}
+            (native/'validation.json').write_text(json.dumps(dict(passed=True, checks=checks)))
+        elif case.endswith('component'):
             native = folder/'native'
             native.mkdir()
             for name in ('validation', 'human-sensor-validation'):
@@ -44,7 +51,17 @@ def test_remote_start_cannot_replace_current_source_near_human_gates(tmp_path):
         else:
             (folder/'stationary-gate.json').write_text(json.dumps(dict(passed=True,
                 human_component_checks={'ownership': True}, human_body_envelope_checks={'contained': True})))
+    with pytest.raises(ValueError, match='three'):
+        verify_near_human_gates(folders[:2], tmp_path, scene)
     assert verify_near_human_gates(folders, tmp_path, scene)
+    idle_gate = folders[2]/'native/validation.json'
+    idle_report = json.loads(idle_gate.read_text())
+    idle_report['checks']['idle_drift_below_1mm'] = False
+    idle_gate.write_text(json.dumps(idle_report))
+    with pytest.raises(ValueError, match='long idle'):
+        verify_near_human_gates(folders, tmp_path, scene)
+    idle_report['checks']['idle_drift_below_1mm'] = True
+    idle_gate.write_text(json.dumps(idle_report))
     source.write_text('changed control')
     with pytest.raises(ValueError, match='stale'):
         verify_near_human_gates(folders, tmp_path, scene)

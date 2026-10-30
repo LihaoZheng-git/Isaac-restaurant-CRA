@@ -45,6 +45,8 @@ class RestaurantHumanEpisode:
             raise ValueError("mirrored crossing is bounded to standalone walking")
         self.crossing_direction = crossing_direction
         self.parallel_oncoming = mode == 'parallel'
+        self.long_service_parallel = long_service_parallel
+        self.initial_idle_held = False
         from robot.scene.rear_pass_encounter import validate_crossing_layout
         self.open_layout = validate_crossing_layout(crossing_layout, direction=crossing_direction,
             extension=crossing_extension_m, crossing_y=crossing_y_m)
@@ -165,6 +167,15 @@ class RestaurantHumanEpisode:
 
             self.carry = NativeBowlCarry(self.agent, self.carry_setup, names)
 
+    def hold_initial_idle(self):
+        """Stop native idle root drift; release before walking, never teleport."""
+        if not self.long_service_parallel or self.phase != 'idle_before' or self.task is not None:
+            raise RuntimeError('initial idle hold requires the settled long-service actor')
+        self.agent.set_enabled(False)
+        if self.agent.is_enabled():
+            raise RuntimeError('native agent did not enter the initial hold')
+        self.initial_idle_held = True
+
     def begin_carry(self):
         """Call only after the native idle/robot startup has settled."""
         if (
@@ -231,6 +242,11 @@ class RestaurantHumanEpisode:
                              delay_seconds=self.crossing_delay_seconds,
                              navigation_start=self.navigation_start_time)
         ):
+            if self.initial_idle_held:
+                self.agent.set_enabled(True)
+                if not self.agent.is_enabled():
+                    raise RuntimeError('native agent did not release the initial hold')
+                self.initial_idle_held = False
             self.agent.set_speed(self.speed)
             self.task = self.agent.move_to(
                 self.circuit.goal if self.circuit else self.goal,
@@ -283,6 +299,8 @@ class RestaurantHumanEpisode:
         row = {
             "time": now,
             "phase": self.phase,
+            "initial_idle_held": self.initial_idle_held,
+            "native_agent_enabled": bool(self.agent.is_enabled()),
             "actor_xyz": xyz.tolist(),
             "left_foot_xyz": feet["L"],
             "right_foot_xyz": feet["R"],

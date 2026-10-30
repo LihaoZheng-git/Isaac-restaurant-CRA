@@ -24,9 +24,10 @@ def verify_near_human_gates(folders, root, scene):
                for directory in ('robot', 'scripts') for p in (root/directory).rglob('*.py')
                if p.relative_to(root).as_posix() != 'scripts/evaluation/run_restaurant_demo.py'}
     cases = (('long-parallel-component', 'native/validation.json'),
-             ('long-parallel-near', 'stationary-gate.json'))
-    if len(folders) != 2:
-        raise ValueError('two current-source human gates required')
+             ('long-parallel-near', 'stationary-gate.json'),
+             ('long-idle-component', 'native/validation.json'))
+    if len(folders) != 3:
+        raise ValueError('three current-source human gates required')
     for folder, (case, filename) in zip(folders, cases):
         folder = Path(folder)
         meta = json.loads((folder/'invocation.json').read_text())
@@ -45,6 +46,14 @@ def verify_near_human_gates(folders, root, scene):
                     and all(report['human_component_checks'].values())
                     and all(report['human_body_envelope_checks'].values())):
                 raise ValueError('near-view human ownership and body envelope must pass')
+        elif case == 'long-idle-component':
+            required = {'hold_at_least_180_seconds', 'held_agent_disabled',
+                'idle_drift_below_1mm', 'released_native_walking', 'native_task_completed',
+                'native_travel_over_3m', 'unchanged_geometry_guard'}
+            if set(report.get('checks', {})) != required or not all(
+                value is True for value in report['checks'].values()
+            ):
+                raise ValueError('long idle and native release must pass')
         else:
             from scripts.evaluation.run_restaurant_demo import component_reports_pass
             if not component_reports_pass(folder):

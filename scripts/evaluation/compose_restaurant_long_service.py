@@ -38,14 +38,14 @@ def main():
     )
     image = np.full((*mask.shape, 3), (238, 242, 245), np.uint8)
     image[mask > 0] = (153, 164, 174)
-    # Display only the service region; raster row zero is minimum world y.
+    # Display only the service region; raster row zero is maximum world y.
     crop = Image.fromarray(
         image[
-            round((2 + 2) / 0.025) : round((19 + 2) / 0.025),
+            round((32 - 19) / 0.025) : round((32 - 2) / 0.025),
             round((5 + 2) / 0.025) : round((34 + 2) / 0.025),
         ]
     )
-    crop = crop.transpose(Image.Transpose.FLIP_TOP_BOTTOM).resize((390, 229))
+    crop = crop.resize((390, 229))
 
     def pixel(q):
         return (860 + (q[0] - 5) / 29 * 390, 86 + (19 - q[1]) / 17 * 229)

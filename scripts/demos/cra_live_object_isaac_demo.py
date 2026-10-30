@@ -185,8 +185,8 @@ parser.add_argument("--presentation-follow-camera", action="store_true",
                     help="render-only elevated robot follow camera; never a perception source")
 parser.add_argument("--long-service-parallel", action="store_true",
                     help="separate long-route native parallel actor; requires independent near-view component gate")
-parser.add_argument("--long-service-human-gates", nargs=2, type=Path,
-                    help="current-source native component and near-human stationary folders; required for long human motion")
+parser.add_argument("--long-service-human-gates", nargs=3, type=Path,
+                    help="current-source native component, near-human stationary and long-idle folders; required for long human motion")
 parser.add_argument("--restaurant-server", action="store_true", help="explicit static-server scene opt-in; stationary actor gate required before wheels")
 parser.add_argument("--restaurant-human", choices=("standing", "crossing", "continuous-crossing", "parallel"),
                     help="native adult-human control integration; no static occupancy or shape persistence")
@@ -1126,6 +1126,8 @@ def main():
     for _ in range(stationary.SETTLE_STEPS):
         controller.stop()
         app.update()
+    if args.long_service_parallel:
+        human.hold_initial_idle()
     if args.human_carry_bowl:
         human.start_video()
         for _ in range(30):

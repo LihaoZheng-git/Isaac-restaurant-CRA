@@ -98,6 +98,26 @@ were 0.133333..0.283333 s. Numeric completeness is not complete perception.
 
 ## Next bounded parallel-human integration
 
+At225290b, startup, native human component and near-view stationary gates passed.
+The first full mission then FAILED at24.78s navigation, before the encounter:
+native idle root motion drifted about26cm into a chair's independent clearance
+guard (.019682m, required>.02m). Robot progress was normal; neither tracking loss
+nor phi caused the exception. Preserve `human-long-motion-v1`, including its
+incomplete route and missing final stopping audit.
+
+Long-service now holds the settled native agent with `set_enabled(False)` until
+the actor trigger, then enables it before `move_to`. No teleport, altered robot
+policy or relaxed geometry gate is used. A separate180s actor-only hold/release
+audit disables the robot in its unsaved diagnostic session; all original actor
+collider/ground/layout checks remain. That audit plus current-source startup,
+near-view and human component gates are mandatory before new long-human wheels.
+
+The route presentation overlay's raster orientation was corrected: PNG row0 is
+maximum worldy. Authoritative presentation is
+`outputs/rolling_service_field/restaurant-long-service-route-v2.mp4`; control and
+native footage were unaffected. It trims initial setup only, retaining every
+navigation frame and pause.
+
 `configs/restaurant_long_service_human_v1.json` uses the same existing native
 adult and table layout. The actor waits at (29.8,10.5), then walks south to
 (29.8,7.0) when robot world y reaches9.0. This changes actor timing only; all
