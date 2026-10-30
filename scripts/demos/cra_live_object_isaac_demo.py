@@ -1854,6 +1854,12 @@ def main():
             gate["fixture_gate_scope"] = "fresh visually associated adult mass prior/current motion/contact proxy; potential and thermal priors; wheels still blocked until this gate passes"
         elif human is not None:
             gate["remote_human_scope"] = "human is outside the startup view; this route-start gate is not human perception acceptance; launcher requires separate current-source near-view component and stationary gates before motion"
+            if any(r['diagnostics'].get('human_body_envelope_priors') for r in records):
+                from robot.evaluation.human_body_envelope_validation import validate_human_body_envelopes
+                remote_envelopes = validate_human_body_envelopes(records, human.records,
+                    reference_radius_m=human.setup['collision_radius_m'])
+                gate['remote_view_emitted_envelope_audit'] = remote_envelopes
+                gate['passed'] = stationary_ready = bool(stationary_ready and remote_envelopes['passed'])
         if args.restaurant_plume_diagnostic:
             plume_validation = restaurant_plume_checks(records, fixtures)
             save_json("restaurant-plume-validation.json", plume_validation)
@@ -1881,7 +1887,12 @@ def main():
         from robot.evaluation.human_mass_retention_validation import validate_human_mass_identity_retention
         mass_gate = validate_human_mass_identity_retention(records)
         gate['human_mass_identity_retention_checks'] = mass_gate['checks']
-        gate['passed'] = stationary_ready = bool(stationary_ready and mass_gate['passed'])
+        applied_mass_gate = mass_gate
+        if args.long_service_parallel:
+            from robot.evaluation.restaurant_long_service_validation import distant_start_retention_audit
+            applied_mass_gate = distant_start_retention_audit(mass_gate)
+            gate['distant_start_mass_retention_scope'] = applied_mass_gate
+        gate['passed'] = stationary_ready = bool(stationary_ready and applied_mass_gate['passed'])
         save_json('stationary-human-mass-identity-retention-validation.json', mass_gate)
     save_json("stationary-gate.json", gate)
     print(json.dumps({key: value for key, value in gate.items() if key != "last_objects"}, default=json_default), flush=True)

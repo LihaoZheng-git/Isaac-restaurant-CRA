@@ -115,3 +115,13 @@ the configured nominal polyline, so its planned corners do not count as
 avoidance. Human integration is pending native validation; failure of the short
 memory in the front aisle must be preserved, not repaired by retaining human
 positions as static occupancy.
+
+The first new long-start zero-wheel run (`b8e554c`, human-long-stationary-v1)
+passed owned mass/contact/motion readiness but failed the legacy requirement
+for five retained human-mass sources, because the person is outside this view.
+Keep that failed result. The distant-start audit now requires all identity,
+source-age and confidence checks but records exercise coverage as untested;
+five retained sources remain mandatory in the separate near-view gate and
+complete navigation audit. Any emitted human envelope is still independently
+audited at the distant start. This changes test placement, not runtime priors,
+source clocks, identity association or the required human evidence.

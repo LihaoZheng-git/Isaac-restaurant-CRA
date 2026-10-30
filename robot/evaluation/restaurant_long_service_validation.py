@@ -5,6 +5,18 @@ import json
 from pathlib import Path
 
 
+def distant_start_retention_audit(report):
+    """Exercise coverage belongs to the mandatory near-view gate; violations never do."""
+    checks = report['checks']
+    required = {k: v for k, v in checks.items() if k != 'five_distinct_retained_sources'}
+    if set(required) != {'original_fresh_visual_prior', 'current_positive_body_identity',
+                         'original_source_expiry', 'decayed_confidence_widened_bounds'}:
+        raise ValueError('unexpected retention audit contract')
+    return dict(passed=all(v is True for v in required.values()), checks=required,
+                full_retention_gate_passed=report['passed'],
+                scope='distant-start provenance audit only; five retained sources remain mandatory in the current-source near-view gate and complete navigation audit')
+
+
 def verify_near_human_gates(folders, root, scene):
     """Require current runtime/scene bytes and both independent human gates."""
     root, scene = Path(root), Path(scene).resolve()

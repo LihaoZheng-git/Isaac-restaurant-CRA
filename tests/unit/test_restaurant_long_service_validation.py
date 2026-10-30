@@ -6,6 +6,18 @@ import pytest
 from robot.evaluation.restaurant_long_service_validation import verify_near_human_gates
 
 
+def test_distant_start_defers_exercise_count_but_never_provenance_failure():
+    from robot.evaluation.restaurant_long_service_validation import distant_start_retention_audit
+    report = dict(passed=False, checks=dict(original_fresh_visual_prior=True,
+        current_positive_body_identity=True, original_source_expiry=True,
+        decayed_confidence_widened_bounds=True, five_distinct_retained_sources=False))
+    assert distant_start_retention_audit(report)['passed']
+    assert not distant_start_retention_audit(report)['full_retention_gate_passed']
+    for key in list(report['checks'])[:-1]:
+        bad = dict(report, checks=dict(report['checks'], **{key: False}))
+        assert not distant_start_retention_audit(bad)['passed']
+
+
 def test_remote_start_cannot_replace_current_source_near_human_gates(tmp_path):
     (tmp_path/'robot').mkdir()
     source = tmp_path/'robot/controller.py'
