@@ -3,6 +3,7 @@
 import argparse
 import hashlib
 import json
+import math
 import os
 from pathlib import Path
 import subprocess
@@ -10,10 +11,41 @@ import sys
 import time
 
 ROOT = Path(__file__).resolve().parents[2]
+LAUNCHER = "scripts/evaluation/run_restaurant_demo.py"
 
 
 def digest(path):
     return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def prerequisite_matches(meta, execution, gate, case, config_hash, hashes, scene_hashes):
+    """Require identical simulation sources even across a launcher-only commit."""
+    def runtime(values):
+        return {p: h for p, h in values.items() if p != LAUNCHER}
+    return bool(gate.get("passed") and execution.get("passed")
+                and execution.get("source_unchanged") and meta.get("case") == case
+                and meta.get("config_sha256") == config_hash
+                and runtime(meta.get("source_sha256", {})) == runtime(hashes)
+                and meta.get("scene_sha256") == scene_hashes)
+
+
+def component_reports_pass(folder):
+    """Some legacy setup reports contain clearances instead of a passed flag."""
+    native = folder/"native"
+    if any(not (native/name).exists() for name in (
+        "human-sensor-validation.json", "robot-setup-validation.json"
+    )):
+        return False
+    for path in native.glob("*validation.json"):
+        report = json.loads(path.read_text())
+        if path.name == "robot-setup-validation.json":
+            values = [report.get(k) for k in ("configured_clearance_m", "settled_clearance_m")]
+            if not all(isinstance(v, (int, float)) and not isinstance(v, bool)
+                       and math.isfinite(v) and v > .02 for v in values):
+                return False
+        elif report.get("passed") is not True:
+            return False
+    return True
 
 
 def main():
@@ -40,6 +72,13 @@ def main():
     component = args.case.endswith("-component")
     if component != (args.stage == "component"):
         parser.error("component stage must use a component recipe")
+    scene_key = "--scene" if component else "--restaurant-scene"
+    scene = Path(command[command.index(scene_key)+1])
+    manifest = json.loads(scene.with_suffix(".json").read_text())
+    scene_hashes = {str(p): digest(p) for p in (scene, Path(manifest["additions"]))}
+    scene_hashes.update({p: digest(Path(p)) for p in manifest["source_sha256"]})
+    if any(scene_hashes[p] != h for p, h in manifest["source_sha256"].items()):
+        parser.error("base scene changed since demo construction")
     if args.stage == "motion":
         if args.case not in {"static", "parallel", "crossing"} or args.stationary_source is None:
             parser.error("motion needs an eligible case and a same-source stationary gate")
@@ -52,27 +91,19 @@ def main():
             meta = json.loads((folder/"invocation.json").read_text())
             execution = json.loads((folder/"execution.json").read_text())
             gate = json.loads((folder/filename).read_text())
-            if not (gate["passed"] and execution["source_unchanged"]
-                    and execution["passed"] and meta["source_revision"] == revision
-                    and meta["case"] == case and meta["config_sha256"] == digest(config)):
+            if not prerequisite_matches(meta, execution, gate, case, digest(config), hashes, scene_hashes):
                 parser.error("failed/mismatched prerequisite")
-            if case.endswith("-component"):
-                reports = list((folder/"native").glob("*validation.json"))
-                if not (folder/"native/human-sensor-validation.json").exists() or any(
-                    not json.loads(p.read_text()).get("passed", False) for p in reports
-                ):
-                    parser.error("every human component/source/geometry validation must pass")
-            prerequisites.append(dict(path=str(folder), report_sha256=digest(folder/filename)))
+            if case.endswith("-component") and not component_reports_pass(folder):
+                parser.error("every human component/source/geometry validation must pass")
+            prerequisites.append(dict(path=str(folder), report_sha256=digest(folder/filename),
+                source_revision=meta["source_revision"], same_revision=meta["source_revision"] == revision,
+                runtime_config_scene_hashes_match=True,
+                non_runtime_source_exclusion=LAUNCHER))
         command.append("--motion")
     output = args.output.resolve()
     output.mkdir(parents=True)
     command.extend(["--output", str(output/"native" if component else output)])
     # Freeze referenced generated scene layers as well as Python source.
-    scene_key = "--scene" if component else "--restaurant-scene"
-    scene = Path(command[command.index(scene_key)+1])
-    manifest = json.loads(scene.with_suffix(".json").read_text())
-    scene_hashes = {str(p): digest(p) for p in (scene, Path(manifest["additions"]))}
-    scene_hashes.update(manifest["source_sha256"])
     meta = dict(source_revision=revision, source_sha256=hashes, scene_sha256=scene_hashes,
                 config_sha256=digest(config), command=command, case=args.case, stage=args.stage,
                 prerequisites=prerequisites, scope=recipe["scope"])

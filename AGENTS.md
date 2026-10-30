@@ -1,5 +1,15 @@
 # CRA repository guidance
 
+- Service-demo v5 retained two setup failures: the 15 cm chair pull-out
+  intruded into the native parallel human's idle-sway clearance; crossing's
+  optional mass-identity retention lacked five exercised retained sources.
+  V6 reduces the chair pull-out to 5 cm and leaves that optional retention OFF
+  for crossing, keeping the parallel option and all margins unchanged. Require
+  fresh native gates. Launcher-only revisions may reuse a passing gate only
+  with exact runtime/config/scene hash parity; legacy numeric setup reports
+  retain their original >.02 m clearance check. Failed tabletop caddy ownership
+  remains unresolved; do not claim a fork-tip risk comparison from scenery.
+
 - The user now authorizes first PI service-demo construction. Keep the separate
   demo scene layer and realistic clearing-station/bin/caddy/chair geometry out
   of estimator inputs. New views require stationary checks; new human scenes

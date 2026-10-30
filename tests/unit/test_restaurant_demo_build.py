@@ -28,7 +28,7 @@ def test_demo_layer_keeps_original_scene_and_all_collision_without_score_labels(
     assert len(records) == 5 and records == demo_prop_records(stage)
     assert all(not r["available_as_physical_factor_input"] for r in records)
     chair = next(r for r in records if r["name"] == "PulledChair")
-    assert np.mean([chair["bounds_minimum"][0], chair["bounds_maximum"][0]]) == pytest.approx(30.85)
+    assert np.mean([chair["bounds_minimum"][0], chair["bounds_maximum"][0]]) == pytest.approx(30.95)
     for prim in Usd.PrimRange(stage.GetPrimAtPath(DEMO_ROOT)):
         if prim.IsA(UsdGeom.Gprim):
             assert prim.HasAPI(UsdPhysics.CollisionAPI)

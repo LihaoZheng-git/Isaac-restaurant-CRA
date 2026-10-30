@@ -94,7 +94,7 @@ def author_demo_props(stage):
     chair = UsdGeom.Xformable(stage.GetPrimAtPath(CHAIR_PATH))
     cache = UsdGeom.XformCache()
     world = cache.GetLocalToWorldTransform(chair.GetPrim())
-    world.SetTranslateOnly(world.ExtractTranslation()+Gf.Vec3d(-.15, 0, 0))
+    world.SetTranslateOnly(world.ExtractTranslation()+Gf.Vec3d(-.05, 0, 0))
     parent = cache.GetLocalToWorldTransform(chair.GetPrim().GetParent())
     chair.MakeMatrixXform().Set(world*parent.GetInverse())
     return demo_prop_records(stage)

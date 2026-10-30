@@ -42,7 +42,7 @@
       "--human-fragment-maximum-point-speed",
       "1.0",
       "--restaurant-scene",
-      "scenes/generated/restaurant_demo_human_v4.usda",
+      "scenes/generated/restaurant_demo_human_v6.usda",
       "--restaurant-layout-survey",
       "outputs\\restaurant_service\\layout-monitor-v1\\geometry-survey.json",
       "--restaurant-view",
@@ -188,7 +188,7 @@
       "--human-fragment-maximum-point-speed",
       "1.0",
       "--restaurant-scene",
-      "scenes/generated/restaurant_demo_human_v4.usda",
+      "scenes/generated/restaurant_demo_human_v6.usda",
       "--restaurant-layout-survey",
       "outputs\\restaurant_service\\layout-monitor-v1\\geometry-survey.json",
       "--restaurant-view",
@@ -283,8 +283,7 @@
       "yield-then-go",
       "--encounter-guidance-ablation",
       "--checked-wait-transition",
-      "--human-track-recovery",
-      "--human-mass-body-identity-retention"
+      "--human-track-recovery"
     ],
     "static": [
       "scripts/demos/cra_live_object_isaac_demo.py",
@@ -306,7 +305,7 @@
       "--maximum-seconds",
       "90",
       "--restaurant-scene",
-      "scenes/generated/restaurant_demo_v4.usda",
+      "scenes/generated/restaurant_demo_v6.usda",
       "--restaurant-route",
       "service",
       "--static-occupancy-memory-prior",
@@ -323,7 +322,7 @@
     "parallel-component": [
       "scripts/demos/restaurant_human_locomotion_isaac.py",
       "--scene",
-      "scenes/generated/restaurant_demo_human_v4.usda",
+      "scenes/generated/restaurant_demo_human_v6.usda",
       "--layout-survey",
       "outputs/restaurant_service/layout-monitor-v1/geometry-survey.json",
       "--speed",
@@ -363,7 +362,7 @@
     "crossing-component": [
       "scripts/demos/restaurant_human_locomotion_isaac.py",
       "--scene",
-      "scenes/generated/restaurant_demo_human_v4.usda",
+      "scenes/generated/restaurant_demo_human_v6.usda",
       "--layout-survey",
       "outputs/restaurant_service/layout-monitor-v1/geometry-survey.json",
       "--speed",
@@ -391,7 +390,8 @@
       "--crossing-line-y",
       "8.9",
       "--crossing-layout",
-      "legacy"
+      "legacy",
+      "--human-track-recovery"
     ],
     "bin": [
       "scripts/demos/cra_live_object_isaac_demo.py",
@@ -413,7 +413,7 @@
       "--maximum-seconds",
       "90",
       "--restaurant-scene",
-      "scenes/generated/restaurant_demo_v4.usda",
+      "scenes/generated/restaurant_demo_v6.usda",
       "--restaurant-route",
       "short",
       "--static-occupancy-memory-prior",
@@ -449,7 +449,7 @@
       "--maximum-seconds",
       "90",
       "--restaurant-scene",
-      "scenes/generated/restaurant_demo_v4.usda",
+      "scenes/generated/restaurant_demo_v6.usda",
       "--restaurant-route",
       "short",
       "--static-occupancy-memory-prior",
@@ -485,7 +485,7 @@
       "--maximum-seconds",
       "90",
       "--restaurant-scene",
-      "scenes/generated/restaurant_demo_v4.usda",
+      "scenes/generated/restaurant_demo_v6.usda",
       "--restaurant-route",
       "short",
       "--static-occupancy-memory-prior",
