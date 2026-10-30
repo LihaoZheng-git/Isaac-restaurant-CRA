@@ -240,15 +240,39 @@ class StationaryFurnitureMemory:
 
 
 def person_exclusion_points(world, projection, person_frame, camera_frame, camera_time, envelopes):
-    """A suspect person mask EXCLUDES memory; it does not assert association."""
-    points = []
+    """Resolved person masks exclude without asserting instance association.
+
+    A clipped detector box/mask is an unresolved cue, not evidence that all
+    LiDAR rays behind the image edge belong to a person. Current validated body
+    centers still exclude unconditionally. No rejected mask establishes absence
+    of a person or clears occupancy; partial unrecognized humans remain outside
+    this separated, visible-human experiment's acceptance.
+    """
+    points, detections = [], []
     if person_frame is not None:
         if person_frame.source_frame_id != camera_frame or person_frame.source_timestamp_seconds != camera_time:
             raise ValueError("person exclusion requires the actual current RGB source")
         ix, pixels = projection.source_indices, projection.pixel_indices_xy
-        for d in person_frame.detections:
+        for index, d in enumerate(person_frame.detections):
             if d.semantic_class == "person" and d.confidence >= .5:
-                points.append(world[ix[d.mask[pixels[:, 1], pixels[:, 0]]], :2])
+                mask, box = d.mask, d.bounding_box
+                height, width = mask.shape
+                # Include the detector's continuous box extent: mask resizing
+                # can leave a one-pixel sliver even when its box hits the edge.
+                clipped = (mask[0].any() or mask[-1].any() or mask[:, 0].any()
+                    or mask[:, -1].any() or math.floor(box.x_min) <= 0
+                    or math.floor(box.y_min) <= 0 or math.ceil(box.x_max) >= width
+                    or math.ceil(box.y_max) >= height)
+                hits = mask[pixels[:, 1], pixels[:, 0]]
+                detections.append(dict(detection_index=index, confidence=float(d.confidence),
+                    accepted=not bool(clipped), projected_return_count=int(hits.sum()),
+                    reason="unresolved_image_boundary_person_cue" if clipped else "resolved_current_person_mask",
+                    bounding_box=asdict(box)))
+                if not clipped:
+                    points.append(world[ix[hits], :2])
     for row in envelopes:
         points.append(np.asarray(row["center_world_xy"]).reshape(1, 2))
-    return np.concatenate(points) if points else np.empty((0, 2))
+    return (np.concatenate(points) if points else np.empty((0, 2))), dict(
+        camera_frame_id=camera_frame, camera_timestamp_seconds=camera_time,
+        detections=detections, current_body_center_count=len(envelopes),
+        scope="resolved raw masks plus current validated bodies; rejected boundary cues are unknown, not negative person evidence")

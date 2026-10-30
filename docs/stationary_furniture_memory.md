@@ -20,7 +20,7 @@ remains OFF. No authored layout, asset name or actor truth selects furniture.
   lease. A missing surface is rasterized with .05m uncertainty plus .005m per
   second of age. These configurable engineering priors assume stationary
   background furniture; repeated support alone does not prove permanent rigidity.
-- Current person masks, even without accepted instance association, and validated
+- Resolved, untruncated current person masks, even without accepted instance association, and validated
   body centers exclude a1m neighborhood. Tracks with at least three observations
   and speed above .2m/s without complete repeated fixed-world surface support
   exclude their own .06m surface neighborhood. A centroid-speed disagreement
@@ -92,3 +92,37 @@ Fresh native gates and a new full mission remain required after this correction.
 The correction passes116 focused and3,300 full unit tests (167.45s), Ruff and
 the same431-source replay, which still retains original fragment2045. The
 archived long-gap replay cannot validate the new motion attempt by itself.
+
+## Second native attempt and person-mask boundary correction
+
+At `f77d522` all four fresh prerequisites passed again:115 parked component
+sources (49 with retention),180s zero-drift idle/release, and both60-frame views.
+The mission passed the previous stopping location but FAILED at88.3s with
+613 committed fields, two passed route guides, .391863m minimum clearance and
+.004587m stopping drift. The guard used1316 furniture-coverage proofs; all
+independent human-memory audits passed. These are partial results, not arrival.
+Preserve `outputs/furniture_memory/long-motion-v2` and its failed report.
+
+Fragment1930 was correctly qualified and retained from its original90.7s source.
+At96.2s, YOLO produced two false person masks on the robot's visible image edges
+(confidence .573 and .540). Projecting these masks excluded1597 returns and
+purged that furniture record. The actual human was distant in the image. This
+was a raw visual-cue quality bug, not missing memory eligibility or a CRA score.
+
+The exclusion adapter now rejects masks or continuous detector boxes that reach
+the image boundary, consistent with the existing resolved person-association
+requirement. Checking the detector box catches resizing slivers that leave a
+single empty mask pixel at the border. Rejected detections, confidences, boxes
+and affected return counts are logged as unresolved cues. They never assert
+that a person is absent. Current validated body centers and IDs still exclude
+unconditionally, and resolved raw person masks still exclude without SAM.
+No physical occupancy is removed; no mass, motion, other factor or source clock
+is changed. New partially visible/unrecognized people are outside this bounded
+scenario, and this is not a general detector false-positive solution.
+
+The archived actual-image/LiDAR replay reproduces both masks and the1597-return
+exclusion, and the corrected adapter rejects both. That is an offline component
+diagnostic only. Fresh stationary and moving-human gates, followed by a new
+full navigation attempt, remain required.
+The boundary correction passes125 focused and3,305 full unit tests (116.92s),
+Ruff, compilation and diff checks. These do not replace the pending native gates.

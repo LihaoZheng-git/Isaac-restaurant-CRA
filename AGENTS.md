@@ -1,5 +1,20 @@
 # CRA repository guidance
 
+- Furniture-memory v2 at f77d522 passed all four fresh prerequisites and the
+  previous failure location, but FAILED nearby_track_lost at88.3s/613fields.
+  Clearance .391863m/stop drift .004587m and 1316 coverage proofs are not arrival.
+  Fragment1930 WAS qualified and retained from90.7s; at96.2s two false raw YOLO
+  person masks on the robot's image edges excluded1597 projected furniture
+  returns and purged it. Preserve this failure and the original images.
+  Raw-mask memory exclusion now requires an untruncated mask AND detector box
+  (including continuous box extents reaching an edge pixel); rejected cues are
+  explicitly unresolved, never negative person evidence. Current validated
+  body centers/IDs still exclude unconditionally. Resolved raw person masks
+  still exclude without SAM association. No occupancy, source, risk, expiry or
+  motion threshold is relaxed. Partial unrecognized humans remain outside this
+  bounded separated visible-human acceptance. Archived-image replay reproduces
+  both false masks; fresh native gates and full mission remain required.
+
 - Furniture-memory v1 at64037a9 PASSED all four fresh native prerequisites
   (parked component116sources/62retained, startup/near60each,180s idle/release),
   but motion FAILED nearby_track_lost10.8333s/75fields before the human.

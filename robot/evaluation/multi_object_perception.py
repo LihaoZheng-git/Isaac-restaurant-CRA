@@ -689,7 +689,7 @@ def assess_all_objects(worker, packet):
         from robot.perception.stationary_furniture_memory import (
             ID_OFFSET, SOURCE, person_exclusion_points,
         )
-        excluded = person_exclusion_points(world, projection, worker.visual_person_frame(packet),
+        excluded, person_exclusion_audit = person_exclusion_points(world, projection, worker.visual_person_frame(packet),
             packet.camera_frame_id, packet.camera_timestamp_seconds, envelope_audit)
         # An original geometric track may contain separately owned instance and
         # unmatched support returns. Remember its strongest actually applied risk.
@@ -702,6 +702,7 @@ def assess_all_objects(worker, packet):
             source_time=packet.sensor_timestamp_seconds, source_frame=packet.sensor_frame_id,
             robot_xy=packet.robot_position_world_xy, excluded_points=excluded,
             excluded_track_ids=[r["track_id"] for r in envelope_audit])
+        furniture_audit["person_exclusion_observations"] = person_exclusion_audit
         extra, extra_ids = furniture_snapshot.placements(grid_config, worker.anchor, worker.anchor_yaw)
         points, point_ids = np.concatenate((points, extra)), np.concatenate((point_ids, extra_ids))
         for record in furniture_snapshot.surfaces:

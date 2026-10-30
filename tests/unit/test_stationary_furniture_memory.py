@@ -9,6 +9,7 @@ from robot.evaluation.restaurant_baselines import fixed_class_comparison_policy
 from robot.perception.stationary_furniture_memory import (
     ID_OFFSET, FurnitureMemoryConfig, StationaryFurnitureMemory, person_exclusion_points,
 )
+from robot.perception.semantic_detection import PixelBoundingBox
 from robot.safety.local_occupancy_grid import LocalOccupancyGrid, LocalOccupancyGridConfig
 from robot.safety.obstacle_tracking import TrackedObstacle
 
@@ -188,15 +189,48 @@ def test_raster_covers_full_disks_in_rotated_rolling_grid():
 
 
 def test_person_mask_excludes_without_claiming_object_association():
-    mask = np.array([[True, False], [False, False]])
+    mask = np.zeros((8, 8), bool)
+    mask[3, 3] = True
     frame = SimpleNamespace(source_frame_id=3, source_timestamp_seconds=1.2,
-        detections=[SimpleNamespace(semantic_class="person", confidence=.6, mask=mask)])
-    projection = SimpleNamespace(source_indices=np.array([0, 1]), pixel_indices_xy=np.array([[0, 0], [1, 1]]))
-    points = person_exclusion_points(np.array([[1., 2., 3.], [4., 5., 6.]]), projection, frame, 3, 1.2,
+        detections=[SimpleNamespace(semantic_class="person", confidence=.6, mask=mask,
+                                    bounding_box=PixelBoundingBox(2., 2., 5., 5.))])
+    projection = SimpleNamespace(source_indices=np.array([0, 1]), pixel_indices_xy=np.array([[3, 3], [4, 4]]))
+    points, audit = person_exclusion_points(np.array([[1., 2., 3.], [4., 5., 6.]]), projection, frame, 3, 1.2,
                                     [{"center_world_xy": [2., 3.]}])
     np.testing.assert_array_equal(points, [[1., 2.], [2., 3.]])
+    assert audit["detections"][0]["accepted"]
     with pytest.raises(ValueError, match="actual current"):
         person_exclusion_points(POINTS, projection, frame, 4, 1.3, [])
+
+
+@pytest.mark.parametrize("edge", ["mask", "left_box", "right_box", "top_box", "bottom_box"])
+def test_unresolved_person_boundary_does_not_erase_furniture_but_body_still_excludes(edge):
+    mask = np.zeros((8, 8), bool)
+    mask[3, 3] = True
+    box = PixelBoundingBox(2., 2., 5., 5.)
+    if edge == "mask":
+        mask[0, 3] = True
+    elif edge == "left_box":
+        box = replace(box, x_min=.2)
+    elif edge == "right_box":
+        box = replace(box, x_max=7.5)
+    elif edge == "top_box":
+        box = replace(box, y_min=.2)
+    else:
+        box = replace(box, y_max=7.5)
+    frame = SimpleNamespace(source_frame_id=3, source_timestamp_seconds=1.2,
+        detections=[SimpleNamespace(semantic_class="person", confidence=.9, mask=mask, bounding_box=box)])
+    projection = SimpleNamespace(source_indices=np.array([0]), pixel_indices_xy=np.array([[3, 3]]))
+    points, audit = person_exclusion_points(POINTS, projection, frame, 3, 1.2, [])
+    assert points.shape == (0, 2)
+    assert audit["detections"][0]["reason"] == "unresolved_image_boundary_person_cue"
+    m = StationaryFurnitureMemory()
+    acquire(m)
+    assert missing(m, excluded_points=points)[0].surfaces
+    points, audit = person_exclusion_points(POINTS, projection, frame, 3, 1.2,
+        [{"center_world_xy": [1., 0.]}])
+    assert audit["current_body_center_count"] == 1
+    assert not missing(m, 1.5, excluded_points=points)[0].surfaces
 
 
 def test_rejected_field_does_not_commit_furniture_memory():
