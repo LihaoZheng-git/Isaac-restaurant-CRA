@@ -214,6 +214,8 @@ parser.add_argument('--human-crossing-line-y', type=float, default=8.9,
                     help='separate authored crossing line y=8.4..8.9; never estimator/control context')
 parser.add_argument("--human-cluster-radius", type=float, default=.12,
                     help="explicit human 3D connectivity radius .12...20 m; original occupancy and safety gates retained")
+parser.add_argument("--human-lidar-range", type=float, default=7.5,
+                    help="actual-return preprocessing radius 7.5..10 m; legacy 7.5, no identity/geometry lease extension")
 parser.add_argument("--human-carry-bowl", action="store_true",
                     help="native held bowl in explicit continuous-crossing mode; separate bowl perception remains unvalidated")
 parser.add_argument("--human-upper-continuation", action="store_true",
@@ -536,6 +538,9 @@ if (not math.isfinite(args.height_support_margin) or not .12 <= args.height_supp
     raise ValueError("height support margin/gap must lie within [.12,1.] / [.02,.20] m")
 if not args.object_height_evidence and (args.height_support_margin != .12 or args.height_support_gap != .06):
     raise ValueError("height support configuration requires --object-height-evidence")
+if (not math.isfinite(args.human_lidar_range) or not 7.5 <= args.human_lidar_range <= 10.
+    or args.human_lidar_range != 7.5 and not args.restaurant_human):
+    parser.error("extended LiDAR range requires human mode and radius in[7.5,10]m")
 if not .12 <= args.human_cluster_radius <= .20 or (args.human_cluster_radius != .12 and not args.restaurant_human):
     parser.error("human 3D radius .12...20 requires a native human scenario")
 if not .5 <= args.human_walking_speed <= 1. or (
@@ -1583,7 +1588,7 @@ def main():
                 minimum_height=floor + 0.05,
                 maximum_height=floor + (1.8 if human is not None else 1.0),
                 minimum_range=0.15,
-                maximum_range=7.5 if human is not None else 5.0,
+                maximum_range=args.human_lidar_range if human is not None else 5.0,
                 forward_only=False,
                 angular_bin_size_degrees=None,
             ),
@@ -2861,6 +2866,7 @@ def main():
         "encounter_guidance_validation": encounter_validation,
         "native_human_mode": args.restaurant_human,
         "human_lidar_cluster_radius_m": args.human_cluster_radius,
+        "human_lidar_preprocessing_range_m": args.human_lidar_range if human is not None else 5.0,
         "native_carried_bowl": args.human_carry_bowl,
         "native_human_upper_continuation": args.human_upper_continuation,
         "human_crossing_trigger_robot_world_y": args.human_crossing_trigger_y,

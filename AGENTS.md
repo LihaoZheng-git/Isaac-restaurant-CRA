@@ -1,5 +1,21 @@
 # CRA repository guidance
 
+- Furniture v6 at ee82394 passed all four prerequisites and the previous
+  furniture-loss locations, then FAILED near final arrival:145.333333s,
+  947fields,7guides,.391794m clearance/.001319m stop drift. Human motion,
+  independent body containment and .393027m nearby curve passed; final goal
+  remained about1.055m away.1441 retained-prior and471 current-surface coverage
+  proofs passed their audits. This is not a complete continuous mission.
+  Late human3117 loss was a software7.5m LiDAR crop: two archived raw scans
+  retained153/149 actor-region returns at10m, versus zero at7.5m. Independent
+  whole-scan clustering found centers within.107m; oracle region only scores
+  outputs, never supplies extraction/tracking/control. Separate explicit
+  --human-lidar-range10 preserves all original nearby returns, field scope,
+  identity30s/gap.6s limits and legacy7.5m defaults. Range alone cannot renew
+  original visual identity. Wider native component validation is pending;
+  distant-human continuation is a proposed policy awaiting the user's decision.
+  Keep PR204 draft/development-parent only and all main/primary/PR117 holds.
+
 - Furniture v5 at0954fb1 passed all four prerequisites and all earlier stopping
   locations, then FAILED at114.2667s/761fields before the human trigger. The
   qualified2363 surface expired after10s while still1.179m away, even though

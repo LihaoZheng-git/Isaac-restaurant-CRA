@@ -103,8 +103,12 @@ class RestaurantHumanSensorDiagnostic:
         human_mass_body_identity_retention=False,
         observed_motion_reference=False,
         stationary_furniture_memory=False,
+        lidar_range_m=7.5,
     ):
         self.stage, self.output = stage, output
+        if not math.isfinite(lidar_range_m) or not 7.5 <= lidar_range_m <= 10.:
+            raise ValueError("human LiDAR preprocessing range must be in[7.5,10]m")
+        self.lidar_range_m = lidar_range_m
         from robot.safety.motion_aware_passing import MotionAwarePassingConfig
         if parallel_guidance_selection and not motion_aware_passing:
             raise ValueError('parallel selection component requires motion-aware passing')
@@ -189,6 +193,7 @@ class RestaurantHumanSensorDiagnostic:
                 "training_data": "COCO pretrained; no dataset downloaded or retraining",
                 "calibration": asdict(calibration),
                 "camera_prim_path": self.camera.camera_prim_path,
+                "lidar_preprocessing_range_m": self.lidar_range_m,
                 "camera_scope": "one actual authored camera per trial; no multi-camera fusion or synthetic wider image",
             },
         )
@@ -435,7 +440,7 @@ class RestaurantHumanSensorDiagnostic:
                 minimum_height=floor + 0.05,
                 maximum_height=floor + 1.8,
                 minimum_range=0.15,
-                maximum_range=7.5,
+                maximum_range=self.lidar_range_m,
                 forward_only=False,
                 angular_bin_size_degrees=None,
             ),

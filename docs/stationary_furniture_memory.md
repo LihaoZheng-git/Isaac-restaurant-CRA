@@ -210,3 +210,53 @@ diff checks. A462-source sparse archive replay has gaps up to5.2s and does not
 retain the required continuous proof for2363; it is not an acceptance result.
 That replay also lacks runtime raw-mask/body-envelope exclusions. Preserve its
 diagnostic output and require fresh native tests on the frozen correction.
+
+## Sixth attempt: furniture continuity passed through the human encounter
+
+At `ee82394`, all four fresh native prerequisites passed. The continuous mission
+passed every earlier furniture stop and the human encounter, reaching seven
+route guides over145.333333s with947 committed fields. Minimum clearance was
+.391794m and stopping drift .001319m. The independent human-envelope audit,
+native walking, human navigation component and nearby curve (.393027m) passed.
+There were1441 retained-furniture coverage proofs and471 fresh-surface proofs;
+all furniture/human separation audits passed. These validate the bounded
+furniture mechanism along this route, not full mission arrival or general
+occluded-object tracking. Preserve `outputs/furniture_memory/long-motion-v6`.
+
+The mission still FAILED `repeated_inference_failure` roughly1.055m before the
+final goal: `human envelope 3117: current positive LiDAR track missing`.
+At source152.7s the human was around(29.816,6.979), while the robot was around
+(29.922,14.693), approximately7.7m away. The person had already completed the
+encounter. The software preprocessing radius, rather than absence from the
+raw LiDAR scan, removed the person's current geometry.
+
+The actual archived152.5/152.7s full scans contain153/149 returns inside an
+independent .4m actor evaluation region. The original7.5m filter retains zero;
+an explicit10m filter retains all of them. Whole-scan clustering, with no actor
+truth input, produces centers .104/.107m from the independently recorded actor.
+The replay exactly reproduces the old cropped arrays and verifies that every
+old nearby return is unchanged by the wider extraction. These are offline
+sensor-data diagnostics, not continuous identity, field or wheel acceptance.
+See `outputs/furniture_memory/far-range-audit-v1.json`.
+
+The demo and parked component now expose `--human-lidar-range` in[7.5,10]m,
+with the original7.5m default. The separate recipe
+`configs/restaurant_furniture_memory_range10_v1.json` selects10m. This uses only
+actual measured returns and does not widen the field or renew any identity,
+factor, command or occupancy lease. A new native component gate is pending.
+
+A second, distinct limit remains: the human's original visual identity in v6
+was acquired at124.5s and expires at154.5s under the unchanged30s policy.
+Wider LiDAR range cannot refresh that camera evidence. Continuing after an
+expired/missing human identity requires a separately justified policy; simply
+following the previous planner command is not implemented. The proposed next
+policy would preserve original source times and check a conservative expanding
+human reachable region against the robot's entire checked horizon on every
+field, stopping whenever separation cannot be verified. That policy is awaiting
+the user's decision and is not integrated or validated here.
+
+The all-object diagnostics record98 accepted visual instances but zero fresh
+complete four-factor assessments,295791 factor-prior uses and702 retained
+property uses. Numeric CRA completeness and successful local navigation do not
+establish fresh four-factor perception, physical heat/sharpness or calibrated
+human mass. Fixed lambda and all original exact/physical checks remain.

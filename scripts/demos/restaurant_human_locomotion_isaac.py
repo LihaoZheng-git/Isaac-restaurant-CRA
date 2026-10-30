@@ -71,6 +71,8 @@ parser.add_argument("--carry-facing-crossing", action="store_true",
 parser.add_argument("--sensor-simulation-rate", type=float, default=0.1)
 parser.add_argument("--human-cluster-radius", type=float, default=.12,
                     help="explicit 3D connected-cluster radius .12...20 m; all sensor occupancy retained")
+parser.add_argument("--human-lidar-range", type=float, default=7.5,
+                    help="actual-return preprocessing radius 7.5..10 m; no identity/geometry lease extension")
 parser.add_argument("--robot-view", choices=("approach", "approach-forward", "close", "crossing-approach", "carried-front", "carried-diagonal"), default="approach")
 parser.add_argument("--camera-upward-degrees", type=float, default=0.)
 parser.add_argument("--camera-raise-metres", type=float, default=0.)
@@ -147,6 +149,9 @@ if args.robot_view in {"carried-front", "carried-diagonal"} and not args.carried
     parser.error("the frontal parked pose is bounded to the carried-object sensor component")
 if args.rgb_camera != "front_hawk_left" and not args.sensor_diagnostic:
     parser.error("camera selection requires the zero-wheel sensor diagnostic")
+if (not math.isfinite(args.human_lidar_range) or not 7.5 <= args.human_lidar_range <= 10.
+    or args.human_lidar_range != 7.5 and not args.sensor_diagnostic):
+    parser.error("extended LiDAR range requires the sensor diagnostic and radius in[7.5,10]m")
 if not .12 <= args.human_cluster_radius <= .20 or (args.human_cluster_radius != .12 and not args.sensor_diagnostic):
     parser.error("3D radius .12...20 requires the native human sensor diagnostic")
 if args.carry_facing_crossing and not args.continuous_crossing:
@@ -465,6 +470,7 @@ def main():
             get_prim_planar_pose(stage, ROBOT_BASE_PRIM_PATH),
             mass_interval=args.human_mass_prior,
             cluster_radius_m=args.human_cluster_radius,
+            lidar_range_m=args.human_lidar_range,
             carried_object_groups=args.carried_object_groups,
             human_body_contact_prior_score=args.human_body_contact_prior,
             motion_aware_passing=args.motion_aware_passing,
