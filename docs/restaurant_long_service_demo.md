@@ -98,6 +98,33 @@ were 0.133333..0.283333 s. Numeric completeness is not complete perception.
 
 ## Next bounded parallel-human integration
 
+### Latest native result and remaining decision
+
+At`cacbb56` all four fresh prerequisites passed:180s idle/release, route-start,
+moving-human component and near-view stationary gates. The full suite passed
+3,269tests in118.21s;65focused tests and Ruff passed. Native
+`human-long-motion-v3` then FAILED `nearby_track_lost` at83.016667s navigation,
+676live fields and2waypoints. It stopped atworld(24.430313,4.147136), before the
+person's trigger. Minimum independent clearance.442919m, minimum CBF margin
+.177991, stopping drift.004666m. The human's held idle drift was exactly zero.
+Report SHA256:`63e03e7eab1c279492bc77d726837a76d4190d3cd6df61ab783809e9ac34b7f9`.
+
+The new correspondence path WAS exercised:30many-to-one events passed full
+current-surface coverage, maximum distance.073510m. The final fragment2045 was
+different: its8old returns had nearest current returns.158283..168582m away,
+outside the original.10m correspondence gate. The guard correctly left this
+gap unresolved. Do not widen the threshold or count the partial route as arrival.
+There were39fresh accepted visual instances across54,663object rows and zero
+complete fresh four-factor rows. Original priors and all source clocks remain.
+
+A separate sensor-built stationary-furniture memory layer for the mixed scene
+has been proposed to the user as a geometry-uncertainty research choice. It is
+NOT implemented or approved yet. Moving-human geometry must remain live and
+unresolved human associations must retain their stop behavior. Do not silently
+enable the existing static-scene memory globally. The accepted continuous
+route-only video is ready; the earlier human clips are separate recordings.
+Primary/main/PR117 holds remain. No native process is left running.
+
 At5a8ab20 the180s actor hold/release gate PASSED (zero idle drift,3.470465m native
 travel,.256891m minimum actor clearance). Refreshed startup, human component and
 near-view stationary gates also PASSED. Full unit suite:3261passed/130.28s; Ruff

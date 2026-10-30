@@ -1,5 +1,18 @@
 # CRA repository guidance
 
+- Atcacbb56 all four fresh long-human prerequisites PASSED, then native v3
+  FAILED nearby_track_lost at83.016667s/676fields/2waypoints before the human
+  trigger. Minimum clearance.442919m/CBF.177991/stopdrift.004666m; zero actor
+  idle drift. Thirty many-to-one events passed complete current coverage (max
+  .073510m). The final8return furniture fragment2045 instead had nearest fresh
+  returns .158283..168582m away, exceeding unchanged .10m; do not relabel it
+  as observed, widen the gate, or enable static memory for humans. Report SHA
+  63e03e7eab1c279492bc77d726837a76d4190d3cd6df61ab783809e9ac34b7f9.
+  Broader stationary-furniture memory in a mixed dynamic scene is a pending
+  user research-policy decision, not integrated. Accepted continuous route-only
+  video v2 and earlier separate human chapters remain available.3269units/
+  65focused/Ruff passed. Preserve all failures and primary/main/PR117 holds.
+
 - Long human v2 at5a8ab20 FAILED before the encounter despite passing all four
   prerequisites: the continuity guard retained fragment250 after two old IDs
   merged into current21. Archived original767/12returns are ALL covered within
