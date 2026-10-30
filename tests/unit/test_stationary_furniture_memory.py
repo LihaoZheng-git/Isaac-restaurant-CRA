@@ -39,18 +39,135 @@ def missing(memory, now=1.4, **kwargs):
     return observe(memory, now, points=np.empty((0, 2)), **kwargs)
 
 
-def grid_for(snapshot, cfg=None, anchor=(0., 0.), yaw=0.):
+def grid_for(snapshot, cfg=None, anchor=(0., 0.), yaw=0., current=False):
     cfg = cfg or LocalOccupancyGridConfig(resolution=.05, minimum_x=-1., maximum_x=3., minimum_y=-2., maximum_y=2.)
     occupied = np.zeros(cfg.shape, bool)
     ids = np.full(cfg.shape, -1, dtype=np.int64)
     risks, flux = np.zeros(cfg.shape), np.zeros(cfg.shape)
     points, keys = snapshot.placements(cfg, anchor, yaw)
+    if current:
+        for surface in snapshot.observed_surfaces:
+            c, s = np.cos(yaw), np.sin(yaw)
+            local = (surface.points-anchor) @ np.array([[c, -s], [s, c]])
+            points = np.vstack((points, local))
+            keys = np.r_[keys, np.full(len(local), surface.current_track_id)]
     cells = np.floor((points-[cfg.minimum_x, cfg.minimum_y])/cfg.resolution).astype(int)
     if len(cells):
         c, r = cells.T
         occupied[r, c], ids[r, c] = True, keys
         risks[r, c], flux[r, c] = GUIDANCE.risk, GUIDANCE.boundary_flux
     return LocalOccupancyGrid(cfg, occupied, ids, risks, flux, len(points), len(points))
+
+
+def continuously_observed_after_expiry():
+    m = StationaryFurnitureMemory()
+    acquire(m)
+    # New cluster identity, but the original region has fresh whole support.
+    for now in np.arange(13, 114) / 10:
+        snapshot, audit = observe(m, now, key=2, points=POINTS+[.01, 0.])
+    assert not snapshot.surfaces  # The original ten-second geometry lease expired.
+    assert audit["observed_coverage_count"] == 1
+    return m, snapshot
+
+
+def test_fresh_whole_surface_resolves_continuity_without_extending_memory_lease():
+    _, snapshot = continuously_observed_after_expiry()
+    assert snapshot.placements(grid_for(snapshot).config, (0., 0.), 0.)[0].shape == (0, 2)
+    assert snapshot.coverage(1, 1.2, (1., 0.), grid_for(snapshot), (0., 0.), 0.) is None
+    proof = snapshot.coverage(1, 1.2, (1., 0.), grid_for(snapshot, current=True), (0., 0.), 0.)
+    assert proof["status"] == "inferred"
+    assert proof["original_source_time"] == 1.2
+    assert proof["current_source_time"] == 11.3
+    assert proof["current_source_frame"] == 113
+    assert proof["current_track_id"] == 2
+    assert proof["maximum_correspondence_distance_m"] == pytest.approx(.01)
+    assert proof["original_risk"] == GUIDANCE.risk
+
+
+def test_independent_human_audit_includes_current_surface_proofs_after_memory_expiry():
+    from robot.evaluation.furniture_memory_validation import audit_snapshot
+    _, snapshot = continuously_observed_after_expiry()
+    truth = [{"time": 11.3, "actor_xyz": [1., 0., 0.]}]
+    assert not audit_snapshot(snapshot, truth)["passed"]
+    truth[0]["actor_xyz"] = [3., 0., 0.]
+    audit = audit_snapshot(snapshot, truth)
+    assert audit["passed"] and audit["retained_surfaces"] == 0
+    assert audit["observed_surface_proofs"] == 1
+
+
+@pytest.mark.parametrize("problem", ["missing", "partial", "person", "moving", "gap", "ambiguous", "unclustered"])
+def test_observed_surface_coverage_rejects_loss_ambiguity_or_contradiction_after_expiry(problem):
+    m, _ = continuously_observed_after_expiry()
+    now = 11.7 if problem == "gap" else 11.4
+    points = POINTS+[.01, 0.]
+    extra = {}
+    if problem == "missing":
+        points = np.empty((0, 2))
+    elif problem == "partial":
+        points = POINTS+[0., .1]
+    elif problem == "person":
+        extra["excluded_points"] = [[1., 0.]]
+    elif problem == "moving":
+        points = POINTS+[.15, 0.]
+        extra["velocity"] = (.5, 0.)
+    if problem in {"ambiguous", "unclustered"}:
+        other = points+[.001, 0.]
+        ids = np.r_[[2]*3, [3 if problem == "ambiguous" else -1]*3]
+        tracks = (track(2, points),) + ((track(3, other),) if problem == "ambiguous" else ())
+        snapshot, _ = m.update(np.vstack((points, other)), ids, tracks, {2: GUIDANCE, 3: GUIDANCE},
+            source_time=now, source_frame=114, robot_xy=(0., 0.))
+    else:
+        snapshot, _ = observe(m, now, key=2, points=points, **extra)
+    assert not snapshot.observed_surfaces
+    assert not m.observed_associations
+    assert snapshot.coverage(1, 1.2, (1., 0.), grid_for(snapshot), (0., 0.), 0.) is None
+    # Later clean scans cannot resurrect the expired old query.
+    for t in (now+.1, now+.2, now+.3):
+        snapshot, _ = observe(m, t, key=2)
+        assert not any(r.original.track_id == 1 for r in snapshot.observed_surfaces)
+
+
+@pytest.mark.parametrize("problem", ["wrong_time", "wrong_center", "missing_cell", "low_risk", "low_flux", "clipped"])
+def test_fresh_surface_proof_requires_actual_current_field_and_original_identity(problem):
+    _, snapshot = continuously_observed_after_expiry()
+    grid = grid_for(snapshot, current=True)
+    row, col = np.argwhere(grid.occupied_mask)[0]
+    if problem == "missing_cell":
+        grid.occupied_mask[row, col] = False
+    elif problem == "low_risk":
+        grid.cell_risks[row, col] = 0.
+    elif problem == "low_flux":
+        grid.cell_boundary_fluxes[row, col] = 0.
+    proof = snapshot.coverage(1, 1.1 if problem == "wrong_time" else 1.2,
+        (1.1, 0.) if problem == "wrong_center" else (1., 0.), grid,
+        (10., 0.) if problem == "clipped" else (0., 0.), 0.)
+    assert proof is None
+
+
+def test_guard_keeps_original_watch_epoch_with_current_coverage_then_stops_on_loss():
+    m = StationaryFurnitureMemory()
+    acquire(m)
+    guard = NearbyTrackLossGuard(NearbyTrackLossConfig(allow_stationary_furniture_memory=True))
+    snapshot, _ = observe(m, 1.3)
+    def check(snapshot, tracks):
+        return guard.observe(tracks, source_time=snapshot.source_time, robot_world_xy=(0., 0.),
+            current_furniture_snapshot=snapshot, current_occupancy_grid=grid_for(snapshot, current=True),
+            current_grid_anchor_xy=(0., 0.), current_grid_anchor_yaw=0.)
+    check(snapshot, (track(),))
+    # The covering parent's center is far, so centroid reassociation is unavailable.
+    large = np.vstack((POINTS, POINTS+[4., 0.]))
+    for now in np.arange(14, 115)/10:
+        snapshot, _ = observe(m, now, key=2, points=large)
+        result = check(snapshot, (track(2, large),))
+        assert not result["blocked"]
+        assert guard.observed[1][1] == 1.3
+    assert not snapshot.surfaces
+    assert result["furniture_observed_covered_missing_tracks"]
+    assert not result["furniture_prior_covered_missing_tracks"]
+    snapshot, _ = missing(m, 11.5)
+    result = check(snapshot, ())
+    assert result["blocked"]
+    assert result["blocking_tracks"][0]["original_last_seen_time"] == 1.3
 
 
 def test_repeated_surface_can_survive_id_changes_without_transferring_identity():

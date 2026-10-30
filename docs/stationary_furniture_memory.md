@@ -175,3 +175,38 @@ The v4 parked component at `4b8801e` was interrupted during this review, before
 wheel trials. Its partial output is preserved and provides no acceptance.
 This source-gap correction passes133 focused and3,313 full unit tests (116.98s),
 with Ruff and diff checks passing. Fresh native validation remains pending.
+
+## Fifth attempt: fresh surface coverage versus expired memory
+
+At `0954fb1`, all four prerequisites passed again (115 parked component sources,
+88 with retention;180s idle/release;60 startup and60 near-human frames). The
+mission passed all three old stopping locations, but FAILED at114.266667s with
+761 fields, four guide passages, .391803m minimum clearance and .004543m stopping
+drift. Human walking had not started. Preserve `long-motion-v5`; it is not arrival.
+
+The qualified nine-point fragment2363 retained its112.1s epoch and expired at
+122.2s. The robot was still1.1792m from its old center. All nine original points
+were nevertheless directly observed in larger cluster1941: maximum distance
+.082732m immediately after loss at112.2s and .001548m at the final stop. That
+cluster's center was outside the centroid-based guard enrollment region.
+
+The correction distinguishes current whole-surface observation from retained
+memory. It keeps the original query, source/frame and risk; finds one unique
+current owner; requires at least three distinct, temporally supported current
+returns covering EVERY old point within the unchanged .06m bound; and retains
+the human, motion and ambiguity exclusions. Actual current return cells must
+be in the built field at least as conservative as the original risk/flux.
+It adds no old geometry after expiry. Beyond the original ten-second lease,
+only an uninterrupted sequence of fresh proofs can maintain this association;
+missing, ambiguous or gapped support ends it. Later scans cannot resurrect an
+expired query. Its geometry association is inferred, with current sensor epochs;
+original factor priors and source epochs are not refreshed. Logging separates
+these proofs from furniture-prior coverage, and independent human audits also
+check the current covering points. New tests retain the original watch epoch,
+exercise expiry under fresh support and restore stopping on subsequent loss.
+
+The correction passes149 focused and3,329 full unit tests (118.72s), Ruff and
+diff checks. A462-source sparse archive replay has gaps up to5.2s and does not
+retain the required continuous proof for2363; it is not an acceptance result.
+That replay also lacks runtime raw-mask/body-envelope exclusions. Preserve its
+diagnostic output and require fresh native tests on the frozen correction.

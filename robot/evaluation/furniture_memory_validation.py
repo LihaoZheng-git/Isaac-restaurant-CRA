@@ -6,7 +6,8 @@ def audit_snapshot(snapshot, truth):
     if snapshot is None:
         return None
     time = snapshot.source_time
-    if not snapshot.surfaces:
+    surfaces = [r.points for r in snapshot.surfaces] + [r.points for r in snapshot.observed_surfaces]
+    if not surfaces:
         return dict(passed=True, source_time=time, retained_surfaces=0,
                     minimum_retained_surface_human_distance_m=None,
                     scope="empty retained geometry; no human overlap claim is needed")
@@ -18,13 +19,13 @@ def audit_snapshot(snapshot, truth):
     j = max(0, i-1)
     alpha = 0. if times[i] == times[j] else (time-times[j])/(times[i]-times[j])
     center = (1-alpha)*np.array(truth[j]["actor_xyz"][:2]) + alpha*np.array(truth[i]["actor_xyz"][:2])
-    distances = [float(np.linalg.norm(r.points-center, axis=1).min())
-                 for r in snapshot.surfaces]
+    distances = [float(np.linalg.norm(points-center, axis=1).min()) for points in surfaces]
     return dict(passed=bool(not distances or min(distances) > .4),
-                source_time=time, retained_surfaces=len(distances),
+                source_time=time, retained_surfaces=len(snapshot.surfaces),
+                observed_surface_proofs=len(snapshot.observed_surfaces),
                 minimum_retained_surface_human_distance_m=min(distances) if distances else None,
                 human_reference_radius_m=.4,
-                scope="independent current native human root audit; raw retained points outside .4m; not control input or a complete mesh test")
+                scope="independent current native human root audit; raw retained and observed-coverage points outside .4m; not control input or a complete mesh test")
 
 
 def summarize_memory(rows):

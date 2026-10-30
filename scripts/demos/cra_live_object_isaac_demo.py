@@ -2336,6 +2336,7 @@ def main():
                         if (coverage_result["observed_fragment_merges"] or coverage_result["blocked"]
                             or coverage_result["prior_covered_missing_tracks"]
                             or coverage_result["furniture_prior_covered_missing_tracks"]
+                            or coverage_result["furniture_observed_covered_missing_tracks"]
                             or coverage_result.get("positive_surface_merge_rejections")):
                             if any(e.get("coexistence_basis") in {"retained_original_coobservation", "recent_original_coobservation_positive_extent"}
                                    or e.get("coexistence_basis") == "recent_original_coobservation_positive_surface"
@@ -2904,6 +2905,7 @@ def main():
             "source_aligned_human_audits_pass": all(r["diagnostics"].get("furniture_memory_human_audit", {}).get("passed", False) for r in live_fields)
                 if args.stationary_furniture_memory else None,
             "coverage_events": sum(len(r.get("furniture_prior_covered_missing_tracks", ())) for r in coverage_events),
+            "fresh_observed_coverage_events": sum(len(r.get("furniture_observed_covered_missing_tracks", ())) for r in coverage_events),
         },
         "perception_evidence_counts": {
             "accepted_current_instances": sum(

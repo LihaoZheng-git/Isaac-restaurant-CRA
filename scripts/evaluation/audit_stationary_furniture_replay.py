@@ -1,7 +1,9 @@
 """Replay archived pre-encounter LiDAR sources through the furniture prior.
 
 This diagnoses geometry retention only, not navigation or human recognition.
-The selected archive ends before the native person enters the local field.
+It excludes archived observed-person classes but does not reproduce raw person
+masks or validated body-envelope exclusions. Keep archival source gaps explicit;
+this module replay cannot establish runtime human exclusion or wheel acceptance.
 """
 import argparse
 from dataclasses import replace
@@ -50,11 +52,13 @@ def main():
         snapshot, audit = memory.update(points, ids, tracks, guidance,
             source_time=now, source_frame=frame, robot_xy=robot, excluded_track_ids=excluded)
         rows.append(dict(time=now, frame=frame, enrolled=audit["enrolled_track_ids"],
-                         retained=audit["retained"], excluded=audit["excluded_track_ids"]))
+                         retained=audit["retained"], observed_coverage=audit["observed_coverage"],
+                         excluded=audit["excluded_track_ids"]))
     args.output.parent.mkdir(parents=True, exist_ok=True)
     result = dict(scope=__doc__, archived_sources=len(rows),
                   maximum_gap=max(np.diff(sorted(sources))), rows=rows,
-                  final_retained=[r.track_id for r in snapshot.surfaces])
+                  final_retained=[r.track_id for r in snapshot.surfaces],
+                  final_observed_coverage=[r.original.track_id for r in snapshot.observed_surfaces])
     args.output.write_text(json.dumps(result, indent=2)+"\n")
     print(json.dumps({k: v for k, v in result.items() if k not in {"rows", "scope"}}))
 

@@ -582,6 +582,7 @@ class NearbyTrackLossGuard:
         prior_coverage["covered"] = [p for p in prior_coverage["covered"]
             if p["track_id"] in pending and p["track_id"] not in current]
         furniture_coverage = []
+        observed_furniture_coverage = []
         if self.config.allow_stationary_furniture_memory:
             from robot.perception.stationary_furniture_memory import FurnitureSnapshot
             if (not isinstance(current_furniture_snapshot, FurnitureSnapshot)
@@ -594,7 +595,10 @@ class NearbyTrackLossGuard:
                     proof = current_furniture_snapshot.coverage(key, last_seen, point,
                         current_occupancy_grid, current_grid_anchor_xy, current_grid_anchor_yaw)
                     if proof is not None:
-                        furniture_coverage.append(proof)
+                        if proof["status"] == "inferred":
+                            observed_furniture_coverage.append(proof)
+                        else:
+                            furniture_coverage.append(proof)
         elif current_furniture_snapshot is not None:
             raise ValueError("furniture coverage requires explicit opt-in")
         blocking = []
@@ -606,6 +610,7 @@ class NearbyTrackLossGuard:
                 and distance <= self.config.stop_distance_m
                 and not any(p["track_id"] == key for p in prior_coverage["covered"])
                 and not any(p["track_id"] == key for p in furniture_coverage)
+                and not any(p["track_id"] == key for p in observed_furniture_coverage)
             ):
                 blocking.append(
                     {
@@ -660,6 +665,7 @@ class NearbyTrackLossGuard:
             "prior_covered_missing_tracks": prior_coverage["covered"],
             "body_prior_coverage_rejections": prior_coverage["rejected"],
             "furniture_prior_covered_missing_tracks": furniture_coverage,
+            "furniture_observed_covered_missing_tracks": observed_furniture_coverage,
             **({"positive_surface_route_enabled": True,
                 "positive_surface_merge_rejections": surface_rejections,
                 "many_to_one_full_surface_route_enabled": self.config.allow_many_to_one_full_surface_merges,

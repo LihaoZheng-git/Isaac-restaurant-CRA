@@ -76,10 +76,20 @@ class RememberedSurface:
 
 
 @dataclass(frozen=True)
+class ObservedSurfaceCoverage:
+    original: RememberedSurface
+    current_source_frame: int
+    current_track_id: int
+    points: np.ndarray
+    maximum_correspondence_distance_m: float
+
+
+@dataclass(frozen=True)
 class FurnitureSnapshot:
     source_time: float
     config: FurnitureMemoryConfig
     surfaces: tuple
+    observed_surfaces: tuple = ()
 
     def radius(self, record):
         return self.config.uncertainty_radius_m + self.config.uncertainty_growth_mps * (
@@ -96,6 +106,36 @@ class FurnitureSnapshot:
 
     def coverage(self, track_id, last_seen, centroid, grid, anchor_xy, anchor_yaw):
         """A guard exception needs exact old identity/epoch AND actual grid cover."""
+        for observed in self.observed_surfaces:
+            r = observed.original
+            if (r.track_id != track_id or abs(r.source_time-last_seen) > 1e-9
+                or not np.allclose(r.centroid, centroid, atol=1e-9, rtol=0)):
+                continue
+            # These are actual CURRENT returns, not the old uncertainty raster.
+            c, s = math.cos(anchor_yaw), math.sin(anchor_yaw)
+            local = (observed.points-anchor_xy) @ np.array([[c, -s], [s, c]])
+            cells = np.unique(np.floor((local-[grid.config.minimum_x, grid.config.minimum_y])
+                                      / grid.config.resolution).astype(int), axis=0)
+            if (not len(cells) or np.any(cells < 0)
+                or np.any(cells[:, 0] >= grid.config.column_count)
+                or np.any(cells[:, 1] >= grid.config.row_count)):
+                continue
+            cols, rows = cells.T
+            if (grid.occupied_mask[rows, cols].all()
+                and (grid.cell_risks[rows, cols] >= r.guidance.risk-1e-12).all()
+                and (grid.cell_boundary_fluxes[rows, cols] <= r.guidance.boundary_flux+1e-12).all()):
+                return dict(track_id=int(track_id), source="current_whole_stationary_surface_coverage",
+                    status="inferred", original_source_time=r.source_time,
+                    original_source_frame=r.source_frame, current_source_time=self.source_time,
+                    current_source_frame=observed.current_source_frame,
+                    current_track_id=observed.current_track_id,
+                    missing_seconds=self.source_time-r.source_time,
+                    qualification_source_time=r.qualification_source_time,
+                    support_start_time=r.support_start_time,
+                    original_point_count=len(r.points), current_covering_point_count=len(observed.points),
+                    original_risk=r.guidance.risk, checked_cell_count=len(cells),
+                    maximum_correspondence_distance_m=observed.maximum_correspondence_distance_m,
+                    basis="fresh_unique_whole_positive_surface_in_current_field; no_retained_geometry_or_source_renewal")
         records = [r for r in self.surfaces if r.track_id == track_id]
         if len(records) != 1:
             return None
@@ -123,6 +163,13 @@ class FurnitureSnapshot:
 
     def diagnostic(self):
         return dict(source=SOURCE, status="prior", source_time=self.source_time,
+                    observed_coverage_count=len(self.observed_surfaces),
+                    observed_coverage=[dict(track_id=o.original.track_id,
+                        original_source_time=o.original.source_time,
+                        current_source_time=self.source_time, current_source_frame=o.current_source_frame,
+                        current_track_id=o.current_track_id, current_point_count=len(o.points),
+                        maximum_correspondence_distance_m=o.maximum_correspondence_distance_m)
+                        for o in self.observed_surfaces],
                     config=asdict(self.config), retained_count=len(self.surfaces),
                     retained=[dict(track_id=r.track_id, original_source_time=r.source_time,
                                    original_source_frame=r.source_frame, original_point_count=len(r.points),
@@ -137,6 +184,7 @@ class StationaryFurnitureMemory:
         self.history = []
         self.records = {}
         self.pending_surfaces = {}
+        self.observed_associations = {}
         self.last_time = None
 
     def update(self, points, ids, tracks, guidance, *, source_time, source_frame,
@@ -266,10 +314,46 @@ class StationaryFurnitureMemory:
             records[key] = replace(candidate, qualification_source_time=float(source_time))
             enrolled.append(int(key))
         self.pending_surfaces = pending
+        # A freshly observed whole surface can resolve geometry continuity even
+        # when its large parent cluster has a distant centroid. The old query
+        # and policy stay unchanged; no old geometry is added after its expiry.
+        # Beyond that expiry, a proof must be continuous across real sources.
+        associations = {k: r for k, (r, t) in self.observed_associations.items()
+                        if not source_gap and 0 < source_time-t <= cfg.maximum_sample_gap_seconds+1e-9}
+        associations.update(records)
+        observed, verified = [], {}
+        raw_tree = support_tree(points) if len(points) else None
+        for key, r in associations.items():
+            if key in tracks or key in excluded or not allowed(r.points).all() or raw_tree is None:
+                continue
+            neighborhoods = raw_tree.query_ball_point(r.points, cfg.support_distance_m)
+            indices = np.unique(np.concatenate(neighborhoods)).astype(int)
+            nearby_ids = ids[indices]
+            if np.count_nonzero(nearby_ids == -1) >= 3:
+                continue
+            owners = []
+            for owner in np.unique(nearby_ids[nearby_ids >= 0]):
+                owned_indices = indices[nearby_ids == owner]
+                if (len(np.unique(points[owned_indices], axis=0)) >= 3
+                    and np.all(support_tree(points[owned_indices]).query(r.points)[0] <= cfg.support_distance_m)):
+                    owners.append((int(owner), owned_indices))
+            if len(owners) != 1:
+                continue
+            owner, owned_indices = owners[0]
+            covered_points = points[owned_indices[stable[owned_indices]]]
+            if len(np.unique(covered_points, axis=0)) < 3:
+                continue
+            distance = support_tree(covered_points).query(r.points)[0]
+            if np.any(distance > cfg.support_distance_m):
+                continue
+            observed.append(ObservedSurfaceCoverage(r, int(source_frame), owner,
+                                                   covered_points.copy(), float(distance.max())))
+            verified[key] = (r, float(source_time))
+        self.observed_associations = verified
         self.records, self.last_time = records, float(source_time)
         self.history = (history + [(float(source_time), points[usable].copy())])[-8:]
         snapshot = FurnitureSnapshot(float(source_time), cfg,
-                                     tuple(r for k, r in records.items() if k not in tracks))
+                                     tuple(r for k, r in records.items() if k not in tracks), tuple(observed))
         audit = snapshot.diagnostic()
         audit.update(enrolled_track_ids=enrolled, stable_point_count=int(stable.sum()),
                      qualification_history_reset=bool(source_gap),

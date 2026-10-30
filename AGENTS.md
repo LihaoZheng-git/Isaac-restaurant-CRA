@@ -1,5 +1,20 @@
 # CRA repository guidance
 
+- Furniture v5 at0954fb1 passed all four prerequisites and all earlier stopping
+  locations, then FAILED at114.2667s/761fields before the human trigger. The
+  qualified2363 surface expired after10s while still1.179m away, even though
+  every old point had current support in large cluster1941 (max.001548m at the
+  stop; max.082732m immediately after the ID change). Preserve this failure.
+  A separate fresh whole-surface proof now keeps the ORIGINAL watch/source/
+  policy and requires a unique current owner, >=3 distinct stable returns,
+  unchanged .06m/three-scan/.2s support, human/motion exclusions and actual
+  current-field risk/flux coverage. Beyond the original10s prior expiry, this
+  proof must remain continuous across actual source gaps <=.35s; failed or
+  ambiguous coverage ends it permanently. The query is association history,
+  never retained occupancy, renewed factor evidence or renewed original time.
+  Log observed coverage separately from retained-prior coverage. Missing current
+  geometry after expiry still stops. Require fresh native gates/full mission.
+
 - A furniture qualification source gap clears unpublished candidates as well
   as raw support history. Later scans must not qualify an old candidate across
   the broken sequence. Already-qualified priors retain their original expiry.
