@@ -1,6 +1,7 @@
 """Actor-only long-wait/release audit; robot removed from this diagnostic session."""
 
 import argparse
+import importlib
 import json
 from pathlib import Path
 import sys
@@ -15,6 +16,9 @@ args = parser.parse_args()
 if args.output.exists():
     parser.error('preserve existing outputs')
 args.output.mkdir(parents=True)
+# Resolve the existing environment pair before Kit injects its legacy archive.
+# Episode imports share risk dataclasses even though this audit runs no model.
+importlib.import_module('robot.perception.visual_mass_runtime')
 
 from isaacsim import SimulationApp
 
