@@ -17,8 +17,8 @@ CHAIR_PATH = ("/World/Environment/Restaurant/assets_restaurant/Assets_Banquettes
               "Geo_TableSet_14/Chair_Array")
 DEMO_OBSERVATIONS = {
     "demo-bin": ("RoundedBin", (28.8, 5.9, .07382), 0.0),
-    "demo-rounded": ("ClosedCaddy", (29.4, 5.25, .07382), 0.0),
-    "demo-utensils": ("UtensilCaddy", (29.4, 5.65, .07382), 0.0),
+    "demo-rounded": ("ClosedCaddy", (29.0, 5.25, .07382), 0.0),
+    "demo-utensils": ("UtensilCaddy", (29.0, 6.3, .07382), -.40),
 }
 DEMO_NAMES = ("ClearingStation", "RoundedBin", "ClosedCaddy", "UtensilCaddy")
 

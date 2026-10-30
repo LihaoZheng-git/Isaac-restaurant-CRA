@@ -736,6 +736,7 @@ from robot.sensor.lidar_geometry import filter_valid_points, transform_points
 stationary = existing.stationary
 app = existing.simulation_app
 ACTIVE_HUMAN = None
+ACTIVE_SERVICE_VIDEO = None
 RADIUS = 0.18
 ACTOR_HEIGHT = 1.4 if args.actor_shape == "upright_capsule" else 2 * RADIUS
 ACTOR_CENTER_Z = ACTOR_HEIGHT / 2
@@ -1304,6 +1305,10 @@ def main():
     latest_source_packet = None
     sensor_archive_payloads = {}
     navigation_active = False
+    global ACTIVE_SERVICE_VIDEO
+    if args.restaurant_scene and human is None and serving_payload["present"]:
+        from robot.scene.service_demo_video import ServiceDemoVideo
+        ACTIVE_SERVICE_VIDEO = ServiceDemoVideo(stage, args.output)
 
     def state():
         pose = stationary.read_robot_pose(stage)
@@ -1334,6 +1339,8 @@ def main():
         history.append(
             EgoPoseSample(now, matrix, EstimateStatus.ORACLE, "isaac_usd_chassis_pose")
         )
+        if ACTIVE_SERVICE_VIDEO is not None:
+            ACTIVE_SERVICE_VIDEO.record(now, command, (matrix[0, 3], matrix[1, 3]))
         if human is not None:
             human.update(now, (matrix[0, 3], matrix[1, 3]), command, layout_monitor,
                          navigation=navigation_active)
@@ -2952,7 +2959,8 @@ def main():
         "waypoints_reached": len(ROUTE) if arrived else waypoint.current_waypoint_index,
         "fixture_spacing": args.fixture_spacing,
         "progress_timeout_seconds": args.progress_timeout_seconds,
-        "clearance_monitor_scope": "independent authored original mesh raster plus conservative new-prop XY boxes and selected bowl disk; base footprint only; no payload; never control/factor input"
+        "serving_payload": serving_payload if args.restaurant_scene else None,
+        "clearance_monitor_scope": "independent authored original mesh raster plus conservative new-prop XY boxes and selected bowl disk; base footprint contains any validated mounted presentation tray; no free payload dynamics; never control/factor input"
         if args.restaurant_scene else "independent authored sphere disks and circumscribed support disk; never control/factor input",
         "scheduled_observation_pauses": 0,
         "lidar_ego_motion_correction": "legacy_scan_start_transform"
@@ -3025,6 +3033,8 @@ except Exception:
     traceback.print_exc()
     raise
 finally:
+    if ACTIVE_SERVICE_VIDEO is not None:
+        ACTIVE_SERVICE_VIDEO.close()
     if ACTIVE_HUMAN is not None:
         ACTIVE_HUMAN.abort()
         save_json("human-truth-evaluation-only.json", ACTIVE_HUMAN.records)
