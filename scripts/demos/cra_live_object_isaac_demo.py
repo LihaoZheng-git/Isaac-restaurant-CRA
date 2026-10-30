@@ -644,7 +644,8 @@ if args.persistent_object_risk_map and args.evidence_gap_diagnostic:
     )
 if args.evidence_gap_diagnostic and (args.motion or args.disable_evidence_retention):
     parser.error("evidence-gap diagnostic requires retention and zero wheel motion")
-if not 0 < args.simulation_rate <= 1 or not 0 < args.maximum_seconds <= 120:
+maximum_trial_seconds = 300 if args.restaurant_route == "long-service" else 120
+if not 0 < args.simulation_rate <= 1 or not 0 < args.maximum_seconds <= maximum_trial_seconds:
     parser.error("invalid bounded simulation rate/duration")
 if not 0.1 <= args.planner_result_max_age <= 0.5:
     parser.error("planner candidate age must be within [.1, .5] seconds")

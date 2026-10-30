@@ -59,6 +59,15 @@ ceiling/column occlusion; rendering quality does not establish navigation succes
 The full unit suite passes: 3,257 tests in 141.09 s; Ruff passes. A focused
 80-test run also passes. Initial pytest attempts failed temporary-directory
 setup; creating the dedicated output parent resolved that environment issue.
-Native validation is pending. No continuous long mission
+Native short rolling validation at `30651c5` passed its independent and own
+60-frame stationary gates, then all three service waypoints with 209 live fields,
+1.150603 m minimum clearance and 0.002235 m stopping drift. Sources remained
+unchanged. The follow camera was visually inspected at the starting pose.
+
+The first long-route attempt was rejected by the legacy 120 s CLI duration cap
+before native startup. The long-service selector now permits an explicit bounded
+300 s trial; other callers retain 120 s. This does not change the 120 s property
+expiry, source-age limits or command leases. Preserve the rejected launch.
+No continuous long mission
 or distributed-hazard native acceptance is claimed yet. Primary-controller,
 main and PR117 holds remain unchanged.
