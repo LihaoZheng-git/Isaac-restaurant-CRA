@@ -56,6 +56,53 @@ def test_guard_rejects_invalid_scope_and_duplicate_geometric_ids():
     guard = NearbyTrackLossGuard()
     with pytest.raises(ValueError):
         guard.observe((track(1), track(1)), source_time=1, robot_world_xy=(0, 0))
+    with pytest.raises(ValueError, match='many-to-one'):
+        NearbyTrackLossConfig(allow_many_to_one_full_surface_merges=True)
+
+
+@pytest.mark.parametrize('problem', [None, 'legacy', 'uncovered', 'ambiguous', 'unclustered', 'stale', 'no_surface'])
+def test_many_fragments_require_all_original_surfaces_uniquely_observed_now(problem):
+    import numpy as np
+    guard = NearbyTrackLossGuard(NearbyTrackLossConfig(allow_observed_fragment_merges=True,
+        allow_positive_extent_merges=True, allow_positive_surface_merges=True,
+        allow_unique_full_surface_merges=True, allow_many_to_one_full_surface_merges=problem != 'legacy'))
+    points = np.array([[x, y] for x in (1., 1.4, 1.7) for y in (-.02, 0., .02)])
+    old = tuple(replace(track(k, x), point_count=3) for k, x in ((1, 1.), (2, 1.4), (3, 1.7)))
+    guard.observe(old, source_time=1., robot_world_xy=(.5, 0.),
+        current_points_world_xy=points, current_point_track_ids=[1]*3+[2]*3+[3]*3,
+        current_points_source_time=1.)
+    if problem == 'no_surface':
+        guard.positive_surfaces.pop(3)
+    current = points.copy()
+    if problem == 'uncovered':
+        current[-1] += [0., .5]
+    ids, tracks = [2]*9, (replace(track(2, 1.4), point_count=9),)
+    if problem == 'ambiguous':
+        current = np.vstack((current, points))
+        ids += [4]*9
+        tracks += (replace(track(4, 1.4), point_count=9),)
+    if problem == 'unclustered':
+        current = np.vstack((current, points[:3]))
+        ids += [-1]*3
+    t = 1.4 if problem == 'stale' else 1.2
+    result = guard.observe(tracks, source_time=t, robot_world_xy=(.5, 0.),
+        current_points_world_xy=current, current_point_track_ids=ids, current_points_source_time=t)
+    if problem:
+        assert result['blocked']
+        assert 1 in guard.observed or 3 in guard.observed
+    else:
+        assert not result['blocked']
+        assert set(guard.observed) == {2}
+        assert {r['lost_track_id'] for r in result['observed_fragment_merges']} == {1, 3}
+        for proof in result['observed_fragment_merges']:
+            assert proof['basis'] == 'coobserved_many_to_one_whole_positive_surfaces'
+            assert proof['original_last_seen_time'] == 1.
+            assert proof['positive_surface_proof']['all_original_positive_returns_covered']
+        # No old occupancy is retained if the current covering geometry then disappears.
+        missing = guard.observe((), source_time=1.4, robot_world_xy=(.5, 0.),
+            current_points_world_xy=np.empty((0, 2)), current_point_track_ids=np.array([], int),
+            current_points_source_time=1.4)
+        assert missing['blocked']
 
 
 def merge_guard(enabled=True):

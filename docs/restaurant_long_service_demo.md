@@ -98,6 +98,31 @@ were 0.133333..0.283333 s. Numeric completeness is not complete perception.
 
 ## Next bounded parallel-human integration
 
+At5a8ab20 the180s actor hold/release gate PASSED (zero idle drift,3.470465m native
+travel,.256891m minimum actor clearance). Refreshed startup, human component and
+near-view stationary gates also PASSED. Full unit suite:3261passed/130.28s; Ruff
+passed. The first actor-only launch failed Kit's legacy torchvision import path;
+using the existing pre-Kit import order repaired it without changing packages.
+
+`human-long-motion-v2` nevertheless FAILED at14.533333s navigation: the nearby
+continuity guard retained furniture track250 after it and308 merged into21.
+Both old surfaces remained fully observed:767 and12returns, maximum current
+correspondence distances.044899/.019467m. The old one-to-one rule rejected this
+many-to-one correspondence. No person had started walking; the held idle stayed
+fixed. Stop drift was.005151m with.532680m stopping clearance. A final audit
+exception compared a settled-anchor goal against the authored nominal endpoint;
+the reporting fix now transforms the entire nominal route with the control
+anchor, without relaxing the curve or goal check. Original failed record stays.
+
+A long-service-only option now admits many-to-one geometric continuity only
+when EVERY child has a fresh original co-observation and its WHOLE positive
+surface is uniquely covered by current returns. Original .35s source-age/.10m
+distance/min3return gates remain; partial, ambiguous, unclustered and stale
+coverage reject. There is no identity/factor transfer, static occupancy memory,
+new geometry, free-space claim or source renewal. Archived two-scan replay and
+synthetic rejection tests precede fresh native validation; replay alone is not
+navigation acceptance.
+
 At225290b, startup, native human component and near-view stationary gates passed.
 The first full mission then FAILED at24.78s navigation, before the encounter:
 native idle root motion drifted about26cm into a chair's independent clearance

@@ -138,6 +138,17 @@ def validate_parallel_actor(records, *, parked_robot):
         scope='authored oncoming aisle component; independent root/limbs/geometry only; away_endpoint is not a human stopping claim')
 
 
+def anchored_nominal_route_world(anchor_xy_yaw, local_waypoints):
+    """Use the same settled anchor as control, including tiny pose offsets."""
+    anchor, local = np.asarray(anchor_xy_yaw, float), np.asarray(local_waypoints, float)
+    if (anchor.shape != (3,) or local.ndim != 2 or local.shape[1] != 2
+        or len(local) == 0 or not np.isfinite(anchor).all() or not np.isfinite(local).all()):
+        raise ValueError('finite settled anchor and local waypoints required')
+    c, s = np.cos(anchor[2]), np.sin(anchor[2])
+    world = local @ np.array([[c, s], [-s, c]]) + anchor[:2]
+    return np.vstack((anchor[:2], world))
+
+
 def route_projection(query, route):
     """Nearest point/direction on the configured nominal polyline, evaluation only."""
     route, query = np.asarray(route, float), np.asarray(query, float)

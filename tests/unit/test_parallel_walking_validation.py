@@ -130,6 +130,18 @@ def test_polyline_curve_scoring_does_not_count_nominal_corner_as_avoidance():
     assert result['checks']['current_observed_oncoming_rows']
 
 
+def test_nominal_audit_uses_settled_control_anchor_and_retains_failed_early_stop():
+    from robot.evaluation.parallel_walking_validation import anchored_nominal_route_world
+    records, truth = example()
+    route = anchored_nominal_route_world((28.8002, 6.9997, np.pi/2+.0001), [(1., 0.), (3.5, 0.)])
+    assert np.linalg.norm(route[-1]-[28.8, 10.5]) > 1e-6
+    for r in truth:
+        r['robot_xy'] = [28.8002, 6.9997]
+        r['phase'] = 'idle_before'
+    result = validate_parallel_curve(records, truth, goal_world_xy=route[-1], nominal_route_world_xy=route)
+    assert not result['passed']  # A failed mission produces an audit, not a goal mismatch exception.
+
+
 def test_service_actor_trigger_is_explicit_and_does_not_change_legacy_protocol(monkeypatch):
     from pxr import Usd
     from robot.scene import restaurant_human_episode as module

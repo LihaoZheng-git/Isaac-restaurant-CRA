@@ -555,6 +555,7 @@ if args.rear_preparation and not args.rear_delayed_commit:
     parser.error('rear preparation requires the explicit delayed person-relative experiment')
 if args.long_service_parallel and (args.restaurant_route != 'long-service'
     or args.restaurant_human != 'parallel' or args.human_crossing_delay_seconds is not None
+    or not args.human_unique_full_surface
     or not 8.8 <= args.human_crossing_trigger_y <= 9.2):
     parser.error('long-service parallel requires its explicit route/actor and y=8.8..9.2 trigger, no timed delay')
 if args.long_service_parallel and args.motion:
@@ -2089,6 +2090,7 @@ def main():
         allow_positive_extent_merges=args.human_positive_fragment_extent,
         allow_positive_surface_merges=args.human_positive_fragment_surface,
         allow_unique_full_surface_merges=args.human_unique_full_surface,
+        allow_many_to_one_full_surface_merges=args.long_service_parallel,
         maximum_visual_mask_boundary_pixels=args.human_fragment_mask_boundary_pixels,
         allow_current_visual_part_associations=args.human_visual_fragment_association,
         use_observed_merge_velocity=human is not None),
@@ -2701,12 +2703,12 @@ def main():
             completed = completed and mass_validation['passed']
             save_json('live-human-mass-identity-retention-validation.json', mass_validation)
         if args.restaurant_human == 'parallel':
-            from robot.evaluation.parallel_walking_validation import validate_parallel_curve
-            parallel_goal = (anchor.x + math.cos(anchor.yaw)*ROUTE[-1][0] - math.sin(anchor.yaw)*ROUTE[-1][1],
-                anchor.y + math.sin(anchor.yaw)*ROUTE[-1][0] + math.cos(anchor.yaw)*ROUTE[-1][1])
-            from robot.scene.restaurant_service_build import LONG_ROUTE_WORLD_XY
+            from robot.evaluation.parallel_walking_validation import (
+                anchored_nominal_route_world, validate_parallel_curve)
+            parallel_route = anchored_nominal_route_world((anchor.x, anchor.y, anchor.yaw), ROUTE)
+            parallel_goal = parallel_route[-1]
             parallel_validation = validate_parallel_curve(live_fields, human.records, goal_world_xy=parallel_goal,
-                nominal_route_world_xy=LONG_ROUTE_WORLD_XY if args.long_service_parallel else None)
+                nominal_route_world_xy=parallel_route if args.long_service_parallel else None)
             human_validation['parallel_curve'] = parallel_validation
             completed = completed and parallel_validation['passed']
             save_json('parallel-walking-validation.json', parallel_validation)

@@ -1,5 +1,18 @@
 # CRA repository guidance
 
+- Long human v2 at5a8ab20 FAILED before the encounter despite passing all four
+  prerequisites: the continuity guard retained fragment250 after two old IDs
+  merged into current21. Archived original767/12returns are ALL covered within
+  .044900/.019468m by current21. Long-service only now permits many-to-one
+  continuity with fresh, uniquely covering WHOLE surfaces for EVERY coobserved
+  child, original .35s age/.10m distance/min3returns and no identity/factor
+  transfer. Partial, competing, unclustered or expired coverage still rejects;
+  all occupancy remains current, no static memory or source renewal is added.
+  Require fresh native gates. A separate reporting fix transforms the nominal
+  polyline using the actual settled anchor, matching control exactly instead
+  of comparing it to authored world coordinates at1e-6 tolerance. Preserve both
+  failed missions; early stops are not arrival and current replay is not wheels.
+
 - Long parallel mission at225290b FAILED before the encounter: native idle root
   drifted about26cm toward a chair and the unchanged .02m actor-layout guard
   rejected. Robot progress was normal; do not call this tracking or CRA failure.

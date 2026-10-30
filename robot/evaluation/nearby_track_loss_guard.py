@@ -24,6 +24,7 @@ class NearbyTrackLossConfig:
     allow_positive_extent_merges: bool = False
     allow_positive_surface_merges: bool = False
     allow_unique_full_surface_merges: bool = False
+    allow_many_to_one_full_surface_merges: bool = False
     allow_current_visual_part_associations: bool = False
     maximum_visual_mask_boundary_pixels: int = 0
     maximum_merge_speed_mps: float = 2.0
@@ -40,6 +41,8 @@ class NearbyTrackLossConfig:
             self.allow_current_visual_part_associations, bool
         ) or not isinstance(
             self.allow_unique_full_surface_merges, bool
+        ) or not isinstance(
+            self.allow_many_to_one_full_surface_merges, bool
         ):
             raise TypeError("fragment merge opt-in must be boolean")
         if self.allow_positive_extent_merges and not self.allow_observed_fragment_merges:
@@ -48,6 +51,8 @@ class NearbyTrackLossConfig:
             raise ValueError("positive surface association requires positive extent merges")
         if self.allow_unique_full_surface_merges and not self.allow_positive_surface_merges:
             raise ValueError("unique full surface association requires positive surface merges")
+        if self.allow_many_to_one_full_surface_merges and not self.allow_unique_full_surface_merges:
+            raise ValueError("many-to-one coverage requires unique full surface association")
         if (isinstance(self.maximum_visual_mask_boundary_pixels, bool)
             or not isinstance(self.maximum_visual_mask_boundary_pixels, int)
             or self.maximum_visual_mask_boundary_pixels not in (0, 1)
@@ -60,6 +65,7 @@ class NearbyTrackLossConfig:
                 "allow_positive_extent_merges",
                 "allow_positive_surface_merges",
                 "allow_unique_full_surface_merges",
+                "allow_many_to_one_full_surface_merges",
                 "allow_current_visual_part_associations",
                 "maximum_visual_mask_boundary_pixels",
             }:
@@ -461,14 +467,68 @@ class NearbyTrackLossGuard:
                                 else "retained_original_coobservation",
                             )
                 proposals[key] = choices
+            many_proofs = {}
+            if self.config.allow_many_to_one_full_surface_merges:
+                from scipy.spatial import cKDTree
+                for new in current:
+                    children = [key for key, choices in proposals.items() if new in choices]
+                    if len(children) < 2 or any(proposals[key] != [new] for key in children):
+                        continue
+                    proofs = {}
+                    for key in children:
+                        original = self.positive_surfaces.get(key)
+                        old_time = missing[key][1]
+                        pair_time = coobserved.get(tuple(sorted((key, new))))
+                        if (original is None or original[1] != old_time or pair_time is None
+                            or not 0 <= old_time-pair_time <= self.config.maximum_missing_seconds+1e-9
+                            or not 0 < source_time-old_time <= self.config.maximum_merge_age_seconds+1e-9):
+                            break
+                        old_surface = original[0]
+                        minimum = self.config.minimum_positive_merge_returns
+                        if len(np.unique(old_surface, axis=0)) < minimum:
+                            break
+                        distance, _ = cKDTree(xyz[ids == new]).query(old_surface)
+                        if np.any(distance > self.config.positive_merge_distance_m):
+                            break
+                        tree = cKDTree(xyz)
+                        neighbors = tree.query_ball_point(old_surface, self.config.positive_merge_distance_m)
+                        indices = np.unique(np.concatenate(neighbors)).astype(int)
+                        near_ids = ids[indices]
+                        supported = [int(k) for k in np.unique(near_ids)
+                            if np.count_nonzero(near_ids == k) >= minimum]
+                        if -1 in supported:
+                            break
+                        whole = [k for k in supported if np.all(cKDTree(xyz[ids == k]).query(
+                            old_surface)[0] <= self.config.positive_merge_distance_m)]
+                        covering = xyz[indices[near_ids == new]]
+                        if whole != [new] or len(np.unique(covering, axis=0)) < minimum:
+                            break
+                        proofs[key, new] = dict(original_surface_source_time=old_time,
+                            current_surface_source_time=source_time,
+                            original_positive_return_count=len(old_surface),
+                            current_covering_return_count=len(covering),
+                            maximum_original_to_current_distance_m=float(distance.max()),
+                            all_original_positive_returns_covered=True,
+                            original_surface_points_world_xy=old_surface.tolist(),
+                            current_covering_points_world_xy=covering.tolist(),
+                            whole_surface_supported_track_ids=whole,
+                            jointly_covered_original_track_ids=children,
+                            scope='fresh complete positive-surface coverage for each coobserved fragment; geometry continuity only, no identity/factor transfer or retained occupancy')
+                    if len(proofs) == len(children):
+                        many_proofs.update(proofs)
             for key, choices in proposals.items():
                 if (
                     len(choices) == 1
-                    and sum(choices[0] in v for v in proposals.values()) == 1
+                    and (sum(choices[0] in v for v in proposals.values()) == 1
+                         or (key, choices[0]) in many_proofs)
                 ):
                     new = choices[0]
                     old_point, old_time = pending.pop(key)
                     query, basis, shift = matches[key, new]
+                    if (key, new) in many_proofs:
+                        basis = 'coobserved_many_to_one_whole_positive_surfaces'
+                        query, shift = old_point, np.zeros(2)
+                        surface_proofs[key, new] = many_proofs[key, new]
                     merged.append(
                         {
                             "lost_track_id": int(key),
@@ -581,6 +641,7 @@ class NearbyTrackLossGuard:
             "body_prior_coverage_rejections": prior_coverage["rejected"],
             **({"positive_surface_route_enabled": True,
                 "positive_surface_merge_rejections": surface_rejections,
+                "many_to_one_full_surface_route_enabled": self.config.allow_many_to_one_full_surface_merges,
                 "unique_full_surface_route_enabled": self.config.allow_unique_full_surface_merges}
                if self.config.allow_positive_surface_merges else {}),
             "scope": "nearby positive LiDAR-track continuity watchdog; lost occupancy is unresolved, not free; bounded separated actors; not a dynamic belief map or general occlusion guarantee",
