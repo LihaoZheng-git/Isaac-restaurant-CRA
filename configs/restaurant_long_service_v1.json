@@ -72,7 +72,9 @@
       "--restaurant-layout-survey",
       "outputs/restaurant_service/layout-monitor-v1/geometry-survey.json",
       "--rolling-local-field",
-      "--presentation-follow-camera"
+      "--presentation-follow-camera",
+      "--rgb-camera",
+      "front_owl"
     ]
   }
 }

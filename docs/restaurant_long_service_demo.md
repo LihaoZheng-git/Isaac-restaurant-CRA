@@ -68,6 +68,30 @@ The first long-route attempt was rejected by the legacy 120 s CLI duration cap
 before native startup. The long-service selector now permits an explicit bounded
 300 s trial; other callers retain 120 s. This does not change the 120 s property
 expiry, source-age limits or command leases. Preserve the rejected launch.
-No continuous long mission
-or distributed-hazard native acceptance is claimed yet. Primary-controller,
+The default narrow-camera long-start gate failed: 32 accepted mass instances
+but only one resolved contact observation. The existing `front_owl` camera passed
+the same unchanged 60-frame gate; no model, confidence or acceptance threshold
+was changed. Preserve both attempts.
+
+At `a7b87a9`, `native-long-motion-owl-v1` then PASSED its own stationary gate and
+all eight route waypoints: 158.350 s navigation, 1,353 live fields (1,351 while
+translating), minimum independent clearance 0.310740 m, minimum CBF margin
+0.236671 and stopping drift 0.002264 m. The launcher recorded no traceback and
+unchanged runtime/scene sources. The 120 s property expiry remained unchanged.
+This establishes one continuous route-only mission, not distributed-hazard
+acceptance. All 1,662 follow-camera frames are saved at 10 fps; start, front
+bar aisle, turn and destination frames were visually inspected. The mounted
+meal is presentation geometry, not payload-dynamics validation. Runtime is
+paced simulation (3,750.6 wall seconds), not real time.
+
+Native evidence and video: `outputs/rolling_service_field/native-long-motion-owl-v1/`.
+The long-route recipe now records the actually validated front_owl selection.
+Human, utensil and live thermal encounters are not included in this run. Primary-controller,
 main and PR117 holds remain unchanged.
+
+The complete append-only history contains 70 fresh accepted visual instances
+across 93,858 current object rows. Contact has 959 evidence-supported rows and
+kinetic 1,217; potential and thermal remain configured priors throughout this
+route. No row has four evidence-supported factors. Current-track phi spans
+0.591428..0.854707. There were 34 distinct field origins; admitted field ages
+were 0.133333..0.283333 s. Numeric completeness is not complete perception.

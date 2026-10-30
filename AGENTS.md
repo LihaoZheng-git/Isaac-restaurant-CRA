@@ -9,8 +9,12 @@
   The follow camera is rendering only and preserves native pauses. The long
   route's separate startup sensor gate is not remote tabletop-asset acceptance.
   Require fresh stationary/short rolling/long-route gates before encounter
-  expansion. No continuous mission acceptance yet; primary/main/PR117 holds
-  remain. See docs/restaurant_long_service_demo.md.
+  expansion. One route-only native mission at a7b87a9 PASSED all8 goals
+  over158.35s:1353fields/.310740m clearance/.002264m stop. The unchanged
+  long-start gate failed with front_hawk_left and passed with front_owl. Keep
+  both records, original120s expiry and prior-assisted scope. Humans/utensil/
+  live-plume encounters remain unvalidated on this route; primary/main/PR117
+  holds remain. See docs/restaurant_long_service_demo.md.
 
 - First service-demo native chapters at 240cb9d PASSED their independent,
   own stationary and navigation gates: service 3 waypoints/20.50 s/1.151 m
