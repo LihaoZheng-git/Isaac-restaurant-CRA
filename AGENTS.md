@@ -1,5 +1,22 @@
 # CRA repository guidance
 
+- First service-demo native chapters at 240cb9d PASSED their independent,
+  own stationary and navigation gates: service 3 waypoints/20.50 s/1.151 m
+  clearance; parallel final goal/21.73 s/.400 m clearance/.23267 m near curve;
+  crossing 3 waypoints/23.45 s/.654 m clearance. All stopped within 2.47 mm.
+  These are separate recordings, not one continuous long mission. Parallel
+  actual nearby hold REGRESSED to 2.6167 s: preserve the earlier .30 s result
+  as a different scene, never transfer its smoothness acceptance. All-track
+  fresh visual counts are 4/26/78; complete fresh generic four-factor counts
+  remain zero. Body-envelope prior-risk flooring is labeled separately from
+  assessed track phi. Crossing uses nine checked lambda-zero envelope commits
+  and 225 normal 1.25 commits, not globally zero guidance. Caddy ownership
+  remains failed; thermal inset is an earlier fixed-camera component only.
+  Keep primary/main/PR117 holds and the separate guidance-ablation scope.
+  No margins, clocks or confidence gates were relaxed. 3242 unit tests and
+  Ruff passed at the native runtime revision; later edits are presentation
+  tooling/docs. See docs/restaurant_service_demo_v1.md and the local video.
+
 - Service-demo v5 retained two setup failures: the 15 cm chair pull-out
   intruded into the native parallel human's idle-sway clearance; crossing's
   optional mass-identity retention lacked five exercised retained sources.
