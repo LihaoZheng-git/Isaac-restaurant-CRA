@@ -58,7 +58,7 @@ def test_repeated_surface_can_survive_id_changes_without_transferring_identity()
     _, audit = acquire(memory, keys=(9, 8, 1))
     assert audit["enrolled_track_ids"] == [1]
     snapshot, _ = missing(memory)
-    r = snapshot.surfaces[0]
+    r = next(r for r in snapshot.surfaces if r.track_id == 1)
     assert r.track_id == 1 and r.source_time == 1.2 and r.support_start_time == 1.
     assert r.source_frame == 12
     proof = snapshot.coverage(1, 1.2, (1., 0.), grid_for(snapshot), (0., 0.), 0.)
@@ -66,8 +66,67 @@ def test_repeated_surface_can_survive_id_changes_without_transferring_identity()
     assert proof["original_risk"] == GUIDANCE.risk
     assert not snapshot.coverage(9, 1.2, (1., 0.), grid_for(snapshot), (0., 0.), 0.)
     later, _ = missing(memory, 2.)
-    assert later.surfaces[0].source_time == 1.2
+    assert next(r for r in later.surfaces if r.track_id == 1).source_time == 1.2
     assert later.radius(r) > snapshot.radius(r)
+
+
+def test_later_real_scans_complete_support_after_id_change_without_source_renewal():
+    m = StationaryFurnitureMemory()
+    observe(m, 1.)
+    observe(m, 1.1)
+    extended = np.vstack((POINTS, [[1., .1]]))
+    snapshot, audit = observe(m, 1.2, points=extended)
+    assert not snapshot.surfaces and not audit["enrolled_track_ids"]
+    snapshot, audit = observe(m, 1.3, key=2, points=extended)
+    assert not snapshot.surfaces and not audit["confirmed_missing_track_ids"]
+    snapshot, audit = observe(m, 1.4, key=2, points=extended)
+    assert audit["confirmed_missing_track_ids"] == [1]
+    record = snapshot.surfaces[0]
+    assert record.source_time == 1.2 and record.source_frame == 12
+    assert record.qualification_source_time == 1.4
+    assert record.support_start_time == 1.2
+    np.testing.assert_array_equal(record.points, extended)
+    proof = snapshot.coverage(1, 1.2, extended.mean(axis=0), grid_for(snapshot), (0., 0.), 0.)
+    assert proof["qualification_source_time"] == 1.4
+    assert proof["missing_seconds"] == pytest.approx(.2)
+    assert next(r for r in missing(m, 1.5)[0].surfaces if r.track_id == 1).source_time == 1.2
+
+
+@pytest.mark.parametrize("problem", ["expired", "partial", "person", "moving", "no_current_support"])
+def test_pending_surface_never_qualifies_without_bounded_fresh_full_support(problem):
+    m = StationaryFurnitureMemory()
+    observe(m, 1.)
+    observe(m, 1.1, key=2)
+    now = 1.8 if problem == "expired" else 1.2
+    kwargs = {}
+    points = POINTS
+    if problem == "partial":
+        points = np.array([[1., -.08], [1., -.09], [1., -.1]])
+    elif problem == "person":
+        kwargs["excluded_points"] = [[1., 0.]]
+    elif problem == "moving":
+        points = POINTS + [.15, 0.]
+        kwargs["velocity"] = (.5, 0.)
+    elif problem == "no_current_support":
+        points = POINTS + [1., 0.]
+    snapshot, audit = observe(m, now, key=2, points=points, **kwargs)
+    assert 1 not in audit["confirmed_missing_track_ids"]
+    assert 1 not in [r.track_id for r in snapshot.surfaces]
+
+
+def test_pending_confirmation_allows_two_bounded_actual_source_intervals():
+    m = StationaryFurnitureMemory()
+    observe(m, 1.)
+    observe(m, 1.2, key=2)
+    snapshot, audit = observe(m, 1.5, key=2)
+    assert audit["confirmed_missing_track_ids"] == [1]
+    record = snapshot.surfaces[0]
+    assert record.source_time == 1. and record.qualification_source_time == 1.5
+    # A source gap still breaks the proof, even within the total buffer window.
+    m = StationaryFurnitureMemory()
+    observe(m, 1.)
+    observe(m, 1.1, key=2)
+    assert not observe(m, 1.5, key=2)[0].surfaces
 
 
 @pytest.mark.parametrize("problem", ["one_scan", "two_scans", "new_surface", "gap", "moving", "person"])

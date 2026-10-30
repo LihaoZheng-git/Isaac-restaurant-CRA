@@ -1,5 +1,20 @@
 # CRA repository guidance
 
+- Furniture-memory v3 at76e18b8 passed all four new prerequisites and both old
+  stopping locations, but FAILED nearby_track_lost110.1333s/758fields/4guides
+  before human walking. Clearance .391843m/stop drift .004592m;1542 coverage
+  proofs and all memory-human audits passed, not full arrival. Fragment2429
+  at112.2s had10/13 temporally supported points; all13 then appeared under
+  cluster1959 at112.4/112.7s (max gaps .057262/.033380m). The old qualifier
+  discarded the candidate when its ID changed. A bounded unpublished candidate
+  may now complete the SAME three-real-scan/.2s/.06m proof across IDs within
+  the existing two-source-gap history window (.7s total, each gap <=.35s).
+  Require CURRENT real support of every old point and all human/motion gates.
+  Geometry/policy/frame/10s expiry keep the ORIGINAL source; record qualification
+  time separately. Pending candidates supply no occupancy or guard exception.
+  No original source/field/command clock is renewed. Preserve v3 and require
+  fresh native gates and full navigation before claiming the correction passes.
+
 - Furniture-memory v2 at f77d522 passed all four fresh prerequisites and the
   previous failure location, but FAILED nearby_track_lost at88.3s/613fields.
   Clearance .391863m/stop drift .004587m and 1316 coverage proofs are not arrival.

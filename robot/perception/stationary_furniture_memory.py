@@ -6,7 +6,7 @@ unknown people, newly moving furniture and crowded occlusion are outside scope.
 No free-space clearing, factor refresh, actor truth or planner command lives here.
 """
 
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 import math
 
 import numpy as np
@@ -72,6 +72,7 @@ class RememberedSurface:
     centroid: np.ndarray
     points: np.ndarray
     guidance: object
+    qualification_source_time: float | None = None
 
 
 @dataclass(frozen=True)
@@ -117,6 +118,7 @@ class FurnitureSnapshot:
                     original_point_count=len(r.points), original_risk=r.guidance.risk,
                     uncertainty_radius_m=self.radius(r), checked_cell_count=len(cells),
                     support_start_time=r.support_start_time,
+                    qualification_source_time=r.qualification_source_time,
                     basis="whole_original_surface_in_current_field; unchanged_source_and_risk")
 
     def diagnostic(self):
@@ -125,7 +127,8 @@ class FurnitureSnapshot:
                     retained=[dict(track_id=r.track_id, original_source_time=r.source_time,
                                    original_source_frame=r.source_frame, original_point_count=len(r.points),
                                    original_risk=r.guidance.risk, uncertainty_radius_m=self.radius(r),
-                                   support_start_time=r.support_start_time) for r in self.surfaces])
+                                   support_start_time=r.support_start_time,
+                                   qualification_source_time=r.qualification_source_time) for r in self.surfaces])
 
 
 class StationaryFurnitureMemory:
@@ -133,6 +136,7 @@ class StationaryFurnitureMemory:
         self.config = config or FurnitureMemoryConfig()
         self.history = []
         self.records = {}
+        self.pending_surfaces = {}
         self.last_time = None
 
     def update(self, points, ids, tracks, guidance, *, source_time, source_frame,
@@ -173,15 +177,24 @@ class StationaryFurnitureMemory:
         if self.last_time is not None and source_time - self.last_time > cfg.maximum_sample_gap_seconds + 1e-9:
             history = []
 
-        def support_from(samples):
-            support = np.zeros(len(points), dtype=int)
-            earliest = np.full(len(points), source_time)
+        support_trees = {}
+
+        def support_tree(p):
+            # Keep the array alive with its tree; several pending fragments
+            # query the same actual scan without rebuilding its spatial index.
+            if id(p) not in support_trees:
+                support_trees[id(p)] = (p, cKDTree(p))
+            return support_trees[id(p)][1]
+
+        def support_from(samples, query=points, minimum_sources=2):
+            support = np.zeros(len(query), dtype=int)
+            earliest = np.full(len(query), source_time)
             for t, p in samples:
                 if len(p):
-                    matched = cKDTree(p).query(points)[0] <= cfg.support_distance_m
+                    matched = support_tree(p).query(query)[0] <= cfg.support_distance_m
                     support += matched
                     earliest[matched] = np.minimum(earliest[matched], t)
-            stable = (support >= 2) & (source_time - earliest >= cfg.minimum_support_seconds - 1e-9)
+            stable = (support >= minimum_sources) & (source_time - earliest >= cfg.minimum_support_seconds - 1e-9)
             return stable, earliest
 
         # Centroid velocity can jump when a stationary cluster loses half its
@@ -206,6 +219,27 @@ class StationaryFurnitureMemory:
         records = {k: r for k, r in self.records.items()
                    if 0 < source_time - r.source_time <= cfg.maximum_age_seconds
                    and k not in excluded and allowed(r.points).all()}
+        # A fragment may change ID just before its third supporting scan. Keep
+        # its original measured surface unpublished for at most TWO existing
+        # source-gap intervals (the three-scan history window). Later actual
+        # scans may complete the same three-
+        # source/.2s/.06m proof, without renewing its geometry/policy epoch.
+        pending = {k: r for k, r in self.pending_surfaces.items()
+                   if k not in tracks and k not in excluded
+                   and 0 < source_time-r.source_time <= 2*cfg.maximum_sample_gap_seconds+1e-9
+                   and allowed(r.points).all()}
+        current_points = points[usable]
+        current_tree = support_tree(current_points) if len(current_points) else None
+        confirmed = []
+        for key, candidate in list(pending.items()):
+            supported, first = support_from(history + [(source_time, current_points)],
+                                            candidate.points, minimum_sources=3)
+            if (supported.all() and current_tree is not None
+                and np.all(current_tree.query(candidate.points)[0] <= cfg.support_distance_m)):
+                records[key] = replace(candidate, support_start_time=float(first.max()),
+                                       qualification_source_time=float(source_time))
+                confirmed.append(key)
+                del pending[key]
         enrolled, rejected = [], []
         for key, track in tracks.items():
             owned = ids == key
@@ -215,23 +249,28 @@ class StationaryFurnitureMemory:
             # a large furniture cluster's center enters the local watch region.
             if np.linalg.norm(np.asarray(track.centroid_world_xy) - robot_xy) > cfg.enrollment_distance_m:
                 continue
-            if owned.sum() < 3 or not stable[owned].all():
-                rejected.append(dict(track_id=int(key), original_points=int(owned.sum()),
-                    supported_points=int(stable[owned].sum()), excluded=key in excluded))
-                continue
             value = guidance[key]
             if value.tangential_strength != 1.25 or not math.isclose(value.boundary_flux, -(.5 + 1.2 * value.risk), abs_tol=1e-12):
                 raise ValueError("furniture memory requires unchanged primary lambda and CRA mapping")
-            records[key] = RememberedSurface(int(key), float(source_time), int(source_frame),
+            candidate = RememberedSurface(int(key), float(source_time), int(source_frame),
                 float(earliest[owned].max()), np.asarray(track.centroid_world_xy).copy(),
                 points[owned].copy(), value)
+            if owned.sum() < 3 or not stable[owned].all():
+                rejected.append(dict(track_id=int(key), original_points=int(owned.sum()),
+                    supported_points=int(stable[owned].sum()), excluded=key in excluded))
+                if owned.sum() >= 3 and usable[owned].all():
+                    pending[key] = candidate
+                continue
+            records[key] = replace(candidate, qualification_source_time=float(source_time))
             enrolled.append(int(key))
+        self.pending_surfaces = pending
         self.records, self.last_time = records, float(source_time)
         self.history = (history + [(float(source_time), points[usable].copy())])[-8:]
         snapshot = FurnitureSnapshot(float(source_time), cfg,
                                      tuple(r for k, r in records.items() if k not in tracks))
         audit = snapshot.diagnostic()
         audit.update(enrolled_track_ids=enrolled, stable_point_count=int(stable.sum()),
+                     pending_surface_count=len(pending), confirmed_missing_track_ids=confirmed,
                      rejected_tracks=rejected, centroid_surface_disagreement_track_ids=sorted(disagreement),
                      excluded_track_ids=sorted(excluded), exclusion_point_count=len(forbidden),
                      current_observed_point_count=len(points),

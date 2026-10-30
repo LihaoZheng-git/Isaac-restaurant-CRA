@@ -16,6 +16,12 @@ remains OFF. No authored layout, asset name or actor truth selects furniture.
   spanning at least .2s, within .06m in the world frame. Source gaps above .35s
   reset qualification. Matching is geometric and may cross track-ID changes;
   it never transfers an object's visual identity or factor evidence.
+- An unpublished candidate may also complete that same three-scan proof after
+  its original track ID disappears, using real subsequent scans. Its maximum
+  confirmation window is the existing two-gap history window (.7s total, each
+  actual source gap at most .35s). Every point must have current real support.
+  The original geometry/policy epoch and10s expiry stay unchanged; qualification
+  time is separate. Pending candidates never supply occupancy or guard coverage.
 - Qualified surfaces with their track center within2.5m are eligible for a10s original-source
   lease. A missing surface is rasterized with .05m uncertainty plus .005m per
   second of age. These configurable engineering priors assume stationary
@@ -126,3 +132,36 @@ diagnostic only. Fresh stationary and moving-human gates, followed by a new
 full navigation attempt, remain required.
 The boundary correction passes125 focused and3,305 full unit tests (116.92s),
 Ruff, compilation and diff checks. These do not replace the pending native gates.
+
+## Third native attempt and confirmation across an ID change
+
+At `76e18b8` all four new prerequisites passed, including116 parked component
+sources with89 retained-surface observations. The full mission passed both
+previous failure locations, then FAILED nearby_track_lost at110.133333s,
+758 fields and four passed route guides, before human walking began. Minimum
+clearance was .391843m and stopping drift .004592m;1542 furniture coverage proofs
+and all independent memory-human audits passed. Preserve `long-motion-v3`.
+
+Fragment2429's last observation at112.2s contained13 points. Ten had already
+completed temporal support; three had not. Its entire surface was still directly
+observed inside the larger cluster1959 at112.4 and112.7s: maximum original-to-current
+distances .057262m and .033380m. The qualifier only examined the old fragment
+while its ID existed, so it missed this later confirmation.
+
+The corrected implementation keeps the original candidate unpublished within
+the existing three-scan history window. Real subsequent scans can complete the
+same all-point stationarity proof across cluster IDs. This does not transfer
+identity/factors, add geometry before qualification, renew the original lease,
+or change correspondence, uncertainty, human exclusion or safety thresholds.
+Qualification time is logged separately from the original source time. Spatial
+indices are reused within an update to avoid rebuilding the same scan index for
+each pending fragment. The original failed result remains a failure; new native
+acceptance is still required.
+
+The corrected source passes132 focused and3,312 full unit tests (142.67s),
+Ruff, compilation and diff checks. The506-source archive replay confirms
+fragment2429 at112.7s while retaining its original112.2s source. That archive
+has gaps up to4.5s: its later117.4s history reset purges the fragment, whereas
+the original live diagnostic records show the covering cluster continuously
+qualified at116.7--118.0s. Keep both facts; the replay is confirmation of this
+data path, not a complete native navigation pass.
