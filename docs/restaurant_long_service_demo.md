@@ -95,3 +95,23 @@ kinetic 1,217; potential and thermal remain configured priors throughout this
 route. No row has four evidence-supported factors. Current-track phi spans
 0.591428..0.854707. There were 34 distinct field origins; admitted field ages
 were 0.133333..0.283333 s. Numeric completeness is not complete perception.
+
+## Next bounded parallel-human integration
+
+`configs/restaurant_long_service_human_v1.json` uses the same existing native
+adult and table layout. The actor waits at (29.8,10.5), then walks south to
+(29.8,7.0) when robot world y reaches9.0. This changes actor timing only; all
+robot avoidance uses current RGB/LiDAR, CRA and online filtering. The existing
+moving-arc guidance/route-guide ablation remains separately labeled, fixed
+lambda1.25; no early-preparation or predictive-geometry option is enabled.
+The main recording follows the actual robot through the continuous route.
+
+Static occupancy memory is OFF. Existing .15s positive occupancy, mass-only3s
+retention, track-loss coverage, body-envelope and freshness gates stay unchanged.
+The distant start cannot establish human perception: the launcher and runtime
+require current-source near-human stationary and native component records in
+addition to the route-start gate. Nearby curve evaluation uses distance from
+the configured nominal polyline, so its planned corners do not count as
+avoidance. Human integration is pending native validation; failure of the short
+memory in the front aisle must be preserved, not repaired by retaining human
+positions as static occupancy.

@@ -63,6 +63,7 @@ def main():
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--stationary-source", type=Path)
     parser.add_argument("--component-source", type=Path)
+    parser.add_argument("--near-stationary-source", type=Path)
     parser.add_argument("--config", type=Path, default=Path("configs/restaurant_demo_v1.json"))
     args = parser.parse_args()
     os.chdir(ROOT)
@@ -89,13 +90,17 @@ def main():
     if any(scene_hashes[p] != h for p, h in manifest["source_sha256"].items()):
         parser.error("base scene changed since demo construction")
     if args.stage == "motion":
-        if args.case not in {"static", "parallel", "crossing", "rolling-service", "long-service"} or args.stationary_source is None:
+        if args.case not in {"static", "parallel", "crossing", "rolling-service", "long-service", "long-parallel"} or args.stationary_source is None:
             parser.error("motion needs an eligible case and a same-source stationary gate")
         required = [(args.stationary_source, "stationary-gate.json", args.case)]
-        if args.case in {"parallel", "crossing"}:
+        if args.case in {"parallel", "crossing", "long-parallel"}:
             if args.component_source is None:
                 parser.error("human motion needs a new-scene component gate")
             required.append((args.component_source, "native/validation.json", args.case+"-component"))
+        if args.case == "long-parallel":
+            if args.near_stationary_source is None:
+                parser.error("long parallel requires a fresh near-human stationary gate")
+            required.append((args.near_stationary_source, "stationary-gate.json", "long-parallel-near"))
         for folder, filename, case in required:
             meta = json.loads((folder/"invocation.json").read_text())
             execution = json.loads((folder/"execution.json").read_text())
@@ -113,6 +118,9 @@ def main():
                 same_whole_config=meta["config_sha256"] == digest(config),
                 non_runtime_source_exclusion=LAUNCHER))
         command.append("--motion")
+        if args.case == "long-parallel":
+            command.extend(["--long-service-human-gates", str(args.component_source.resolve()),
+                            str(args.near_stationary_source.resolve())])
     output = args.output.resolve()
     output.mkdir(parents=True)
     command.extend(["--output", str(output/"native" if component else output)])

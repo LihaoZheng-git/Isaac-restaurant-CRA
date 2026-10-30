@@ -183,6 +183,10 @@ parser.add_argument("--rolling-local-field", action="store_true",
                     help="opt-in translating window with original timestamps and strict temporal-overlap queries")
 parser.add_argument("--presentation-follow-camera", action="store_true",
                     help="render-only elevated robot follow camera; never a perception source")
+parser.add_argument("--long-service-parallel", action="store_true",
+                    help="separate long-route native parallel actor; requires independent near-view component gate")
+parser.add_argument("--long-service-human-gates", nargs=2, type=Path,
+                    help="current-source native component and near-human stationary folders; required for long human motion")
 parser.add_argument("--restaurant-server", action="store_true", help="explicit static-server scene opt-in; stationary actor gate required before wheels")
 parser.add_argument("--restaurant-human", choices=("standing", "crossing", "continuous-crossing", "parallel"),
                     help="native adult-human control integration; no static occupancy or shape persistence")
@@ -549,8 +553,19 @@ if args.rear_delayed_commit and not args.rear_person_relative:
     parser.error('delayed rear commitment requires the explicit person-relative experiment')
 if args.rear_preparation and not args.rear_delayed_commit:
     parser.error('rear preparation requires the explicit delayed person-relative experiment')
+if args.long_service_parallel and (args.restaurant_route != 'long-service'
+    or args.restaurant_human != 'parallel' or args.human_crossing_delay_seconds is not None
+    or not 8.8 <= args.human_crossing_trigger_y <= 9.2):
+    parser.error('long-service parallel requires its explicit route/actor and y=8.8..9.2 trigger, no timed delay')
+if args.long_service_parallel and args.motion:
+    from robot.evaluation.restaurant_long_service_validation import verify_near_human_gates
+    if not args.long_service_human_gates:
+        parser.error('long human motion requires component and near-view stationary evidence')
+    verify_near_human_gates(args.long_service_human_gates, ROOT, args.restaurant_scene)
+elif args.long_service_human_gates:
+    parser.error('near-human gate references require explicit long-service human motion')
 if args.restaurant_human == 'parallel' and (args.human_walking_speed != .5
-    or args.human_crossing_delay_seconds is None or args.human_continuing_away
+    or (args.human_crossing_delay_seconds is None and not args.long_service_parallel) or args.human_continuing_away
     or args.human_carry_bowl or args.human_start_view != 'original'
     or args.human_crossing_direction != 'right-to-left' or args.crossing_strategy != 'legacy'
     or args.encounter_guidance_ablation or args.zero_tangential_bias_ablation):
@@ -561,8 +576,11 @@ if (not math.isfinite(args.post_goal_observation_seconds) or not 0 <= args.post_
 minimum_crossing_trigger_y = 6.0 if open_crossing_layout else 6.8
 maximum_crossing_trigger_y = 8.4 if args.restaurant_human == "crossing" and not args.human_carry_bowl else 7.8
 maximum_crossing_trigger_y = 6.6 if open_crossing_layout else maximum_crossing_trigger_y
+if args.long_service_parallel:
+    minimum_crossing_trigger_y, maximum_crossing_trigger_y = 8.8, 9.2
 if not minimum_crossing_trigger_y <= args.human_crossing_trigger_y <= maximum_crossing_trigger_y or (
     args.human_crossing_trigger_y != 7.8 and args.restaurant_human not in {"crossing", "continuous-crossing"}
+    and not args.long_service_parallel
 ):
     parser.error(f"crossing trigger override requires crossing mode, world y=6.8..{maximum_crossing_trigger_y}")
 if args.restaurant_human == "continuous-crossing" and args.human_walking_speed != .5:
@@ -589,13 +607,15 @@ if args.restaurant_scene and (
     parser.error("restaurant component requires static persistent mapping, single/default selectors, no emitted plume/actors, and an independent authored layout survey")
 if args.restaurant_human and (not args.restaurant_scene or not args.restaurant_server
     or args.restaurant_view != "bowl" or args.restaurant_plume_diagnostic
-    or args.disable_lidar_deskew or args.restaurant_route not in {"service", "human-service"}):
+    or args.disable_lidar_deskew or (args.restaurant_route not in {"service", "human-service"}
+                                   and not args.long_service_parallel)):
     parser.error("native human requires restaurant service route/server, deskew, bowl start and no plume")
 if args.restaurant_route == "human-service" and not args.restaurant_human:
     parser.error("human-service is the separate native-human centerline route")
 if args.rolling_local_field and not args.persistent_object_risk_map:
     parser.error("rolling local field requires the transactional all-track map")
-if args.restaurant_route == "long-service" and (not args.rolling_local_field or args.restaurant_human):
+if args.restaurant_route == "long-service" and (not args.rolling_local_field
+    or (args.restaurant_human and not args.long_service_parallel)):
     parser.error("long-service first requires rolling coverage; human episodes have separate gates")
 if args.presentation_follow_camera and not args.restaurant_scene:
     parser.error("presentation follow camera requires a restaurant scene")
@@ -775,7 +795,7 @@ if open_crossing_layout:
     stationary.ROBOT_START_YAW_RADIANS = OPEN_ROBOT_YAW
     ROUTE = open_robot_route_local_xy()
     GOAL = ROUTE[-1]
-if args.restaurant_human == 'parallel':
+if args.restaurant_human == 'parallel' and not args.long_service_parallel:
     from robot.scene.parallel_walk_encounter import PARALLEL_ROBOT_START, PARALLEL_ROBOT_YAW, PARALLEL_ROBOT_ROUTE
     stationary.ROBOT_START_POSITION_WORLD = PARALLEL_ROBOT_START
     stationary.ROBOT_START_YAW_RADIANS = PARALLEL_ROBOT_YAW
@@ -788,6 +808,8 @@ if args.actor_shape == "upright_capsule":
 
 
 def json_default(value):
+    if isinstance(value, Path):
+        return str(value)
     if isinstance(value, np.generic):
         return value.item()
     if isinstance(value, np.ndarray):
@@ -934,6 +956,7 @@ def main():
                                        carry_facing_crossing=args.human_carry_facing_crossing,
                                        upper_continuation=args.human_upper_continuation,
                                        continuing_away=args.human_continuing_away,
+                                       long_service_parallel=args.long_service_parallel,
                                        crossing_extension_m=args.human_crossing_extension,
                                        crossing_y_m=args.human_crossing_line_y, crossing_layout=args.human_crossing_layout)
         ACTIVE_HUMAN = human
@@ -1811,7 +1834,7 @@ def main():
             gate["server_component_checks"] = restaurant_asset_checks(object_summary,"Server")
             gate["passed"] = stationary_ready = bool(stationary_ready and all(gate["server_component_checks"].values()))
         save_json("stationary-object-validation.json", object_summary)
-        if human is not None:
+        if human is not None and not args.long_service_parallel:
             from robot.evaluation.human_navigation_validation import human_stationary_checks
             gate["human_component_checks"] = human_stationary_checks(records)
             if args.human_body_envelope_radius is not None:
@@ -1829,6 +1852,8 @@ def main():
             gate["passed"] = stationary_ready = bool(stationary_ready
                 and all(gate["human_component_checks"].values()))
             gate["fixture_gate_scope"] = "fresh visually associated adult mass prior/current motion/contact proxy; potential and thermal priors; wheels still blocked until this gate passes"
+        elif human is not None:
+            gate["remote_human_scope"] = "human is outside the startup view; this route-start gate is not human perception acceptance; launcher requires separate current-source near-view component and stationary gates before motion"
         if args.restaurant_plume_diagnostic:
             plume_validation = restaurant_plume_checks(records, fixtures)
             save_json("restaurant-plume-validation.json", plume_validation)
@@ -2666,7 +2691,9 @@ def main():
             from robot.evaluation.parallel_walking_validation import validate_parallel_curve
             parallel_goal = (anchor.x + math.cos(anchor.yaw)*ROUTE[-1][0] - math.sin(anchor.yaw)*ROUTE[-1][1],
                 anchor.y + math.sin(anchor.yaw)*ROUTE[-1][0] + math.cos(anchor.yaw)*ROUTE[-1][1])
-            parallel_validation = validate_parallel_curve(live_fields, human.records, goal_world_xy=parallel_goal)
+            from robot.scene.restaurant_service_build import LONG_ROUTE_WORLD_XY
+            parallel_validation = validate_parallel_curve(live_fields, human.records, goal_world_xy=parallel_goal,
+                nominal_route_world_xy=LONG_ROUTE_WORLD_XY if args.long_service_parallel else None)
             human_validation['parallel_curve'] = parallel_validation
             completed = completed and parallel_validation['passed']
             save_json('parallel-walking-validation.json', parallel_validation)

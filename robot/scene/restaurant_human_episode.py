@@ -32,7 +32,11 @@ class RestaurantHumanEpisode:
         crossing_extension_m=0.,
         crossing_y_m=8.9,
         crossing_layout="legacy",
+        long_service_parallel=False,
     ):
+        if long_service_parallel and (mode != "parallel" or crossing_delay_seconds is not None
+            or not 8.8 <= trigger_robot_y <= 9.2):
+            raise ValueError("long-service actor requires parallel mode and explicit y=8.8..9.2 trigger")
         if mode not in {"standing", "crossing", "continuous-crossing", "parallel"}:
             raise ValueError("unknown human episode")
         if crossing_direction not in {"right-to-left", "left-to-right"} or (
@@ -66,6 +70,8 @@ class RestaurantHumanEpisode:
         maximum_trigger_y = 8.4 if mode == "crossing" and not carry_bowl else 7.8
         minimum_trigger_y = 6.0 if self.open_layout else 6.8
         maximum_trigger_y = 6.6 if self.open_layout else maximum_trigger_y
+        if long_service_parallel:
+            minimum_trigger_y, maximum_trigger_y = 8.8, 9.2
         if not math.isfinite(trigger_robot_y) or not minimum_trigger_y <= trigger_robot_y <= maximum_trigger_y:
             raise ValueError(f"bounded native crossing trigger must be y=6.8..{maximum_trigger_y}")
         self.trigger_robot_y = trigger_robot_y
@@ -79,7 +85,7 @@ class RestaurantHumanEpisode:
         if not math.isfinite(speed_mps) or not 0.5 <= speed_mps <= 1.0:
             raise ValueError("bounded coupled native walking speed must be .5..1 m/s")
         if self.parallel_oncoming and (speed_mps != .5 or continuing_away or carry_bowl
-            or upper_continuation or crossing_delay_seconds is None):
+            or upper_continuation or (crossing_delay_seconds is None and not long_service_parallel)):
             raise ValueError('parallel fixture requires explicit timing, bare adult and .5m/s')
         self.stage, self.mode, self.output = stage, mode, output
         with Usd.EditContext(stage, stage.GetSessionLayer()):

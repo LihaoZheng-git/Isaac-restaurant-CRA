@@ -138,7 +138,24 @@ def validate_parallel_actor(records, *, parked_robot):
         scope='authored oncoming aisle component; independent root/limbs/geometry only; away_endpoint is not a human stopping claim')
 
 
-def validate_parallel_curve(records, truth, *, goal_world_xy):
+def route_projection(query, route):
+    """Nearest point/direction on the configured nominal polyline, evaluation only."""
+    route, query = np.asarray(route, float), np.asarray(query, float)
+    if (route.ndim != 2 or route.shape[1] != 2 or len(route) < 2
+        or query.shape != (2,) or not np.isfinite(route).all() or not np.isfinite(query).all()):
+        raise ValueError('finite nominal polyline and query required')
+    delta = np.diff(route, axis=0)
+    length2 = np.sum(delta**2, axis=1)
+    if np.any(length2 <= 1e-12):
+        raise ValueError('nominal polyline segments must be nonzero')
+    fraction = np.clip(np.sum((query-route[:-1])*delta, axis=1)/length2, 0., 1.)
+    projected = route[:-1]+fraction[:, None]*delta
+    distance = np.linalg.norm(projected-query, axis=1)
+    i = int(np.argmin(distance))
+    return float(distance[i]), delta[i]/np.sqrt(length2[i])
+
+
+def validate_parallel_curve(records, truth, *, goal_world_xy, nominal_route_world_xy=None):
     """A late curve or restored lambda alone cannot establish parallel avoidance."""
     actor = validate_parallel_actor(truth, parked_robot=False)
     if len(truth) < 30:
@@ -151,10 +168,16 @@ def validate_parallel_curve(records, truth, *, goal_world_xy):
         raise ValueError('nontrivial configured robot route required')
     forward = (goal-xy[0])/np.linalg.norm(goal-xy[0])
     left = np.array([-forward[1], forward[0]])
+    if nominal_route_world_xy is not None:
+        route_projection(xy[0], nominal_route_world_xy)
+        if np.linalg.norm(np.asarray(nominal_route_world_xy)[-1]-goal) > 1e-6:
+            raise ValueError('nominal polyline must end at the required goal')
     velocity = np.gradient(person, t, axis=0)
     walking = (np.array([r['phase'] for r in truth]) == 'move') & (np.linalg.norm(velocity, axis=1) >= .3)
     near = walking & (np.linalg.norm(xy-person, axis=1) <= 2.)
-    excursion = float(np.max(np.abs((xy[near]-xy[0])@left))) if near.any() else None
+    excursion = (max(route_projection(q, nominal_route_world_xy)[0] for q in xy[near])
+                 if nominal_route_world_xy is not None and near.any()
+                 else float(np.max(np.abs((xy[near]-xy[0])@left))) if near.any() else None)
     policy_sources = set()
     for r in records:
         for o in r['objects']:
@@ -172,7 +195,11 @@ def validate_parallel_curve(records, truth, *, goal_world_xy):
                 continue
             v = np.array([v['value'] for v in values])
             speed = np.linalg.norm(v)
-            if .2 <= speed <= 2. and v@forward < -np.cos(np.pi/6)*speed:
+            current_direction = forward
+            if nominal_route_world_xy is not None:
+                robot_xy = [np.interp(source, t, xy[:, j]) for j in range(2)]
+                _, current_direction = route_projection(robot_xy, nominal_route_world_xy)
+            if .2 <= speed <= 2. and v@current_direction < -np.cos(np.pi/6)*speed:
                 policy_sources.add(source)
     policies = [p for r in records for p in r['diagnostics']['applied_field_policies']]
     checks = dict(actual_parallel_actor=actor['passed'], current_observed_oncoming_rows=len(policy_sources) >= 3,
@@ -181,5 +208,6 @@ def validate_parallel_curve(records, truth, *, goal_world_xy):
         final_goal_rejoined=np.linalg.norm(xy[-1]-goal) <= .1)
     return dict(passed=all(checks.values()), checks={k: bool(v) for k, v in checks.items()},
         observed_parallel_rows=len(policy_sources), nearby_walking_excursion_m=excursion,
+        deviation_basis='configured nominal polyline' if nominal_route_world_xy is not None else 'start-to-goal chord',
         required_excursion_m=.2, actor_component=actor,
         scope='independent parallel walking curve; actual arrival/stopping/clearance/containment/source gates remain separate; no enforced side, causal CRA or exact-paper claim')

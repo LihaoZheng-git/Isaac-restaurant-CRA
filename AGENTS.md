@@ -1,5 +1,16 @@
 # CRA repository guidance
 
+- Long-service parallel integration is a separate default-OFF experiment. The
+  authored native person starts only when robot world y reaches the configured
+  8.8..9.2 m trigger; actor route/timing never supply control evidence. Keep
+  static occupancy memory OFF and the existing .15 s dynamic occupancy/3 s
+  mass-only retention, all coverage/envelope gates and fixed lambda. The distant
+  startup gate observes local furniture only; long motion additionally requires
+  current-source near-human stationary AND native component records. Audit
+  nearby curvature relative to the nominal polyline, not its start-goal chord,
+  so a planned restaurant corner cannot masquerade as human avoidance. No native
+  long-human acceptance yet. Keep primary/main/PR117 holds.
+
 - Continuous restaurant service-demo work adds a default-OFF translating local
   field with a fixed world anchor/yaw and integer-cell window shifts. Compare
   actual prior/current fields only on overlapping world cells; new edge cells

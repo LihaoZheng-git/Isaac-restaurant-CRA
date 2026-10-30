@@ -114,3 +114,36 @@ def test_parallel_cannot_silently_mix_actor_protocols(change):
     args.update(change)
     with pytest.raises(ValueError):
         RestaurantHumanEpisode(None, **args)
+
+
+def test_polyline_curve_scoring_does_not_count_nominal_corner_as_avoidance():
+    records, truth = example()
+    route = [(7.8, 4.05), (28.8, 4.05), (28.8, 10.5)]
+    accepted = validate_parallel_curve(records, truth, goal_world_xy=route[-1], nominal_route_world_xy=route)
+    assert accepted['passed']
+    assert accepted['nearby_walking_excursion_m'] == pytest.approx(.35)
+    for r in truth:
+        r['robot_xy'][0] = 28.8
+    result = validate_parallel_curve(records, truth, goal_world_xy=route[-1], nominal_route_world_xy=route)
+    assert not result['checks']['curved_during_nearby_parallel_walk']
+    assert result['nearby_walking_excursion_m'] == pytest.approx(0., abs=1e-12)
+    assert result['checks']['current_observed_oncoming_rows']
+
+
+def test_service_actor_trigger_is_explicit_and_does_not_change_legacy_protocol(monkeypatch):
+    from pxr import Usd
+    from robot.scene import restaurant_human_episode as module
+    class AtAuthoring(Exception):
+        pass
+    def stop(*args, **kwargs):
+        assert kwargs['parallel_oncoming']
+        raise AtAuthoring
+    monkeypatch.setattr(module, 'prepare_native_restaurant_human', stop)
+    args = dict(mode='parallel', output=None, speed_mps=.5, trigger_robot_y=9.)
+    with pytest.raises(ValueError):
+        module.RestaurantHumanEpisode(None, **args)
+    with pytest.raises(AtAuthoring):
+        module.RestaurantHumanEpisode(Usd.Stage.CreateInMemory(), **args, long_service_parallel=True)
+    for change in (dict(trigger_robot_y=9.3), dict(crossing_delay_seconds=3.), dict(mode='crossing')):
+        with pytest.raises(ValueError):
+            module.RestaurantHumanEpisode(None, **(args | change), long_service_parallel=True)
