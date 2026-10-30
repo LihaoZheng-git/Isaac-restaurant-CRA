@@ -165,3 +165,13 @@ has gaps up to4.5s: its later117.4s history reset purges the fragment, whereas
 the original live diagnostic records show the covering cluster continuously
 qualified at116.7--118.0s. Keep both facts; the replay is confirmation of this
 data path, not a complete native navigation pass.
+
+Review found a further sequence edge case: clearing support history alone could
+leave an unpublished candidate eligible for three later scans across a source
+gap. A gap now also discards those candidates, while previously qualified
+records retain their original expiry. A regression supplies three fresh scans
+after a broken sequence and checks that only the new current surface qualifies.
+The v4 parked component at `4b8801e` was interrupted during this review, before
+wheel trials. Its partial output is preserved and provides no acceptance.
+This source-gap correction passes133 focused and3,313 full unit tests (116.98s),
+with Ruff and diff checks passing. Fresh native validation remains pending.

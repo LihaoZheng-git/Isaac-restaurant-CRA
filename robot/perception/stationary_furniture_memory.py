@@ -174,7 +174,9 @@ class StationaryFurnitureMemory:
 
         history = [(t, p[human_clear(p)]) for t, p in self.history
                    if 0 < source_time - t <= 2 * cfg.maximum_sample_gap_seconds + 1e-9]
-        if self.last_time is not None and source_time - self.last_time > cfg.maximum_sample_gap_seconds + 1e-9:
+        source_gap = (self.last_time is not None
+                      and source_time - self.last_time > cfg.maximum_sample_gap_seconds + 1e-9)
+        if source_gap:
             history = []
 
         support_trees = {}
@@ -225,7 +227,7 @@ class StationaryFurnitureMemory:
         # scans may complete the same three-
         # source/.2s/.06m proof, without renewing its geometry/policy epoch.
         pending = {k: r for k, r in self.pending_surfaces.items()
-                   if k not in tracks and k not in excluded
+                   if not source_gap and k not in tracks and k not in excluded
                    and 0 < source_time-r.source_time <= 2*cfg.maximum_sample_gap_seconds+1e-9
                    and allowed(r.points).all()}
         current_points = points[usable]
@@ -270,6 +272,7 @@ class StationaryFurnitureMemory:
                                      tuple(r for k, r in records.items() if k not in tracks))
         audit = snapshot.diagnostic()
         audit.update(enrolled_track_ids=enrolled, stable_point_count=int(stable.sum()),
+                     qualification_history_reset=bool(source_gap),
                      pending_surface_count=len(pending), confirmed_missing_track_ids=confirmed,
                      rejected_tracks=rejected, centroid_surface_disagreement_track_ids=sorted(disagreement),
                      excluded_track_ids=sorted(excluded), exclusion_point_count=len(forbidden),

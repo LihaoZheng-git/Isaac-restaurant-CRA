@@ -129,6 +129,25 @@ def test_pending_confirmation_allows_two_bounded_actual_source_intervals():
     assert not observe(m, 1.5, key=2)[0].surfaces
 
 
+def test_broken_source_sequence_discards_unqualified_candidate_permanently():
+    m = StationaryFurnitureMemory()
+    observe(m, 1.)
+    observe(m, 1.1)
+    _, audit = observe(m, 1.5, key=2)
+    assert audit["qualification_history_reset"]
+    assert 1 not in m.pending_surfaces
+    for now in (1.6, 1.7):
+        snapshot, audit = observe(m, now, key=2)
+        assert not audit["qualification_history_reset"]
+        assert 1 not in audit["confirmed_missing_track_ids"]
+        assert not any(r.track_id == 1 for r in snapshot.surfaces)
+    # Three new sources can qualify the current surface with its actual epoch.
+    assert audit["enrolled_track_ids"] == [2]
+    snapshot, _ = missing(m, 1.8)
+    assert len(snapshot.surfaces) == 1
+    assert snapshot.surfaces[0].source_time == 1.7
+
+
 @pytest.mark.parametrize("problem", ["one_scan", "two_scans", "new_surface", "gap", "moving", "person"])
 def test_no_memory_for_unqualified_or_human_surfaces(problem):
     m = StationaryFurnitureMemory()

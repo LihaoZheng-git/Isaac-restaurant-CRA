@@ -1,5 +1,11 @@
 # CRA repository guidance
 
+- A furniture qualification source gap clears unpublished candidates as well
+  as raw support history. Later scans must not qualify an old candidate across
+  the broken sequence. Already-qualified priors retain their original expiry.
+  The v4 parked component was interrupted during review before wheel trials;
+  it supplies no acceptance. Preserve its partial output and rerun fresh gates.
+
 - Furniture-memory v3 at76e18b8 passed all four new prerequisites and both old
   stopping locations, but FAILED nearby_track_lost110.1333s/758fields/4guides
   before human walking. Clearance .391843m/stop drift .004592m;1542 coverage
