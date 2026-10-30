@@ -118,8 +118,9 @@ There were39fresh accepted visual instances across54,663object rows and zero
 complete fresh four-factor rows. Original priors and all source clocks remain.
 
 A separate sensor-built stationary-furniture memory layer for the mixed scene
-has been proposed to the user as a geometry-uncertainty research choice. It is
-NOT implemented or approved yet. Moving-human geometry must remain live and
+was proposed as a geometry-uncertainty research choice. The user subsequently
+approved it; the default-OFF implementation and fresh validation are tracked in
+`docs/stationary_furniture_memory.md`. Moving-human geometry must remain live and
 unresolved human associations must retain their stop behavior. Do not silently
 enable the existing static-scene memory globally. The accepted continuous
 route-only video is ready; the earlier human clips are separate recordings.

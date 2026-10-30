@@ -87,6 +87,7 @@ def assess_all_objects(worker, packet):
     prediction_memory = copy.deepcopy(getattr(worker, "predictive_human_geometry", None))
     preparation_memory = copy.deepcopy(getattr(worker, "parallel_preparation", None))
     human_mass_memory = copy.deepcopy(getattr(worker, "human_mass_identity_retention", None))
+    furniture_memory = copy.deepcopy(getattr(worker, "stationary_furniture_memory", None))
     tracking = tracker.update(
         packet.obstacle_xyz[:, :2],
         robot_position_world_xy=np.array(packet.robot_position_world_xy),
@@ -683,6 +684,38 @@ def assess_all_objects(worker, packet):
         from robot.evaluation.crossing_strategy import zero_tangential_bias
         field_guidance_policy, applied_guidance, baseline_audit = zero_tangential_bias(
             field_guidance_policy, applied_guidance, baseline_audit)
+    furniture_snapshot, furniture_audit = None, None
+    if furniture_memory is not None:
+        from robot.perception.stationary_furniture_memory import (
+            ID_OFFSET, SOURCE, person_exclusion_points,
+        )
+        excluded = person_exclusion_points(world, projection, worker.visual_person_frame(packet),
+            packet.camera_frame_id, packet.camera_timestamp_seconds, envelope_audit)
+        # An original geometric track may contain separately owned instance and
+        # unmatched support returns. Remember its strongest actually applied risk.
+        original_guidance = {}
+        for track in tracks:
+            keys = np.unique(current_placement[3][:len(world)][tracking.point_track_ids == track.track_id])
+            original_guidance[track.track_id] = max((applied_guidance[int(k)] for k in keys), key=lambda g: g.risk)
+        furniture_snapshot, furniture_audit = furniture_memory.update(
+            world[:, :2], tracking.point_track_ids, tracks, original_guidance,
+            source_time=packet.sensor_timestamp_seconds, source_frame=packet.sensor_frame_id,
+            robot_xy=packet.robot_position_world_xy, excluded_points=excluded,
+            excluded_track_ids=[r["track_id"] for r in envelope_audit])
+        extra, extra_ids = furniture_snapshot.placements(grid_config, worker.anchor, worker.anchor_yaw)
+        points, point_ids = np.concatenate((points, extra)), np.concatenate((point_ids, extra_ids))
+        for record in furniture_snapshot.surfaces:
+            key = ID_OFFSET + record.track_id
+            applied_guidance[key] = record.guidance
+            semantics.append(SemanticObstacle(replace(tracks[0], track_id=key,
+                point_count=int(np.count_nonzero(extra_ids == key))), "unknown", 0., SOURCE))
+            baseline_audit.append(dict(track_or_group_id=key, observed_class="unknown",
+                class_basis=SOURCE, original_track_id=record.track_id,
+                original_source_time=record.source_time, original_source_frame=record.source_frame,
+                cra_phi=record.guidance.risk, applied_field_risk=record.guidance.risk,
+                boundary_flux=record.guidance.boundary_flux, lambda_value=record.guidance.tangential_strength,
+                field_used_for_control=True, factor_basis="retained_applied_policy_not_new_factor_evidence"))
+            baseline_audit[-1]["lambda"] = baseline_audit[-1].pop("lambda_value")
     cells = np.floor(
         (points - [grid_config.minimum_x, grid_config.minimum_y])
         / grid_config.resolution
@@ -864,6 +897,8 @@ def assess_all_objects(worker, packet):
         worker.parallel_preparation = preparation_memory
     if human_mass_memory is not None:
         worker.human_mass_identity_retention = human_mass_memory
+    if furniture_memory is not None:
+        worker.stationary_furniture_memory = furniture_memory
     worker.temporal_recovery_baseline = None
     if carried_state is not None:
         worker.carried_runtime_state=carried_state
@@ -896,6 +931,7 @@ def assess_all_objects(worker, packet):
         "human_track_recovery_config": None if envelope_memory is None or envelope_memory.recovery_config is None
             else asdict(envelope_memory.recovery_config),
         "human_mass_body_identity_retention": human_mass_audit,
+        "stationary_furniture_memory": furniture_audit,
         "predictive_human_geometry": prediction_audit,
         "observed_motion_reference": None if motion_reference is None else motion_reference.diagnostic(),
         "parallel_preparation": preparation_audit,
@@ -968,4 +1004,5 @@ def assess_all_objects(worker, packet):
         diagnostics,
         tuple(objects),
         grid,
+        furniture_snapshot,
     )

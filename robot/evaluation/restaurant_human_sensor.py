@@ -102,6 +102,7 @@ class RestaurantHumanSensorDiagnostic:
         parallel_preparation_exit_lateral=None,
         human_mass_body_identity_retention=False,
         observed_motion_reference=False,
+        stationary_furniture_memory=False,
     ):
         self.stage, self.output = stage, output
         from robot.safety.motion_aware_passing import MotionAwarePassingConfig
@@ -318,6 +319,9 @@ class RestaurantHumanSensorDiagnostic:
         )
         if body_contact_config is not None:
             self.save("human-body-contact-configuration.json", asdict(body_contact_config))
+        if stationary_furniture_memory:
+            from robot.perception.stationary_furniture_memory import StationaryFurnitureMemory
+            self.worker.stationary_furniture_memory = StationaryFurnitureMemory()
         self.history = EgoPoseHistory(maximum_samples=2048)
         self.truth, self.records, self.rejections = [], [], []
         self.executor = ThreadPoolExecutor(max_workers=1)
@@ -474,6 +478,8 @@ class RestaurantHumanSensorDiagnostic:
         self.pending = None
         try:
             result = future.result()
+            from robot.evaluation.furniture_memory_validation import audit_snapshot
+            furniture_audit = audit_snapshot(result.furniture_memory_snapshot, self.truth)
             if not self.worker.persistent_properties.frozen:
                 self.worker.persistent_properties.freeze_properties()
             self.records.append(
@@ -482,6 +488,8 @@ class RestaurantHumanSensorDiagnostic:
                     "sensor_frame_id": packet.sensor_frame_id,
                     "camera_time": packet.camera_timestamp_seconds,
                     "phase": phase,
+                    "stationary_furniture_memory": result.diagnostics.get("stationary_furniture_memory"),
+                    "furniture_memory_human_audit": furniture_audit,
                     "completion_age_sim_seconds": now - packet.sensor_timestamp_seconds,
                     "processing_wall_seconds": time.perf_counter() - start,
                     "carried_object_groups":result.diagnostics.get("carried_object_groups"),

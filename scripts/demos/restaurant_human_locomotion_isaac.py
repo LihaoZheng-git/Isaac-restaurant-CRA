@@ -39,6 +39,8 @@ parser.add_argument('--identity-selection-body-envelope', action='store_true',
                     help='explicit existing .40+.25m body PRIOR for zero-wheel parallel identity-selection validation')
 parser.add_argument('--human-track-recovery', action='store_true',
                     help='explicit bounded current-positive human identity recovery; no wheel commands')
+parser.add_argument('--stationary-furniture-memory', action='store_true',
+                    help='separate bounded furniture memory exclusion benchmark; no wheels')
 parser.add_argument('--predictive-human-geometry', action='store_true',
                     help='separate zero-wheel LiDAR source-window motion/geometry PRIOR benchmark; future actor truth only scores it')
 parser.add_argument('--observed-motion-reference', action='store_true',
@@ -470,6 +472,7 @@ def main():
             maximum_identity_prior_selection_age_seconds=args.human_passing_identity_prior_max_age,
             identity_selection_body_envelope=args.identity_selection_body_envelope,
             human_track_recovery=args.human_track_recovery,
+            stationary_furniture_memory=args.stationary_furniture_memory,
             predictive_human_geometry=args.predictive_human_geometry,
             human_prediction_uncertainty_rate=args.human_prediction_uncertainty_rate,
             human_prediction_uncertainty_floor=args.human_prediction_uncertainty_floor,
@@ -780,6 +783,12 @@ def main():
         report['human_mass_body_identity_retention_validation'] = mass_report
         report['passed'] &= mass_report['passed']
         save('human-mass-identity-retention-validation.json', mass_report)
+    if args.stationary_furniture_memory:
+        from robot.evaluation.furniture_memory_validation import summarize_memory
+        memory_report = summarize_memory(sensor.records)
+        report['furniture_memory_validation'] = memory_report
+        report['passed'] &= memory_report['passed']
+        save('furniture-memory-validation.json', memory_report)
     save("validation.json", report)
     print(json.dumps(report), flush=True)
     if not report["passed"]:

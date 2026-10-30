@@ -25,6 +25,7 @@ class NearbyTrackLossConfig:
     allow_positive_surface_merges: bool = False
     allow_unique_full_surface_merges: bool = False
     allow_many_to_one_full_surface_merges: bool = False
+    allow_stationary_furniture_memory: bool = False
     allow_current_visual_part_associations: bool = False
     maximum_visual_mask_boundary_pixels: int = 0
     maximum_merge_speed_mps: float = 2.0
@@ -33,7 +34,7 @@ class NearbyTrackLossConfig:
     maximum_merge_age_seconds: float = 0.35
 
     def __post_init__(self):
-        if not isinstance(self.allow_observed_fragment_merges, bool) or not isinstance(
+        if not isinstance(self.allow_stationary_furniture_memory, bool) or not isinstance(self.allow_observed_fragment_merges, bool) or not isinstance(
             self.use_observed_merge_velocity, bool
         ) or not isinstance(self.allow_positive_extent_merges, bool) or not isinstance(
             self.allow_positive_surface_merges, bool
@@ -66,6 +67,7 @@ class NearbyTrackLossConfig:
                 "allow_positive_surface_merges",
                 "allow_unique_full_surface_merges",
                 "allow_many_to_one_full_surface_merges",
+                "allow_stationary_furniture_memory",
                 "allow_current_visual_part_associations",
                 "maximum_visual_mask_boundary_pixels",
             }:
@@ -112,6 +114,7 @@ class NearbyTrackLossGuard:
         current_grid_anchor_yaw=None,
         current_camera_timestamp_seconds=None,
         current_visual_part_associations=(),
+        current_furniture_snapshot=None,
     ):
         if (
             isinstance(source_time, bool)
@@ -578,6 +581,22 @@ class NearbyTrackLossGuard:
                 pending[key] = (point.copy(), float(source_time))
         prior_coverage["covered"] = [p for p in prior_coverage["covered"]
             if p["track_id"] in pending and p["track_id"] not in current]
+        furniture_coverage = []
+        if self.config.allow_stationary_furniture_memory:
+            from robot.perception.stationary_furniture_memory import FurnitureSnapshot
+            if (not isinstance(current_furniture_snapshot, FurnitureSnapshot)
+                or current_furniture_snapshot.source_time != source_time
+                or current_occupancy_grid is None or current_grid_anchor_xy is None
+                or current_grid_anchor_yaw is None):
+                raise ValueError("furniture coverage requires the current typed snapshot and built field")
+            for key, (point, last_seen) in pending.items():
+                if key not in current:
+                    proof = current_furniture_snapshot.coverage(key, last_seen, point,
+                        current_occupancy_grid, current_grid_anchor_xy, current_grid_anchor_yaw)
+                    if proof is not None:
+                        furniture_coverage.append(proof)
+        elif current_furniture_snapshot is not None:
+            raise ValueError("furniture coverage requires explicit opt-in")
         blocking = []
         for key, (point, last_seen) in pending.items():
             age = float(source_time - last_seen)
@@ -586,6 +605,7 @@ class NearbyTrackLossGuard:
                 age > self.config.maximum_missing_seconds + 1e-9
                 and distance <= self.config.stop_distance_m
                 and not any(p["track_id"] == key for p in prior_coverage["covered"])
+                and not any(p["track_id"] == key for p in furniture_coverage)
             ):
                 blocking.append(
                     {
@@ -639,6 +659,7 @@ class NearbyTrackLossGuard:
             "body_prior_coverage_enabled": self.fragment_coverage is not None,
             "prior_covered_missing_tracks": prior_coverage["covered"],
             "body_prior_coverage_rejections": prior_coverage["rejected"],
+            "furniture_prior_covered_missing_tracks": furniture_coverage,
             **({"positive_surface_route_enabled": True,
                 "positive_surface_merge_rejections": surface_rejections,
                 "many_to_one_full_surface_route_enabled": self.config.allow_many_to_one_full_surface_merges,

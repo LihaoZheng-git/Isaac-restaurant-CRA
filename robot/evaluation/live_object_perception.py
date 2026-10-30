@@ -203,6 +203,7 @@ class LiveObjectResult:
     diagnostics: dict
     objects: tuple = ()
     source_occupancy_grid: object | None = None
+    furniture_memory_snapshot: object | None = None
 
 
 class LiveObjectPerception:

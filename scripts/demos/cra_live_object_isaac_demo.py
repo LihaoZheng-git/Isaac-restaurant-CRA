@@ -185,6 +185,8 @@ parser.add_argument("--presentation-follow-camera", action="store_true",
                     help="render-only elevated robot follow camera; never a perception source")
 parser.add_argument("--long-service-parallel", action="store_true",
                     help="separate long-route native parallel actor; requires independent near-view component gate")
+parser.add_argument("--stationary-furniture-memory", action="store_true",
+                    help="separate bounded repeated-surface background PRIOR; current people/motion excluded, no source renewal")
 parser.add_argument("--long-service-human-gates", nargs=3, type=Path,
                     help="current-source native component, near-human stationary and long-idle folders; required for long human motion")
 parser.add_argument("--restaurant-server", action="store_true", help="explicit static-server scene opt-in; stationary actor gate required before wheels")
@@ -1339,6 +1341,11 @@ def main():
         mask_foreground_depth_gap_m=0.5 if args.fixture_layout == "three" or args.actor_shape == "upright_capsule" or args.restaurant_scene else None,
         plume_view_fov_degrees=args.plume_view_fov,
     )
+    if args.stationary_furniture_memory:
+        if not (args.restaurant_human == "parallel" and args.rolling_local_field and args.persistent_object_risk_map) or args.static_occupancy_memory_prior:
+            raise ValueError("furniture memory requires the separate long-human rolling experiment, not global static memory")
+        from robot.perception.stationary_furniture_memory import StationaryFurnitureMemory
+        perception.stationary_furniture_memory = StationaryFurnitureMemory()
     history = EgoPoseHistory()
     if args.rolling_local_field:
         from robot.safety.rolling_local_field import RollingLocalField
@@ -1734,6 +1741,9 @@ def main():
             ),
             flush=True,
         )
+        if args.stationary_furniture_memory:
+            from robot.evaluation.furniture_memory_validation import audit_snapshot
+            latest.diagnostics["furniture_memory_human_audit"] = audit_snapshot(latest.furniture_memory_snapshot, human.records)
         records.append(field_record(latest, now))
         if args.restaurant_plume_diagnostic:
             phase = (len(records)-1)//args.stationary_frames
@@ -1876,6 +1886,13 @@ def main():
             if args.actor_shape == "upright_capsule" else "sphere/support/plume fixture evidence gate")
         gate["passed"] = stationary_ready = bool(stationary_ready and gate["bounded_fixture_checks"] and all(gate["bounded_fixture_checks"].values()))
         save_json("stationary-object-validation.json", object_summary)
+    if args.stationary_furniture_memory:
+        memory_checks = {
+            "source_aligned_human_audits_pass": all(r["diagnostics"]["furniture_memory_human_audit"]["passed"] for r in records),
+            "repeated_surface_enrollment_exercised": any(r["diagnostics"]["stationary_furniture_memory"]["enrolled_track_ids"] for r in records),
+        }
+        gate["stationary_furniture_memory_checks"] = memory_checks
+        gate["passed"] = stationary_ready = bool(stationary_ready and all(memory_checks.values()))
     if args.predictive_human_geometry_ablation:
         prediction = latest.field.predictive_human_geometry
         gate['predictive_geometry_ready'] = bool(prediction is not None and prediction.ready and prediction.forecasts)
@@ -2091,6 +2108,7 @@ def main():
         allow_positive_surface_merges=args.human_positive_fragment_surface,
         allow_unique_full_surface_merges=args.human_unique_full_surface,
         allow_many_to_one_full_surface_merges=args.long_service_parallel,
+        allow_stationary_furniture_memory=args.stationary_furniture_memory,
         maximum_visual_mask_boundary_pixels=args.human_fragment_mask_boundary_pixels,
         allow_current_visual_part_associations=args.human_visual_fragment_association,
         use_observed_merge_velocity=human is not None),
@@ -2125,7 +2143,7 @@ def main():
                if source_packet.scan_pose_samples_world is not None else {})}
 
     def coverage_prior_inputs(result, source_packet):
-        if fragment_coverage_config is None:
+        if fragment_coverage_config is None and not args.stationary_furniture_memory:
             return {}
         return {
             "current_track_risks": {row["track_or_group_id"]: row["applied_field_risk"]
@@ -2135,6 +2153,7 @@ def main():
             "current_grid_anchor_xy": result.field.anchor_position_world_xy,
             "current_grid_anchor_yaw": result.field.anchor_yaw,
             "current_camera_timestamp_seconds": source_packet.camera_timestamp_seconds,
+            "current_furniture_snapshot": result.furniture_memory_snapshot,
         }
 
     if coverage_guard is not None:
@@ -2316,6 +2335,7 @@ def main():
                             **coverage_geometry(outcome.value, submitted_packet), **coverage_prior_inputs(outcome.value, submitted_packet))
                         if (coverage_result["observed_fragment_merges"] or coverage_result["blocked"]
                             or coverage_result["prior_covered_missing_tracks"]
+                            or coverage_result["furniture_prior_covered_missing_tracks"]
                             or coverage_result.get("positive_surface_merge_rejections")):
                             if any(e.get("coexistence_basis") in {"retained_original_coobservation", "recent_original_coobservation_positive_extent"}
                                    or e.get("coexistence_basis") == "recent_original_coobservation_positive_surface"
@@ -2342,6 +2362,9 @@ def main():
                         staged_perception.accept(outcome.value)
                     latest = outcome.value
                     latest_source_packet = submitted_packet
+                    if args.stationary_furniture_memory:
+                        from robot.evaluation.furniture_memory_validation import audit_snapshot
+                        latest.diagnostics["furniture_memory_human_audit"] = audit_snapshot(latest.furniture_memory_snapshot, human.records)
                     live_fields.append(field_record(latest, now, current))
                     if args.moving_actor:
                         elapsed = latest.field.sensor_timestamp_seconds - actor_start_time
@@ -2791,6 +2814,9 @@ def main():
                 simultaneous_kinetic_updates += 1
         live_kinetic_validation = summarize_live_relative_motion(live_fields)
         completed = completed and simultaneous_kinetic_updates >= 5 and live_kinetic_validation["passed"]
+    if args.stationary_furniture_memory:
+        completed = completed and bool(live_fields) and all(
+            r["diagnostics"]["furniture_memory_human_audit"]["passed"] for r in live_fields)
     scene_unchanged = (
         original_hash
         == hashlib.sha256(SCENE_PATH.read_bytes()).hexdigest()
@@ -2873,6 +2899,12 @@ def main():
         "live_relative_motion_validation": live_kinetic_validation,
         "nearby_track_loss_guard": coverage_result,
         "nearby_track_loss_guard_config": asdict(coverage_guard.config) if coverage_guard is not None else None,
+        "stationary_furniture_memory_validation": {
+            "enabled": args.stationary_furniture_memory,
+            "source_aligned_human_audits_pass": all(r["diagnostics"].get("furniture_memory_human_audit", {}).get("passed", False) for r in live_fields)
+                if args.stationary_furniture_memory else None,
+            "coverage_events": sum(len(r.get("furniture_prior_covered_missing_tracks", ())) for r in coverage_events),
+        },
         "perception_evidence_counts": {
             "accepted_current_instances": sum(
                 r["diagnostics"].get("accepted_instance", False) for r in live_fields

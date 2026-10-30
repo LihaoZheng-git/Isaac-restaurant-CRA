@@ -1,5 +1,25 @@
 # CRA repository guidance
 
+- The user now APPROVES bounded stationary-furniture retention through brief
+  tracking gaps, with fresh command verification rather than blind old-command
+  execution. Separate default-OFF --stationary-furniture-memory on the mixed
+  restaurant experiment requires every original return to have repeated world
+  support (>=3 scans spanning .2s, .06m correspondence), then retains the whole
+  positive surface up to10s with .05m+.005m/s spatial uncertainty. This is an
+  explicit stationary-background PRIOR, not furniture recognition or free space.
+  Current person masks/body centers exclude a1m region; moving-track surfaces
+  exclude their own .06m neighborhood. Purge both history and retained records
+  on contradictions. Original source/frame/policy remain; no factor refresh.
+  The continuity guard may continue only if the EXACT original identity/epoch
+  and whole uncertainty-expanded surface are covered in the CURRENT built grid
+  at >=original risk/flux. Expiry/clipping/incomplete coverage still stop. Stage
+  memory with field admission; keep human tracking live, global static memory
+  OFF, nominal/CRA/lambda1.25/all exact checks unchanged. Replay of431 archived
+  sources retains failed fragment2045, but is not native/navigation validation.
+  Require fresh idle, startup, near and moving-human parked exclusion gates,
+  then a guarded full mission. Preserve v3 failure and all primary/main/PR117
+  holds. See docs/stationary_furniture_memory.md for scope and results.
+
 - Atcacbb56 all four fresh long-human prerequisites PASSED, then native v3
   FAILED nearby_track_lost at83.016667s/676fields/2waypoints before the human
   trigger. Minimum clearance.442919m/CBF.177991/stopdrift.004666m; zero actor
@@ -8,8 +28,8 @@
   returns .158283..168582m away, exceeding unchanged .10m; do not relabel it
   as observed, widen the gate, or enable static memory for humans. Report SHA
   63e03e7eab1c279492bc77d726837a76d4190d3cd6df61ab783809e9ac34b7f9.
-  Broader stationary-furniture memory in a mixed dynamic scene is a pending
-  user research-policy decision, not integrated. Accepted continuous route-only
+  Broader stationary-furniture memory was then pending (later user approval
+  and separate implementation are recorded above). Accepted continuous route-only
   video v2 and earlier separate human chapters remain available.3269units/
   65focused/Ruff passed. Preserve all failures and primary/main/PR117 holds.
 
