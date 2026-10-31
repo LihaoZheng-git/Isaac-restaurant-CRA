@@ -4,6 +4,36 @@ import math
 import numpy as np
 
 
+def validate_tracking_uncertainty(records, actor_records, *, reference_radius_m):
+    """Independent current/available-future containment, never estimator input."""
+    rows = []
+    for record in records:
+        diagnostics = record.get('diagnostics', record)
+        for region in diagnostics.get('tracking_uncertainty_regions', ()):
+            t = region['evaluation_timestamp_seconds']
+            nearest = min(actor_records, key=lambda r: abs(r['time']-t)) if actor_records else None
+            future = [r for r in actor_records if t <= r['time'] <= t+region['checked_horizon_seconds']]
+            aligned = nearest is not None and abs(nearest['time']-t) <= .05
+            samples = ([nearest] if aligned else []) + future
+            margins = [region['radius_m']-reference_radius_m-np.linalg.norm(
+                np.array(region['center_world_xy'])-r['actor_xyz'][:2]) for r in samples]
+            expected = region['body_radius_prior_m'] + region['maximum_speed_prior_mps'] * (
+                t-region['original_lidar_timestamp_seconds']+region['checked_horizon_seconds'])
+            rows.append(dict(source_time=t, track_id=region['track_id'],
+                aligned=aligned, source_age=region['source_age_seconds'],
+                minimum_containment_margin_m=float(min(margins)) if margins else None,
+                available_future_queries=len(future),
+                full_future_available=bool(actor_records and actor_records[-1]['time'] >= t+region['checked_horizon_seconds']),
+                explicit_original_source=region['status']=='prior' and not region['current_identity_verified']
+                    and not region['current_motion_measured'] and region['source_age_seconds'] >= 0
+                    and math.isclose(region['radius_m'], expected, abs_tol=1e-9),
+                original_risk_floor=region['applied_cra_phi'] >= region['original_applied_risk']))
+    return dict(passed=all(r['aligned'] and r['explicit_original_source'] and r['original_risk_floor']
+        and r['minimum_containment_margin_m'] >= -1e-9 for r in rows),
+        exercised=bool(rows), rows=rows,
+        scope='independent source/available-future actor containment; truncated final horizons explicitly recorded; no truth in control')
+
+
 def validate_human_body_envelopes(records, actor_records, *, reference_radius_m):
     if not math.isfinite(reference_radius_m) or reference_radius_m <= 0:
         raise ValueError("reference radius must be positive and finite")

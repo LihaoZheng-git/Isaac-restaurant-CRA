@@ -204,6 +204,7 @@ class LiveObjectResult:
     objects: tuple = ()
     source_occupancy_grid: object | None = None
     furniture_memory_snapshot: object | None = None
+    tracking_uncertainty_snapshot: object | None = None
 
 
 class LiveObjectPerception:
@@ -246,6 +247,7 @@ class LiveObjectPerception:
         motion_passing_config=None,
         human_body_envelope_config=None,
         human_track_recovery_config=None,
+        human_tracking_uncertainty=False,
         human_fragment_coverage_config=None,
         human_observed_occupancy_only=False,
         human_boundary_flux=None,
@@ -310,7 +312,10 @@ class LiveObjectPerception:
         if human_track_recovery_config is not None and human_body_envelope_config is None:
             raise ValueError('track recovery requires explicit human body geometry')
         self.human_body_envelope = HumanBodyEnvelope(human_body_envelope_config,
-            recovery_config=human_track_recovery_config) if human_body_envelope_config is not None else None
+            recovery_config=human_track_recovery_config,
+            planning_uncertainty=human_tracking_uncertainty) if human_body_envelope_config is not None else None
+        if human_tracking_uncertainty and self.human_body_envelope is None:
+            raise ValueError("tracking uncertainty requires current human geometry initialization")
         from robot.perception.human_mass_identity_retention import HumanMassIdentityRetention
         if (not isinstance(human_mass_body_identity_retention, bool)
             or human_mass_body_identity_retention and (self.human_body_envelope is None
@@ -330,6 +335,8 @@ class LiveObjectPerception:
         if human_observed_occupancy_only and human_fragment_coverage_config is not None:
             raise ValueError("observed-only geometry cannot cover fragments with an unoccupied prior disk")
         self.human_observed_occupancy_only = human_observed_occupancy_only
+        if human_tracking_uncertainty and (human_observed_occupancy_only or predictive_human_geometry_config is not None):
+            raise ValueError("tracking uncertainty requires occupied body geometry without the separate predictive ablation")
         from robot.safety.predictive_human_geometry import HumanGeometryForecastConfig, PredictiveHumanGeometryMemory
         if predictive_human_geometry_config is not None and (
             not isinstance(predictive_human_geometry_config, HumanGeometryForecastConfig)

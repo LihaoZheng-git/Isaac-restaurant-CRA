@@ -41,6 +41,8 @@ parser.add_argument('--human-track-recovery', action='store_true',
                     help='explicit bounded current-positive human identity recovery; no wheel commands')
 parser.add_argument('--stationary-furniture-memory', action='store_true',
                     help='separate bounded furniture memory exclusion benchmark; no wheels')
+parser.add_argument('--human-tracking-uncertainty', action='store_true',
+                    help='growing geometry prior for unresolved human tracking; zero wheels')
 parser.add_argument('--predictive-human-geometry', action='store_true',
                     help='separate zero-wheel LiDAR source-window motion/geometry PRIOR benchmark; future actor truth only scores it')
 parser.add_argument('--observed-motion-reference', action='store_true',
@@ -95,6 +97,8 @@ if args.human_prediction_uncertainty_floor is not None and (not args.predictive_
     parser.error('adaptive uncertainty requires explicit prediction/preparation and .30<=floor<=ceiling<=1m/s')
 if args.human_mass_body_identity_retention and not args.identity_selection_body_envelope:
     parser.error('adult mass identity retention requires explicit current body identity')
+if args.human_tracking_uncertainty and (not args.human_track_recovery or args.predictive_human_geometry):
+    parser.error('tracking uncertainty requires recovery without separate predictive geometry')
 if args.human_track_recovery and not args.identity_selection_body_envelope:
     parser.error('track recovery requires explicit current body identity')
 if (args.parallel_preparation and not args.predictive_human_geometry
@@ -478,6 +482,7 @@ def main():
             maximum_identity_prior_selection_age_seconds=args.human_passing_identity_prior_max_age,
             identity_selection_body_envelope=args.identity_selection_body_envelope,
             human_track_recovery=args.human_track_recovery,
+            human_tracking_uncertainty=args.human_tracking_uncertainty,
             stationary_furniture_memory=args.stationary_furniture_memory,
             predictive_human_geometry=args.predictive_human_geometry,
             human_prediction_uncertainty_rate=args.human_prediction_uncertainty_rate,

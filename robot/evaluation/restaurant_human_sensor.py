@@ -94,6 +94,7 @@ class RestaurantHumanSensorDiagnostic:
         maximum_identity_prior_selection_age_seconds=0.,
         identity_selection_body_envelope=False,
         human_track_recovery=False,
+        human_tracking_uncertainty=False,
         predictive_human_geometry=False,
         human_prediction_uncertainty_rate=.25,
         human_prediction_uncertainty_floor=None,
@@ -248,6 +249,7 @@ class RestaurantHumanSensorDiagnostic:
             human_body_envelope_config=self._identity_selection_envelope_config()
                 if identity_selection_body_envelope else None,
             human_track_recovery_config=HumanTrackRecoveryConfig() if human_track_recovery else None,
+            human_tracking_uncertainty=human_tracking_uncertainty,
             segmenter=SamInstanceSegmenter(
                 SamInstanceConfig(
                     paths["sam"],
@@ -502,6 +504,7 @@ class RestaurantHumanSensorDiagnostic:
                     "motion_aware_passing":result.diagnostics.get("motion_aware_passing"),
                     "human_body_envelope_priors":result.diagnostics.get("human_body_envelope_priors", ()),
                     "human_track_recovery":result.diagnostics.get("human_track_recovery"),
+                    "tracking_uncertainty_regions":result.diagnostics.get("tracking_uncertainty_regions", ()),
                     "human_mass_body_identity_retention":result.diagnostics.get("human_mass_body_identity_retention"),
                     "predictive_human_geometry":result.diagnostics.get("predictive_human_geometry"),
                     "observed_motion_reference":result.diagnostics.get("observed_motion_reference"),
@@ -595,4 +598,8 @@ class RestaurantHumanSensorDiagnostic:
         report = summarize_human_sensor(self.records, self.truth)
         report["capture_worker_rejections"] = self.rejections
         self.save("human-sensor-validation.json", report)
+        if self.worker.human_body_envelope is not None and self.worker.human_body_envelope.planning_uncertainty:
+            from robot.evaluation.human_body_envelope_validation import validate_tracking_uncertainty
+            self.save("tracking-uncertainty-validation.json", validate_tracking_uncertainty(
+                self.records, self.truth, reference_radius_m=.4))
         return report

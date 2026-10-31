@@ -684,6 +684,40 @@ def assess_all_objects(worker, packet):
         from robot.evaluation.crossing_strategy import zero_tangential_bias
         field_guidance_policy, applied_guidance, baseline_audit = zero_tangential_bias(
             field_guidance_policy, applied_guidance, baseline_audit)
+    uncertainty_snapshot, uncertainty_audit = None, []
+    if envelope_memory is not None and envelope_memory.planning_uncertainty:
+        from robot.perception.tracking_uncertainty import TrackingUncertaintySnapshot, SOURCE as UNCERTAINTY_SOURCE
+        for body in envelope_audit:
+            envelope_memory.geometry_policies[body['track_id']] = applied_guidance[body['envelope_track_id']]
+        region_policies = []
+        for region in envelope_memory.uncertainty_regions:
+            previous_policy = envelope_memory.geometry_policies.get(region.track_id)
+            if previous_policy is None:
+                raise ValueError("uncertainty occupancy requires an original verified geometry policy")
+            unknown = adapt_physical_factors(PhysicalAttributes.unknown(track_id=region.geometry_id,
+                timestamp_seconds=packet.camera_timestamp_seconds), timestamp_seconds=packet.camera_timestamp_seconds)
+            floor, _ = evaluate_object_risk(unknown, worker.object_factor_prior_config)
+            guidance = max((previous_policy, floor.guidance_parameters,
+                applied_guidance.get(region.track_id, previous_policy)), key=lambda g: g.risk)
+            extra, _, _, _ = region.cells(grid_config, worker.anchor, worker.anchor_yaw)
+            points = np.concatenate((points, extra))
+            point_ids = np.concatenate((point_ids, np.full(len(extra), region.geometry_id, dtype=np.int64)))
+            applied_guidance[region.geometry_id] = guidance
+            c, s = math.cos(packet.robot_yaw), math.sin(packet.robot_yaw)
+            center_robot = (np.asarray(region.center_world_xy)-packet.robot_position_world_xy) @ np.array([[c, -s], [s, c]])
+            semantics.append(SemanticObstacle(replace(tracks[0], track_id=region.geometry_id,
+                centroid_world_xy=region.center_world_xy, centroid_robot_xy=tuple(center_robot),
+                point_count=len(extra), velocity_world_xy=(0., 0.), velocity_robot_xy=(0., 0.),
+                observation_count=0, matched_previous_track=False), "unknown", 0., UNCERTAINTY_SOURCE))
+            region_policies.append((region, guidance))
+            row = dict(region.diagnostic(), applied_cra_phi=guidance.risk,
+                field_occupied_cells=len(extra), original_applied_risk=previous_policy.risk)
+            uncertainty_audit.append(row)
+            baseline_audit.append(dict(track_or_group_id=region.geometry_id, observed_class="unknown",
+                class_basis=UNCERTAINTY_SOURCE, cra_phi=guidance.risk, applied_field_risk=guidance.risk,
+                boundary_flux=guidance.boundary_flux, **{"lambda": guidance.tangential_strength},
+                field_used_for_control=True, factor_basis="original_risk_floor_and_configured_unknown_priors"))
+        uncertainty_snapshot = TrackingUncertaintySnapshot(packet.sensor_timestamp_seconds, tuple(region_policies))
     furniture_snapshot, furniture_audit = None, None
     if furniture_memory is not None:
         from robot.perception.stationary_furniture_memory import (
@@ -691,6 +725,10 @@ def assess_all_objects(worker, packet):
         )
         excluded, person_exclusion_audit = person_exclusion_points(world, projection, worker.visual_person_frame(packet),
             packet.camera_frame_id, packet.camera_timestamp_seconds, envelope_audit)
+        if uncertainty_snapshot is not None:
+            for region, _ in uncertainty_snapshot.regions_and_guidance:
+                selected = np.linalg.norm(world[:, :2]-region.center_world_xy, axis=1) <= region.radius_m
+                excluded = np.concatenate((excluded, world[selected, :2]))
         # An original geometric track may contain separately owned instance and
         # unmatched support returns. Remember its strongest actually applied risk.
         original_guidance = {}
@@ -929,6 +967,7 @@ def assess_all_objects(worker, packet):
         "motion_passing_reference_source_timestamp_seconds": field.motion_passing_reference_source_timestamp_seconds,
         "human_body_envelope_priors": envelope_audit,
         "human_track_recovery": None if envelope_memory is None else envelope_memory.recovery_audit,
+        "tracking_uncertainty_regions": uncertainty_audit,
         "human_track_recovery_config": None if envelope_memory is None or envelope_memory.recovery_config is None
             else asdict(envelope_memory.recovery_config),
         "human_mass_body_identity_retention": human_mass_audit,
@@ -1006,4 +1045,5 @@ def assess_all_objects(worker, packet):
         tuple(objects),
         grid,
         furniture_snapshot,
+        uncertainty_snapshot,
     )

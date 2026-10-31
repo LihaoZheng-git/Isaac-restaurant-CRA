@@ -26,6 +26,7 @@ class NearbyTrackLossConfig:
     allow_unique_full_surface_merges: bool = False
     allow_many_to_one_full_surface_merges: bool = False
     allow_stationary_furniture_memory: bool = False
+    allow_tracking_uncertainty: bool = False
     allow_current_visual_part_associations: bool = False
     maximum_visual_mask_boundary_pixels: int = 0
     maximum_merge_speed_mps: float = 2.0
@@ -34,7 +35,7 @@ class NearbyTrackLossConfig:
     maximum_merge_age_seconds: float = 0.35
 
     def __post_init__(self):
-        if not isinstance(self.allow_stationary_furniture_memory, bool) or not isinstance(self.allow_observed_fragment_merges, bool) or not isinstance(
+        if not isinstance(self.allow_tracking_uncertainty, bool) or not isinstance(self.allow_stationary_furniture_memory, bool) or not isinstance(self.allow_observed_fragment_merges, bool) or not isinstance(
             self.use_observed_merge_velocity, bool
         ) or not isinstance(self.allow_positive_extent_merges, bool) or not isinstance(
             self.allow_positive_surface_merges, bool
@@ -68,6 +69,7 @@ class NearbyTrackLossConfig:
                 "allow_unique_full_surface_merges",
                 "allow_many_to_one_full_surface_merges",
                 "allow_stationary_furniture_memory",
+                "allow_tracking_uncertainty",
                 "allow_current_visual_part_associations",
                 "maximum_visual_mask_boundary_pixels",
             }:
@@ -95,6 +97,7 @@ class NearbyTrackLossGuard:
         self.velocities = {}
         self.coobserved = {}
         self.positive_surfaces = {}
+        self.positive_risks = {}
         from robot.perception.human_fragment_coverage import HumanFragmentCoverage
         self.fragment_coverage = HumanFragmentCoverage(fragment_coverage_config) if fragment_coverage_config is not None else None
 
@@ -115,6 +118,7 @@ class NearbyTrackLossGuard:
         current_camera_timestamp_seconds=None,
         current_visual_part_associations=(),
         current_furniture_snapshot=None,
+        current_uncertainty_snapshot=None,
     ):
         if (
             isinstance(source_time, bool)
@@ -183,7 +187,7 @@ class NearbyTrackLossGuard:
                     "fragment merge requires aligned current positive sensor geometry"
                 )
             geometry = (xyz, ids)
-        if self.config.allow_positive_surface_merges and geometry is None:
+        if (self.config.allow_positive_surface_merges or self.config.allow_tracking_uncertainty) and geometry is None:
             raise ValueError("positive surface association requires aligned current geometry")
         part_children = set()
         if current_visual_part_associations:
@@ -601,6 +605,23 @@ class NearbyTrackLossGuard:
                             furniture_coverage.append(proof)
         elif current_furniture_snapshot is not None:
             raise ValueError("furniture coverage requires explicit opt-in")
+        uncertainty_coverage = []
+        if self.config.allow_tracking_uncertainty:
+            from robot.perception.tracking_uncertainty import TrackingUncertaintySnapshot
+            if (not isinstance(current_uncertainty_snapshot, TrackingUncertaintySnapshot)
+                or current_uncertainty_snapshot.source_time != source_time or current_occupancy_grid is None
+                or current_grid_anchor_xy is None or current_grid_anchor_yaw is None or current_track_risks is None):
+                raise ValueError("tracking uncertainty requires current typed geometry and actual field")
+            for key, (_, last_seen) in pending.items():
+                surface = self.positive_surfaces.get(key)
+                if key not in current and surface is not None and surface[1] == last_seen:
+                    proof = current_uncertainty_snapshot.coverage(key, last_seen, surface[0],
+                        self.positive_risks.get(key, math.inf), current_occupancy_grid,
+                        current_grid_anchor_xy, current_grid_anchor_yaw)
+                    if proof is not None:
+                        uncertainty_coverage.append(proof)
+        elif current_uncertainty_snapshot is not None:
+            raise ValueError("tracking uncertainty requires explicit opt-in")
         blocking = []
         for key, (point, last_seen) in pending.items():
             age = float(source_time - last_seen)
@@ -611,6 +632,7 @@ class NearbyTrackLossGuard:
                 and not any(p["track_id"] == key for p in prior_coverage["covered"])
                 and not any(p["track_id"] == key for p in furniture_coverage)
                 and not any(p["track_id"] == key for p in observed_furniture_coverage)
+                and not any(p["track_id"] == key for p in uncertainty_coverage)
             ):
                 blocking.append(
                     {
@@ -642,7 +664,7 @@ class NearbyTrackLossGuard:
         self.coobserved = {
             pair: t for pair, t in coobserved.items() if all(k in pending for k in pair)
         }
-        if self.config.allow_positive_surface_merges:
+        if self.config.allow_positive_surface_merges or self.config.allow_tracking_uncertainty:
             # Association history only: never feed these old points to the field
             # or renew their source epoch when only the parent is still visible.
             self.positive_surfaces = {
@@ -650,9 +672,12 @@ class NearbyTrackLossGuard:
                 if key in current else self.positive_surfaces[key]
                 for key in pending
                 if key in current or key in self.positive_surfaces
-                and source_time - self.positive_surfaces[key][1]
-                <= self.config.maximum_merge_age_seconds + 1e-9
+                and (self.config.allow_tracking_uncertainty or source_time - self.positive_surfaces[key][1]
+                <= self.config.maximum_merge_age_seconds + 1e-9)
             }
+        if self.config.allow_tracking_uncertainty:
+            self.positive_risks = {key: current_track_risks[key] if key in current else self.positive_risks[key]
+                for key in pending if key in current or key in self.positive_risks}
         return {
             "blocked": bool(blocking),
             "blocking_tracks": blocking,
@@ -666,6 +691,7 @@ class NearbyTrackLossGuard:
             "body_prior_coverage_rejections": prior_coverage["rejected"],
             "furniture_prior_covered_missing_tracks": furniture_coverage,
             "furniture_observed_covered_missing_tracks": observed_furniture_coverage,
+            "uncertainty_geometry_covered_missing_tracks": uncertainty_coverage,
             **({"positive_surface_route_enabled": True,
                 "positive_surface_merge_rejections": surface_rejections,
                 "many_to_one_full_surface_route_enabled": self.config.allow_many_to_one_full_surface_merges,

@@ -12,9 +12,10 @@ from robot.risk.physical_factor_adapter import adapt_physical_factors
 
 def apply_body_identity_mass_retention(memory, body_memory, tracking, packet, objects, frames, policies, prior_config):
     fresh = {}
+    uncertain_ids = {r.track_id for r in body_memory.uncertainty_regions}
     for item, frame in zip(objects, frames):
         cue = frame.get('geometry_diagnostics', {}).get('human_mass_prior', {})
-        if (frame['accepted'] and cue.get('source') == HUMAN_MASS_PRIOR_SOURCE
+        if (item.attributes.track_id not in uncertain_ids and frame['accepted'] and cue.get('source') == HUMAN_MASS_PRIOR_SOURCE
             and cue.get('value') is not None and cue.get('timestamp_seconds') == packet.camera_timestamp_seconds):
             # Read the actual current specialist result, before the generic
             # property cache can freeze/replace it with an older observation.

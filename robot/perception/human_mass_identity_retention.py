@@ -59,6 +59,7 @@ class HumanMassIdentityRetention:
             and r['decision'] == 'temporarily_outside_checked_reach'
             and r['evaluation_timestamp_seconds'] == tracking.timestamp_seconds
             and r['clearance_m'] > 0}
+        excluded.update(r.track_id for r in body_memory.uncertainty_regions)
         active_identities = {key: value for key, value in identities.items() if key not in excluded}
         for key, identity in active_identities.items():
             track = tracks.get(key)

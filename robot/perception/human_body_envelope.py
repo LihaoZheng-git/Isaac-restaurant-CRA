@@ -78,7 +78,7 @@ class HumanBodyEnvelopeConfig:
 
 
 class HumanBodyEnvelope:
-    def __init__(self, config, *, recovery_config=None):
+    def __init__(self, config, *, recovery_config=None, planning_uncertainty=False):
         if not isinstance(config, HumanBodyEnvelopeConfig):
             raise TypeError("config must be HumanBodyEnvelopeConfig")
         self.config = config
@@ -86,15 +86,21 @@ class HumanBodyEnvelope:
         if recovery_config is not None and not isinstance(recovery_config, HumanTrackRecoveryConfig):
             raise TypeError("recovery_config must be HumanTrackRecoveryConfig")
         self.recovery_config = recovery_config
+        if not isinstance(planning_uncertainty, bool) or planning_uncertainty and recovery_config is None:
+            raise ValueError("planning uncertainty requires explicit bounded recovery configuration")
+        self.planning_uncertainty = planning_uncertainty
+        self.uncertainty_regions = ()
+        self.geometry_policies = {}
         self.identities = {}
         self.recovery_audit = []
 
     def update(self, tracking, fresh_person_cues, *, camera_timestamp_seconds, robot_world_xy=None):
         """Return circles, or block publication rather than erase an old body.
 
-        The caller works on a transaction copy. Any missing/ambiguous known
-        identity prevents publication until a fresh accepted association can
-        resolve it. No source time is renewed by LiDAR-only identity retention.
+        The caller works on a transaction copy. Legacy unresolved identities
+        block publication; the explicit planning-uncertainty mode instead
+        retains their reachable geometry without claiming a current identity.
+        No source time is renewed by LiDAR-only identity retention.
         """
         now = tracking.timestamp_seconds
         if not math.isfinite(now) or not math.isfinite(camera_timestamp_seconds):
@@ -107,7 +113,21 @@ class HumanBodyEnvelope:
             raise ValueError("human envelope camera/LiDAR epoch mismatch")
         tracks = {t.track_id: t for t in tracking.tracked_obstacles}
         updated = dict(self.identities)
-        result, recovery_audit = [], []
+        result, recovery_audit, uncertain = [], [], []
+        def retain_uncertainty(key, previous, reason):
+            if not self.planning_uncertainty or previous is None:
+                return False
+            cfg = self.recovery_config
+            if np.linalg.norm(previous['velocity']) > cfg.maximum_human_speed_mps:
+                raise ValueError("previous human motion exceeds the uncertainty speed prior")
+            from robot.perception.tracking_uncertainty import ReachableTrackRegion
+            region = ReachableTrackRegion(key, tuple(previous['center']), previous['lidar_timestamp'],
+                previous['camera_timestamp'], previous['camera_frame'], now,
+                self.config.body_radius_m+self.config.centroid_uncertainty_m,
+                cfg.maximum_human_speed_mps, cfg.checked_horizon_seconds, reason)
+            uncertain.append(region)
+            recovery_audit.append(dict(decision='planning_geometry_uncertainty', **region.diagnostic()))
+            return True
         candidates = {}
         if self.recovery_config is not None:
             # Only missing identities may move to a NEW, uniquely compatible
@@ -132,6 +152,8 @@ class HumanBodyEnvelope:
                 if sum(new in matches for matches in candidates.values()) == 1:
                     key, track, reassociated = new, tracks[new], True
             if track is None:
+                if retain_uncertainty(old_key, previous, "missing_positive_track"):
+                    continue
                 if self.recovery_config is not None:
                     proof = self.recovery_config.missing_path_clearance(previous, now=now,
                         robot_xy=robot_world_xy, body_radius_m=self.config.body_radius_m
@@ -153,6 +175,10 @@ class HumanBodyEnvelope:
                 or not np.isfinite(center).all()
                 or not np.isfinite(velocity).all()
             ):
+                if (center.shape == (2,) and velocity.shape == (2,) and np.isfinite(center).all()
+                    and np.isfinite(velocity).all()
+                    and retain_uncertainty(old_key, previous, "insufficient_current_support")):
+                    continue
                 raise ValueError(
                     f"human envelope {key}: insufficient current LiDAR support"
                 )
@@ -169,6 +195,8 @@ class HumanBodyEnvelope:
                 < self.config.competitor_distance_m
             ]
             if competitors:
+                if retain_uncertainty(old_key, previous, "ambiguous_current_association"):
+                    continue
                 raise ValueError(
                     f"human envelope {key}: ambiguous competing tracks {competitors}"
                 )
@@ -210,6 +238,9 @@ class HumanBodyEnvelope:
                     or np.linalg.norm(previous['velocity']) > self.recovery_config.maximum_human_speed_mps):
                     failed_gates.append('recovery_motion_scope')
                 if failed_gates:
+                    if ('recovery_motion_scope' not in failed_gates and age >= 0 and dt > 0
+                        and retain_uncertainty(old_key, previous, ','.join(failed_gates))):
+                        continue
                     raise ValueError(
                         f"human envelope {key}: original identity prior expired or continuity unresolved; "
                         f"failed_gates={','.join(failed_gates)}; lidar_source_gap_seconds={dt:.9g}; "
@@ -263,6 +294,7 @@ class HumanBodyEnvelope:
             )
         self.identities = updated
         self.recovery_audit = recovery_audit
+        self.uncertainty_regions = tuple(uncertain)
         return result
 
     def passing_selection_priors(self, tracking, *, camera_timestamp_seconds, maximum_age_seconds):
@@ -276,6 +308,8 @@ class HumanBodyEnvelope:
             raise ValueError("selection identity age must be in (0,.5]")
         result = {}
         for track in tracking.tracked_obstacles:
+            if any(r.track_id == track.track_id for r in self.uncertainty_regions):
+                continue
             entry = self.identities.get(track.track_id)
             if entry is None:
                 continue

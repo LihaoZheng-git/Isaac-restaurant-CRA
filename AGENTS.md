@@ -1,5 +1,27 @@
 # CRA repository guidance
 
+- The user now approves tracking uncertainty as planning input instead of an
+  automatic stop on a lost ID. Separate default-OFF --human-tracking-uncertainty
+  retains unresolved known-human geometry at its LAST VERIFIED LiDAR center:
+  original body radius plus1m/s*(original source age+1.55s checked horizon).
+  This is an all-direction walking-speed PRIOR, not measured motion, identity,
+  free space, or a new factor score. Missing, expired or ambiguous associations
+  supply a separate raster to the current field; MPC/dense/analytical checks
+  decide feasibility. Preserve actual raw occupancy and at least the original
+  applied risk/configured unknown floor, fixed lambda and all source clocks.
+  Fresh-current body/mass/passing selection must exclude these uncertain records.
+  Existing unique <=.6s reassociation stays bounded; no long-gap identity merge.
+  Raster work clips to the local grid, while diagnostics retain the full region.
+  Nearby continuity exceptions require original whole geometry/current full
+  region/risk/flux coverage, never just a centroid or a prior label. Exclude the
+  uncertain region from stationary-furniture enrollment. Independent actor
+  truth audits current and available future containment only, not runtime input.
+  Current selected scope is qualified furniture and separated walking humans;
+  arbitrary unrecognized dynamic obstacles/general occlusion remain unvalidated.
+  Genuine geometric conflicts, invalid sensors and no verified command can
+  still stop; this is not a universal liveness/safety guarantee. Require fresh
+  stationary gates and full actual arrival/stopping before demo acceptance.
+
 - Furniture v6 at ee82394 passed all four prerequisites and the previous
   furniture-loss locations, then FAILED near final arrival:145.333333s,
   947fields,7guides,.391794m clearance/.001319m stop drift. Human motion,
@@ -16,7 +38,8 @@
   sources/55retained, human sensing/body/selection/mass/exclusion/zero wheels,
   unchanged source. This does not validate a far-human wheel mission or long
   identity expiry.3329units122.39s/165focused9.21s/Ruff/diff/CLIhelpPASS;
-  distant-human continuation is a proposed policy awaiting the user's decision.
+  The then-pending distant-human policy is now superseded by the user's approval
+  and the separate planning-uncertainty mode documented above.
   Keep PR204 draft/development-parent only and all main/primary/PR117 holds.
 
 - Furniture v5 at0954fb1 passed all four prerequisites and all earlier stopping

@@ -162,6 +162,8 @@ parser.add_argument("--human-body-envelope-radius", type=float,
                     help="opt-in configured body-radius occupancy PRIOR; no actor geometry is read")
 parser.add_argument("--human-envelope-centroid-uncertainty", type=float, default=0.2)
 parser.add_argument("--human-envelope-identity-max-age", type=float, default=30.0)
+parser.add_argument("--human-tracking-uncertainty", action="store_true",
+                    help="represent unresolved human geometry as a growing planning prior; no factor or identity renewal")
 parser.add_argument("--human-track-recovery", action="store_true",
                     help="explicit .6 s positive-track recovery and full-reach missing-person exclusion prior; original visual clocks retained")
 parser.add_argument("--human-observed-occupancy-only", action="store_true",
@@ -458,6 +460,9 @@ if args.human_body_envelope_radius is not None:
         parser.error(str(exc))
     if not (args.restaurant_human and args.human_mass_prior and args.persistent_object_risk_map) or args.human_carry_bowl or args.static_occupancy_memory_prior:
         parser.error("human envelope requires standalone live human/person-prior object-map mode without static memory")
+if args.human_tracking_uncertainty and (not args.human_track_recovery or args.human_observed_occupancy_only
+    or args.predictive_human_geometry):
+    parser.error("tracking uncertainty requires occupied recovery mode without the separate predictive ablation")
 if args.human_track_recovery and (args.human_body_envelope_radius is None
     or args.human_observed_occupancy_only or args.mpc_horizon_steps != 6):
     parser.error("track recovery requires occupied human body prior and the full six-step horizon")
@@ -1268,6 +1273,7 @@ def main():
             centroid_uncertainty_m=args.human_envelope_centroid_uncertainty,
             maximum_identity_age_seconds=args.human_envelope_identity_max_age) if args.human_body_envelope_radius is not None else None,
         human_observed_occupancy_only=args.human_observed_occupancy_only,
+        human_tracking_uncertainty=args.human_tracking_uncertainty,
         human_track_recovery_config=HumanTrackRecoveryConfig(
             robot_radius_m=math.hypot(max(stationary.ROBOT_FRONT_EXTENT, stationary.ROBOT_REAR_EXTENT) + stationary.ROBOT_SAFETY_MARGIN,
                 max(stationary.ROBOT_LEFT_EXTENT, stationary.ROBOT_RIGHT_EXTENT) + stationary.ROBOT_SAFETY_MARGIN))
@@ -2114,6 +2120,7 @@ def main():
         allow_unique_full_surface_merges=args.human_unique_full_surface,
         allow_many_to_one_full_surface_merges=args.long_service_parallel,
         allow_stationary_furniture_memory=args.stationary_furniture_memory,
+        allow_tracking_uncertainty=args.human_tracking_uncertainty,
         maximum_visual_mask_boundary_pixels=args.human_fragment_mask_boundary_pixels,
         allow_current_visual_part_associations=args.human_visual_fragment_association,
         use_observed_merge_velocity=human is not None),
@@ -2148,7 +2155,7 @@ def main():
                if source_packet.scan_pose_samples_world is not None else {})}
 
     def coverage_prior_inputs(result, source_packet):
-        if fragment_coverage_config is None and not args.stationary_furniture_memory:
+        if fragment_coverage_config is None and not args.stationary_furniture_memory and not args.human_tracking_uncertainty:
             return {}
         return {
             "current_track_risks": {row["track_or_group_id"]: row["applied_field_risk"]
@@ -2159,6 +2166,7 @@ def main():
             "current_grid_anchor_yaw": result.field.anchor_yaw,
             "current_camera_timestamp_seconds": source_packet.camera_timestamp_seconds,
             "current_furniture_snapshot": result.furniture_memory_snapshot,
+            "current_uncertainty_snapshot": result.tracking_uncertainty_snapshot,
         }
 
     if coverage_guard is not None:
@@ -2342,6 +2350,7 @@ def main():
                             or coverage_result["prior_covered_missing_tracks"]
                             or coverage_result["furniture_prior_covered_missing_tracks"]
                             or coverage_result["furniture_observed_covered_missing_tracks"]
+                            or coverage_result["uncertainty_geometry_covered_missing_tracks"]
                             or coverage_result.get("positive_surface_merge_rejections")):
                             if any(e.get("coexistence_basis") in {"retained_original_coobservation", "recent_original_coobservation_positive_extent"}
                                    or e.get("coexistence_basis") == "recent_original_coobservation_positive_surface"
@@ -2702,6 +2711,13 @@ def main():
             save_json("live-human-envelope-validation.json", envelope_validation)
             if not args.human_observed_occupancy_only:
                 completed = completed and envelope_validation["passed"]
+        if args.human_tracking_uncertainty:
+            from robot.evaluation.human_body_envelope_validation import validate_tracking_uncertainty
+            uncertainty_validation = validate_tracking_uncertainty(live_fields, human.records,
+                reference_radius_m=human.setup['collision_radius_m'])
+            completed = completed and uncertainty_validation['passed']
+            human_validation['tracking_uncertainty_validation'] = uncertainty_validation
+            save_json('tracking-uncertainty-validation.json', uncertainty_validation)
         save_json("human-navigation-validation.json", human_validation)
         if human.departure is not None:
             save_json("human-departure-events.json", human.departure.events)
@@ -2865,6 +2881,7 @@ def main():
         "crossing_strategy_validation": strategy_validation,
         "encounter_guidance_validation": encounter_validation,
         "native_human_mode": args.restaurant_human,
+        "human_tracking_uncertainty_enabled": args.human_tracking_uncertainty,
         "human_lidar_cluster_radius_m": args.human_cluster_radius,
         "human_lidar_preprocessing_range_m": args.human_lidar_range if human is not None else 5.0,
         "native_carried_bowl": args.human_carry_bowl,
