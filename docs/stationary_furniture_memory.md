@@ -243,7 +243,17 @@ The demo and parked component now expose `--human-lidar-range` in[7.5,10]m,
 with the original7.5m default. The separate recipe
 `configs/restaurant_furniture_memory_range10_v1.json` selects10m. This uses only
 actual measured returns and does not widen the field or renew any identity,
-factor, command or occupancy lease. A new native component gate is pending.
+factor, command or occupancy lease. At `9fbca3a`, the wider parked component
+PASSED with115 sources (55 exercising retained furniture),27 fresh oncoming
+selections, and passing human sensor/body/mass/contact/furniture-exclusion
+checks. Wheels remained zero; runtime source was unchanged. Its325.64s wall
+time is not real-time performance. This near-view parked component and the
+far-range archive replay together remain distinct from a new full mission.
+See `outputs/furniture_memory/component-v7`.
+
+The final runtime source passes165 focused and3,329 full unit tests (122.39s),
+Ruff, CLI-help and diff checks. The range-only recipe comparison confirms no
+other command option changed.
 
 A second, distinct limit remains: the human's original visual identity in v6
 was acquired at124.5s and expires at154.5s under the unchanged30s policy.

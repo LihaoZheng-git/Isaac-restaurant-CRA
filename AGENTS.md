@@ -10,9 +10,12 @@
   retained153/149 actor-region returns at10m, versus zero at7.5m. Independent
   whole-scan clustering found centers within.107m; oracle region only scores
   outputs, never supplies extraction/tracking/control. Separate explicit
-  --human-lidar-range10 preserves all original nearby returns, field scope,
+  --human-lidar-range 10 preserves all original nearby returns, field scope,
   identity30s/gap.6s limits and legacy7.5m defaults. Range alone cannot renew
-  original visual identity. Wider native component validation is pending;
+  original visual identity. At9fbca3a the wider parked component PASSED115
+  sources/55retained, human sensing/body/selection/mass/exclusion/zero wheels,
+  unchanged source. This does not validate a far-human wheel mission or long
+  identity expiry.3329units122.39s/165focused9.21s/Ruff/diff/CLIhelpPASS;
   distant-human continuation is a proposed policy awaiting the user's decision.
   Keep PR204 draft/development-parent only and all main/primary/PR117 holds.
 
