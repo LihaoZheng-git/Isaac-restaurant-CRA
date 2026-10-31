@@ -1,4 +1,7 @@
 from dataclasses import replace
+import json
+from pathlib import Path
+import sys
 
 import numpy as np
 import pytest
@@ -20,6 +23,31 @@ from robot.safety.local_occupancy_grid import (
 from robot.safety.safe_sage_guidance_policy import SafeSAGEGuidanceParameters
 from test_human_body_envelope import tracking, cue
 from test_human_track_recovery import missing
+
+
+@pytest.mark.parametrize(
+    "case", ["long-parallel", "long-parallel-near", "long-parallel-component"]
+)
+def test_native_recipe_argument_validation_before_simulator_start(
+    case, monkeypatch, tmp_path
+):
+    root = Path(__file__).resolve().parents[2]
+    recipe = json.loads(
+        (root / "configs/restaurant_tracking_uncertainty_v1.json").read_text()
+    )
+    command = recipe["commands"][case]
+    source = root / command[0]
+    # Exercise real parser/semantic checks without creating outputs or starting Kit.
+    marker = "args.output.mkdir"
+    content = source.read_text()
+    assert marker in content
+    prefix = content.split(marker, 1)[0]
+    monkeypatch.setattr(sys, "argv", [*command, "--output", str(tmp_path / "native")])
+    monkeypatch.setattr(sys, "path", list(sys.path))
+    scope = {"__file__": str(source), "__name__": "cli_validation_test"}
+    exec(compile(prefix, str(source), "exec"), scope)
+    assert scope["args"].human_tracking_uncertainty
+    assert not (tmp_path / "native").exists()
 
 
 def memory(center=(1.0, 0.0), **kwargs):

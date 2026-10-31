@@ -45,7 +45,7 @@ arrival or never-stop claim follows.
 
 ## Validation plan and current status
 
-The25 new tests cover missing/expired/ambiguous tracks, original clocks,
+The28 new tests cover missing/expired/ambiguous tracks, original clocks,
 short-gap ID recovery, mass exclusion, bounded raster work, actual field
 integration, transaction rollback, whole-region coverage and CBF behavior
 with distant versus overlapping uncertainty. The215 focused tests pass,
@@ -63,6 +63,14 @@ preserve every failed result. The independent uncertainty audit checks current
 and available future actor containment; missing final future coverage is
 reported explicitly and never fabricated.
 
-No new native run has yet been accepted. Earlier furniture v6 remains a failed
+At0d3250f, the parked component passed115 sources and all human/furniture
+checks. The idle/release gate passed180s with zero idle drift and3.470465m
+native travel. Route-start v1 failed before Kit/wheel startup because the new
+CLI validation referenced the component runner's flag name instead of the
+navigation runner's `predictive_human_geometry_ablation`. The corrected wiring
+has28 focused passes, including actual argument validation for all three new
+recipes without starting Kit. Fresh frozen-source gates are required again.
+
+No new full native run has yet been accepted. Earlier furniture v6 remains a failed
 full mission despite its passed furniture/human encounter. Main/primary/PR117
 holds remain unchanged.

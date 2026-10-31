@@ -461,7 +461,7 @@ if args.human_body_envelope_radius is not None:
     if not (args.restaurant_human and args.human_mass_prior and args.persistent_object_risk_map) or args.human_carry_bowl or args.static_occupancy_memory_prior:
         parser.error("human envelope requires standalone live human/person-prior object-map mode without static memory")
 if args.human_tracking_uncertainty and (not args.human_track_recovery or args.human_observed_occupancy_only
-    or args.predictive_human_geometry):
+    or args.predictive_human_geometry_ablation):
     parser.error("tracking uncertainty requires occupied recovery mode without the separate predictive ablation")
 if args.human_track_recovery and (args.human_body_envelope_radius is None
     or args.human_observed_occupancy_only or args.mpc_horizon_steps != 6):
