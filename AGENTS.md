@@ -1,5 +1,26 @@
 # CRA repository guidance
 
+- Tracking-uncertainty long-motion-v3 at abb6e12 PASSED all8 route guides,
+  actual final arrival/stopping in150.816667s:936fields/935translating,
+  .391756m clearance/.002174m stop/.079385minCBF/.400339m nearby parallel bend.
+  All four fresh v2 prerequisites passed unchanged sources.1408 retained-prior
+  and180 fresh-surface furniture proofs passed;14 supported moving-kinetic
+  rows.20 late expired-human uncertainty records passed independent current/
+  available-future containment, original source and risk audits;19 full future
+  horizons, last explicitly truncated. Ages.2..3.9s/radii2.4..6.1m; last1920
+  grid cells. This validates distant visual-identity expiry, not close natural
+  occlusion. Nearby actual hold0s/slow.033333s over240 samples is descriptive,
+  not matched causal/repeatability or whole-mission pause-free acceptance.
+  91 accepted generic visual instances but ZERO complete fresh four-factor
+  assessments: retain explicit factor/body/property priors and paced-not-real-
+  time scope. Preserve v1 CLI startup failure and interrupted long-motion-v2
+  (execution session vanished; no final report or known termination cause).
+  Native report SHA aadc706a57ee5aa70462c866625606d39f6abc1c9ecce2c534bf1bbb0d65fbff.
+  3357units133.33s/28focused/Ruff/diffPASS. Video retains all1519 navigation/
+  stop frames, trims only69 startup frames. Keep option defaultOFF, PR204 draft
+  into development parent and main/primary/PR117 holds. See
+  docs/tracking_uncertainty_planning.md and outputs/tracking_uncertainty/.
+
 - The user now approves tracking uncertainty as planning input instead of an
   automatic stop on a lost ID. Separate default-OFF --human-tracking-uncertainty
   retains unresolved known-human geometry at its LAST VERIFIED LiDAR center:
