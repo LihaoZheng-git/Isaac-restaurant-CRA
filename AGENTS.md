@@ -8,8 +8,12 @@
   factor priors labeled. Geometric-only tracks/raw cues/retained bounds create
   no masks. New no-mask assessments clear old colors. Presentation must not
   change fields, source clocks, acceptance, lambda or commands. Preserve archived
-  final demo/v1 and all main/primary/PR117/PR204 holds. Initial camera-preview
-  recipe is stationary only; native validation pending. See
+  final demo/v1 and all main/primary/PR117/PR204 holds. At9c32605 camera-preview
+  PASSED60 stationary sources/zero wheels;60 accepted mask updates of ONE
+  furniture track32, phi.596180..807260, zero fresh complete4factor assessments.
+  All70 video epochs/score/mask/source audits passed, sources unchanged.3375full
+  units+68focused/Ruff passed. This is stationary presentation, not new motion,
+  multi-object native coverage or live plume acceptance. See
   docs/risk_camera_presentation.md.
 
 - Tracking-uncertainty long-motion-v3 at abb6e12 PASSED all8 route guides,

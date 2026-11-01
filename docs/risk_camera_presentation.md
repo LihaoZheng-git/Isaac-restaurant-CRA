@@ -50,6 +50,31 @@ parity (no extra inference, identical risk grids), epoch/identity mismatch,
 unaccepted masks, retained-frame age, clearing old masks, fixed colors, overlap,
 and video pause/frame preservation. Full regression: 3375 tests passed in
 119.55 seconds; repository Ruff and compile checks passed. A subsequent focused
-regression adds the explicit all-prior human-contact label case. Native stationary
-preview is pending at the initial implementation commit. Rendering a mask is
-not proof of four fresh factors or validated moving-camera plume estimation.
+regression adds the explicit all-prior human-contact label case: 68 focused tests
+passed in 7.10 seconds. Rendering a mask is not proof of four fresh factors or
+validated moving-camera plume estimation.
+
+## Native stationary preview
+
+At runtime revision `9c32605`, `outputs/risk-camera/stationary-v1` passed the
+unchanged 60-assessment stationary gate with zero wheel commands. The launcher
+verified unchanged sources and successful exit (279.70 wall seconds). All 60
+assessments contained an accepted mask of the same furniture track, ID 32;
+individual phi ranged from .596180 to .807260. These are repeated observations
+of **one** track, not 60 different objects. No complete fresh four-factor
+assessment was recorded; potential/thermal priors remain explicit.
+
+The presentation audit in `outputs/risk-camera/presentation-audit.json` checked
+all saved mask pixel counts, original camera/LiDAR epochs, CRA scores and factor
+modes against the native stationary field records. All matched. Both videos have
+70 frames with identical simulation timestamps, original zero commands and
+correct source ages. No presentation source records were rejected. The stored
+RGB/mask arrays reproduce the panel without rerunning inference. Preview stills
+were visually inspected after the audit.
+
+The package under `outputs/final demo/v2-camera-preview/` is a **stationary
+presentation preview**, not a newly accepted continuous v2 mission. It does not
+validate changed station positions, an already-walking human, live thermal
+plume influence or moving-camera overlay performance. Existing v1 media remain
+unchanged. PRs remain draft against the development chain; main/primary holds
+remain in force.
