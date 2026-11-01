@@ -17,7 +17,7 @@ def distant_start_retention_audit(report):
                 scope='distant-start provenance audit only; five retained sources remain mandatory in the current-source near-view gate and complete navigation audit')
 
 
-def verify_near_human_gates(folders, root, scene):
+def verify_near_human_gates(folders, root, scene, *, require_background_walk=False):
     """Require current runtime/scene bytes and both independent human gates."""
     root, scene = Path(root), Path(scene).resolve()
     runtime = {p.relative_to(root).as_posix(): hashlib.sha256(p.read_bytes()).hexdigest()
@@ -50,6 +50,14 @@ def verify_near_human_gates(folders, root, scene):
             required = {'hold_at_least_180_seconds', 'held_agent_disabled',
                 'idle_drift_below_1mm', 'released_native_walking', 'native_task_completed',
                 'native_travel_over_3m', 'unchanged_geometry_guard'}
+            if require_background_walk:
+                required = {'hold_at_least_180_seconds', 'held_agent_disabled',
+                    'idle_drift_below_1mm', 'background_walk_exercised', 'background_loop_completed',
+                    'oncoming_segment_completed', 'continuation_exercised',
+                    'no_native_idle_after_start', 'measured_walking', 'independent_geometry',
+                    'grounded', 'bounded_region'}
+                if '--background-service-walk' not in meta['command']:
+                    raise ValueError('v2 requires its actual native background circuit gate')
             if set(report.get('checks', {})) != required or not all(
                 value is True for value in report['checks'].values()
             ):

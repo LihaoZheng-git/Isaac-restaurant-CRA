@@ -102,6 +102,26 @@ def validate_parallel_selection(records, *, maximum_identity_prior_selection_age
 
 
 def validate_parallel_actor(records, *, parked_robot):
+    extra_phases = {'background_walk', 'approach_parallel', 'continue_walk'}
+    if any(r['phase'] in extra_phases for r in records):
+        if not all(r.get('background_service_walk') is True for r in records):
+            raise ValueError('extra walking phases require the explicit v2 actor circuit')
+        # Keep the original oncoming-region/direction/limb gates on that exact
+        # segment. The full trace remains mandatory in the separate circuit,
+        # current/future body, physical-clearance and source-clock audits.
+        result = validate_parallel_actor([r for r in records if r['phase'] == 'move'],
+                                         parked_robot=parked_robot)
+        checks = dict(result['checks'])
+        checks['whole_circuit_geometry'] = all(
+            r['actor_layout_clearance_m'] > .02 and r['collider_alignment_error_m'] <= .03
+            and abs(r['actor_xyz'][2]) <= .05 for r in records)
+        positions = np.asarray([r['robot_xy'] for r in records])
+        checks['whole_circuit_parked_robot'] = not parked_robot or (
+            np.isfinite(positions).all() and np.linalg.norm(positions-positions[0], axis=1).max() <= .02
+            and all(r['nonzero_wheel_command_count'] == 0 for r in records))
+        result.update(passed=all(checks.values()), checks=checks,
+                      scope='v2 explicit oncoming segment under original bounds; full circuit separately audited')
+        return result
     if len(records) < 30:
         return dict(passed=False, checks=dict(enough_actual_samples=False))
     times = np.array([r['time'] for r in records], float)

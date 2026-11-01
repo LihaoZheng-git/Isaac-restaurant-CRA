@@ -187,8 +187,12 @@ parser.add_argument("--presentation-follow-camera", action="store_true",
                     help="render-only elevated robot follow camera; never a perception source")
 parser.add_argument("--presentation-risk-camera", action="store_true",
                     help="render-only source-aligned accepted RGB/LiDAR masks colored by CRA phi; records priors and frame age")
+parser.add_argument("--service-demo-v2", action="store_true",
+                    help="explicit revised prop views and existing stylized pot steam layer; no supplied risk evidence")
 parser.add_argument("--long-service-parallel", action="store_true",
                     help="separate long-route native parallel actor; requires independent near-view component gate")
+parser.add_argument("--background-service-walk", action="store_true",
+                    help="v2 actor-only background walking circuit before/after the parallel encounter; separate native route gate required")
 parser.add_argument("--stationary-furniture-memory", action="store_true",
                     help="separate bounded repeated-surface background PRIOR; current people/motion excluded, no source renewal")
 parser.add_argument("--long-service-human-gates", nargs=3, type=Path,
@@ -576,7 +580,8 @@ if args.long_service_parallel and args.motion:
     from robot.evaluation.restaurant_long_service_validation import verify_near_human_gates
     if not args.long_service_human_gates:
         parser.error('long human motion requires component and near-view stationary evidence')
-    verify_near_human_gates(args.long_service_human_gates, ROOT, args.restaurant_scene)
+    verify_near_human_gates(args.long_service_human_gates, ROOT, args.restaurant_scene,
+                           require_background_walk=args.background_service_walk)
 elif args.long_service_human_gates:
     parser.error('near-human gate references require explicit long-service human motion')
 if args.restaurant_human == 'parallel' and (args.human_walking_speed != .5
@@ -634,6 +639,10 @@ if args.restaurant_route == "long-service" and (not args.rolling_local_field
     parser.error("long-service first requires rolling coverage; human episodes have separate gates")
 if args.presentation_follow_camera and not args.restaurant_scene:
     parser.error("presentation follow camera requires a restaurant scene")
+if args.background_service_walk and not args.long_service_parallel:
+    parser.error("background service walk requires the separate long-service parallel experiment")
+if args.service_demo_v2 and not args.restaurant_scene:
+    parser.error("v2 presentation requires its separate restaurant scene")
 if args.presentation_risk_camera and not (args.restaurant_scene and args.persistent_object_risk_map):
     parser.error("presentation risk camera requires a restaurant scene and the transactional all-track map")
 if args.restaurant_layout_survey and not args.restaurant_scene:
@@ -643,11 +652,11 @@ if args.restaurant_view != "bowl" and (not args.restaurant_scene or args.motion)
 if args.restaurant_route != "short" and (not args.restaurant_scene or args.restaurant_view != "bowl"):
     parser.error("restaurant service route requires the validated bowl start view")
 if args.restaurant_plume_diagnostic and (
-    not args.restaurant_scene or args.restaurant_view != "bowl" or args.motion
+    not args.restaurant_scene or args.restaurant_view not in (("bowl", "pot") if args.service_demo_v2 else ("bowl",)) or args.motion
     or not 12 <= args.stationary_frames <= 20
 ):
     parser.error("restaurant plume diagnostic requires zero wheels, bowl view and 12..20 frames per phase")
-if args.restaurant_server and (not args.restaurant_scene or args.restaurant_plume_diagnostic):
+if args.restaurant_server and (not args.restaurant_scene or (args.restaurant_plume_diagnostic and not args.service_demo_v2)):
     parser.error("static restaurant server requires a separate restaurant/no-plume diagnostic")
 if args.restaurant_view == "server" and not args.restaurant_server:
     parser.error("server observation requires the explicit static-server scene opt-in")
@@ -793,6 +802,9 @@ SCENE_PATH = args.restaurant_scene.resolve() if args.restaurant_scene else Path(
 if args.restaurant_scene:
     from robot.scene.restaurant_demo_build import DEMO_OBSERVATIONS
     observation_options = {**RESTAURANT_OBSERVATIONS, **DEMO_OBSERVATIONS}
+    if args.service_demo_v2:
+        from robot.scene.restaurant_demo_build import DEMO_V2_OBSERVATIONS
+        observation_options.update(DEMO_V2_OBSERVATIONS)
     restaurant_target, restaurant_start, restaurant_yaw = (SERVER_OBSERVATION
         if args.restaurant_view == "server" else observation_options[args.restaurant_view])
     if args.human_start_view != "original":
@@ -974,6 +986,7 @@ def main():
                                        upper_continuation=args.human_upper_continuation,
                                        continuing_away=args.human_continuing_away,
                                        long_service_parallel=args.long_service_parallel,
+                                       background_service_walk=args.background_service_walk,
                                        crossing_extension_m=args.human_crossing_extension,
                                        crossing_y_m=args.human_crossing_line_y, crossing_layout=args.human_crossing_layout)
         ACTIVE_HUMAN = human
@@ -1057,6 +1070,15 @@ def main():
     restaurant_props = []
     layout_monitor = None
     if args.restaurant_scene:
+        if args.service_demo_v2:
+            from robot.scene.restaurant_visual_steam import STEAM_PATH
+            steam = UsdGeom.Imageable(stage.GetPrimAtPath(STEAM_PATH))
+            if not steam:
+                raise RuntimeError("v2 requires its separate authored steam layer")
+            if args.restaurant_plume_diagnostic:
+                with Usd.EditContext(stage, stage.GetSessionLayer()):
+                    steam.MakeInvisible()
+                puffs.append(steam)
         for spec in service_props():
             path = f"{SERVICE_ROOT}/{spec.name}"
             bounds = read_world_bounds(stage, path)
@@ -1066,7 +1088,7 @@ def main():
                 fixtures.append({"name":spec.name,"center_world_xy":bounds.center[:2],
                     "center_world_xyz":bounds.center,"monitor_radius_m":math.hypot(*bounds.size[:2])/2,
                     "actor_shape":"audited_CC0_restaurant_mesh","plume":False,"drop_m":None})
-                if args.restaurant_plume_diagnostic:
+                if args.restaurant_plume_diagnostic and not args.service_demo_v2:
                     with Usd.EditContext(stage, stage.GetSessionLayer()):
                         for index in range(4):
                             puff = UsdGeom.Sphere.Define(stage, f"/World/CRARestaurantVisiblePlume/Puff{index}")
@@ -1301,7 +1323,7 @@ def main():
         anchor_position_world_xy=(anchor.x, anchor.y),
         anchor_yaw=anchor.yaw,
         ground_prior_scope=GROUND_SCOPE if args.actor_shape == "sphere" and not args.restaurant_scene and not args.object_height_evidence else None,
-        negative_plume_scope=("bounded stationary native-aspect real-bowl view: explicitly clean reference phase; object-associated visible cue only, not absence of heat"
+        negative_plume_scope=("bounded stationary restaurant vessel view: explicitly clean reference phase; object-associated visible cue only, not absence of heat"
             if args.restaurant_plume_diagnostic else None) if args.restaurant_scene else PLUME_SCOPE,
         rectify_plume=True,
         occupancy_retention_seconds=0.15 if args.kinetic_diagnostic or args.moving_actor or human is not None else 0.5,
@@ -1763,6 +1785,10 @@ def main():
             from robot.evaluation.furniture_memory_validation import audit_snapshot
             latest.diagnostics["furniture_memory_human_audit"] = audit_snapshot(latest.furniture_memory_snapshot, human.records)
         records.append(field_record(latest, now))
+        if human is not None and human.background_walk is not None and len(records) >= args.stationary_frames-20:
+            # Actor-only pre-roll during the last zero-wheel assessments. This
+            # supplies no preparation/avoidance command to the robot.
+            human.background_walk_requested = True
         if ACTIVE_SERVICE_VIDEO is not None:
             ACTIVE_SERVICE_VIDEO.accept_risk_assessment(latest)
         if args.restaurant_plume_diagnostic:
@@ -1894,7 +1920,7 @@ def main():
                 gate['remote_view_emitted_envelope_audit'] = remote_envelopes
                 gate['passed'] = stationary_ready = bool(stationary_ready and remote_envelopes['passed'])
         if args.restaurant_plume_diagnostic:
-            plume_validation = restaurant_plume_checks(records, fixtures)
+            plume_validation = restaurant_plume_checks(records, fixtures, target_name=restaurant_target)
             save_json("restaurant-plume-validation.json", plume_validation)
             gate["restaurant_plume_checks"] = plume_validation["checks"]
             gate["passed"] = stationary_ready = bool(stationary_ready and plume_validation["passed"])
@@ -2695,6 +2721,11 @@ def main():
         save_json('encounter-guidance-validation.json', encounter_validation)
     if human is not None:
         from robot.evaluation.human_navigation_validation import summarize_human_navigation
+        if human.background_walk is not None:
+            from robot.scene.restaurant_background_walk import audit_background_walk
+            background_validation = audit_background_walk(human.records, human.background_walk.events)
+            save_json('background-walk-validation.json', background_validation)
+            completed = completed and background_validation['passed']
         human_validation = summarize_human_navigation(live_fields, human.records,
             mode=args.restaurant_human, upper_continuation=args.human_upper_continuation,
             crossing_direction=args.human_crossing_direction, continuing_away=args.human_continuing_away,
@@ -3121,7 +3152,8 @@ def main():
             else "short-lived retained mass/contact are persistence priors with original timestamps; no cached motion/plume/fall-height evidence",
             "renderer internal history warning remains unresolved despite the requested setting",
             "SAM-associated category-free rough heaviness, visual contact silhouette and registered visible-plume proxies",
-            "new restaurant assets have no emitted plume or validated negative-plume scope; thermal remains a labeled factor prior; all live LiDAR occupancy retained"
+            "v2 pot has stylized visible puffs; rendered appearance supplies no thermal score. Current RGB association/clean-reference gates decide evidence; unsupported thermal retains its labeled prior"
+            if args.service_demo_v2 else "new restaurant assets have no emitted plume or validated negative-plume scope; thermal remains a labeled factor prior; all live LiDAR occupancy retained"
             if args.restaurant_scene else "rendered puffs are opaque visual fixtures, not steam physics/temperature; all live LiDAR occupancy retained",
             "real-mesh restaurant component gate; potential/support and thermal may remain configured priors; not full four-factor sensor acceptance, moving-view plume or human validation"
             if args.restaurant_scene else "bounded separated sources with validated initial clean-reference registration and retained cues; no moving-view plume/human/crowd generalization",
@@ -3183,5 +3215,7 @@ finally:
             save_json("native-carry-setup.json", ACTIVE_HUMAN.carry_setup)
         if ACTIVE_HUMAN.circuit is not None:
             save_json("continuous-server-route-events.json", ACTIVE_HUMAN.circuit.events)
+        if ACTIVE_HUMAN.background_walk is not None:
+            save_json("background-walk-events.json", ACTIVE_HUMAN.background_walk.events)
         ACTIVE_HUMAN.close()
     app.close()

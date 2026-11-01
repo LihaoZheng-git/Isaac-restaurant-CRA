@@ -33,7 +33,13 @@ class RestaurantHumanEpisode:
         crossing_y_m=8.9,
         crossing_layout="legacy",
         long_service_parallel=False,
+        background_service_walk=False,
     ):
+        if background_service_walk and not long_service_parallel:
+            raise ValueError("background service walk requires the separate long parallel demo")
+        from robot.scene.restaurant_background_walk import BackgroundServiceWalk
+        self.background_walk = BackgroundServiceWalk() if background_service_walk else None
+        self.background_walk_requested = False
         if long_service_parallel and (mode != "parallel" or crossing_delay_seconds is not None
             or not 8.8 <= trigger_robot_y <= 9.2):
             raise ValueError("long-service actor requires parallel mode and explicit y=8.8..9.2 trigger")
@@ -234,13 +240,13 @@ class RestaurantHumanEpisode:
 
         # This controls the scripted actor only. No actor state enters CRA.
         if (
-            navigation
+            (navigation or self.background_walk_requested)
             and self.mode in {"crossing", "continuous-crossing", "parallel"}
             and self.task is None
             and self.phase == "idle_before"
-            and crossing_due(now=now, robot_y=robot_xy[1], trigger_y=self.trigger_robot_y,
+            and (self.background_walk is not None or crossing_due(now=now, robot_y=robot_xy[1], trigger_y=self.trigger_robot_y,
                              delay_seconds=self.crossing_delay_seconds,
-                             navigation_start=self.navigation_start_time)
+                             navigation_start=self.navigation_start_time))
         ):
             if self.initial_idle_held:
                 self.agent.set_enabled(True)
@@ -249,12 +255,12 @@ class RestaurantHumanEpisode:
                 self.initial_idle_held = False
             self.agent.set_speed(self.speed)
             self.task = self.agent.move_to(
-                self.circuit.goal if self.circuit else self.goal,
-                auto_brake=self.circuit is None and self.departure is None,
+                self.background_walk.goal if self.background_walk else self.circuit.goal if self.circuit else self.goal,
+                auto_brake=self.circuit is None and self.departure is None and self.background_walk is None,
             )
             if self.task == bh.BEHAVIOR_TASK_ID_INVALID:
                 raise RuntimeError("native crossing task rejected")
-            self.phase = "move"
+            self.phase = self.background_walk.phase if self.background_walk else "move"
         if (
             self.task is not None
             and not self.task_succeeded
@@ -263,7 +269,17 @@ class RestaurantHumanEpisode:
             status = self.agent.get_task_status(self.task)
             if status == bh.BehaviorTaskStatus.FAILED:
                 raise RuntimeError("native crossing task failed")
-            if self.departure is not None and self.departure.advance(self.position(), now):
+            if self.background_walk is not None:
+                from robot.scene.restaurant_background_walk import BACKGROUND_ENCOUNTER_TRIGGER_Y
+                if self.background_walk.advance(self.position(), now,
+                        encounter_due=robot_xy[1] >= BACKGROUND_ENCOUNTER_TRIGGER_Y):
+                    self.task = self.agent.move_to(self.background_walk.goal, auto_brake=False)
+                    if self.task == bh.BEHAVIOR_TASK_ID_INVALID:
+                        raise RuntimeError("native background walk next-leg task rejected")
+                    self.phase = self.background_walk.phase
+                elif status == bh.BehaviorTaskStatus.SUCCEEDED:
+                    raise RuntimeError("native background walk success without actual progress")
+            elif self.departure is not None and self.departure.advance(self.position(), now):
                 self.task = self.agent.move_to(self.departure.goal, auto_brake=True)
                 if self.task == bh.BEHAVIOR_TASK_ID_INVALID:
                     raise RuntimeError("native departure task rejected")
@@ -301,6 +317,7 @@ class RestaurantHumanEpisode:
             "phase": self.phase,
             "initial_idle_held": self.initial_idle_held,
             "native_agent_enabled": bool(self.agent.is_enabled()),
+            "background_service_walk": self.background_walk is not None,
             "actor_xyz": xyz.tolist(),
             "left_foot_xyz": feet["L"],
             "right_foot_xyz": feet["R"],

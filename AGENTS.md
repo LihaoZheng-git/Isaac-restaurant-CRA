@@ -1,5 +1,21 @@
 # CRA repository guidance
 
+- User-approved service-demo v2 is separate: revised prop positions, rendered
+  pot puffs, native background/continuation walking and source-aligned risk
+  camera. Authoring never supplies factor scores/masks/control references.
+  --background-service-walk affects the actor only; normal nominal/CRA/lambda/
+  geometry/source clocks/controller limits remain. Preserve original oncoming
+  gates on its explicit segment AND full-circuit geometry/containment/clock
+  audits. Require the new native circuit gate plus all original fresh stationary
+  prerequisites before wheels. Initial v2 scene with scaled pot translation is
+  unused/preserved; v2b failed the offline near-robot clearance check. V2c moves
+  the bin clear of that unchanged setup; native validation is pending.
+  Puffs are stylized rendering,
+  not thermal evidence by themselves; retain failed plume association and priors.
+  Native v2 acceptance pending. Preserve final demo/v1, camera preview, main/
+  primary/PR117 holds and draft development PR chain. See
+  docs/restaurant_service_demo_v2.md.
+
 - User-approved robot-camera presentation uses separate default-OFF
   --presentation-risk-camera. Color only current accepted image-LiDAR masks,
   on their ORIGINAL assessed RGB; hold that image with explicit age between

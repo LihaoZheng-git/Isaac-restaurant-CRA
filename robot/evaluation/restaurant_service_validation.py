@@ -11,7 +11,7 @@ from PIL import Image, ImageDraw
 from robot.config import PROJECT_ROOT
 
 
-def restaurant_plume_checks(records, fixtures):
+def restaurant_plume_checks(records, fixtures, *, target_name="FoodBowl"):
     """Evaluate continuous cue ordering from fresh matched sensor assessments.
 
     Authored fixture matching is evaluation only. Numeric priors and unknown
@@ -31,7 +31,7 @@ def restaurant_plume_checks(records, fixtures):
             continue
         previous_epoch = epoch
         summary = summarize_fixture_assessments([record], fixtures, maximum_distance_m=.20)
-        row = summary["fixtures"].get("FoodBowl", {}).get("latest")
+        row = summary["fixtures"].get(target_name, {}).get("latest")
         if row is not None:
             heat = row["attributes"]["thermal"]["heat_source_likelihood"]
             diagnostic = row["diagnostics"]
@@ -53,7 +53,7 @@ def restaurant_plume_checks(records, fixtures):
     return {"passed": all(checks.values()), "checks": checks,
             "fresh_cue_scores": scores, "median_cue_scores": medians,
             "rejected_or_unavailable_updates": rejected,
-            "scope": "stationary RGB visible-plume proxy on real bowl; no temperature, soup classification or moving-view acceptance"}
+            "scope": "stationary RGB visible-plume proxy on real vessel; no temperature, soup classification or moving-view acceptance"}
 
 
 def restaurant_asset_checks(summary, target_name="FoodBowl"):

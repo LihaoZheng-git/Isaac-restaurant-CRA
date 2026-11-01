@@ -12,6 +12,7 @@ parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--scene', type=Path, required=True)
 parser.add_argument('--layout-survey', type=Path, required=True)
 parser.add_argument('--output', type=Path, required=True)
+parser.add_argument('--background-service-walk', action='store_true')
 args = parser.parse_args()
 if args.output.exists():
     parser.error('preserve existing outputs')
@@ -57,7 +58,8 @@ try:
         additions.append(dict(bounds_minimum=b.minimum, bounds_maximum=b.maximum))
     layout = load_authored_layout_monitor(args.layout_survey, additions)
     human = RestaurantHumanEpisode(stage, mode='parallel', output=args.output,
-        trigger_robot_y=9., speed_mps=.5, long_service_parallel=True)
+        trigger_robot_y=9., speed_mps=.5, long_service_parallel=True,
+        background_service_walk=args.background_service_walk)
     for _ in range(20):
         app.update()
     human.bake()
@@ -83,11 +85,16 @@ try:
     held = list(human.records)
     release = float(timeline.get_current_time())
     human.start_video()
-    for _ in range(20*60):
+    for step in range((180 if args.background_service_walk else 20)*60):
         # The supplied position triggers only the authored actor, no robot exists.
-        human.update(float(timeline.get_current_time()), (28.8, 9.), (0., 0.), layout,
+        elapsed = float(timeline.get_current_time())-release
+        human.update(float(timeline.get_current_time()),
+                     (7.8, 4.05) if args.background_service_walk and elapsed < 120 else (28.8, 9.),
+                     (0., 0.), layout,
                      navigation=True)
         app.update()
+        if step % 1800 == 0:
+            print(f'Native released walk: {elapsed:.1f} seconds; phase {human.phase}', flush=True)
         if human.task_succeeded:
             break
     walked = human.records[len(held):]
@@ -99,6 +106,15 @@ try:
         released_native_walking=bool(walked) and all(r['native_agent_enabled'] and not r['initial_idle_held'] for r in walked),
         native_task_completed=human.task_succeeded, native_travel_over_3m=travel >= 3.,
         unchanged_geometry_guard=bool(human.records))
+    if args.background_service_walk:
+        from robot.scene.restaurant_background_walk import audit_background_walk
+        circuit = audit_background_walk(walked, human.background_walk.events,
+                                        minimum_background_seconds=120.)
+        checks = {k: checks[k] for k in ('hold_at_least_180_seconds',
+                  'held_agent_disabled', 'idle_drift_below_1mm')}
+        checks.update(circuit['checks'])
+        save('background-walk-validation.json', circuit)
+        save('background-walk-events.json', human.background_walk.events)
     save('validation.json', dict(passed=all(checks.values()), checks=checks,
         hold_seconds=release-start, idle_drift_m=drift, native_travel_m=travel,
         minimum_layout_clearance_m=min(r['actor_layout_clearance_m'] for r in human.records),

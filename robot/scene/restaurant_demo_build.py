@@ -21,6 +21,12 @@ DEMO_OBSERVATIONS = {
     "demo-utensils": ("UtensilCaddy", (29.0, 6.3, .07382), -.40),
 }
 DEMO_NAMES = ("ClearingStation", "RoundedBin", "ClosedCaddy", "UtensilCaddy")
+DEMO_V2_OBSERVATIONS = {
+    "demo-bin": ("RoundedBin", (26.8, 6.1, .07382), 0.),
+    "demo-rounded": ("ClosedCaddy", (28., 5.3, .07382), 0.),
+    "demo-utensils": ("UtensilCaddy", (27.5, 5.6, .07382), .15),
+    "pot": ("SecondPot", (28.8, 12., .07382), 0.),
+}
 
 
 def _shape(stage, path, kind, position, scale, color, *, radius=None, height=None):
@@ -172,5 +178,51 @@ def build_demo_scene(output, *, base_scene):
     result = dict(scene=str(output), additions=str(additions), source_sha256=sources,
                   props=props, source_files_unchanged=True, payload_added=True, payload=payload,
                   scope="scene construction only; no perception or navigation acceptance")
+    output.with_suffix(".json").write_text(json.dumps(result, indent=2)+"\n", encoding="utf-8")
+    return result
+
+
+def build_demo_v2_scene(output, *, base_scene):
+    """Separate v2 overrides; preserve the accepted v1 and all source assets."""
+    output, base_scene = Path(output).resolve(), Path(base_scene).resolve()
+    additions = output.with_name(output.stem+"_dressing.usda")
+    if output == base_scene or output.exists() or additions.exists():
+        raise ValueError("new scene and dressing paths required")
+    base = Usd.Stage.Open(str(base_scene))
+    if not base.GetPrimAtPath(DEMO_ROOT) or base.GetEndTimeCode() <= base.GetStartTimeCode():
+        raise ValueError("v2 requires the existing demo layer and a nonempty timeline")
+    sources = {p.realPath: hashlib.sha256(Path(p.realPath).read_bytes()).hexdigest()
+               for p in base.GetUsedLayers() if p.realPath and Path(p.realPath).is_file()}
+    output.parent.mkdir(parents=True, exist_ok=True)
+    stage = Usd.Stage.CreateNew(str(output))
+    layer = Sdf.Layer.CreateNew(str(additions))
+    stage.GetRootLayer().subLayerPaths = [additions.name, os.path.relpath(base_scene, output.parent).replace("\\", "/")]
+    UsdGeom.SetStageMetersPerUnit(stage, 1.)
+    UsdGeom.SetStageUpAxis(stage, "Z")
+    stage.SetStartTimeCode(base.GetStartTimeCode())
+    stage.SetEndTimeCode(base.GetEndTimeCode())
+    stage.SetTimeCodesPerSecond(base.GetTimeCodesPerSecond())
+    offsets = {"ClearingStation": (-1.35, .10, 0), "ClosedCaddy": (-1.35, .05, 0),
+               "UtensilCaddy": (-1.35, .13, 0), "RoundedBin": (-2.5, .05, 0)}
+    with Usd.EditContext(stage, layer):
+        for name, offset in offsets.items():
+            prim = stage.GetPrimAtPath(DEMO_ROOT+"/"+name)
+            UsdGeom.Xformable(prim).AddTranslateOp(opSuffix="v2Placement").Set(Gf.Vec3d(*offset))
+        from robot.scene.restaurant_service_build import SERVICE_ROOT
+        pot = stage.GetPrimAtPath(SERVICE_ROOT+"/SecondPot")
+        transform = UsdGeom.Xformable(pot)
+        matrix = transform.GetLocalTransformation()
+        matrix.SetTranslateOnly(matrix.ExtractTranslation()+Gf.Vec3d(-.40, 0, 0))
+        transform.MakeMatrixXform().Set(matrix)
+        from robot.scene.restaurant_visual_steam import author_visual_steam
+        steam = author_visual_steam(stage, source_path=SERVICE_ROOT+"/SecondPot")
+        props = demo_prop_records(stage)
+    layer.Save()
+    stage.GetRootLayer().Save()
+    if not all(hashlib.sha256(Path(p).read_bytes()).hexdigest() == h for p, h in sources.items()):
+        raise RuntimeError("source scene changed")
+    result = dict(scene=str(output), additions=str(additions), source_sha256=sources,
+                  source_files_unchanged=True, props=props, visual_steam=steam,
+                  scope="v2 scene/rendering only; no perception, thermal or navigation acceptance")
     output.with_suffix(".json").write_text(json.dumps(result, indent=2)+"\n", encoding="utf-8")
     return result
