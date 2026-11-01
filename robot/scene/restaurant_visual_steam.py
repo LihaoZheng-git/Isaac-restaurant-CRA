@@ -19,9 +19,11 @@ def author_visual_steam(stage, *, source_path):
     for i in range(5):
         puff = UsdGeom.Sphere.Define(stage, STEAM_PATH+f"/Puff{i}")
         puff.CreateRadiusAttr(.045+.009*i)
+        # Translation must precede shape scaling in USD's ordered transform
+        # stack, otherwise the vertical stretch also scales the world height.
+        position = puff.AddTranslateOp()
         puff.AddScaleOp().Set(Gf.Vec3f(1, 1, 1.5))
         puff.CreateDisplayColorAttr([Gf.Vec3f(.88, .89, .90)])
-        position = puff.AddTranslateOp()
         for tick in range(3001):
             t = tick/10
             position.Set(Gf.Vec3d(bounds.center[0]+.018*math.sin(2*t+i),

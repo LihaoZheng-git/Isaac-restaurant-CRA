@@ -9,7 +9,19 @@
   audits. Require the new native circuit gate plus all original fresh stationary
   prerequisites before wheels. Initial v2 scene with scaled pot translation is
   unused/preserved; v2b failed the offline near-robot clearance check. V2c moves
-  the bin clear of that unchanged setup; native validation is pending.
+  the bin clear of that unchanged setup. At dd7b7c9/v2c all four fresh native
+  prerequisites passed (actor circuit,115-source component,startup60,near60).
+  The five extra prop/plume diagnostics FAILED: initial sensor-epoch rejection,
+  tabletop ownership gaps and zero accepted pot thermal cues. Bin mask/911
+  LiDAR returns were accepted but its visible centroid missed the .20m authored
+  center gate (.201734m); do not widen that gate or relabel these as passes.
+  Camera score/source audits passed. A steam transform-order defect stretched
+  translation as well as shape; long-motion-v1 was stopped during stationary
+  frame13, before navigation. Preserve it as interrupted, not a wheel result.
+  V2d corrects puff world placement with regression coverage. A proposed .2s
+  prop reassessment was rejected by existing CLI tests; retain its allowed1s
+  setting without relaxing that guard. All fresh native gates remain
+  required before v2d navigation; no acceptance transfers from v2c.
   Puffs are stylized rendering,
   not thermal evidence by themselves; retain failed plume association and priors.
   Native v2 acceptance pending. Preserve final demo/v1, camera preview, main/

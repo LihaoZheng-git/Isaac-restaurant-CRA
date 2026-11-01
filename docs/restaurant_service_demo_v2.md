@@ -66,7 +66,36 @@ The frozen-source recipe is `configs/restaurant_service_demo_v2.json`.
 The full unit suite passed 3389 tests before the final pose adjustment; focused
 checks and Ruff were rerun afterward. A default sandbox temporary-directory
 failure was resolved by selecting a new repository-local pytest temporary path.
-All native validation remains pending at the initial implementation commit.
+## Preserved v2c native results (dd7b7c9)
+
+All four main prerequisites passed with unchanged source: actor-only hold and
+continuous circuit (minimum layout clearance .227185 m), 115-source moving-human
+perception component (65 furniture-retention sources), startup60 and near60.
+Both camera audits passed exact frame/mask/score parity: startup60 mask updates
+of one furniture track, near51 updates of one human track,70 video frames each.
+
+The five separate prop diagnostics failed. Each recorded one initial camera/
+LiDAR epoch rejection. The bin had accepted image/LiDAR evidence (911 returns,
+overlap1.0 in its final source), but its visible-surface centroid was .201734 m
+from the authored center and failed the unchanged .20m fixture-matching gate.
+The closed/utensil caddies were not separately matched; the pot lacked accepted
+visual mass/contact. Both pot thermal phases had zero accepted matched cues.
+Their camera presentation audits passed separately; this does not repair the
+failed perception gates. Preserve all outputs under `outputs/service-demo-v2/`.
+
+Inspection of the raw plume images exposed an authoring defect: USD scale was
+before translation, stretching puff world height by1.5 as well as shape. The
+first full-route launch was stopped at stationary frame13, before navigation;
+it has no final native report or accepted motion result. The corrected candidate
+is `restaurant_service_demo_v2d.usda`. A world-transform regression now checks
+puff positions at three times. A proposed prop-only .2s reassessment was caught
+by five CLI regression failures: that rate is allowed only for native-human
+experiments. It is reverted to the original1.0s setting, preserving the guard.
+No safety, ownership or score gates change.
+All four fresh native prerequisites must be rerun for this candidate.
+After restoring the supported configuration, the full suite passed3390 tests
+in117.82s; Ruff and the unchanged offline layout-clearance checks also passed.
+
 Keep the development PR chain and main/primary/PR117 holds. The eventual final
 package belongs in `outputs/final demo/v2/`; the camera-only preview and v1 remain
 separate. No trained steam model or environment upgrade is introduced.

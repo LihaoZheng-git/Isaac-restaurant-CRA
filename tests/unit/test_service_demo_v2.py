@@ -81,10 +81,14 @@ def test_rendered_steam_has_no_collider_mass_or_factor_label():
     assert not result['available_as_factor_input'] and not result['colliders']
     puffs = list(stage.GetPrimAtPath(STEAM_PATH).GetChildren())
     assert len(puffs) == 5
-    for p in puffs:
+    for i, p in enumerate(puffs):
         assert not p.HasAPI(UsdPhysics.CollisionAPI) and not p.HasAPI(UsdPhysics.MassAPI)
         samples = p.GetAttribute('xformOp:translate').GetTimeSamples()
         assert samples[0] == 0 and samples[-1] == 18000
+        for t in (0., 1., 120.):
+            center = UsdGeom.XformCache(Usd.TimeCode(t*60)).GetLocalToWorldTransform(p).ExtractTranslation()
+            np.testing.assert_allclose(center, [3+.018*np.sin(2*t+i),
+                4+.012*np.cos(1.3*t+i), 2+.12+.075*i+.012*np.sin(3*t+i)])
     with pytest.raises(ValueError, match='already'):
         author_visual_steam(stage, source_path='/World/Pot')
 
