@@ -1,5 +1,17 @@
 # CRA repository guidance
 
+- User-approved robot-camera presentation uses separate default-OFF
+  --presentation-risk-camera. Color only current accepted image-LiDAR masks,
+  on their ORIGINAL assessed RGB; hold that image with explicit age between
+  updates, never paste old masks on newer views. Fixed0..1 green/yellow/orange/red
+  scale uses actual individual CRA phi, with applied/group phi separate and
+  factor priors labeled. Geometric-only tracks/raw cues/retained bounds create
+  no masks. New no-mask assessments clear old colors. Presentation must not
+  change fields, source clocks, acceptance, lambda or commands. Preserve archived
+  final demo/v1 and all main/primary/PR117/PR204 holds. Initial camera-preview
+  recipe is stationary only; native validation pending. See
+  docs/risk_camera_presentation.md.
+
 - Tracking-uncertainty long-motion-v3 at abb6e12 PASSED all8 route guides,
   actual final arrival/stopping in150.816667s:936fields/935translating,
   .391756m clearance/.002174m stop/.079385minCBF/.400339m nearby parallel bend.

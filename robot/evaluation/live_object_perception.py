@@ -205,6 +205,7 @@ class LiveObjectResult:
     source_occupancy_grid: object | None = None
     furniture_memory_snapshot: object | None = None
     tracking_uncertainty_snapshot: object | None = None
+    risk_camera_frame: object | None = None
 
 
 class LiveObjectPerception:
@@ -262,7 +263,9 @@ class LiveObjectPerception:
         parallel_preparation_config=None,
         human_mass_body_identity_retention=False,
         observed_motion_reference=False,
+        capture_risk_masks=False,
     ):
+        self.capture_risk_masks = capture_risk_masks
         self.segmenter, self.mass_estimator, self.contact_detector = (
             segmenter,
             mass_estimator,

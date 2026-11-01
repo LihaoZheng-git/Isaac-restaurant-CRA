@@ -11,12 +11,14 @@ from pxr import Gf, Usd, UsdGeom
 class ServiceDemoVideo:
     """Rendering only. Frames/epochs never feed perception or control."""
 
-    def __init__(self, stage, output, *, follow_pose=None):
+    def __init__(self, stage, output, *, follow_pose=None, risk_camera=False):
         from isaacsim.sensors.experimental.rtx import CameraSensor, RtxCamera
 
         self.output, self.rows, self.last = output, [], -math.inf
         self.stage, self.follow_pose, self.pose_time = stage, follow_pose, None
         self.camera_pose_record = None
+        self.risk_frame, self.risk_rows, self.risk_writer = None, [], None
+        self.risk_rejections = []
         with Usd.EditContext(stage, stage.GetSessionLayer()):
             path = "/World/CRAServiceDemoOverview"
             camera = RtxCamera.create(path, tick_rate=10)
@@ -33,6 +35,14 @@ class ServiceDemoVideo:
                                       cv2.VideoWriter_fourcc(*"mp4v"), 10, (800, 600))
         if not self.writer.isOpened():
             raise RuntimeError("service overview recording failed to open")
+        if risk_camera:
+            self.risk_writer = cv2.VideoWriter(str(output/"service-risk-camera.mp4"),
+                cv2.VideoWriter_fourcc(*"mp4v"), 10, (1440, 600))
+            if not self.risk_writer.isOpened():
+                self.writer.release()
+                self.camera.detach_annotators("rgb")
+                raise RuntimeError("service risk-camera recording failed to open")
+            (output/"risk-camera-sources").mkdir(exist_ok=True)
         if follow_pose is not None:
             self.update_pose(0., follow_pose)
 
@@ -57,15 +67,53 @@ class ServiceDemoVideo:
         if rgb.shape[:2] != (600, 800):
             return
         self.writer.write(np.ascontiguousarray(rgb[:, :, :3][:, :, ::-1]))
+        if getattr(self, "risk_writer", None) is not None:
+            from robot.evaluation.risk_camera_overlay import render_risk_panel
+            panel, metadata = render_risk_panel(self.risk_frame, now)
+            combined = np.concatenate((rgb[:, :, :3], panel), axis=1)
+            self.risk_writer.write(np.ascontiguousarray(combined[:, :, ::-1]))
+            self.risk_rows.append(dict(time=float(now), **metadata))
         self.rows.append(dict(time=float(now), robot_command=list(command),
                               robot_world_xy=list(world_xy),
                               presentation_camera=getattr(self, "camera_pose_record", None)))
         self.last = now
 
+    def accept_risk_assessment(self, result):
+        """Only call after field admission; read its immutable source RGB/masks."""
+        if getattr(self, "risk_writer", None) is None:
+            return
+        frame = result.risk_camera_frame
+        self.risk_frame = None
+        if frame is None:
+            return
+        if (frame.sensor_frame_id != result.field.sensor_frame_id or
+                frame.sensor_timestamp_seconds != result.field.sensor_timestamp_seconds):
+            self.risk_rejections.append(dict(reason="admitted_field_source_mismatch",
+                sensor_frame_id=frame.sensor_frame_id))
+            return
+        self.risk_frame = frame
+        if frame.masks:
+            from robot.evaluation.risk_camera_overlay import render_risk_panel
+            stem = self.output/"risk-camera-sources"/str(frame.camera_frame_id)
+            np.savez_compressed(str(stem)+".npz", rgb=frame.rgb,
+                masks=np.stack([m.mask for m in frame.masks]))
+            stem.with_suffix(".json").write_text(json.dumps(frame.diagnostic(), indent=2)+"\n",
+                                                encoding="utf-8")
+            panel, _ = render_risk_panel(frame, frame.camera_timestamp_seconds)
+            cv2.imwrite(str(self.output/"risk-camera-latest.png"), panel[:, :, ::-1])
+
     def close(self):
         if self.writer is None:
             return
         self.writer.release()
+        if getattr(self, "risk_writer", None) is not None:
+            self.risk_writer.release()
+            self.risk_writer = None
+            (self.output/"risk-camera-epochs.json").write_text(json.dumps(dict(
+                fps=10, frames=self.risk_rows,
+                rejected_assessments=self.risk_rejections,
+                scope="latest assessed source RGB; fixed CRA phi scale; held frames show source age; no control input"),
+                indent=2)+"\n", encoding="utf-8")
         self.camera.detach_annotators("rgb")
         self.writer = None
         (self.output/"service-video-epochs.json").write_text(json.dumps(dict(

@@ -185,6 +185,8 @@ parser.add_argument("--rolling-local-field", action="store_true",
                     help="opt-in translating window with original timestamps and strict temporal-overlap queries")
 parser.add_argument("--presentation-follow-camera", action="store_true",
                     help="render-only elevated robot follow camera; never a perception source")
+parser.add_argument("--presentation-risk-camera", action="store_true",
+                    help="render-only source-aligned accepted RGB/LiDAR masks colored by CRA phi; records priors and frame age")
 parser.add_argument("--long-service-parallel", action="store_true",
                     help="separate long-route native parallel actor; requires independent near-view component gate")
 parser.add_argument("--stationary-furniture-memory", action="store_true",
@@ -632,6 +634,8 @@ if args.restaurant_route == "long-service" and (not args.rolling_local_field
     parser.error("long-service first requires rolling coverage; human episodes have separate gates")
 if args.presentation_follow_camera and not args.restaurant_scene:
     parser.error("presentation follow camera requires a restaurant scene")
+if args.presentation_risk_camera and not (args.restaurant_scene and args.persistent_object_risk_map):
+    parser.error("presentation risk camera requires a restaurant scene and the transactional all-track map")
 if args.restaurant_layout_survey and not args.restaurant_scene:
     parser.error("restaurant layout survey requires the explicit restaurant scene")
 if args.restaurant_view != "bowl" and (not args.restaurant_scene or args.motion):
@@ -1246,6 +1250,7 @@ def main():
     from robot.perception.human_track_recovery import HumanTrackRecoveryConfig
 
     perception = LiveObjectPerception(
+        capture_risk_masks=args.presentation_risk_camera,
         human_mass_body_identity_retention=args.human_mass_body_identity_retention,
         predictive_human_geometry_config=HumanGeometryForecastConfig(
             horizon_seconds=round(args.mpc_horizon_steps * .2, 10),
@@ -1368,9 +1373,11 @@ def main():
     sensor_archive_payloads = {}
     navigation_active = False
     global ACTIVE_SERVICE_VIDEO
-    if args.restaurant_scene and serving_payload["present"] and (human is None or args.presentation_follow_camera):
+    if args.restaurant_scene and (args.presentation_risk_camera or (
+        serving_payload["present"] and (human is None or args.presentation_follow_camera))):
         from robot.scene.service_demo_video import ServiceDemoVideo
         ACTIVE_SERVICE_VIDEO = ServiceDemoVideo(stage, args.output,
+            risk_camera=args.presentation_risk_camera,
             follow_pose=(anchor.x, anchor.y, anchor.yaw) if args.presentation_follow_camera else None)
 
     def state():
@@ -1756,6 +1763,8 @@ def main():
             from robot.evaluation.furniture_memory_validation import audit_snapshot
             latest.diagnostics["furniture_memory_human_audit"] = audit_snapshot(latest.furniture_memory_snapshot, human.records)
         records.append(field_record(latest, now))
+        if ACTIVE_SERVICE_VIDEO is not None:
+            ACTIVE_SERVICE_VIDEO.accept_risk_assessment(latest)
         if args.restaurant_plume_diagnostic:
             phase = (len(records)-1)//args.stationary_frames
             records[-1]["restaurant_plume_phase"] = ("clean_reference_validation", "no_plume", "visible_plume")[phase]
@@ -2377,6 +2386,8 @@ def main():
                         staged_perception.accept(outcome.value)
                     latest = outcome.value
                     latest_source_packet = submitted_packet
+                    if ACTIVE_SERVICE_VIDEO is not None:
+                        ACTIVE_SERVICE_VIDEO.accept_risk_assessment(latest)
                     if args.stationary_furniture_memory:
                         from robot.evaluation.furniture_memory_validation import audit_snapshot
                         latest.diagnostics["furniture_memory_human_audit"] = audit_snapshot(latest.furniture_memory_snapshot, human.records)

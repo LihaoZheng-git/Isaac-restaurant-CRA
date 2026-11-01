@@ -33,3 +33,25 @@ def test_follow_camera_stays_behind_robot_and_wraps_yaw_smoothly():
     assert eye[2] == 2.5 and target[2] == .55
     stopped, _, _ = follow_camera_pose(smooth, smooth, .1)
     np.testing.assert_allclose(stopped, smooth)
+
+
+def test_risk_video_keeps_overview_frames_pause_commands_and_source_age():
+    from test_risk_camera_overlay import capture, fixture
+    overview, combined = [], []
+    recorder = ServiceDemoVideo.__new__(ServiceDemoVideo)
+    recorder.camera = SimpleNamespace(get_data=lambda name: (
+        SimpleNamespace(numpy=lambda: np.full((600, 800, 4), 40, dtype=np.uint8)), None))
+    recorder.writer = SimpleNamespace(write=overview.append)
+    recorder.risk_writer = SimpleNamespace(write=combined.append)
+    recorder.risk_frame = capture(*fixture())
+    recorder.risk_rows = []
+    recorder.last, recorder.rows = -math.inf, []
+    for now in (1.1, 1.2, 1.3):
+        recorder.record(now, (0., 0.), (4., 5.))
+    assert len(overview) == len(combined) == 3
+    assert all(v.shape == (600, 1440, 3) for v in combined)
+    for a, b in zip(overview, combined):
+        np.testing.assert_array_equal(a, b[:, :800])
+    assert recorder.risk_rows[0]["source_age_seconds"] == 0
+    assert recorder.risk_rows[-1]["source_age_seconds"] > .19
+    assert all(row["robot_command"] == [0., 0.] for row in recorder.rows)

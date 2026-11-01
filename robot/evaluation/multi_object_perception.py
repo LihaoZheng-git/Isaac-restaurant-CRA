@@ -1033,6 +1033,10 @@ def assess_all_objects(worker, packet):
         "controller_numeric_policy_ready": True,
         "sensor_perception_ready": all(item.readiness.ready for item in objects),
     }
+    risk_camera_frame = None
+    if getattr(worker, "capture_risk_masks", False):
+        from robot.evaluation.risk_camera_overlay import capture_risk_camera_frame
+        risk_camera_frame = capture_risk_camera_frame(packet, objects, frames, policies)
     return LiveObjectResult(
         field,
         primary.attributes,
@@ -1046,4 +1050,5 @@ def assess_all_objects(worker, packet):
         grid,
         furniture_snapshot,
         uncertainty_snapshot,
+        risk_camera_frame,
     )
