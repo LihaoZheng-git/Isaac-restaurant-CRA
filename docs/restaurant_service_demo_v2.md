@@ -99,3 +99,28 @@ in117.82s; Ruff and the unchanged offline layout-clearance checks also passed.
 Keep the development PR chain and main/primary/PR117 holds. The eventual final
 package belongs in `outputs/final demo/v2/`; the camera-only preview and v1 remain
 separate. No trained steam model or environment upgrade is introduced.
+
+## Preserved v2d full-route failure (efc4059)
+
+All four fresh prerequisites passed: actor circuit,115-source component,
+startup60 and near60. The full mission `outputs/service-demo-v2/long-motion-v2`
+then failed `nearby_track_lost` at113.666667 navigation seconds,4/8 guides and
+749 fields. Clearance was .391761m, minimum CBF .138337 and stopping drift
+.001332m. These are not final arrival. Original report SHA:
+`a6ac73d110e90bd1881079e5394679a59c56efd733590ed95dfb586dbdcb6f55`.
+
+The original four-return furniture fragment2836 (source112.2) remained fully
+covered at the rejected source121.6, maximum correspondence .003308m, by331
+nearby returns uniquely owned by3004. However, that large parent's centroid
+velocity crossed .2m/s;11/7248 current parent points lacked adjacent-scan .06m
+support. The existing whole-parent motion exclusion purged the old fragment.
+The saved raw comparison is a diagnosis, not a three-source qualification replay.
+The user approved testing a separate bounded fragment proof with all original
+support, human-exclusion, expiry, risk and actual-field checks unchanged.
+
+The camera presentation audit passed117 accepted masks/25 tracks/1216 frames,
+using actual phi .561113..807260. Fresh complete four-factor updates remain zero.
+The correctly placed steam diagnostic still failed thermal association: zero
+matched accepted pot cues in both18-source no-plume and plume phases. Visible
+puffs do not justify a thermal score or heat-driven avoidance claim. The failed
+route and its images are retained; accepted final demo/v1 is unchanged.

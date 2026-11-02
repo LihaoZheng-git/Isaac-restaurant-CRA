@@ -1,5 +1,24 @@
 # CRA repository guidance
 
+- V2d at efc4059 PASSED four fresh prerequisites, then full long-motion-v2
+  FAILED nearby_track_lost after113.666667s/749fields/4of8guides, clearance
+  .391761m/stopdrift.001332m. Preserve report SHA
+  a6ac73d110e90bd1881079e5394679a59c56efd733590ed95dfb586dbdcb6f55.
+  Old qualified fragment2836 (four returns, original112.2s) remained wholly
+  supported at rejected121.6s (max.003308m,331 nearby returns, owner3004).
+  Parent centroid speed exceeded.2m/s and11of7248 current parent points lacked
+  adjacent-scan .06m support; whole-parent motion exclusion purged the fragment.
+  This adjacent-scan diagnosis is NOT a complete three-source replay. The user
+  now approves a separate default-OFF fragment-level proof ONLY for already-
+  qualified furniture. Require fresh repeated support of EVERY original point,
+  unique current ownership, original three scans/.2s/.06m/gap limits, human
+  exclusions, original expiry/risk/geometry/current-field checks. Never retain
+  unverified parent parts or renew original sources/factors. Fresh stationary
+  gates and full mission remain required. Camera presentation passed117 masks/
+  25tracks/1216frames; this is not navigation acceptance. Correctly placed pot
+  steam still produced ZERO accepted matched thermal cues. Keep priors and
+  accepted final demo/v1; no v2 acceptance or change to main/primary/PR117 holds.
+
 - User-approved service-demo v2 is separate: revised prop positions, rendered
   pot puffs, native background/continuation walking and source-aligned risk
   camera. Authoring never supplies factor scores/masks/control references.
