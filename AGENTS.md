@@ -1,5 +1,23 @@
 # CRA repository guidance
 
+- Short human-fragment mode at64cf67b PASSED all four fresh prerequisites:
+  actor610.93s wall; component114sources/83retained mass/5current-grid human
+  fragment proofs/33furniture proofs; startup60; near60/10retained mass. Own60
+  also passed. Full navigation FAILED earlier on furniture403 at24.333333s,
+  161fields/1of8guides, .527427m clearance/.004428m stopdrift. Preserve SHA
+  d7b3c8c1d76eea94af65effb2dac0f3b5f7f91a2c2c83d0fbd7eb0381d54cfd9.
+  Original403 at26.1s had626 qualified points. At32.3s623/626 remain within
+  .06m under521, but three gaps are.061578/.066559/.070869m. Parent centroid
+  speed.442085m/s triggers moving exclusion; whole-fragment proof correctly
+  rejects and purges the original prior before36.1s expiry. Do NOT widen.06m,
+  label missing points observed, renew expiry, or silently retain it despite
+  the current exclusion rule. Short-human mode had ZERO wheel-run proofs/no
+  current human here; five parked proofs do not establish navigation benefit.
+  100furniture provenance proofs/71camera masks/8tracks/323frames passed their
+  audits, not arrival. Accepted v1's12 checksums unchanged; no final v2 release.
+  Further partial-observation furniture retention is a policy decision, pending
+  user input. Keep PR208 draft/development-parent and all main/primary holds.
+
 - Separate default-OFF --human-short-fragment-coverage implements the approved
   two-epoch same-envelope prior. It requires original whole-region unique body
   containment (partial competing envelopes reject), then continuous same-parent

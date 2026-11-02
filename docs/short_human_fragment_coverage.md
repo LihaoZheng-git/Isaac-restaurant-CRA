@@ -57,3 +57,33 @@ coverage/real-CLI/recipe cases. Repository Ruff and diff checks passed. These
 results include unchanged strict defaults, original expiry/no identity transfer,
 both-epoch whole-region/ambiguity rejection, current field risk, no revival after
 a missing parent, transactional field admission and source-provenance checks.
+
+Native results at `64cf67b`: all four fresh prerequisites passed. The actor
+hold/release/circuit gate passed; the parked moving-human component passed114
+sources,83 retained adult-mass prior sources and five short-fragment grid proofs.
+Those five proofs had two or three original observations, with.1/.2/.3s missing
+ages; the one-observation case remains unit/archive tested. Startup60 and near60
+passed; the near gate exercised10 retained mass sources. The full mission's own
+60-source stationary gate passed too. All native source fingerprints stayed fixed.
+
+The full mission nevertheless FAILED `nearby_track_lost` before the human:
+24.333333s,161 fields,1/8 guides,.527427m clearance,.184805 minimum CBF margin,
+.004428m stopping drift. Report SHA256:
+`d7b3c8c1d76eea94af65effb2dac0f3b5f7f91a2c2c83d0fbd7eb0381d54cfd9`.
+The blocking record is furniture403, qualified at26.1s with626 points. At32.3s,
+623 points remain within.06m of current owner521; the other three gaps are
+.061578/.066559/.070869m. The owner's centroid speed is.442085m/s, triggering
+motion exclusion. The all-point fragment exception correctly rejects; the
+original ten-second prior is purged before its36.1s expiry. There is no current
+human envelope here and no short-human coverage proof in this wheel run. This
+does not establish a human-mode navigation regression or benefit.
+
+The failed run's100 furniture proofs passed provenance, and camera presentation
+passed71 masks/8 tracks/323 frames with exact score/source/timing parity. These
+do not substitute for arrival. All12 accepted v1 checksums remain unchanged;
+no final v2 archive was released. Raw diagnosis and reports are preserved under
+`outputs/short-human-fragment/long-motion-v1/`. A possible next policy would keep
+an already-qualified original surface as a bounded stationary prior through
+partial observations, while retaining all original geometry, risk, expiry,
+human exclusions and current-field checks. That changes the current moving-
+parent exclusion rule and needs the user's decision; it is not implemented here.
