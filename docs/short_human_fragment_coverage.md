@@ -87,3 +87,13 @@ an already-qualified original surface as a bounded stationary prior through
 partial observations, while retaining all original geometry, risk, expiry,
 human exclusions and current-field checks. That changes the current moving-
 parent exclusion rule and needs the user's decision; it is not implemented here.
+
+More specifically, all626 original points fit the EXISTING.081m retained-prior
+uncertainty radius at32.3s. An offline diagnostic finds1735 nearby current points
+with repeated.06m support in archived31.8/32.0/32.1 sources. This reconstruction
+excludes labeled tracks but does not replay every historical moving-neighborhood
+purge; it is a candidate, not runtime acceptance. The proposed separate proof
+would use that original uncertainty allowance only until36.1s, preserve all
+original geometry/risk/source clocks and fresh field checks, and label coverage
+as PRIOR rather than observed. It would not widen the.06m observed-support gate.
+This interpretation of the furniture prior is explicitly awaiting user approval.
