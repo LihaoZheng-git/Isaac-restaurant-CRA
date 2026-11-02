@@ -105,6 +105,7 @@ class RestaurantHumanSensorDiagnostic:
         observed_motion_reference=False,
         stationary_furniture_memory=False,
         stationary_furniture_fragment_proof=False,
+        human_short_fragment_coverage=False,
         lidar_range_m=7.5,
     ):
         self.stage, self.output = stage, output
@@ -112,6 +113,14 @@ class RestaurantHumanSensorDiagnostic:
             raise ValueError("human LiDAR preprocessing range must be in[7.5,10]m")
         self.lidar_range_m = lidar_range_m
         from robot.safety.motion_aware_passing import MotionAwarePassingConfig
+        from robot.perception.human_fragment_coverage import HumanFragmentCoverageConfig
+        if human_short_fragment_coverage and not identity_selection_body_envelope:
+            raise ValueError('short fragment coverage requires explicit current body envelope')
+        fragment_config = HumanFragmentCoverageConfig(
+            "bounded separated adult; whole original region plus1m/s point-motion prior; .35s original expiry",
+            short_fragment_coverage=True) if human_short_fragment_coverage else None
+        if fragment_config is not None:
+            self.save('human-fragment-coverage-configuration.json', asdict(fragment_config))
         if parallel_guidance_selection and not motion_aware_passing:
             raise ValueError('parallel selection component requires motion-aware passing')
         if maximum_identity_prior_selection_age_seconds and not parallel_guidance_selection:
@@ -238,6 +247,7 @@ class RestaurantHumanSensorDiagnostic:
             lookahead_distance=0.1,
         )
         self.worker = LiveObjectPerception(
+            human_fragment_coverage_config=fragment_config,
             observed_motion_reference=observed_motion_reference,
             human_mass_body_identity_retention=human_mass_body_identity_retention,
             predictive_human_geometry_config=HumanGeometryForecastConfig(
@@ -501,6 +511,7 @@ class RestaurantHumanSensorDiagnostic:
                     "phase": phase,
                     "stationary_furniture_memory": result.diagnostics.get("stationary_furniture_memory"),
                     "furniture_memory_human_audit": furniture_audit,
+                    "human_fragment_coverage_prior": result.diagnostics.get("human_fragment_coverage_prior"),
                     "completion_age_sim_seconds": now - packet.sensor_timestamp_seconds,
                     "processing_wall_seconds": time.perf_counter() - start,
                     "carried_object_groups":result.diagnostics.get("carried_object_groups"),

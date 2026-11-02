@@ -43,6 +43,8 @@ parser.add_argument('--stationary-furniture-memory', action='store_true',
                     help='separate bounded furniture memory exclusion benchmark; no wheels')
 parser.add_argument('--stationary-furniture-fragment-proof', action='store_true',
                     help='separate already-qualified fragment proof benchmark; no wheels')
+parser.add_argument('--human-short-fragment-coverage', action='store_true',
+                    help='separate bounded same-envelope fragment coverage benchmark; zero wheels')
 parser.add_argument('--human-tracking-uncertainty', action='store_true',
                     help='growing geometry prior for unresolved human tracking; zero wheels')
 parser.add_argument('--predictive-human-geometry', action='store_true',
@@ -90,6 +92,8 @@ parser.add_argument(
     metavar=("KG", "LOWER", "UPPER"),
 )
 args = parser.parse_args()
+if args.human_short_fragment_coverage and not args.identity_selection_body_envelope:
+    parser.error('short fragment coverage requires explicit current body envelope')
 if args.stationary_furniture_fragment_proof and not args.stationary_furniture_memory:
     parser.error('fragment-level proof requires explicit stationary furniture memory')
 if args.parallel_preparation_exit_lateral is not None and (not args.parallel_preparation
@@ -489,6 +493,7 @@ def main():
             human_tracking_uncertainty=args.human_tracking_uncertainty,
             stationary_furniture_memory=args.stationary_furniture_memory,
             stationary_furniture_fragment_proof=args.stationary_furniture_fragment_proof,
+            human_short_fragment_coverage=args.human_short_fragment_coverage,
             predictive_human_geometry=args.predictive_human_geometry,
             human_prediction_uncertainty_rate=args.human_prediction_uncertainty_rate,
             human_prediction_uncertainty_floor=args.human_prediction_uncertainty_floor,
@@ -805,6 +810,12 @@ def main():
         report['furniture_memory_validation'] = memory_report
         report['passed'] &= memory_report['passed']
         save('furniture-memory-validation.json', memory_report)
+    if args.human_short_fragment_coverage:
+        from robot.evaluation.human_fragment_validation import summarize_short_fragment_coverage
+        fragment_report = summarize_short_fragment_coverage(sensor.records)
+        report['short_fragment_coverage_validation'] = fragment_report
+        report['passed'] &= fragment_report['passed']
+        save('short-fragment-coverage-validation.json', fragment_report)
     save("validation.json", report)
     print(json.dumps(report), flush=True)
     if not report["passed"]:

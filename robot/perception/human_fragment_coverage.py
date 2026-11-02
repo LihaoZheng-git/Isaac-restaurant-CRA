@@ -22,12 +22,13 @@ class HumanFragmentCoverageConfig:
     maximum_observation_gap_seconds: float = .15
     maximum_parent_velocity_change_mps: float = .3
     minimum_observations: int = 4
+    short_fragment_coverage: bool = False
 
     def __post_init__(self):
         if not isinstance(self.scope, str) or not self.scope.strip():
             raise ValueError("fragment coverage requires an explicit unchanged-shape/motion scope")
         for name, value in vars(self).items():
-            if name == "scope":
+            if name in ("scope", "short_fragment_coverage"):
                 continue
             if isinstance(value, bool) or not math.isfinite(value) or value <= 0:
                 raise ValueError("coverage limits must be finite positive numbers")
@@ -35,6 +36,13 @@ class HumanFragmentCoverageConfig:
             or self.maximum_missing_seconds > .35
             or self.maximum_observation_gap_seconds > .15):
             raise ValueError("coverage requires >=4 observations and bounded original gaps")
+        if not isinstance(self.short_fragment_coverage, bool):
+            raise ValueError("short fragment coverage must be explicitly boolean")
+
+    @property
+    def parent_gap_seconds(self):
+        return (self.maximum_missing_seconds if self.short_fragment_coverage
+                else self.maximum_observation_gap_seconds)
 
 
 def bounds_corners(low, high):
@@ -96,7 +104,7 @@ class HumanFragmentCoverage:
             else:
                 velocity = np.asarray(current[parent].velocity_world_xy)
                 if (not 0 < source_time - previous_body["lidar_timestamp_seconds"]
-                    <= self.config.maximum_observation_gap_seconds + 1e-9
+                    <= self.config.parent_gap_seconds + 1e-9
                     or np.linalg.norm(velocity) > self.config.maximum_point_speed_mps
                     or np.linalg.norm(velocity - previous_body["velocity_world_xy"])
                     > self.config.maximum_parent_velocity_change_mps):
@@ -115,6 +123,10 @@ class HumanFragmentCoverage:
                     reason = "ambiguous_competing_envelope"
             if reason is not None:
                 rejected.append({"track_id": int(key), "original_source_time": old["source_time"], "reason": reason})
+                if self.config.short_fragment_coverage:
+                    # A failed/missing/ambiguous parent cannot revive this old
+                    # region on a later scan. Only actual fragment returns can.
+                    pending[key] = {**old, "motion_eligible": False}
                 continue
             covered.append({
                 "track_id": int(key), "parent_track_id": int(parent),
@@ -129,6 +141,15 @@ class HumanFragmentCoverage:
                 "motion_expansion_m": radius, "maximum_covered_extent_m": extent,
                 "current_body_radius_m": body["radius_m"], "scope": self.config.scope,
                 "original_person_camera_timestamp": body["original_person_camera_timestamp"],
+                "short_fragment_coverage": self.config.short_fragment_coverage,
+                "original_observation_count": old["observation_count"],
+                "original_parent_source_time": old["parent_source_time"],
+                "original_parent_center_world_xy": old["parent_center"],
+                "original_parent_radius_m": old["parent_radius"],
+                "original_parent_camera_timestamp": old["parent_camera_time"],
+                "original_maximum_extent_m": old["parent_extent"],
+                "parent_gap_seconds": source_time - previous_body["lidar_timestamp_seconds"],
+                "maximum_parent_gap_seconds": self.config.parent_gap_seconds,
                 "basis": "full_original_positive_region_plus_configured_point_motion; no observed merge or factor transfer",
             })
         # Only actual positive observations replace a source record. Coverage
@@ -139,22 +160,46 @@ class HumanFragmentCoverage:
             corners = bounds_corners(low, high)
             parents = [p for p, b in bodies.items() if p != key and
                        np.linalg.norm(corners - b["center_world_xy"], axis=1).max() <= b["radius_m"]]
+            parent_id = parents[0] if len(parents) == 1 else None
+            if self.config.short_fragment_coverage and parent_id is not None:
+                # Even a partially overlapping second envelope makes the
+                # original association ambiguous; full containment is not identity.
+                if any(p != parent_id and np.linalg.norm(np.maximum(
+                    low - b["center_world_xy"], np.maximum(np.asarray(b["center_world_xy"]) - high, 0.)))
+                    <= b["radius_m"] for p, b in bodies.items()):
+                    parent_id = None
+            parent_body = bodies.get(parent_id)
             previous = self.positive.get(key)
             velocity = np.asarray(track.velocity_world_xy, float)
             if velocity.shape != (2,) or not np.isfinite(velocity).all():
                 raise ValueError("finite current velocities required")
+            legacy_eligible = bool(previous is not None
+                and 0 < source_time - previous["source_time"] <= self.config.maximum_observation_gap_seconds + 1e-9
+                and track.observation_count >= self.config.minimum_observations
+                and np.linalg.norm(velocity) <= self.config.maximum_point_speed_mps
+                and np.linalg.norm(previous["velocity"]) <= self.config.maximum_point_speed_mps)
+            short_eligible = bool(parent_body is not None
+                and np.linalg.norm(current[parent_id].velocity_world_xy) <= self.config.maximum_point_speed_mps
+                # A one-observation fragment has no measured velocity. Use the
+                # explicit all-direction point-speed prior, not its initial zero.
+                and (track.observation_count == 1 or np.linalg.norm(velocity) <= self.config.maximum_point_speed_mps))
             pending[key] = {
                 "source_time": float(source_time), "point_count": track.point_count,
                 "low": low.copy(), "high": high.copy(), "risk": risks[key],
-                "velocity": velocity.copy(), "parent_id": parents[0] if len(parents) == 1 else None,
-                "motion_eligible": bool(previous is not None
-                    and 0 < source_time - previous["source_time"] <= self.config.maximum_observation_gap_seconds + 1e-9
-                    and track.observation_count >= self.config.minimum_observations
-                    and np.linalg.norm(velocity) <= self.config.maximum_point_speed_mps
-                    and np.linalg.norm(previous["velocity"]) <= self.config.maximum_point_speed_mps),
+                "velocity": velocity.copy(), "parent_id": parent_id,
+                "observation_count": track.observation_count,
+                "parent_source_time": None if parent_body is None else parent_body["lidar_timestamp_seconds"],
+                "parent_center": None if parent_body is None else list(parent_body["center_world_xy"]),
+                "parent_radius": None if parent_body is None else parent_body["radius_m"],
+                "parent_camera_time": None if parent_body is None else parent_body["original_person_camera_timestamp"],
+                "parent_extent": None if parent_body is None else float(np.linalg.norm(
+                    corners - parent_body["center_world_xy"], axis=1).max()),
+                "motion_eligible": short_eligible if self.config.short_fragment_coverage else legacy_eligible,
             }
         self.positive, self.previous_bodies, self.last_time = pending, bodies, float(source_time)
-        return {"covered": covered, "rejected": rejected, "scope": self.config.scope}
+        return {"covered": covered, "rejected": rejected, "scope": self.config.scope,
+                "short_fragment_coverage": self.config.short_fragment_coverage,
+                "source_time": float(source_time)}
 
 
 def apply_coverage_risk_floors(guidance, audit):

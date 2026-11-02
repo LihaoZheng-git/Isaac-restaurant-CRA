@@ -96,7 +96,8 @@ def test_rendered_steam_has_no_collider_mass_or_factor_label():
 @pytest.mark.parametrize('case', ['long-parallel', 'long-parallel-near', 'long-parallel-component',
                                 'long-idle-component', 'bin-view', 'rounded-view',
                                 'utensils-view', 'pot-view', 'pot-plume-component-view'])
-@pytest.mark.parametrize('recipe', ['restaurant_service_demo_v2.json', 'restaurant_service_demo_v2_fragment_proof.json'])
+@pytest.mark.parametrize('recipe', ['restaurant_service_demo_v2.json', 'restaurant_service_demo_v2_fragment_proof.json',
+                                  'restaurant_service_demo_v2_short_fragment.json'])
 def test_v2_recipes_pass_real_cli_checks_without_starting_kit(case, recipe, monkeypatch, tmp_path):
     root = Path(__file__).resolve().parents[2]
     command = json.loads((root/'configs'/recipe).read_text())['commands'][case]
@@ -131,4 +132,30 @@ def test_fragment_cli_rejects_without_memory_before_kit(case, monkeypatch, tmp_p
     monkeypatch.setattr(sys, 'path', list(sys.path))
     with pytest.raises(SystemExit):
         exec(compile(prefix, str(source), 'exec'), dict(__file__=str(source), __name__='cli_test'))
+    assert not (tmp_path/'native').exists()
+
+
+def test_short_fragment_recipe_preserves_every_other_command_option():
+    root = Path(__file__).resolve().parents[2]
+    original = json.loads((root/'configs/restaurant_service_demo_v2_fragment_proof.json').read_text())['commands']
+    candidate = json.loads((root/'configs/restaurant_service_demo_v2_short_fragment.json').read_text())['commands']
+    assert original.keys() == candidate.keys()
+    for case, command in candidate.items():
+        enabled = case in ('long-parallel', 'long-parallel-near', 'long-parallel-component')
+        assert command.count('--human-short-fragment-coverage') == int(enabled)
+        assert [v for v in command if v != '--human-short-fragment-coverage'] == original[case]
+
+
+@pytest.mark.parametrize('case,required', [('long-parallel','--human-fragment-coverage-prior'),
+    ('long-parallel-component','--identity-selection-body-envelope')])
+def test_short_fragment_cli_requires_explicit_parent_mode(case, required, monkeypatch, tmp_path):
+    root = Path(__file__).resolve().parents[2]
+    command = json.loads((root/'configs/restaurant_service_demo_v2_short_fragment.json').read_text())['commands'][case]
+    command.remove(required)
+    source = root/command[0]
+    monkeypatch.setattr(sys, 'argv', [*command, '--output', str(tmp_path/'native')])
+    monkeypatch.setattr(sys, 'path', list(sys.path))
+    with pytest.raises(SystemExit):
+        exec(compile(source.read_text().split('args.output.mkdir', 1)[0], str(source), 'exec'),
+             dict(__file__=str(source), __name__='cli_test'))
     assert not (tmp_path/'native').exists()

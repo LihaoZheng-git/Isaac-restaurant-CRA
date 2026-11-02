@@ -172,6 +172,8 @@ parser.add_argument("--human-boundary-flux", type=float,
                     help="separate human-only applied flux ablation in [-1.7,-.5]; computed CRA and all nonhuman policies unchanged")
 parser.add_argument("--human-fragment-coverage-prior", action="store_true",
                     help="opt-in full-region/motion/risk coverage by current verified body envelope; strict observed merges unchanged")
+parser.add_argument("--human-short-fragment-coverage", action="store_true",
+                    help="separate same-envelope proof at both observations, including new fragments; original .35s expiry")
 parser.add_argument("--human-fragment-maximum-point-speed", type=float, default=1.,
                     help="explicit uncalibrated point-motion PRIOR in m/s, used to expand the whole missing region")
 parser.add_argument("--restaurant-scene", type=Path,
@@ -512,9 +514,12 @@ if args.human_fresh_person_policy and (not (args.human_observed_occupancy_only o
     or args.restaurant_human is None or args.human_carry_bowl):
     parser.error("fresh person policy requires the bare-human observed-only person-selected passing fixture")
 from robot.perception.human_fragment_coverage import HumanFragmentCoverageConfig
+if args.human_short_fragment_coverage and not args.human_fragment_coverage_prior:
+    parser.error("short fragment coverage requires explicit human fragment coverage prior")
 fragment_coverage_config = HumanFragmentCoverageConfig(
     "bounded separated adult fixture; all points in a missing fragment assumed within configured speed bound; .35 s original-source expiry",
-    maximum_point_speed_mps=args.human_fragment_maximum_point_speed) if args.human_fragment_coverage_prior else None
+    maximum_point_speed_mps=args.human_fragment_maximum_point_speed,
+    short_fragment_coverage=args.human_short_fragment_coverage) if args.human_fragment_coverage_prior else None
 if args.human_fragment_coverage_prior and (args.human_body_envelope_radius is None
     or args.experiment_baseline != "continuous_cra_safe_sage"):
     parser.error("fragment coverage requires the validated human-envelope continuous-CRA mode")

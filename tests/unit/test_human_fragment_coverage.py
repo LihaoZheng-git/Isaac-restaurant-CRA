@@ -190,3 +190,123 @@ def test_rotated_grid_and_degenerate_region_do_not_hide_unoccupied_cells():
     assert validate_coverage_grid(proof, occupancy, np.zeros(2), .4)["covered"]
     point_proof = {**proof, "original_bounds_min_world_xy": [1.1, 0.], "original_bounds_max_world_xy": [1.1, 0.]}
     assert validate_coverage_grid(point_proof, occupancy, np.zeros(2), .4)["covered"]
+
+
+SHORT = replace(CONFIG, short_fragment_coverage=True)
+
+
+def new_fragment(time=1., **kwargs):
+    tracks, points, ids, risks, bodies = data(time, **kwargs)
+    tracks[-1] = replace(tracks[-1], observation_count=1, matched_previous_track=False,
+                         velocity_world_xy=(0., 0.))
+    return tracks, points, ids, risks, bodies
+
+
+def test_short_mode_covers_new_fragment_across_point_two_seconds_not_observed_merge():
+    for config, expected in ((CONFIG, False), (SHORT, True)):
+        memory = HumanFragmentCoverage(config)
+        memory.update(*new_fragment(), source_time=1.)
+        result = missing(memory, 1.2)
+        assert bool(result['covered']) is expected
+        if expected:
+            proof = result['covered'][0]
+            assert proof['original_observation_count'] == 1
+            assert proof['original_source_time'] == proof['original_parent_source_time'] == 1.
+            assert proof['original_parent_camera_timestamp'] == 1.
+            assert proof['motion_expansion_m'] == pytest.approx(.2)
+            assert proof['status'] == 'prior'
+            assert memory.positive[8]['source_time'] == 1.
+            assert missing(memory, 1.3)['covered'][0]['original_source_time'] == 1.
+            assert not missing(memory, 1.4)['covered']
+
+
+@pytest.mark.parametrize('problem', ['original_extent', 'original_parent_missing',
+    'current_extent', 'current_parent_missing', 'parent_gap', 'parent_motion', 'measured_fragment_motion'])
+def test_short_fragment_still_requires_both_whole_regions_and_bounded_parent(problem):
+    memory = HumanFragmentCoverage(SHORT)
+    initial = list(new_fragment(fragment_points=[[.5, 0.], [1.5, 0.]]) if problem == 'original_extent' else new_fragment())
+    if problem == 'original_extent':
+        initial[-1][0]['radius_m'] = .4
+    if problem == 'original_parent_missing':
+        initial[-1] = []
+    if problem == 'measured_fragment_motion':
+        initial[0][-1] = replace(initial[0][-1], observation_count=2, velocity_world_xy=(1.1, 0.))
+    memory.update(*initial, source_time=1.)
+    now = 1.36 if problem == 'parent_gap' else 1.2
+    current = list(data(now, False))
+    if problem == 'current_parent_missing':
+        current[-1] = []
+    if problem == 'current_extent':
+        current[-1][0]['center_world_xy'] = [.5, 0.]
+    if problem == 'parent_motion':
+        current[0][0] = replace(current[0][0], velocity_world_xy=(.5, 0.))
+    assert not memory.update(*current, source_time=now)['covered']
+
+
+def add_competitor(values):
+    tracks, points, ids, risks, bodies = values
+    tracks = [*tracks, replace(tracks[0], track_id=9, centroid_world_xy=(1.7, 0.))]
+    points, ids = np.vstack((points, points[:12]+[.7, 0.])), np.r_[ids, np.full(12, 9)]
+    risks = {**risks, 9:.6}
+    bodies = [*bodies, {**bodies[0], 'track_id':9, 'envelope_track_id':3_000_000_009,
+                       'center_world_xy':[1.7, 0.]}]
+    return tracks, points, ids, risks, bodies
+
+
+@pytest.mark.parametrize('at_original', [False, True])
+def test_short_fragment_partial_competing_envelope_at_either_epoch_rejects(at_original):
+    memory = HumanFragmentCoverage(SHORT)
+    values = new_fragment()
+    memory.update(*(add_competitor(values) if at_original else values), source_time=1.)
+    values = data(1.2, False)
+    assert not memory.update(*(values if at_original else add_competitor(values)), source_time=1.2)['covered']
+
+
+def test_short_fragment_failed_parent_continuity_cannot_revive_old_record():
+    memory = HumanFragmentCoverage(SHORT)
+    memory.update(*new_fragment(), source_time=1.)
+    values = list(data(1.1, False))
+    values[-1] = []
+    assert not memory.update(*values, source_time=1.1)['covered']
+    assert not missing(memory, 1.2)['covered']
+    assert not missing(memory, 1.3)['covered']
+    assert memory.positive[8]['source_time'] == 1.
+
+
+@pytest.mark.parametrize('bad_grid', [False, True])
+def test_short_guard_requires_current_field_and_keeps_original_missing_watch(bad_grid):
+    guard = NearbyTrackLossGuard(fragment_coverage_config=SHORT)
+    def observe(t, first):
+        tracks, points, ids, risks, bodies = new_fragment(t) if first else data(t, False)
+        occupancy = grid(bodies[0], .8 if bad_grid else .9)
+        return guard.observe(tracks, source_time=t, robot_world_xy=(.4, 0.),
+            current_points_world_xy=points, current_point_track_ids=ids,
+            current_points_source_time=t, current_track_risks=risks,
+            current_body_envelopes=bodies, current_occupancy_grid=occupancy,
+            current_grid_anchor_xy=np.zeros(2), current_grid_anchor_yaw=0.)
+    observe(1., True)
+    result = observe(1.2, False)
+    assert result['blocked'] is bad_grid
+    assert not result['observed_fragment_merges']
+    assert guard.observed[8][1] == 1.
+    if not bad_grid:
+        assert result['prior_covered_missing_tracks']
+        observe(1.3, False)
+        assert observe(1.4, False)['blocked']
+
+
+def test_short_provenance_audit_rejects_clock_renewal_or_missing_grid_check():
+    from copy import deepcopy
+    from robot.evaluation.human_fragment_validation import summarize_short_fragment_coverage
+    memory = HumanFragmentCoverage(SHORT)
+    memory.update(*new_fragment(), source_time=1.)
+    audit = missing(memory, 1.2)
+    proof = audit['covered'][0]
+    proof['field_coverage'] = validate_coverage_grid(proof, grid(data(1.2, False)[-1][0]), np.zeros(2), 0.)
+    assert summarize_short_fragment_coverage([{'human_fragment_coverage_prior':audit}])['passed']
+    for key in ('original_parent_source_time', 'current_source_time'):
+        broken = deepcopy(audit)
+        broken['covered'][0][key] += .1
+        assert not summarize_short_fragment_coverage([{'human_fragment_coverage_prior':broken}])['passed']
+    del proof['field_coverage']
+    assert not summarize_short_fragment_coverage([{'human_fragment_coverage_prior':audit}])['passed']

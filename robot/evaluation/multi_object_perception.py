@@ -771,6 +771,11 @@ def assess_all_objects(worker, packet):
             key: value.safety_parameters for key, value in applied_guidance.items()
         },
     )
+    if fragment_memory is not None and fragment_memory.config.short_fragment_coverage:
+        from robot.perception.human_fragment_coverage import validate_coverage_grid
+        for proof in fragment_audit["covered"]:
+            proof["field_coverage"] = validate_coverage_grid(
+                proof, grid, worker.anchor, worker.anchor_yaw)
     pipeline_started = time.perf_counter()
     motion_reference = None
     if getattr(worker, 'observed_motion_reference', False):

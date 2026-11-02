@@ -1,5 +1,19 @@
 # CRA repository guidance
 
+- Separate default-OFF --human-short-fragment-coverage implements the approved
+  two-epoch same-envelope prior. It requires original whole-region unique body
+  containment (partial competing envelopes reject), then continuous same-parent
+  current whole-region containment plus1m/s*original age. Parent gap may be up
+  to original.35s expiry; original parent speed/velocity-change gates remain.
+  Initial zero fragment velocity is not a measured static cue. Missing/failed/
+  ambiguous parent coverage cannot revive the old query. Original source/risk/
+  identity/factor clocks, actual-grid whole-region risk/clipping checks, body
+  margins and fixed lambda remain. Fresh raw occupancy is never removed. Recipe
+  changes only this explicit option; component records actual-grid provenance.
+  Archived fragment3645 fits.487564m inside.65m and87 body-raster cells, not wheel
+  acceptance. Fresh four prerequisites/full mission pending. Preserve all holds
+  and failures; see docs/short_human_fragment_coverage.md.
+
 - Furniture fragment proof at6b12a65 passed actor/component/startup/near gates
   (near-v1 failed four retained mass sources; unchanged near-v2 passed seven).
   The full v2 run cleared the original furniture stop but FAILED at133.95s,
