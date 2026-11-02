@@ -195,6 +195,8 @@ parser.add_argument("--background-service-walk", action="store_true",
                     help="v2 actor-only background walking circuit before/after the parallel encounter; separate native route gate required")
 parser.add_argument("--stationary-furniture-memory", action="store_true",
                     help="separate bounded repeated-surface background PRIOR; current people/motion excluded, no source renewal")
+parser.add_argument("--stationary-furniture-fragment-proof", action="store_true",
+                    help="separate repeated-current-support proof for already-qualified fragments only; parent motion exclusion stays")
 parser.add_argument("--long-service-human-gates", nargs=3, type=Path,
                     help="current-source native component, near-human stationary and long-idle folders; required for long human motion")
 parser.add_argument("--restaurant-server", action="store_true", help="explicit static-server scene opt-in; stationary actor gate required before wheels")
@@ -309,6 +311,8 @@ parser.add_argument(
     help="optimizer candidate age cap; every executed horizon still needs fresh exact validation",
 )
 args = parser.parse_args()
+if args.stationary_furniture_fragment_proof and not args.stationary_furniture_memory:
+    parser.error("fragment-level proof requires explicit stationary furniture memory")
 if args.planner_replay_source_window is not None:
     window_start, window_end = args.planner_replay_source_window
     if (not args.save_planner_replay or not math.isfinite(window_start)
@@ -1382,8 +1386,9 @@ def main():
     if args.stationary_furniture_memory:
         if not (args.restaurant_human == "parallel" and args.rolling_local_field and args.persistent_object_risk_map) or args.static_occupancy_memory_prior:
             raise ValueError("furniture memory requires the separate long-human rolling experiment, not global static memory")
-        from robot.perception.stationary_furniture_memory import StationaryFurnitureMemory
-        perception.stationary_furniture_memory = StationaryFurnitureMemory()
+        from robot.perception.stationary_furniture_memory import FurnitureMemoryConfig, StationaryFurnitureMemory
+        perception.stationary_furniture_memory = StationaryFurnitureMemory(FurnitureMemoryConfig(
+            fragment_level_proof=args.stationary_furniture_fragment_proof))
     history = EgoPoseHistory()
     if args.rolling_local_field:
         from robot.safety.rolling_local_field import RollingLocalField

@@ -104,6 +104,7 @@ class RestaurantHumanSensorDiagnostic:
         human_mass_body_identity_retention=False,
         observed_motion_reference=False,
         stationary_furniture_memory=False,
+        stationary_furniture_fragment_proof=False,
         lidar_range_m=7.5,
     ):
         self.stage, self.output = stage, output
@@ -326,9 +327,12 @@ class RestaurantHumanSensorDiagnostic:
         )
         if body_contact_config is not None:
             self.save("human-body-contact-configuration.json", asdict(body_contact_config))
+        if stationary_furniture_fragment_proof and not stationary_furniture_memory:
+            raise ValueError("fragment-level proof requires explicit stationary furniture memory")
         if stationary_furniture_memory:
-            from robot.perception.stationary_furniture_memory import StationaryFurnitureMemory
-            self.worker.stationary_furniture_memory = StationaryFurnitureMemory()
+            from robot.perception.stationary_furniture_memory import FurnitureMemoryConfig, StationaryFurnitureMemory
+            self.worker.stationary_furniture_memory = StationaryFurnitureMemory(FurnitureMemoryConfig(
+                fragment_level_proof=stationary_furniture_fragment_proof))
         self.history = EgoPoseHistory(maximum_samples=2048)
         self.truth, self.records, self.rejections = [], [], []
         self.executor = ThreadPoolExecutor(max_workers=1)

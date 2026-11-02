@@ -502,3 +502,153 @@ def test_duplicate_and_invalid_sources_reject():
         observe(m, 1.)
     with pytest.raises(ValueError):
         replace(FurnitureMemoryConfig(), uncertainty_radius_m=False)
+
+
+def fragment_memory():
+    memory = StationaryFurnitureMemory(FurnitureMemoryConfig(fragment_level_proof=True))
+    acquire(memory)
+    return memory
+
+
+def changing_parent(memory, now, **kwargs):
+    # Old stationary piece plus a newly visible, unsupported remote piece.
+    # Parent centroid velocity is suspect; old local support remains genuine.
+    points = np.vstack((POINTS, POINTS+[.6+now, .2]))
+    return observe(memory, now, key=2, points=points, velocity=(.23, 0.), **kwargs)
+
+
+def test_opt_in_fragment_proof_preserves_only_original_piece_and_clocks():
+    legacy = StationaryFurnitureMemory()
+    acquire(legacy)
+    assert not changing_parent(legacy, 1.3)[0].surfaces
+    memory = fragment_memory()
+    for now in (1.3, 1.4, 1.5, 1.6):
+        snapshot, audit = changing_parent(memory, now)
+        assert audit['excluded_track_ids'] == [2]
+        assert audit['fragment_proof_track_ids'] == [1]
+        assert not audit['enrolled_track_ids']
+        assert 2 not in memory.records and 2 not in memory.pending_surfaces
+        assert len(snapshot.surfaces) == len(snapshot.observed_surfaces) == 1
+        r = snapshot.surfaces[0]
+        assert r.track_id == 1 and r.source_time == 1.2 and r.source_frame == 12
+        assert r.qualification_source_time == 1.2 and r.guidance is GUIDANCE
+        np.testing.assert_array_equal(r.points, POINTS)
+        proof = snapshot.coverage(1, 1.2, (1., 0.), grid_for(snapshot, current=True), (0., 0.), 0.)
+        assert proof['fragment_level_proof']
+        assert len(set(proof['support_source_times'])) >= 3
+        assert proof['current_track_id'] == 2
+        # Only local positive support enters the dedicated history; not parent.
+        assert all(np.max(p[:, 0]) == 1. for _, p in memory.fragment_history[1][1])
+        assert all(not len(p) for _, p in memory.history)
+
+
+@pytest.mark.parametrize('problem', ['partial', 'moved', 'person_mask', 'person_id',
+    'old_person_id', 'source_gap', 'two_returns', 'ambiguous', 'unclustered', 'other_motion'])
+def test_fragment_proof_rejects_incomplete_or_unsafe_association(problem):
+    memory = fragment_memory()
+    now = 1.6 if problem == 'source_gap' else 1.3
+    points = np.vstack((POINTS, POINTS+[2., 0.]))
+    ids = np.full(len(points), 2)
+    extra = {}
+    if problem == 'partial':
+        points[:3] += [0., .1]
+    elif problem == 'moved':
+        points[:3] += [.1, 0.]
+    elif problem == 'two_returns':
+        points = np.vstack((POINTS[:2], POINTS+[2., 0.]))
+        ids = np.full(len(points), 2)
+    elif problem == 'person_mask':
+        extra['excluded_points'] = [[1., 0.]]
+    elif problem in {'person_id', 'old_person_id'}:
+        extra['excluded_track_ids'] = [2 if problem == 'person_id' else 1]
+    elif problem in {'ambiguous', 'unclustered', 'other_motion'}:
+        other = POINTS+[.001, 0.]
+        if problem == 'other_motion':
+            other = np.array([[1.001, -.08], [4., 4.]])
+        points = np.vstack((points, other))
+        ids = np.r_[ids, np.full(len(other), -1 if problem == 'unclustered' else 3)]
+    tracks = tuple(track(int(k), points[ids == k], (.23, 0.)) for k in np.unique(ids) if k >= 0)
+    snapshot, audit = memory.update(points, ids, tracks, {2: GUIDANCE, 3: GUIDANCE},
+        source_time=now, source_frame=13, robot_xy=(0., 0.), **extra)
+    assert not audit['fragment_proof_track_ids']
+    assert not snapshot.observed_surfaces
+    assert not memory.fragment_history
+    if problem == 'moved':
+        # The old isolated surface can retain its original bounded PRIOR;
+        # this option supplies no current observation or renewed expiry.
+        assert snapshot.surfaces[0].source_time == 1.2
+        return
+    assert not snapshot.surfaces
+    # The purged original cannot be reintroduced by later good parent scans.
+    assert not changing_parent(memory, now+.1)[1]['fragment_proof_track_ids']
+
+
+def test_pending_fragment_cannot_borrow_exception_or_duplicate_scan_support():
+    memory = StationaryFurnitureMemory(FurnitureMemoryConfig(fragment_level_proof=True))
+    observe(memory, 1.)
+    observe(memory, 1.1)
+    assert not changing_parent(memory, 1.2)[1]['fragment_proof_track_ids']
+    memory = fragment_memory()
+    changing_parent(memory, 1.3)
+    # Both buffers contain the same sole source: not two independent scans.
+    memory.history = [(1.3, POINTS.copy())]
+    memory.fragment_history[1] = (1.2, [(1.3, POINTS.copy())])
+    assert not changing_parent(memory, 1.5)[1]['fragment_proof_track_ids']
+
+
+def test_fragment_proof_keeps_original_expiry_and_current_continuity():
+    memory = fragment_memory()
+    for now in np.arange(13, 114)/10:
+        snapshot, audit = changing_parent(memory, now)
+        assert audit['fragment_proof_track_ids'] == [1]
+    assert not snapshot.surfaces
+    assert not snapshot.placements(grid_for(snapshot).config, (0., 0.), 0.)[0].size
+    proof = snapshot.coverage(1, 1.2, (1., 0.), grid_for(snapshot, current=True), (0., 0.), 0.)
+    assert proof['original_source_time'] == 1.2 and proof['fragment_level_proof']
+    assert not missing(memory, 11.4)[0].observed_surfaces
+    assert not changing_parent(memory, 11.5)[1]['fragment_proof_track_ids']
+
+
+def test_fragment_history_survives_parent_centroid_speed_returning_to_normal():
+    memory = fragment_memory()
+    changing_parent(memory, 1.3)
+    changing_parent(memory, 1.4)
+    snapshot, audit = observe(memory, 1.5, key=2,
+        points=np.vstack((POINTS, POINTS+[3., 0.])))
+    assert audit['fragment_proof_track_ids'] == [1]
+    assert not audit['enrolled_track_ids']  # No borrowed support of remote points.
+    assert snapshot.observed_surfaces[0].original.source_time == 1.2
+    assert changing_parent(memory, 1.6)[1]['fragment_proof_track_ids'] == [1]
+
+
+@pytest.mark.parametrize('problem', ['wrong_time', 'wrong_center', 'missing_cell', 'low_risk', 'low_flux', 'clipped'])
+def test_fragment_proof_never_bypasses_actual_field_checks(problem):
+    memory = fragment_memory()
+    snapshot, _ = changing_parent(memory, 1.3)
+    # Isolate observed coverage; retained coverage is independently unchanged.
+    snapshot = replace(snapshot, surfaces=())
+    grid = grid_for(snapshot, current=True)
+    row, col = np.argwhere(grid.occupied_mask)[0]
+    if problem == 'missing_cell':
+        grid.occupied_mask[row, col] = False
+    elif problem == 'low_risk':
+        grid.cell_risks[row, col] = 0.
+    elif problem == 'low_flux':
+        grid.cell_boundary_fluxes[row, col] = 0.
+    assert snapshot.coverage(1, 1.1 if problem == 'wrong_time' else 1.2,
+        (1.1, 0.) if problem == 'wrong_center' else (1., 0.), grid,
+        (10., 0.) if problem == 'clipped' else (0., 0.), 0.) is None
+
+
+def test_fragment_proof_is_included_in_independent_human_audit():
+    from robot.evaluation.furniture_memory_validation import audit_snapshot
+    snapshot, _ = changing_parent(fragment_memory(), 1.3)
+    snapshot = replace(snapshot, surfaces=())
+    assert not audit_snapshot(snapshot, [{'time': 1.3, 'actor_xyz': [1., 0., 0.]}])['passed']
+    assert audit_snapshot(snapshot, [{'time': 1.3, 'actor_xyz': [3., 3., 0.]}])['passed']
+
+
+def test_fragment_proof_requires_explicit_boolean():
+    assert not FurnitureMemoryConfig().fragment_level_proof
+    with pytest.raises(ValueError, match='boolean'):
+        FurnitureMemoryConfig(fragment_level_proof=1)

@@ -41,6 +41,8 @@ parser.add_argument('--human-track-recovery', action='store_true',
                     help='explicit bounded current-positive human identity recovery; no wheel commands')
 parser.add_argument('--stationary-furniture-memory', action='store_true',
                     help='separate bounded furniture memory exclusion benchmark; no wheels')
+parser.add_argument('--stationary-furniture-fragment-proof', action='store_true',
+                    help='separate already-qualified fragment proof benchmark; no wheels')
 parser.add_argument('--human-tracking-uncertainty', action='store_true',
                     help='growing geometry prior for unresolved human tracking; zero wheels')
 parser.add_argument('--predictive-human-geometry', action='store_true',
@@ -88,6 +90,8 @@ parser.add_argument(
     metavar=("KG", "LOWER", "UPPER"),
 )
 args = parser.parse_args()
+if args.stationary_furniture_fragment_proof and not args.stationary_furniture_memory:
+    parser.error('fragment-level proof requires explicit stationary furniture memory')
 if args.parallel_preparation_exit_lateral is not None and (not args.parallel_preparation
     or not math.isfinite(args.parallel_preparation_exit_lateral) or not 1.6 <= args.parallel_preparation_exit_lateral <= 2.2):
     parser.error('preparation exit hysteresis requires explicit preparation and limit in[1.6,2.2]m')
@@ -484,6 +488,7 @@ def main():
             human_track_recovery=args.human_track_recovery,
             human_tracking_uncertainty=args.human_tracking_uncertainty,
             stationary_furniture_memory=args.stationary_furniture_memory,
+            stationary_furniture_fragment_proof=args.stationary_furniture_fragment_proof,
             predictive_human_geometry=args.predictive_human_geometry,
             human_prediction_uncertainty_rate=args.human_prediction_uncertainty_rate,
             human_prediction_uncertainty_floor=args.human_prediction_uncertainty_floor,

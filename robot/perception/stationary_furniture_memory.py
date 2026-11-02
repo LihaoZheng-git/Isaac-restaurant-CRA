@@ -29,9 +29,14 @@ class FurnitureMemoryConfig:
     moving_surface_exclusion_radius_m: float = .06
     moving_track_speed_mps: float = .2
     enrollment_distance_m: float = 2.5
+    fragment_level_proof: bool = False
 
     def __post_init__(self):
-        for value in vars(self).values():
+        if not isinstance(self.fragment_level_proof, bool):
+            raise ValueError("fragment-level proof must be an explicit boolean")
+        for name, value in vars(self).items():
+            if name == "fragment_level_proof":
+                continue
             if isinstance(value, bool) or not math.isfinite(value) or value <= 0:
                 raise ValueError("furniture memory limits must be finite and positive")
         if self.maximum_age_seconds > 10 or self.minimum_support_seconds < .2:
@@ -82,6 +87,8 @@ class ObservedSurfaceCoverage:
     current_track_id: int
     points: np.ndarray
     maximum_correspondence_distance_m: float
+    fragment_level_proof: bool = False
+    support_source_times: tuple = ()
 
 
 @dataclass(frozen=True)
@@ -135,6 +142,8 @@ class FurnitureSnapshot:
                     original_point_count=len(r.points), current_covering_point_count=len(observed.points),
                     original_risk=r.guidance.risk, checked_cell_count=len(cells),
                     maximum_correspondence_distance_m=observed.maximum_correspondence_distance_m,
+                    fragment_level_proof=observed.fragment_level_proof,
+                    support_source_times=observed.support_source_times,
                     basis="fresh_unique_whole_positive_surface_in_current_field; no_retained_geometry_or_source_renewal")
         records = [r for r in self.surfaces if r.track_id == track_id]
         if len(records) != 1:
@@ -168,6 +177,8 @@ class FurnitureSnapshot:
                         original_source_time=o.original.source_time,
                         current_source_time=self.source_time, current_source_frame=o.current_source_frame,
                         current_track_id=o.current_track_id, current_point_count=len(o.points),
+                        fragment_level_proof=o.fragment_level_proof,
+                        support_source_times=o.support_source_times,
                         maximum_correspondence_distance_m=o.maximum_correspondence_distance_m)
                         for o in self.observed_surfaces],
                     config=asdict(self.config), retained_count=len(self.surfaces),
@@ -185,6 +196,9 @@ class StationaryFurnitureMemory:
         self.records = {}
         self.pending_surfaces = {}
         self.observed_associations = {}
+        # Separate history for proven pieces of an excluded parent. Never used
+        # to qualify a new surface or the rest of that parent.
+        self.fragment_history = {}
         self.last_time = None
 
     def update(self, points, ids, tracks, guidance, *, source_time, source_frame,
@@ -257,6 +271,77 @@ class StationaryFurnitureMemory:
         moving_points = points[np.isin(ids, list(moving))]
         moving_tree = cKDTree(moving_points) if len(moving_points) else None
 
+        raw_tree = support_tree(points) if len(points) else None
+
+        def unique_owner(original):
+            if raw_tree is None:
+                return None
+            neighborhoods = raw_tree.query_ball_point(original, cfg.support_distance_m)
+            indices = np.unique(np.concatenate(neighborhoods)).astype(int)
+            nearby_ids = ids[indices]
+            if np.count_nonzero(nearby_ids == -1) >= 3:
+                return None
+            owners = []
+            for owner in np.unique(nearby_ids[nearby_ids >= 0]):
+                owned_indices = indices[nearby_ids == owner]
+                if (len(np.unique(points[owned_indices], axis=0)) >= 3
+                    and np.all(support_tree(points[owned_indices]).query(original)[0] <= cfg.support_distance_m)):
+                    owners.append((int(owner), owned_indices))
+            return owners[0] if len(owners) == 1 else None
+
+        continuous = {k: r for k, (r, t) in self.observed_associations.items()
+                      if not source_gap and 0 < source_time-t <= cfg.maximum_sample_gap_seconds+1e-9}
+        qualified = dict(continuous)
+        qualified.update({k: r for k, r in self.records.items()
+                          if 0 < source_time-r.source_time <= cfg.maximum_age_seconds})
+        fragment_proofs, fragment_history = {}, {}
+        if cfg.fragment_level_proof and not source_gap:
+            for key, r in qualified.items():
+                if key in tracks or key in people or not human_clear(r.points).all():
+                    continue
+                match = unique_owner(r.points)
+                if match is None:
+                    continue
+                owner, indices = match
+                if owner in people or (owner not in moving and key not in self.fragment_history):
+                    continue
+                # A different moving surface near the old piece is still a
+                # contradiction. Only the uniquely covering parent is exempt.
+                other = points[np.isin(ids, list(moving - {owner}))]
+                if len(other) and np.any(support_tree(other).query(r.points)[0] <= cfg.moving_surface_exclusion_radius_m):
+                    continue
+                samples = list(history)
+                old = self.fragment_history.get(key)
+                if old is not None and old[0] == r.source_time:
+                    samples += [(t, p[human_clear(p)]) for t, p in old[1]
+                                if 0 < source_time-t <= 2*cfg.maximum_sample_gap_seconds+1e-9]
+                # Normal and fragment histories may share a scan. Count each
+                # actual source once, never duplicate a source into three scans.
+                by_time = {}
+                for t, p in samples:
+                    by_time.setdefault(t, []).append(p)
+                samples = [(t, np.concatenate(parts)) for t, parts in sorted(by_time.items())]
+                current = points[indices]
+                supported, _ = support_from(samples, current)
+                current = current[supported & human_clear(current)]
+                original_supported, _ = support_from(samples, r.points)
+                if not original_supported.all() or len(np.unique(current, axis=0)) < 3:
+                    continue
+                distances = support_tree(current).query(r.points)[0]
+                if np.any(distances > cfg.support_distance_m):
+                    continue
+                proof = ObservedSurfaceCoverage(r, int(source_frame), owner,
+                    current.copy(), float(distances.max()), True,
+                    tuple(t for t, _ in samples) + (float(source_time),))
+                fragment_proofs[key] = proof
+                # Save only positively verified local returns from this source.
+                # Failed proofs disappear; history cannot revive an old query.
+                original_tree = support_tree(r.points)
+                fragment_history[key] = (r.source_time,
+                    ([(t, p[original_tree.query(p)[0] <= cfg.support_distance_m])
+                      for t, p in samples]
+                     + [(float(source_time), current.copy())])[-8:])
+
         def allowed(p):
             motion_clear = (np.ones(len(p), dtype=bool) if moving_tree is None else
                             moving_tree.query(p)[0] > cfg.moving_surface_exclusion_radius_m)
@@ -268,7 +353,7 @@ class StationaryFurnitureMemory:
         stable = usable & world_supported
         records = {k: r for k, r in self.records.items()
                    if 0 < source_time - r.source_time <= cfg.maximum_age_seconds
-                   and k not in excluded and allowed(r.points).all()}
+                   and (k in fragment_proofs or k not in excluded and allowed(r.points).all())}
         # A fragment may change ID just before its third supporting scan. Keep
         # its original measured surface unpublished for at most TWO existing
         # source-gap intervals (the three-scan history window). Later actual
@@ -318,28 +403,20 @@ class StationaryFurnitureMemory:
         # when its large parent cluster has a distant centroid. The old query
         # and policy stay unchanged; no old geometry is added after its expiry.
         # Beyond that expiry, a proof must be continuous across real sources.
-        associations = {k: r for k, (r, t) in self.observed_associations.items()
-                        if not source_gap and 0 < source_time-t <= cfg.maximum_sample_gap_seconds+1e-9}
+        associations = dict(continuous)
         associations.update(records)
         observed, verified = [], {}
-        raw_tree = support_tree(points) if len(points) else None
         for key, r in associations.items():
+            if key in fragment_proofs:
+                observed.append(fragment_proofs[key])
+                verified[key] = (r, float(source_time))
+                continue
             if key in tracks or key in excluded or not allowed(r.points).all() or raw_tree is None:
                 continue
-            neighborhoods = raw_tree.query_ball_point(r.points, cfg.support_distance_m)
-            indices = np.unique(np.concatenate(neighborhoods)).astype(int)
-            nearby_ids = ids[indices]
-            if np.count_nonzero(nearby_ids == -1) >= 3:
+            match = unique_owner(r.points)
+            if match is None:
                 continue
-            owners = []
-            for owner in np.unique(nearby_ids[nearby_ids >= 0]):
-                owned_indices = indices[nearby_ids == owner]
-                if (len(np.unique(points[owned_indices], axis=0)) >= 3
-                    and np.all(support_tree(points[owned_indices]).query(r.points)[0] <= cfg.support_distance_m)):
-                    owners.append((int(owner), owned_indices))
-            if len(owners) != 1:
-                continue
-            owner, owned_indices = owners[0]
+            owner, owned_indices = match
             covered_points = points[owned_indices[stable[owned_indices]]]
             if len(np.unique(covered_points, axis=0)) < 3:
                 continue
@@ -350,6 +427,7 @@ class StationaryFurnitureMemory:
                                                    covered_points.copy(), float(distance.max())))
             verified[key] = (r, float(source_time))
         self.observed_associations = verified
+        self.fragment_history = fragment_history
         self.records, self.last_time = records, float(source_time)
         self.history = (history + [(float(source_time), points[usable].copy())])[-8:]
         snapshot = FurnitureSnapshot(float(source_time), cfg,
@@ -359,6 +437,7 @@ class StationaryFurnitureMemory:
                      qualification_history_reset=bool(source_gap),
                      pending_surface_count=len(pending), confirmed_missing_track_ids=confirmed,
                      rejected_tracks=rejected, centroid_surface_disagreement_track_ids=sorted(disagreement),
+                     fragment_proof_track_ids=sorted(fragment_proofs),
                      excluded_track_ids=sorted(excluded), exclusion_point_count=len(forbidden),
                      current_observed_point_count=len(points),
                      scope="repeated geometric support plus stationary-background prior; not semantic furniture recognition")

@@ -1,5 +1,20 @@
 # CRA repository guidance
 
+- Separate --stationary-furniture-fragment-proof is default OFF and requires
+  stationary furniture memory. Only an ALREADY-qualified absent original piece
+  may override its uniquely covering parent's centroid-motion exclusion, with
+  every old AND current covering point supported by >=3 distinct real scans/
+  .2s/.06m, original source-gap limits and >=3 distinct current returns. Other
+  moving owners, human masks/body/uncertainty and ambiguous ownership reject.
+  A separate local support history cannot enroll any new parent parts; same
+  timestamps count once. Preserve source/qualification/risk/10s geometry expiry
+  and actual current-field risk/flux/clipping checks. Existing continuous current
+  surface proofs may continue after expiry, without retained occupancy or source
+  renewal. Full parent motion/kinetic evidence and raw occupancy remain. Fresh
+  four native prerequisites then full v2 mission are pending. Keep all failed
+  records, accepted v1, draft development chain and main/primary/PR117 holds.
+  See docs/stationary_furniture_fragment_proof.md.
+
 - V2d at efc4059 PASSED four fresh prerequisites, then full long-motion-v2
   FAILED nearby_track_lost after113.666667s/749fields/4of8guides, clearance
   .391761m/stopdrift.001332m. Preserve report SHA

@@ -96,13 +96,39 @@ def test_rendered_steam_has_no_collider_mass_or_factor_label():
 @pytest.mark.parametrize('case', ['long-parallel', 'long-parallel-near', 'long-parallel-component',
                                 'long-idle-component', 'bin-view', 'rounded-view',
                                 'utensils-view', 'pot-view', 'pot-plume-component-view'])
-def test_v2_recipes_pass_real_cli_checks_without_starting_kit(case, monkeypatch, tmp_path):
+@pytest.mark.parametrize('recipe', ['restaurant_service_demo_v2.json', 'restaurant_service_demo_v2_fragment_proof.json'])
+def test_v2_recipes_pass_real_cli_checks_without_starting_kit(case, recipe, monkeypatch, tmp_path):
     root = Path(__file__).resolve().parents[2]
-    command = json.loads((root/'configs/restaurant_service_demo_v2.json').read_text())['commands'][case]
+    command = json.loads((root/'configs'/recipe).read_text())['commands'][case]
     source = root/command[0]
     prefix = source.read_text().split('args.output.mkdir', 1)[0]
     monkeypatch.setattr(sys, 'argv', [*command, '--output', str(tmp_path/'native')])
     monkeypatch.setattr(sys, 'path', list(sys.path))
     scope = dict(__file__=str(source), __name__='cli_validation_test')
     exec(compile(prefix, str(source), 'exec'), scope)
+    assert not (tmp_path/'native').exists()
+
+
+def test_fragment_recipe_changes_only_the_explicit_memory_option():
+    root = Path(__file__).resolve().parents[2]
+    original = json.loads((root/'configs/restaurant_service_demo_v2.json').read_text())['commands']
+    candidate = json.loads((root/'configs/restaurant_service_demo_v2_fragment_proof.json').read_text())['commands']
+    assert original.keys() == candidate.keys()
+    for case, command in candidate.items():
+        enabled = '--stationary-furniture-memory' in original[case]
+        assert command.count('--stationary-furniture-fragment-proof') == int(enabled)
+        assert [v for v in command if v != '--stationary-furniture-fragment-proof'] == original[case]
+
+
+@pytest.mark.parametrize('case', ['long-parallel', 'long-parallel-component'])
+def test_fragment_cli_rejects_without_memory_before_kit(case, monkeypatch, tmp_path):
+    root = Path(__file__).resolve().parents[2]
+    command = json.loads((root/'configs/restaurant_service_demo_v2_fragment_proof.json').read_text())['commands'][case]
+    command.remove('--stationary-furniture-memory')
+    source = root/command[0]
+    prefix = source.read_text().split('args.output.mkdir', 1)[0]
+    monkeypatch.setattr(sys, 'argv', [*command, '--output', str(tmp_path/'native')])
+    monkeypatch.setattr(sys, 'path', list(sys.path))
+    with pytest.raises(SystemExit):
+        exec(compile(prefix, str(source), 'exec'), dict(__file__=str(source), __name__='cli_test'))
     assert not (tmp_path/'native').exists()
