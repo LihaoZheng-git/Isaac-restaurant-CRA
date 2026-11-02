@@ -1,5 +1,23 @@
 # CRA repository guidance
 
+- Furniture fragment proof at6b12a65 passed actor/component/startup/near gates
+  (near-v1 failed four retained mass sources; unchanged near-v2 passed seven).
+  The full v2 run cleared the original furniture stop but FAILED at133.95s,
+  834fields/5of8guides, clearance.134791m/stopdrift.000845m. Preserve SHA
+  b1d2f995c92012994c023113e2802acc2667982609b1b67ce876038db31ce01a.
+  At source141.9 newly observed seven-point fragment3645 was missing for.2s
+  inside validated human2367's envelope. Whole old bounds plus.2m motion prior
+  fit (.487564m extent in.65m envelope), but old four-observation/.15s rules
+  rejected. This is not an observed identity merge or stationary furniture.
+  User now approves a SEPARATE default-OFF bounded human-fragment option:
+  unique validated same envelope covers the entire region at both observations;
+  retain original.35s expiry,1m/s point-motion prior, current-field whole-region
+  risk/geometry checks and all clocks. No factor/identity transfer or margins
+  change. Fresh native prerequisites/full arrival required; implementation and
+  new validation pending. Camera provenance passed120masks/25tracks/1419frames;
+  4047 furniture fragment proofs passed provenance, not navigation acceptance.
+  Preserve accepted v1, failed v2, draft chain and main/primary/PR117 holds.
+
 - Separate --stationary-furniture-fragment-proof is default OFF and requires
   stationary furniture memory. Only an ALREADY-qualified absent original piece
   may override its uniquely covering parent's centroid-motion exclusion, with

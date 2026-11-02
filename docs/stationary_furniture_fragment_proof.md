@@ -43,3 +43,29 @@ unclustered/competing moving returns, duplicate scan clocks, no parent enrollmen
 unchanged expiry, normal/fast parent transitions, current-field risk/flux/clipping
 and independent human audits. Both real CLI parsers reject the option without
 memory; recipe parity verifies no other experiment setting changed.
+
+Native execution at `6b12a65` passed all four fresh prerequisites: actor circuit,
+114-source component (69 retained), startup60 and near60. The first near run
+failed the unchanged five-retained-source requirement with four; an unchanged
+repeat passed with seven. Both records remain under
+`outputs/furniture-fragment-proof/`.
+
+The full mission passed the earlier furniture stopping point and encountered
+the walking human, but failed `nearby_track_lost` after133.95s:5/8 guides,
+834 fields, .134791m minimum clearance and .000845m stopping drift. The report
+SHA256 is `b1d2f995c92012994c023113e2802acc2667982609b1b67ce876038db31ce01a`.
+Human navigation and furniture audits passed;1383 retained-prior and574 fresh
+surface coverage events were recorded. A separate provenance audit passed4047
+fragment proofs; this is not an independent raw-scan replay or mission acceptance.
+Camera provenance passed120 masks/25 tracks/1419 frames, without making the
+failed navigation a demonstration release.
+
+The new stop is a seven-point fragment3645 first observed at141.7s, absent at
+141.9s inside human2367's validated body envelope. Its whole original bounds
+expanded by the unchanged1m/s prior over.2s fit inside that current envelope
+(.487564m extent versus.65m radius). Raw nearest-return distances exceed.10m;
+it is not an observed merge. The existing coverage mode rejects one observation
+and a.2s parent gap. The user approved a separate bounded two-observation body
+coverage experiment, retaining.35s original expiry and current-grid risk/geometry
+checks. That work requires separate implementation and fresh native validation.
+Accepted `outputs/final demo/v1/` remains unchanged; no v2 archive is accepted.
