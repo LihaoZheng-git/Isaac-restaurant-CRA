@@ -111,3 +111,61 @@ The user then approved a separate evidence-based stationary-background prior
 for partially observed non-human surfaces. Whole geometry remains occupied;
 people/observed movers retain dynamic uncertainty. This follow-up requires new
 unit and native validation; it does not turn this interrupted trial into a pass.
+
+## Supported-background follow-up
+
+The explicitly approved, separate `--unknown-supported-background-prior` option
+is default OFF and requires unknown-obstacle planning. Its matched recipe is
+`configs/restaurant_service_demo_v2_supported_background.json`. The original
+all-point furniture qualifier and all earlier recipes remain unchanged.
+
+The new hypothesis requires at least99% of the original points within6cm of
+current points that themselves have support in two earlier real scans, with
+three sources spanning at least0.2s and individual gaps no larger than0.35s.
+At least three distinct physical support coordinates are required. Duplicated
+returns do not count as separate supporting positions. Every remaining point
+must lie within25cm of repeatedly supported geometry. All original points,
+including that unsupported tail, remain occupied with a25cm position allowance,
+plus0.005m/s growth during the existing ten-second geometric support lease.
+
+These configurable limits are engineering assumptions for separated restaurant
+background surfaces. They do not establish that every retained point was seen,
+that a surface is a recognized piece of furniture, or that it cannot move.
+The25cm bound was selected after the three-source archived diagnostic found a
+23.8627cm maximum gap to repeated support; the initial20cm candidate rejected
+that surface. The same25cm allowance is added to occupied geometry. The native
+validation will be fresh, rather than treating that diagnostic as an independent
+navigation test.
+
+Current person masks, validated body regions and uncertain-human regions exclude
+stationary qualification. A current track above0.2m/s whose geometry lacks the
+dominant fixed-world support excludes its6cm neighborhood as possible motion.
+Centroid motion with dominant fixed-world support can be cluster resampling;
+it does not change kinetic evidence. Contradictions remove the stationary
+hypothesis and retain dynamic uncertainty. Whole-source gaps clear unpublished
+support history. No identity, visual factor or original source timestamp is
+renewed. A separate support timestamp records real current geometry evidence;
+unobserved geometry expires into dynamic uncertainty after ten seconds.
+When a conflict invalidates a previously supported stationary hypothesis,
+motion uncertainty starts at its last real geometric support epoch and retains
+that epoch's position allowance. This timestamp is logged separately from the
+unchanged original query/factor source; it is never advanced by the conflict.
+
+Archived three-source geometry replay qualifies both diagnosed surfaces:
+track59 retains8,706 points with8,677 repeatedly supported (99.6669%);
+track176 retains6,740 with6,738 supported (99.9703%). Original epochs8.2s and10.0s
+remain unchanged. This replay uses actual archived raw geometry/current track
+metadata, without seeding qualification or using actor truth. It does not replay
+the complete earlier perception, field/MPC, or wheel mission. The first source
+for track59 is transformed from its recorded robot pose and obstacle scan.
+
+Tests exercise partial support, oversized tails, insufficient support fractions,
+source gaps, human exclusions, moving surfaces, duplicate returns, lease expiry,
+original source preservation, actual-grid coverage, transactional rollback and
+real native CLI dependencies. Fresh actor, moving-human parked, start/near
+stationary and full navigation gates are still required before any v2 release.
+
+Pre-native checks:3,500 unit regressions passed in125.03s. A final independent
+risk/flux-floor correction then passed51 focused tests in6.05s; Ruff and diff
+checks passed. Higher old boundary flux is retained even when the current risk
+is higher. Native validation is pending at this revision.

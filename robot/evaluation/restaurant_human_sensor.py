@@ -107,6 +107,7 @@ class RestaurantHumanSensorDiagnostic:
         stationary_furniture_fragment_proof=False,
         unknown_obstacle_planning=False,
         unknown_obstacle_phi=.68359375,
+        unknown_supported_background_prior=False,
         human_short_fragment_coverage=False,
         lidar_range_m=7.5,
     ):
@@ -345,11 +346,14 @@ class RestaurantHumanSensorDiagnostic:
             from robot.perception.stationary_furniture_memory import FurnitureMemoryConfig, StationaryFurnitureMemory
             self.worker.stationary_furniture_memory = StationaryFurnitureMemory(FurnitureMemoryConfig(
                 fragment_level_proof=stationary_furniture_fragment_proof))
+        if unknown_supported_background_prior and not unknown_obstacle_planning:
+            raise ValueError("supported background prior requires explicit unknown obstacle planning")
         if unknown_obstacle_planning:
             if not stationary_furniture_memory:
                 raise ValueError("unknown obstacle planning requires explicit furniture memory")
             from robot.perception.unknown_obstacle_memory import UnknownObstacleConfig, UnknownObstacleMemory
-            self.worker.unknown_obstacle_memory = UnknownObstacleMemory(UnknownObstacleConfig(unknown_phi=unknown_obstacle_phi))
+            self.worker.unknown_obstacle_memory = UnknownObstacleMemory(UnknownObstacleConfig(
+                unknown_phi=unknown_obstacle_phi, supported_background_prior=unknown_supported_background_prior))
         self.history = EgoPoseHistory(maximum_samples=2048)
         self.truth, self.records, self.rejections = [], [], []
         self.executor = ThreadPoolExecutor(max_workers=1)

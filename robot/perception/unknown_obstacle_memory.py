@@ -30,20 +30,32 @@ class UnknownObstacleConfig:
     maximum_source_gap_seconds: float = .35
     unknown_speed_mps: float = 1.
     checked_horizon_seconds: float = 1.55
+    supported_background_prior: bool = False
+    background_support_fraction: float = .99
+    background_maximum_gap_m: float = .25
+    background_position_radius_m: float = .25
 
     def __post_init__(self):
+        if not isinstance(self.supported_background_prior, bool):
+            raise ValueError("background prior requires explicit boolean opt-in")
         for name, value in vars(self).items():
+            if name == 'supported_background_prior':
+                continue
             if isinstance(value, bool) or not math.isfinite(value) or value <= 0:
                 raise ValueError("finite positive unknown-obstacle configuration required")
         if (self.unknown_phi > 1 or self.unknown_speed_mps < 1
                 or self.checked_horizon_seconds < 1.55
                 or self.stationary_lease_seconds > 10
-                or self.maximum_source_gap_seconds > .35):
+                or self.maximum_source_gap_seconds > .35
+                or not .99 <= self.background_support_fraction <= 1
+                or self.background_maximum_gap_m > .25
+                or self.background_position_radius_m < self.background_maximum_gap_m):
             raise ValueError("invalid risk or original motion/horizon/source bounds")
 
-    def guidance(self, previous=None):
-        risk = max(self.unknown_phi, previous.risk if previous is not None else 0.)
-        flux = max(.5 + 1.2*risk, previous.boundary_flux_magnitude if previous is not None else 0.)
+    def guidance(self, previous=None, retained=None):
+        policies = [p for p in (previous, retained) if p is not None]
+        risk = max([self.unknown_phi, *[p.risk for p in policies]])
+        flux = max([.5 + 1.2*risk, *[p.boundary_flux_magnitude for p in policies]])
         return SafeSAGEGuidanceParameters(ClassSafetyParameters(risk, flux),
             previous.tangential_strength if previous is not None else 1.25,
             previous.passing_side if previous is not None else "right")
@@ -59,6 +71,9 @@ class UnknownSurface:
     guidance: object
     stationary_support_time: float | None = None
     stationary_qualified_time: float | None = None
+    background_support: dict | None = None
+    motion_support_time: float | None = None
+    motion_position_radius_m: float | None = None
 
     def __post_init__(self):
         points = np.array(self.points, dtype=float, copy=True)
@@ -69,7 +84,11 @@ class UnknownSurface:
                 or points.ndim != 2 or points.shape[1] != 2 or not len(points) or not np.isfinite(points).all()
                 or not isinstance(self.guidance, SafeSAGEGuidanceParameters)
                 or self.stationary_support_time is not None and (
-                    not math.isfinite(self.stationary_support_time) or self.stationary_support_time < self.source_time)):
+                    not math.isfinite(self.stationary_support_time) or self.stationary_support_time < self.source_time)
+                or (self.motion_support_time is None) != (self.motion_position_radius_m is None)
+                or self.motion_support_time is not None and (
+                    not math.isfinite(self.motion_support_time) or self.motion_support_time < self.source_time
+                    or not math.isfinite(self.motion_position_radius_m) or self.motion_position_radius_m <= 0)):
             raise ValueError("valid original positive surface and provenance required")
         points.setflags(write=False)
         object.__setattr__(self, 'points', points)
@@ -143,6 +162,9 @@ class UnknownObstacleSnapshot:
             original_source_time=old.source_time, original_source_frame=old.source_frame,
             current_source_time=self.source_time, original_point_count=len(old.points),
             stationary_support_time=old.stationary_support_time,
+            background_support=old.background_support,
+            motion_support_time=old.motion_support_time,
+            motion_position_radius_m=old.motion_position_radius_m,
             radius_m=r.radius_m, fixed_unknown_phi=self.config.unknown_phi,
             applied_risk=old.guidance.risk, checked_cell_count=len(rows),
             replacement_track_id=r.replacement_track_id,
@@ -156,6 +178,9 @@ class UnknownObstacleSnapshot:
                 original_point_count=len(r.original.points), center_world_xy=r.original.center,
                 stationary_support_time=r.original.stationary_support_time,
                 stationary_qualified_time=r.original.stationary_qualified_time,
+                background_support=r.original.background_support,
+                motion_support_time=r.original.motion_support_time,
+                motion_position_radius_m=r.original.motion_position_radius_m,
                 radius_m=r.radius_m, mode=r.mode, support_distance_m=r.support_distance_m,
                 replacement_track_id=r.replacement_track_id,
                 fixed_unknown_phi=self.config.unknown_phi, applied_risk=r.original.guidance.risk)
@@ -170,6 +195,30 @@ class UnknownObstacleMemory:
         self.records = {}
         self.last_time = None
         self.history = []
+
+    def _background_support(self, points, stable, tree, source_times):
+        """Dominant measured support establishes a hypothesis, not all-point observation.
+
+        Every unsupported point remains in the original occupied geometry. The
+        separate position allowance covers the bounded unmatched tail. Counting
+        distinct coordinates prevents duplicate returns from fabricating support.
+        """
+        if not self.config.supported_background_prior or tree is None:
+            return None
+        distances, indices = tree.query(points)
+        supported = distances <= .06
+        fraction = float(supported.mean())
+        distinct = len(np.unique(stable[indices[supported]], axis=0))
+        if (fraction < self.config.background_support_fraction or distinct < 3
+                or distances.max() > self.config.background_maximum_gap_m):
+            return None
+        return dict(basis='repeated fixed-world support; stationary-background PRIOR',
+            support_source_times=tuple(source_times), original_point_count=len(points),
+            supported_point_count=int(supported.sum()), unsupported_point_count=int((~supported).sum()),
+            supported_fraction=fraction, distinct_support_points=distinct,
+            observed_support_distance_m=.06, maximum_gap_m=float(distances.max()),
+            position_allowance_m=self.config.background_position_radius_m,
+            whole_original_geometry_retained=True)
 
     def update(self, points, ids, tracks, guidance, *, source_time, source_frame,
                robot_xy, furniture_memory=None, excluded_points=(), human_regions=(),
@@ -192,10 +241,8 @@ class UnknownObstacleMemory:
         for key, t in current.items():
             if key not in records and np.linalg.norm(np.asarray(t.centroid_world_xy)-robot_xy) > cfg.enrollment_distance_m:
                 continue
-            policy = cfg.guidance(guidance[key])
             old = records.get(key)
-            if old is not None and old.guidance.risk > policy.risk:
-                policy = cfg.guidance(old.guidance)
+            policy = cfg.guidance(guidance[key], old.guidance if old is not None else None)
             qualified = None if furniture_memory is None else furniture_memory.records.get(key)
             stationary = qualified is not None and qualified.source_time == source_time
             records[key] = UnknownSurface(key, source_time, source_frame, tuple(t.centroid_world_xy),
@@ -230,6 +277,37 @@ class UnknownObstacleMemory:
                 stable = latest[good]
         stable_tree = cKDTree(stable) if len(stable) >= 3 else None
         raw_tree = cKDTree(points) if len(points) else None
+        # A high centroid velocity alone can be cluster resampling. Where its
+        # current geometry also lacks dominant fixed-world support, retain the
+        # dynamic interpretation and exclude it from the background hypothesis.
+        background = {}
+        moving_points = []
+        if cfg.supported_background_prior:
+            for key, t in current.items():
+                subset = points[ids == key]
+                proof = self._background_support(subset, stable, stable_tree, [t for t, _ in history])
+                if not np.all(clear[ids == key]):
+                    proof = None
+                background[key] = proof
+                if proof is None and np.linalg.norm(t.velocity_world_xy) > .2:
+                    moving_points.extend(subset)
+        moving_tree = cKDTree(moving_points) if len(moving_points) else None
+
+        def excluded_surface(surface):
+            excluded = bool(exclusion_tree is not None and np.any(exclusion_tree.query(surface)[0] <= 1.))
+            for center, radius in human_regions:
+                excluded |= bool(np.any(np.linalg.norm(surface-center, axis=1) <= radius))
+            excluded |= bool(moving_tree is not None and np.any(moving_tree.query(surface)[0] <= .06))
+            return excluded
+
+        if cfg.supported_background_prior:
+            for key in current:
+                if key not in records or excluded_surface(records[key].points):
+                    continue
+                proof = background[key]
+                if proof is not None:
+                    records[key] = replace(records[key], stationary_support_time=source_time,
+                        stationary_qualified_time=source_time, background_support=proof)
         regions = []
         for key, old in list(records.items()):
             if key in current:
@@ -253,10 +331,10 @@ class UnknownObstacleMemory:
             stable_match = False
             if old.stationary_support_time is not None and stable_tree is not None:
                 dist, ix = stable_tree.query(old.points)
-                stable_match = bool(np.all(dist <= .10) and len(np.unique(ix)) >= 3)
+                stable_match = bool(np.all(dist <= .10) and len(np.unique(stable[ix], axis=0)) >= 3)
             if raw_tree is not None and (age <= cfg.maximum_source_gap_seconds+1e-9 or stable_match):
                 distances, nearest = raw_tree.query(old.points)
-                if np.all(distances <= .10) and len(np.unique(nearest)) >= 3:
+                if np.all(distances <= .10) and len(np.unique(points[nearest], axis=0)) >= 3:
                     neighbors = raw_tree.query_ball_point(old.points, .10)
                     indices = np.unique(np.concatenate(neighbors)).astype(int)
                     owners = [int(k) for k in np.unique(ids[indices]) if k >= 0
@@ -269,18 +347,29 @@ class UnknownObstacleMemory:
                         records.pop(key)
                         if replacement in records:
                             target = records[replacement]
-                            records[replacement] = replace(target, guidance=cfg.guidance(
-                                max((old.guidance, target.guidance), key=lambda g: g.risk)))
+                            records[replacement] = replace(target, guidance=cfg.guidance(target.guidance, old.guidance))
                         continue
-            human_near = (exclusion_tree is not None and np.any(exclusion_tree.query(old.points)[0] < 1.))
-            for center, radius in human_regions:
-                human_near |= bool(np.any(np.linalg.norm(old.points-center, axis=1) <= radius))
+            human_near = excluded_surface(old.points)
             # A real motion/person contradiction invalidates the stationary
             # assumption. It does not erase geometry or stop the mission.
             if human_near and old.stationary_support_time is not None:
-                old = replace(old, stationary_support_time=None)
+                # The last real geometric support is newer than the original
+                # query/factor source. Start motion uncertainty there, without
+                # rewriting either clock or pretending the conflict is observed
+                # free space. Retain the full position allowance at that epoch.
+                old = replace(old, motion_support_time=old.stationary_support_time,
+                    motion_position_radius_m=cfg.background_position_radius_m
+                    if old.background_support is not None else cfg.stationary_support_distance_m,
+                    stationary_support_time=None, background_support=None)
+            background_proof = None if human_near else self._background_support(
+                old.points, stable, stable_tree, [t for t, _ in history])
+            if background_proof is not None:
+                old = replace(old, stationary_support_time=source_time,
+                    stationary_qualified_time=old.stationary_qualified_time or source_time,
+                    background_support=background_proof, motion_support_time=None, motion_position_radius_m=None)
             stationary_age = math.inf if old.stationary_support_time is None else source_time-old.stationary_support_time
             if (not human_near and old.stationary_support_time is not None and stable_tree is not None
+                    and old.background_support is None
                     and self.last_time is not None
                     and source_time-self.last_time <= cfg.maximum_source_gap_seconds+1e-9):
                 distances, indices = stable_tree.query(old.points)
@@ -288,18 +377,26 @@ class UnknownObstacleMemory:
                 # This is an explicit 10cm POSITION PRIOR backed by repeated
                 # current points, not relaxation of the legacy 6cm observation
                 # test. Original query/identity/factor epochs remain unchanged.
-                if support_distance <= cfg.stationary_support_distance_m and len(np.unique(indices)) >= 3:
+                if support_distance <= cfg.stationary_support_distance_m and len(np.unique(stable[indices], axis=0)) >= 3:
                     old = replace(old, stationary_support_time=source_time)
                     stationary_age = 0.
             if stationary_age <= cfg.stationary_lease_seconds:
                 radius = max(cfg.stationary_radius_m + cfg.stationary_growth_mps*stationary_age,
                     cfg.stationary_support_distance_m if old.stationary_support_time != old.source_time else 0.)
                 mode = "stationary_positive_support_position_prior" if stationary_age == 0 else "retained_stationary_geometry_prior"
+                if old.background_support is not None:
+                    radius = max(radius, cfg.background_position_radius_m + cfg.stationary_growth_mps*stationary_age)
+                    mode = 'supported_background_position_prior' if stationary_age == 0 else 'retained_supported_background_prior'
             else:
                 # Preserve geometry beyond a static lease; apply the explicit
                 # unknown-motion bound, including the complete control horizon.
                 motion_age = age if old.stationary_support_time is None else stationary_age-cfg.stationary_lease_seconds
-                radius = cfg.stationary_support_distance_m + cfg.unknown_speed_mps*(motion_age+cfg.checked_horizon_seconds)
+                base_radius = (cfg.background_position_radius_m + cfg.stationary_growth_mps*cfg.stationary_lease_seconds
+                    if old.background_support is not None else cfg.stationary_support_distance_m)
+                if old.motion_support_time is not None:
+                    motion_age = source_time-old.motion_support_time
+                    base_radius = old.motion_position_radius_m
+                radius = base_radius + cfg.unknown_speed_mps*(motion_age+cfg.checked_horizon_seconds)
                 mode = "unknown_motion_reachable_surface_prior"
             records[key] = old
             regions.append(UncertainSurface(old, radius, mode, support_distance))

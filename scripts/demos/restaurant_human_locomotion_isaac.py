@@ -46,6 +46,8 @@ parser.add_argument('--stationary-furniture-fragment-proof', action='store_true'
 parser.add_argument('--unknown-obstacle-planning', action='store_true',
                     help='lost positive geometry as explicit unknown planning obstacles; no wheels')
 parser.add_argument('--unknown-obstacle-phi', type=float, default=.68359375)
+parser.add_argument('--unknown-supported-background-prior', action='store_true',
+                    help='separate repeated-support stationary-background prior; zero wheels')
 parser.add_argument('--human-short-fragment-coverage', action='store_true',
                     help='separate bounded same-envelope fragment coverage benchmark; zero wheels')
 parser.add_argument('--human-tracking-uncertainty', action='store_true',
@@ -95,6 +97,8 @@ parser.add_argument(
     metavar=("KG", "LOWER", "UPPER"),
 )
 args = parser.parse_args()
+if args.unknown_supported_background_prior and not args.unknown_obstacle_planning:
+    parser.error('supported background prior requires explicit unknown obstacle planning')
 if args.human_short_fragment_coverage and not args.identity_selection_body_envelope:
     parser.error('short fragment coverage requires explicit current body envelope')
 if args.stationary_furniture_fragment_proof and not args.stationary_furniture_memory:
@@ -501,6 +505,7 @@ def main():
             stationary_furniture_fragment_proof=args.stationary_furniture_fragment_proof,
             unknown_obstacle_planning=args.unknown_obstacle_planning,
             unknown_obstacle_phi=args.unknown_obstacle_phi,
+            unknown_supported_background_prior=args.unknown_supported_background_prior,
             human_short_fragment_coverage=args.human_short_fragment_coverage,
             predictive_human_geometry=args.predictive_human_geometry,
             human_prediction_uncertainty_rate=args.human_prediction_uncertainty_rate,

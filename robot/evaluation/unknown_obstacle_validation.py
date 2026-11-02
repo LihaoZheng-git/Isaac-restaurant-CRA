@@ -12,7 +12,8 @@ def audit_static_human_exclusion(snapshot, truth):
     # Human truth scores retained static surfaces only and never supplies any
     # runtime grouping, classification, geometry, policy or control parameter.
     static = [r.original for r in snapshot.regions if r.mode in (
-        'stationary_positive_support_position_prior', 'retained_stationary_geometry_prior')]
+        'stationary_positive_support_position_prior', 'retained_stationary_geometry_prior',
+        'supported_background_position_prior', 'retained_supported_background_prior')]
     return audit_snapshot(SimpleNamespace(source_time=snapshot.source_time,
         surfaces=static, observed_surfaces=()), truth)
 
@@ -44,8 +45,24 @@ def summarize_unknown_obstacles(records):
                     or not 0 <= region['original_source_time'] <= now
                     or not math.isfinite(region['radius_m']) or region['radius_m'] < 0
                     or region['applied_risk'] < region['fixed_unknown_phi']
+                    or region.get('motion_support_time') is not None and not region['original_source_time'] <= region['motion_support_time'] <= now
                     or region['stationary_support_time'] is not None and region['stationary_support_time'] > now):
                 errors.append('source/risk/geometry field provenance mismatch')
+            support = region.get('background_support')
+            if region['mode'] in ('supported_background_position_prior', 'retained_supported_background_prior'):
+                cfg = memory['config']
+                if (not cfg.get('supported_background_prior') or not support
+                        or support['original_point_count'] != region['original_point_count']
+                        or support['supported_fraction'] < cfg['background_support_fraction']
+                        or support['supported_point_count']+support['unsupported_point_count'] != region['original_point_count']
+                        or support['maximum_gap_m'] > cfg['background_maximum_gap_m']
+                        or support['distinct_support_points'] < 3
+                        or len(set(support['support_source_times'])) < 3
+                        or max(support['support_source_times']) != region['stationary_support_time']
+                        or max(support['support_source_times'])-min(support['support_source_times']) < .2-1e-9
+                        or not support['whole_original_geometry_retained']
+                        or region['radius_m'] < cfg['background_position_radius_m']):
+                    errors.append('stationary-background support provenance mismatch')
         human = d.get('unknown_obstacle_static_human_audit')
         if human is not None and not human.get('passed'):
             errors.append('static memory overlaps independent human reference')

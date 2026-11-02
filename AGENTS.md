@@ -1,5 +1,25 @@
 # CRA repository guidance
 
+- The user now APPROVES an evidence-based stationary-background PRIOR for
+  partially observed non-human surfaces. Separate default-OFF
+  --unknown-supported-background-prior requires unknown-obstacle planning.
+  At least99% of every original surface needs .06m fixed-world support from
+  three distinct real sources spanning.2s; remaining points must be within
+  .25m of that repeated support. Retain EVERY old point with a labeled .25m
+  position allowance plus original.005m/s growth/10s support lease. The.25m
+  engineering bound was selected from archived resampling diagnosis (.23863m
+  worst repeated-support gap); it is not a calibrated general motion bound.
+  Original query/frame/factor clocks remain; geometric support time is separate.
+  Current people/body/uncertain-human regions exclude unconditionally; current
+  >.2m/s centroid tracks lacking dominant fixed-world support also exclude their
+  .06m neighborhood. Missing/contradicted/expired qualification retains dynamic
+  uncertainty, never free space. Preserve raw occupancy, risk/flux/lambda and
+  all exact control/arrival checks. Replay of two stalled surfaces supports
+  this hypothesis, not native acceptance. Require fresh four gates and complete
+  wheels/arrival/stopping. Keep all failed trials/v1 and main/primary/PR117 holds.
+  See docs/unknown_obstacle_planning.md. This supersedes the earlier pending
+  partial-background policy, without modifying legacy furniture qualification.
+
 - The user now APPROVES general uncertain positive tracks becoming unknown
   planning obstacles, instead of automatic termination on ID loss, with one
   configurable fixed unknown phi. Separate default-OFF --unknown-obstacle-planning

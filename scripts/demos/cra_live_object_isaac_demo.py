@@ -203,6 +203,8 @@ parser.add_argument("--unknown-obstacle-planning", action="store_true",
                     help="lost positive geometry becomes an unknown planning obstacle; no ID-loss termination")
 parser.add_argument("--unknown-obstacle-phi", type=float, default=.68359375,
                     help="fixed unknown-obstacle phi, with any higher original risk preserved")
+parser.add_argument("--unknown-supported-background-prior", action="store_true",
+                    help="separate dominant repeated-support stationary hypothesis; retains all old geometry")
 parser.add_argument("--long-service-human-gates", nargs=3, type=Path,
                     help="current-source native component, near-human stationary and long-idle folders; required for long human motion")
 parser.add_argument("--restaurant-server", action="store_true", help="explicit static-server scene opt-in; stationary actor gate required before wheels")
@@ -317,6 +319,8 @@ parser.add_argument(
     help="optimizer candidate age cap; every executed horizon still needs fresh exact validation",
 )
 args = parser.parse_args()
+if args.unknown_supported_background_prior and not args.unknown_obstacle_planning:
+    parser.error("supported background prior requires explicit unknown obstacle planning")
 if (not math.isfinite(args.unknown_obstacle_phi) or not 0 < args.unknown_obstacle_phi <= 1
         or args.unknown_obstacle_planning and not args.stationary_furniture_memory):
     parser.error("unknown obstacle planning requires explicit furniture memory and phi in (0,1]")
@@ -1404,7 +1408,8 @@ def main():
     if args.unknown_obstacle_planning:
         from robot.perception.unknown_obstacle_memory import UnknownObstacleConfig, UnknownObstacleMemory
         perception.unknown_obstacle_memory = UnknownObstacleMemory(UnknownObstacleConfig(
-            unknown_phi=args.unknown_obstacle_phi))
+            unknown_phi=args.unknown_obstacle_phi,
+            supported_background_prior=args.unknown_supported_background_prior))
     history = EgoPoseHistory()
     if args.rolling_local_field:
         from robot.safety.rolling_local_field import RollingLocalField
