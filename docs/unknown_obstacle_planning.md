@@ -88,4 +88,26 @@ with archived qualification, not a complete preceding qualification, field/MPC
 replay, or native navigation result. Failed report SHA remains
 `d7b3c8c1d76eea94af65effb2dac0f3b5f7f91a2c2c83d0fbd7eb0381d54cfd9`.
 
-Native results remain pending.
+## First native attempt, e7a1364
+
+All four fresh prerequisites passed with unchanged sources: actor circuit
+670.88s wall; moving-human component324.35s/111 sources; startup60/279.15s;
+near60/282.32s. The component exercised28 unknown-region rows including14
+geometry replacements; four short-human field proofs passed. Own60 stationary
+startup also passed before the wheel trial.
+
+The wheel trial was **interrupted after a diagnosed stall**, not accepted.
+Its105 committed fields ran from source8.2 to23.2s; final saved local position
+was approximately(.10543,.00018)m. No final arrival or stopping report exists.
+The original ID-loss guard did not terminate it. Instead, two unqualified
+surfaces received the1m/s generic motion prior and expanded across the robot's
+field, preventing progress. At their first losses,8,703/8,706 and6,738/6,740
+original points had current support within10cm; maximum gaps were.13203 and
+.19625m. The whole-surface/all-point qualification was too brittle to establish
+a stationary hypothesis for these partially observed large surfaces. Phi stayed
+.68359375. Preserve outputs/unknown-obstacle-planning/long-motion-v1.
+
+The user then approved a separate evidence-based stationary-background prior
+for partially observed non-human surfaces. Whole geometry remains occupied;
+people/observed movers retain dynamic uncertainty. This follow-up requires new
+unit and native validation; it does not turn this interrupted trial into a pass.
