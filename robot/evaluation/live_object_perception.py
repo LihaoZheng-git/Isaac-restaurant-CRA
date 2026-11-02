@@ -206,6 +206,7 @@ class LiveObjectResult:
     furniture_memory_snapshot: object | None = None
     tracking_uncertainty_snapshot: object | None = None
     risk_camera_frame: object | None = None
+    unknown_obstacle_snapshot: object | None = None
 
 
 class LiveObjectPerception:

@@ -1,5 +1,24 @@
 # CRA repository guidance
 
+- The user now APPROVES general uncertain positive tracks becoming unknown
+  planning obstacles, instead of automatic termination on ID loss, with one
+  configurable fixed unknown phi. Separate default-OFF --unknown-obstacle-planning
+  uses phi .68359375 (existing four .25 priors aggregate), preserving higher
+  original risk/flux and fixed lambda. Original surface/source/factor clocks
+  remain. Qualified static surfaces retain existing .05+.005m/s/10s prior;
+  separately labeled .10m whole-surface geometry correspondence can resolve
+  current support across IDs (long gaps need actual three-source/.2s/.06m
+  repeated supporting points). This changes the uncertainty policy, not legacy
+  observation thresholds. No current raw occupancy is removed. Unresolved
+  nonstationary/expired geometry grows with 1m/s plus1.55s horizon as a PRIOR.
+  Exact local-field coverage replaces a bookkeeping stop; clipped outside-domain
+  geometry is not free and command-domain checks stay. Current whole raw or
+  validated body-prior geometry replacements retire only old guard queries,
+  never transfer visual identity/factors. Stage all memory with field admission.
+  Invalid sensors/coverage or no verified moving command can still stop.
+  No universal never-stop claim. Require fresh four gates and actual full
+  arrival/stopping for v2, retain all failures/v1 and main/primary/PR117 holds.
+  See docs/unknown_obstacle_planning.md; native acceptance is pending.
 - Short human-fragment mode at64cf67b PASSED all four fresh prerequisites:
   actor610.93s wall; component114sources/83retained mass/5current-grid human
   fragment proofs/33furniture proofs; startup60; near60/10retained mass. Own60

@@ -88,6 +88,7 @@ def assess_all_objects(worker, packet):
     preparation_memory = copy.deepcopy(getattr(worker, "parallel_preparation", None))
     human_mass_memory = copy.deepcopy(getattr(worker, "human_mass_identity_retention", None))
     furniture_memory = copy.deepcopy(getattr(worker, "stationary_furniture_memory", None))
+    unknown_memory = copy.deepcopy(getattr(worker, "unknown_obstacle_memory", None))
     tracking = tracker.update(
         packet.obstacle_xyz[:, :2],
         robot_position_world_xy=np.array(packet.robot_position_world_xy),
@@ -755,6 +756,40 @@ def assess_all_objects(worker, packet):
                 boundary_flux=record.guidance.boundary_flux, lambda_value=record.guidance.tangential_strength,
                 field_used_for_control=True, factor_basis="retained_applied_policy_not_new_factor_evidence"))
             baseline_audit[-1]["lambda"] = baseline_audit[-1].pop("lambda_value")
+    unknown_snapshot = None
+    if unknown_memory is not None:
+        from robot.perception.unknown_obstacle_memory import SOURCE as UNKNOWN_SOURCE
+        # A policy cannot be inferred from an authored object or nearby mask.
+        # Preserve the strongest policy actually applied to each raw surface.
+        raw_guidance = {}
+        for track in tracks:
+            keys = np.unique(current_placement[3][:len(world)][tracking.point_track_ids == track.track_id])
+            raw_guidance[track.track_id] = max((applied_guidance[int(k)] for k in keys), key=lambda g: g.risk)
+        human_regions = [(np.asarray(r["center_world_xy"]), r["radius_m"]) for r in envelope_audit]
+        if uncertainty_snapshot is not None:
+            human_regions.extend((np.asarray(r.center_world_xy), r.radius_m)
+                for r, _ in uncertainty_snapshot.regions_and_guidance)
+        unknown_snapshot = unknown_memory.update(world[:, :2], tracking.point_track_ids,
+            tracks, raw_guidance, source_time=packet.sensor_timestamp_seconds,
+            source_frame=packet.sensor_frame_id, robot_xy=packet.robot_position_world_xy,
+            furniture_memory=furniture_memory,
+            excluded_points=excluded if furniture_memory is not None else (),
+            human_regions=human_regions,
+            covered_human_fragments=fragment_audit.get("covered", ()) if fragment_audit else ())
+        for region in unknown_snapshot.regions:
+            extra, _, _, _ = region.cells(grid_config, worker.anchor, worker.anchor_yaw)
+            key, guidance = region.geometry_id, region.original.guidance
+            points = np.concatenate((points, extra))
+            point_ids = np.concatenate((point_ids, np.full(len(extra), key, dtype=np.int64)))
+            applied_guidance[key] = guidance
+            semantics.append(SemanticObstacle(replace(tracks[0], track_id=key,
+                point_count=len(extra), observation_count=0, matched_previous_track=False),
+                "unknown", 0., UNKNOWN_SOURCE))
+            baseline_audit.append(dict(track_or_group_id=key, observed_class="unknown",
+                class_basis=UNKNOWN_SOURCE, cra_phi=guidance.risk, applied_field_risk=guidance.risk,
+                boundary_flux=guidance.boundary_flux, **{"lambda": guidance.tangential_strength},
+                field_used_for_control=True, factor_basis="fixed_unknown_phi_with_previous_risk_floor",
+                original_track_id=region.original.track_id, original_source_time=region.original.source_time))
     cells = np.floor(
         (points - [grid_config.minimum_x, grid_config.minimum_y])
         / grid_config.resolution
@@ -771,6 +806,11 @@ def assess_all_objects(worker, packet):
             key: value.safety_parameters for key, value in applied_guidance.items()
         },
     )
+    if unknown_snapshot is not None:
+        unknown_checks = [unknown_snapshot.coverage(r.original.track_id, r.original.source_time,
+            r.original.center, grid, worker.anchor, worker.anchor_yaw) for r in unknown_snapshot.regions]
+        if any(row is None for row in unknown_checks):
+            raise ValueError("unknown obstacle geometry is not fully represented in the current local field")
     if fragment_memory is not None and fragment_memory.config.short_fragment_coverage:
         from robot.perception.human_fragment_coverage import validate_coverage_grid
         for proof in fragment_audit["covered"]:
@@ -943,6 +983,8 @@ def assess_all_objects(worker, packet):
         worker.human_mass_identity_retention = human_mass_memory
     if furniture_memory is not None:
         worker.stationary_furniture_memory = furniture_memory
+    if unknown_memory is not None:
+        worker.unknown_obstacle_memory = unknown_memory
     worker.temporal_recovery_baseline = None
     if carried_state is not None:
         worker.carried_runtime_state=carried_state
@@ -977,6 +1019,8 @@ def assess_all_objects(worker, packet):
             else asdict(envelope_memory.recovery_config),
         "human_mass_body_identity_retention": human_mass_audit,
         "stationary_furniture_memory": furniture_audit,
+        "unknown_obstacle_memory": None if unknown_snapshot is None else unknown_snapshot.diagnostic(),
+        "unknown_obstacle_field_checks": None if unknown_snapshot is None else unknown_checks,
         "predictive_human_geometry": prediction_audit,
         "observed_motion_reference": None if motion_reference is None else motion_reference.diagnostic(),
         "parallel_preparation": preparation_audit,
@@ -1056,4 +1100,5 @@ def assess_all_objects(worker, packet):
         furniture_snapshot,
         uncertainty_snapshot,
         risk_camera_frame,
+        unknown_snapshot,
     )

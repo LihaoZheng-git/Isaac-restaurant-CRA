@@ -199,6 +199,10 @@ parser.add_argument("--stationary-furniture-memory", action="store_true",
                     help="separate bounded repeated-surface background PRIOR; current people/motion excluded, no source renewal")
 parser.add_argument("--stationary-furniture-fragment-proof", action="store_true",
                     help="separate repeated-current-support proof for already-qualified fragments only; parent motion exclusion stays")
+parser.add_argument("--unknown-obstacle-planning", action="store_true",
+                    help="lost positive geometry becomes an unknown planning obstacle; no ID-loss termination")
+parser.add_argument("--unknown-obstacle-phi", type=float, default=.68359375,
+                    help="fixed unknown-obstacle phi, with any higher original risk preserved")
 parser.add_argument("--long-service-human-gates", nargs=3, type=Path,
                     help="current-source native component, near-human stationary and long-idle folders; required for long human motion")
 parser.add_argument("--restaurant-server", action="store_true", help="explicit static-server scene opt-in; stationary actor gate required before wheels")
@@ -313,6 +317,9 @@ parser.add_argument(
     help="optimizer candidate age cap; every executed horizon still needs fresh exact validation",
 )
 args = parser.parse_args()
+if (not math.isfinite(args.unknown_obstacle_phi) or not 0 < args.unknown_obstacle_phi <= 1
+        or args.unknown_obstacle_planning and not args.stationary_furniture_memory):
+    parser.error("unknown obstacle planning requires explicit furniture memory and phi in (0,1]")
 if args.stationary_furniture_fragment_proof and not args.stationary_furniture_memory:
     parser.error("fragment-level proof requires explicit stationary furniture memory")
 if args.planner_replay_source_window is not None:
@@ -1394,6 +1401,10 @@ def main():
         from robot.perception.stationary_furniture_memory import FurnitureMemoryConfig, StationaryFurnitureMemory
         perception.stationary_furniture_memory = StationaryFurnitureMemory(FurnitureMemoryConfig(
             fragment_level_proof=args.stationary_furniture_fragment_proof))
+    if args.unknown_obstacle_planning:
+        from robot.perception.unknown_obstacle_memory import UnknownObstacleConfig, UnknownObstacleMemory
+        perception.unknown_obstacle_memory = UnknownObstacleMemory(UnknownObstacleConfig(
+            unknown_phi=args.unknown_obstacle_phi))
     history = EgoPoseHistory()
     if args.rolling_local_field:
         from robot.safety.rolling_local_field import RollingLocalField
@@ -1794,6 +1805,9 @@ def main():
         if args.stationary_furniture_memory:
             from robot.evaluation.furniture_memory_validation import audit_snapshot
             latest.diagnostics["furniture_memory_human_audit"] = audit_snapshot(latest.furniture_memory_snapshot, human.records)
+        if args.unknown_obstacle_planning:
+            from robot.evaluation.unknown_obstacle_validation import audit_static_human_exclusion
+            latest.diagnostics["unknown_obstacle_static_human_audit"] = audit_static_human_exclusion(latest.unknown_obstacle_snapshot, human.records)
         records.append(field_record(latest, now))
         if human is not None and human.background_walk is not None and len(records) >= args.stationary_frames-20:
             # Actor-only pre-roll during the last zero-wheel assessments. This
@@ -1949,6 +1963,11 @@ def main():
         }
         gate["stationary_furniture_memory_checks"] = memory_checks
         gate["passed"] = stationary_ready = bool(stationary_ready and all(memory_checks.values()))
+    if args.unknown_obstacle_planning:
+        from robot.evaluation.unknown_obstacle_validation import summarize_unknown_obstacles
+        unknown_stationary = summarize_unknown_obstacles(records)
+        gate["unknown_obstacle_validation"] = unknown_stationary
+        gate["passed"] = stationary_ready = bool(stationary_ready and unknown_stationary["passed"])
     if args.predictive_human_geometry_ablation:
         prediction = latest.field.predictive_human_geometry
         gate['predictive_geometry_ready'] = bool(prediction is not None and prediction.ready and prediction.forecasts)
@@ -2166,6 +2185,7 @@ def main():
         allow_many_to_one_full_surface_merges=args.long_service_parallel,
         allow_stationary_furniture_memory=args.stationary_furniture_memory,
         allow_tracking_uncertainty=args.human_tracking_uncertainty,
+        allow_unknown_obstacle_planning=args.unknown_obstacle_planning,
         maximum_visual_mask_boundary_pixels=args.human_fragment_mask_boundary_pixels,
         allow_current_visual_part_associations=args.human_visual_fragment_association,
         use_observed_merge_velocity=human is not None),
@@ -2212,6 +2232,7 @@ def main():
             "current_camera_timestamp_seconds": source_packet.camera_timestamp_seconds,
             "current_furniture_snapshot": result.furniture_memory_snapshot,
             "current_uncertainty_snapshot": result.tracking_uncertainty_snapshot,
+            "current_unknown_obstacle_snapshot": result.unknown_obstacle_snapshot,
         }
 
     if coverage_guard is not None:
@@ -2396,6 +2417,7 @@ def main():
                             or coverage_result["furniture_prior_covered_missing_tracks"]
                             or coverage_result["furniture_observed_covered_missing_tracks"]
                             or coverage_result["uncertainty_geometry_covered_missing_tracks"]
+                            or coverage_result["unknown_obstacle_covered_missing_tracks"]
                             or coverage_result.get("positive_surface_merge_rejections")):
                             if any(e.get("coexistence_basis") in {"retained_original_coobservation", "recent_original_coobservation_positive_extent"}
                                    or e.get("coexistence_basis") == "recent_original_coobservation_positive_surface"
@@ -2406,7 +2428,7 @@ def main():
                                 coverage_result["current_positive_geometry_audit_file"] = audit_name
                             coverage_events.append(coverage_result)
                         if coverage_result["blocked"]:
-                            reason = "nearby_track_lost"
+                            reason = "unknown_obstacle_field_coverage_failure" if args.unknown_obstacle_planning else "nearby_track_lost"
                             controller.stop()
                             save_json("unpublished-coverage-stop-field.json", field_record(outcome.value, now, current))
                             if human is not None:
@@ -2427,6 +2449,9 @@ def main():
                     if args.stationary_furniture_memory:
                         from robot.evaluation.furniture_memory_validation import audit_snapshot
                         latest.diagnostics["furniture_memory_human_audit"] = audit_snapshot(latest.furniture_memory_snapshot, human.records)
+                    if args.unknown_obstacle_planning:
+                        from robot.evaluation.unknown_obstacle_validation import audit_static_human_exclusion
+                        latest.diagnostics["unknown_obstacle_static_human_audit"] = audit_static_human_exclusion(latest.unknown_obstacle_snapshot, human.records)
                     live_fields.append(field_record(latest, now, current))
                     if args.moving_actor:
                         elapsed = latest.field.sensor_timestamp_seconds - actor_start_time
@@ -2891,6 +2916,12 @@ def main():
     if args.stationary_furniture_memory:
         completed = completed and bool(live_fields) and all(
             r["diagnostics"]["furniture_memory_human_audit"]["passed"] for r in live_fields)
+    unknown_validation = None
+    if args.unknown_obstacle_planning:
+        from robot.evaluation.unknown_obstacle_validation import summarize_unknown_obstacles
+        unknown_validation = summarize_unknown_obstacles(live_fields)
+        completed = bool(completed and unknown_validation["passed"])
+        save_json("unknown-obstacle-validation.json", unknown_validation)
     scene_unchanged = (
         original_hash
         == hashlib.sha256(SCENE_PATH.read_bytes()).hexdigest()
@@ -2974,6 +3005,7 @@ def main():
         "simultaneous_robot_actor_kinetic_updates_scope": "scripted moving-actor fixture only; native human counts are in human_navigation_validation.simultaneous_rows",
         "live_relative_motion_validation": live_kinetic_validation,
         "nearby_track_loss_guard": coverage_result,
+        "unknown_obstacle_validation": unknown_validation,
         "nearby_track_loss_guard_config": asdict(coverage_guard.config) if coverage_guard is not None else None,
         "stationary_furniture_memory_validation": {
             "enabled": args.stationary_furniture_memory,

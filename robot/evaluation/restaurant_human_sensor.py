@@ -105,6 +105,8 @@ class RestaurantHumanSensorDiagnostic:
         observed_motion_reference=False,
         stationary_furniture_memory=False,
         stationary_furniture_fragment_proof=False,
+        unknown_obstacle_planning=False,
+        unknown_obstacle_phi=.68359375,
         human_short_fragment_coverage=False,
         lidar_range_m=7.5,
     ):
@@ -343,6 +345,11 @@ class RestaurantHumanSensorDiagnostic:
             from robot.perception.stationary_furniture_memory import FurnitureMemoryConfig, StationaryFurnitureMemory
             self.worker.stationary_furniture_memory = StationaryFurnitureMemory(FurnitureMemoryConfig(
                 fragment_level_proof=stationary_furniture_fragment_proof))
+        if unknown_obstacle_planning:
+            if not stationary_furniture_memory:
+                raise ValueError("unknown obstacle planning requires explicit furniture memory")
+            from robot.perception.unknown_obstacle_memory import UnknownObstacleConfig, UnknownObstacleMemory
+            self.worker.unknown_obstacle_memory = UnknownObstacleMemory(UnknownObstacleConfig(unknown_phi=unknown_obstacle_phi))
         self.history = EgoPoseHistory(maximum_samples=2048)
         self.truth, self.records, self.rejections = [], [], []
         self.executor = ThreadPoolExecutor(max_workers=1)
@@ -501,6 +508,8 @@ class RestaurantHumanSensorDiagnostic:
             result = future.result()
             from robot.evaluation.furniture_memory_validation import audit_snapshot
             furniture_audit = audit_snapshot(result.furniture_memory_snapshot, self.truth)
+            from robot.evaluation.unknown_obstacle_validation import audit_static_human_exclusion
+            unknown_audit = audit_static_human_exclusion(result.unknown_obstacle_snapshot, self.truth)
             if not self.worker.persistent_properties.frozen:
                 self.worker.persistent_properties.freeze_properties()
             self.records.append(
@@ -510,6 +519,9 @@ class RestaurantHumanSensorDiagnostic:
                     "camera_time": packet.camera_timestamp_seconds,
                     "phase": phase,
                     "stationary_furniture_memory": result.diagnostics.get("stationary_furniture_memory"),
+                    "unknown_obstacle_memory": result.diagnostics.get("unknown_obstacle_memory"),
+                    "unknown_obstacle_field_checks": result.diagnostics.get("unknown_obstacle_field_checks"),
+                    "unknown_obstacle_static_human_audit": unknown_audit,
                     "furniture_memory_human_audit": furniture_audit,
                     "human_fragment_coverage_prior": result.diagnostics.get("human_fragment_coverage_prior"),
                     "completion_age_sim_seconds": now - packet.sensor_timestamp_seconds,

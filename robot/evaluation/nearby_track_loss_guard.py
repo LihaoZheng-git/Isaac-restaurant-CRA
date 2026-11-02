@@ -27,6 +27,7 @@ class NearbyTrackLossConfig:
     allow_many_to_one_full_surface_merges: bool = False
     allow_stationary_furniture_memory: bool = False
     allow_tracking_uncertainty: bool = False
+    allow_unknown_obstacle_planning: bool = False
     allow_current_visual_part_associations: bool = False
     maximum_visual_mask_boundary_pixels: int = 0
     maximum_merge_speed_mps: float = 2.0
@@ -35,7 +36,7 @@ class NearbyTrackLossConfig:
     maximum_merge_age_seconds: float = 0.35
 
     def __post_init__(self):
-        if not isinstance(self.allow_tracking_uncertainty, bool) or not isinstance(self.allow_stationary_furniture_memory, bool) or not isinstance(self.allow_observed_fragment_merges, bool) or not isinstance(
+        if not isinstance(self.allow_unknown_obstacle_planning, bool) or not isinstance(self.allow_tracking_uncertainty, bool) or not isinstance(self.allow_stationary_furniture_memory, bool) or not isinstance(self.allow_observed_fragment_merges, bool) or not isinstance(
             self.use_observed_merge_velocity, bool
         ) or not isinstance(self.allow_positive_extent_merges, bool) or not isinstance(
             self.allow_positive_surface_merges, bool
@@ -70,6 +71,7 @@ class NearbyTrackLossConfig:
                 "allow_many_to_one_full_surface_merges",
                 "allow_stationary_furniture_memory",
                 "allow_tracking_uncertainty",
+                "allow_unknown_obstacle_planning",
                 "allow_current_visual_part_associations",
                 "maximum_visual_mask_boundary_pixels",
             }:
@@ -119,6 +121,7 @@ class NearbyTrackLossGuard:
         current_visual_part_associations=(),
         current_furniture_snapshot=None,
         current_uncertainty_snapshot=None,
+        current_unknown_obstacle_snapshot=None,
     ):
         if (
             isinstance(source_time, bool)
@@ -622,6 +625,33 @@ class NearbyTrackLossGuard:
                         uncertainty_coverage.append(proof)
         elif current_uncertainty_snapshot is not None:
             raise ValueError("tracking uncertainty requires explicit opt-in")
+        unknown_coverage = []
+        if self.config.allow_unknown_obstacle_planning:
+            from robot.perception.unknown_obstacle_memory import UnknownObstacleSnapshot
+            if (not isinstance(current_unknown_obstacle_snapshot, UnknownObstacleSnapshot)
+                    or current_unknown_obstacle_snapshot.source_time != source_time
+                    or current_occupancy_grid is None or current_grid_anchor_xy is None
+                    or current_grid_anchor_yaw is None):
+                raise ValueError("unknown obstacles require a current typed snapshot and actual field")
+            for key, (point, last_seen) in list(pending.items()):
+                if key in current:
+                    continue
+                proof = current_unknown_obstacle_snapshot.coverage(key, last_seen, point,
+                    current_occupancy_grid, current_grid_anchor_xy, current_grid_anchor_yaw,
+                    original_points=self.positive_surfaces.get(key, (None,))[0],
+                    original_risk=self.positive_risks.get(key))
+                if proof is not None:
+                    unknown_coverage.append(proof)
+                    # A complete current geometry replacement retires only this
+                    # old continuity query. No visual identity/factor is copied.
+                    if proof["replacement_track_id"] is not None:
+                        replacement = proof["replacement_track_id"]
+                        if replacement not in current:
+                            raise ValueError("geometry replacement must be currently observed")
+                        pending.pop(key)
+                        pending[replacement] = (current[replacement].copy(), float(source_time))
+        elif current_unknown_obstacle_snapshot is not None:
+            raise ValueError("unknown obstacle planning requires explicit opt-in")
         blocking = []
         for key, (point, last_seen) in pending.items():
             age = float(source_time - last_seen)
@@ -633,6 +663,7 @@ class NearbyTrackLossGuard:
                 and not any(p["track_id"] == key for p in furniture_coverage)
                 and not any(p["track_id"] == key for p in observed_furniture_coverage)
                 and not any(p["track_id"] == key for p in uncertainty_coverage)
+                and not any(p["track_id"] == key for p in unknown_coverage)
             ):
                 blocking.append(
                     {
@@ -692,6 +723,7 @@ class NearbyTrackLossGuard:
             "furniture_prior_covered_missing_tracks": furniture_coverage,
             "furniture_observed_covered_missing_tracks": observed_furniture_coverage,
             "uncertainty_geometry_covered_missing_tracks": uncertainty_coverage,
+            "unknown_obstacle_covered_missing_tracks": unknown_coverage,
             **({"positive_surface_route_enabled": True,
                 "positive_surface_merge_rejections": surface_rejections,
                 "many_to_one_full_surface_route_enabled": self.config.allow_many_to_one_full_surface_merges,
