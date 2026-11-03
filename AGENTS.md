@@ -1,5 +1,22 @@
 # CRA repository guidance
 
+- Confirmed-motion15c80ae PASSED all four fresh prerequisites (actor636.21s,
+  component103sources, startup60, near60) and own60. Wheels passed previous
+  1.77/3.93/5.39m stalls, but stalled at15.2546m BEFORE the human encounter:
+  522fields through93.8s, interrupted, NO final arrival/stopping acceptance.
+  All453 actual ambiguous-motion decisions replayed exactly from338 candidate
+  archives; zero confirmed geometric mover events. Original-geometry audit
+  passed582sources/8171references/486files. New fragment2027 had FOUR returns,
+  ONE observation at84.3s, only2/4 repeated-support points and no stationary
+  certificate. Its unchanged unqualified1m/s motion prior grew from1.85m at
+  84.5s to11.15m at93.8s. No qualified prior was revoked; new policy is not
+  applicable. Nearby current814 is long-observed stationary geometry, but old
+  fragment gaps .19m exceed original .10m current correspondence; do not relabel
+  them observed or transfer qualification. Preserve outputs/confirmed-background-motion,
+  all failures/v1/main/primary/PR117 holds. Broader unclassified-fragment static
+  default is a NEW uncertainty assumption, not yet authorized by the qualified-
+  background motion-confirmation decision.3555units115.46s/105focused/Ruff PASS.
+
 - Qualified persistent background now requires repeated full-shape translation
   evidence to revoke on centroid motion. Same observed ID needs >=3 continuous
   real sources spanning>=.2s within.7s, every gap<=.35s; no ID transfer. Compare

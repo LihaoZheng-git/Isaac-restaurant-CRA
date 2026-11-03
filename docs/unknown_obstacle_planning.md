@@ -373,3 +373,36 @@ remain required before releasing v2.
 Source validation:105 focused tests passed in5.82s; final full regression
 3,555 unit tests passed in115.46s. Ruff, compilation and diff checks passed.
 Accepted v1's12 file checksums remain unchanged. Native validation is pending.
+
+### Confirmed-motion native outcome at15c80ae
+
+All four fresh prerequisites passed: actor636.21s wall; parked moving-human
+component103 sources/318.11s; startup60/286.04s; near60/290.57s. Own60 also
+passed with zero wheel commands. The wheel trial passed the prior1.77m,3.93m
+and5.39m stall locations, then stalled at15.2546m before the human encounter.
+It was interrupted after522 live fields through source93.8s, with unchanged
+runtime hashes and2274.54s wall time. There is no final arrival/stopping report.
+
+All453 live ambiguous-motion decisions reproduce exactly from338 archived
+candidate geometry files (323 inconsistent/ambiguous shapes,130 insufficient
+continuous histories). There were zero confirmed geometric mover events, so
+this native run does not validate true-mover detection accuracy. Original
+geometry integrity passed582 stationary/live sources,8171 references and486
+files. Preserve the exact output under outputs/confirmed-background-motion.
+
+The new failure is a different scope boundary. Track2027 first appeared at
+84.3s with four returns and one observation. Only two points had the required
+repeated support, so it never received a stationary certificate. It disappeared
+by84.5s; the unchanged generic1m/s uncertainty prior grew to1.85m immediately
+and11.15m by93.8s. Its phi remained0.68359375. No qualified background prior
+was revoked by a centroid jump in this failure.
+
+Nearby current cluster814 had275 observations and approximately0.01m/s
+centroid speed at84.3s. Archived nearest gaps from the fragment were0.074--
+0.102m at83.6/83.7s and0.183--0.196m at84.5/84.7/84.8s, with only two distinct
+nearest points in the latter scans. This does not meet the original0.10m/three-
+distinct-return whole-surface replacement, and cannot be relabeled observed.
+There was no retained qualified prior covering this fragment in the recorded
+snapshot. Extending a capped static default to unclassified one-observation
+fragments requires a separate explicit uncertainty-policy decision. It is not
+part of the user's narrower approval to preserve already-qualified background.
