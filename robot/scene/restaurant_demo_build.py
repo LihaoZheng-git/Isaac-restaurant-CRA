@@ -19,6 +19,7 @@ DEMO_OBSERVATIONS = {
     "demo-bin": ("RoundedBin", (28.8, 5.9, .07382), 0.0),
     "demo-rounded": ("ClosedCaddy", (29.0, 5.25, .07382), 0.0),
     "demo-utensils": ("UtensilCaddy", (29.0, 6.3, .07382), -.40),
+    "demo-container": ("ServiceContainer", (26.8, 6.1, .07382), 0.),
 }
 DEMO_NAMES = ("ClearingStation", "RoundedBin", "ClosedCaddy", "UtensilCaddy")
 DEMO_V2_OBSERVATIONS = {
@@ -48,7 +49,13 @@ def demo_prop_records(stage):
     if not stage.GetPrimAtPath(DEMO_ROOT):
         return []
     result = []
-    for name, path in [(n, f"{DEMO_ROOT}/{n}") for n in DEMO_NAMES] + [("PulledChair", CHAIR_PATH)]:
+    names = list(DEMO_NAMES)
+    container = stage.GetPrimAtPath(f"{DEMO_ROOT}/ServiceContainer")
+    if container and container.IsActive():
+        names.append("ServiceContainer")
+    for name, path in [(n, f"{DEMO_ROOT}/{n}") for n in names] + [("PulledChair", CHAIR_PATH)]:
+        if name == "RoundedBin" and not stage.GetPrimAtPath(path).IsActive():
+            continue  # Separate container bench replaces only this prop.
         bounds = read_world_bounds(stage, path)
         result.append(dict(name=name, prim_path=path, bounds_minimum=bounds.minimum,
                            bounds_maximum=bounds.maximum,

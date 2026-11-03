@@ -182,7 +182,7 @@ parser.add_argument("--restaurant-scene", type=Path,
                     help="separate dressed restaurant scene; bounded 2.2 m real-bowl component route")
 parser.add_argument("--restaurant-layout-survey", type=Path,
                     help="fingerprinted authored layout raster, independent clearance monitor only")
-parser.add_argument("--restaurant-view", choices=("bowl", "pot", "counter", "front", "server", "demo-bin", "demo-rounded", "demo-utensils"), default="bowl",
+parser.add_argument("--restaurant-view", choices=("bowl", "pot", "counter", "front", "server", "demo-bin", "demo-rounded", "demo-utensils", "demo-container"), default="bowl",
                     help="explicit stationary robot view; target names are evaluation metadata only")
 parser.add_argument("--restaurant-route", choices=("short", "service", "human-service", "long-service"), default="short")
 parser.add_argument('--service-wide-corner', action='store_true',
@@ -220,6 +220,8 @@ parser.add_argument("--human-camera-upward-degrees", type=float, default=0.,
                     help="explicit experimental left RGB mount pitch, 0..25 degrees; actual extrinsics re-read")
 parser.add_argument("--human-camera-raise-metres", type=float, default=0.,
                     help="explicit experimental RGB mount height increase, 0...6 m")
+parser.add_argument("--stationary-prop-camera", action="store_true",
+                    help="allow the experimental RGB mount in a stationary restaurant prop test only; no wheel-motion acceptance")
 parser.add_argument("--rgb-camera", choices=("front_hawk_left", "front_hawk_right", "front_owl"),
                     default="front_hawk_left", help="one existing authored camera per trial; actual lens/extrinsics are read, no multi-camera fusion")
 parser.add_argument("--human-crossing-trigger-y", type=float, default=7.8,
@@ -660,10 +662,14 @@ if args.human_carry_facing_crossing and not args.human_carry_bowl:
     parser.error("initial carrying heading requires the carried bowl")
 if args.human_start_view != "original" and (not args.human_carry_bowl or args.restaurant_route != "human-service"):
     parser.error("forward robot start requires carrying and the human-service world route")
+if args.stationary_prop_camera and (not args.restaurant_scene or args.motion
+    or args.restaurant_human or args.restaurant_view not in {"demo-container", "demo-bin", "demo-rounded", "demo-utensils", "pot"}):
+    parser.error("stationary prop camera requires a restaurant prop view, no native human and no motion")
 if not 0 <= args.human_camera_upward_degrees <= 25 or not 0 <= args.human_camera_raise_metres <= .6 or (
-    (args.human_camera_upward_degrees or args.human_camera_raise_metres) and not args.restaurant_human
+    (args.human_camera_upward_degrees or args.human_camera_raise_metres)
+    and not (args.restaurant_human or args.stationary_prop_camera)
 ):
-    parser.error("experimental RGB pitch 0..25 requires the native human mode")
+    parser.error("experimental RGB mount requires native human mode or explicit stationary prop camera")
 if args.restaurant_scene and (
     not args.persistent_object_risk_map
     or (args.static_occupancy_memory_prior == bool(args.restaurant_human))

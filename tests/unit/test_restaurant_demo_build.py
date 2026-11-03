@@ -41,7 +41,7 @@ def test_demo_layer_keeps_original_scene_and_all_collision_without_score_labels(
 
 def test_demo_observations_are_evaluation_views_and_legacy_scene_is_empty():
     assert demo_prop_records(_stage()) == []
-    assert len(DEMO_OBSERVATIONS) == 3
+    assert len(DEMO_OBSERVATIONS) == 4
     stage = _stage()
     with Usd.EditContext(stage, stage.GetSessionLayer()):
         records = author_demo_props(stage)

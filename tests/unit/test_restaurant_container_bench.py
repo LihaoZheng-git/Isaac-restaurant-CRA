@@ -1,0 +1,64 @@
+"""Authored fixture separation and stationary-only mounting constraints."""
+
+import ast
+from pathlib import Path
+
+import numpy as np
+from pxr import Usd, UsdPhysics
+import pytest
+
+from robot.scene.restaurant_container_bench import CONTAINER_PATH, author_service_container
+from robot.scene.restaurant_demo_build import DEMO_ROOT, author_demo_props
+from test_restaurant_demo_build import _stage
+
+
+@pytest.mark.parametrize("shape", ["angular", "rounded"])
+def test_matched_container_stays_ground_supported_and_never_supplies_factors(shape):
+    stage = _stage()
+    author_demo_props(stage)
+    before = stage.GetRootLayer().ExportToString()
+    with Usd.EditContext(stage, stage.GetSessionLayer()):
+        row = author_service_container(stage, shape)
+    assert stage.GetRootLayer().ExportToString() == before
+    assert not stage.GetPrimAtPath(DEMO_ROOT + "/RoundedBin").IsActive()
+    np.testing.assert_allclose(row["bounds_minimum"], [27.99, 5.94, 0.], atol=1e-6)
+    np.testing.assert_allclose(row["bounds_maximum"], [28.31, 6.26, .48], atol=1e-6)
+    assert row["available_as_physical_factor_input"] is False
+    for prim in Usd.PrimRange(stage.GetPrimAtPath(CONTAINER_PATH)):
+        assert not prim.HasAPI(UsdPhysics.MassAPI)
+        assert not prim.HasAttribute("phi")
+        assert not prim.HasAttribute("semantic:class")
+    with pytest.raises(ValueError, match="active original"):
+        author_service_container(stage, shape)
+
+
+def _parse_mount(argv, monkeypatch):
+    """Exercise the real parser and its guards without importing Isaac."""
+    script = Path("scripts/demos/cra_live_object_isaac_demo.py")
+    tree = ast.parse(script.read_text(encoding="utf-8"))
+    # Stop before output directories, environment changes or Isaac imports.
+    cutoff = next(i for i, node in enumerate(tree.body)
+                  if isinstance(node, ast.Expr) and isinstance(node.value, ast.Call)
+                  and ast.unparse(node.value.func) == "args.output.mkdir")
+    namespace = {"__file__": str(script.resolve()), "__name__": "cli_test"}
+    monkeypatch.setattr("sys.argv", [str(script), "--output", "unused", *argv])
+    exec(compile(ast.Module(tree.body[:cutoff], type_ignores=[]), str(script), "exec"), namespace)
+    return namespace["args"]
+
+
+BASE_ARGS = ["--stationary-prop-camera", "--human-camera-raise-metres", ".6",
+             "--restaurant-scene", "fixture.usda", "--restaurant-view", "demo-container",
+             "--persistent-object-risk-map", "--static-occupancy-memory-prior",
+             "--restaurant-layout-survey", "survey.json"]
+
+
+@pytest.mark.parametrize("extra", [["--motion"], ["--restaurant-view", "bowl"],
+                                  ["--restaurant-human", "standing"], ["--human-camera-raise-metres", ".61"]])
+def test_prop_camera_cannot_enable_general_or_moving_mount(extra, monkeypatch):
+    with pytest.raises(SystemExit):
+        _parse_mount([*BASE_ARGS, *extra], monkeypatch)
+
+
+def test_real_stationary_prop_mount_arguments_pass(monkeypatch):
+    args = _parse_mount(BASE_ARGS, monkeypatch)
+    assert args.human_camera_raise_metres == .6 and not args.motion
