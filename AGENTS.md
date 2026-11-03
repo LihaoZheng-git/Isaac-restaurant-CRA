@@ -1,5 +1,17 @@
 # CRA repository guidance
 
+- User-approved simplified camera-height survey at4032675 captured16 paused
+  native Owl RGB views with raises0/.2/.4/.6m, unchanged lens640x480 and props.
+  Zero physics/wheels/time advancement;72 source hashes/bounds passed. Preferred
+  tested candidate is+.60m level (optical world z1.04821m). Pot/plume and utensil
+  holder/fork silhouettes are visible, but tips remain small and route views
+  put targets at the right edge. Original views already partially see them:
+  height is not proven sole cause of earlier association failures. Separate
+  v2_raised_camera recipe is UNVALIDATED beyond RGB visibility; require fresh
+  stationary association/human gates and full mission before wheel acceptance.
+  No physical mast geometry, new factors or transferred v2 validation. Preserve
+  accepted v2/main/primary/PR117 holds. See docs/restaurant_camera_height.md.
+
 - Separate wide-corner/upper-departure v2 at a830bf7 PASSED all four fresh
   prerequisites, own60, full native arrival and stopping:8/8 guides,
   156.083333simsec,1015 live fields/996 translating,.108938m minimum independent
