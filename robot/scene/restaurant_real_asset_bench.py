@@ -1,0 +1,114 @@
+"""Licensed real-mesh props in separate stationary scenes; never factor inputs."""
+
+import hashlib
+import json
+import os
+from pathlib import Path
+
+import numpy as np
+from pxr import Gf, Sdf, Usd, UsdGeom, UsdPhysics
+
+from robot.config import PROJECT_ROOT
+from robot.scene.restaurant_container_bench import CONTAINER_CENTER_XY, CONTAINER_PATH
+from robot.scene.restaurant_demo_build import DEMO_ROOT, demo_prop_records
+
+ASSETS = PROJECT_ROOT / "assets/restaurant/sketchfab_contact_props"
+KINDS = ("recycle_bin", "intact_crate", "broken_crate")
+
+
+def author_real_asset(stage, kind):
+    if kind not in KINDS:
+        raise ValueError("unknown real prop")
+    old = stage.GetPrimAtPath(DEMO_ROOT + "/RoundedBin")
+    if not old or not old.IsActive() or stage.GetPrimAtPath(CONTAINER_PATH):
+        raise ValueError("requires original bin and unused target path")
+    folder = ASSETS / ("recycle_bin" if kind == "recycle_bin" else "crates")
+    source = Usd.Stage.Open(str(folder / "converted.usdc"))
+    if UsdGeom.GetStageUpAxis(source) != "Y" or UsdGeom.GetStageMetersPerUnit(source) != 1:
+        raise ValueError("unexpected converter units/up axis")
+    old.SetActive(False)
+    server = stage.GetPrimAtPath("/World/CRAServiceActors/Server")
+    if server:
+        server.SetActive(False)
+    root = UsdGeom.Xform.Define(stage, CONTAINER_PATH)
+    shift = root.AddTranslateOp()
+    root.AddRotateZOp().Set(-90.)
+    orient = UsdGeom.Xform.Define(stage, CONTAINER_PATH + "/Orientation")
+    orient.AddRotateXOp().Set(90.)  # glTF Y-up -> restaurant Z-up.
+    scale_op = orient.AddScaleOp()
+    reference_path = CONTAINER_PATH + "/Orientation/Asset"
+    reference = stage.DefinePrim(reference_path)
+    layer_path = Path(stage.GetEditTarget().GetLayer().realPath)
+    asset_path = folder / "converted.usdc"
+    relative = (os.path.relpath(asset_path, layer_path.parent).replace("\\", "/")
+                if str(layer_path) != "." else str(asset_path))
+    reference.GetReferences().AddReference(relative)
+    if kind == "recycle_bin":
+        # The original glTF includes an assembled low-poly mesh, its duplicate
+        # component meshes and co-located high-poly baking meshes. Keep the
+        # original textured assembled mesh only, without changing its shape.
+        parent = stage.GetPrimAtPath(reference_path + "/root/GLTF_SceneRootNode")
+        if len(parent.GetChildren()) != 7:
+            raise ValueError("unexpected bin source hierarchy")
+        for child in parent.GetChildren():
+            child.SetActive(child.GetName() == "Plane_l_001_0")
+        cache = UsdGeom.BBoxCache(0, ["default", "render"])
+        bounds = cache.ComputeWorldBound(root.GetPrim()).ComputeAlignedRange()
+        scale = .65 / (bounds.GetMax()[2] - bounds.GetMin()[2])
+    else:
+        parent = stage.GetPrimAtPath(reference_path + "/node_18c1021f1704bc6a4ddc61ad48bf678_fbx/RootNode")
+        keep = "Crate_01_GEO" if kind == "intact_crate" else "Crate_02_GEO"
+        if {p.GetName() for p in parent.GetChildren()} != {"Crate_01_GEO", "Crate_02_GEO"}:
+            raise ValueError("unexpected crate source hierarchy")
+        for child in parent.GetChildren():
+            child.SetActive(child.GetName() == keep)
+        scale = .65  # SAME authored uniform scale for the original crate pair.
+    scale_op.Set(Gf.Vec3f(scale))
+    bounds = UsdGeom.BBoxCache(0, ["default", "render"]).ComputeWorldBound(root.GetPrim()).ComputeAlignedRange()
+    lo, hi = np.array(bounds.GetMin()), np.array(bounds.GetMax())
+    if not np.isfinite([lo, hi]).all() or np.any(hi <= lo):
+        raise ValueError("invalid visible mesh bounds")
+    center = (lo + hi) / 2
+    shift.Set(Gf.Vec3d(CONTAINER_CENTER_XY[0] - center[0],
+                       CONTAINER_CENTER_XY[1] - center[1], -lo[2]))
+    meshes = [p for p in Usd.PrimRange(root.GetPrim()) if p.IsA(UsdGeom.Mesh)]
+    if len(meshes) != 1:
+        raise ValueError("each isolated prop must contain one visible original mesh")
+    for prim in meshes:
+        UsdPhysics.CollisionAPI.Apply(prim)
+        UsdPhysics.MeshCollisionAPI.Apply(prim).CreateApproximationAttr("none")
+    return next(p for p in demo_prop_records(stage) if p["name"] == "ServiceContainer")
+
+
+def build_real_asset_scene(output, *, base_scene, kind):
+    output, base_scene = Path(output).resolve(), Path(base_scene).resolve()
+    additions = output.with_name(output.stem + "_asset.usda")
+    if output == base_scene or any(p.exists() for p in (output, additions, output.with_suffix(".json"))):
+        raise ValueError("fresh scene/additions/manifest paths required")
+    if kind not in KINDS:
+        raise ValueError("unknown real prop")
+    base = Usd.Stage.Open(str(base_scene))
+    paths = {Path(p.realPath) for p in base.GetUsedLayers() if p.realPath and Path(p.realPath).is_file()}
+    paths.update(p for p in ASSETS.rglob("*") if p.is_file())
+    sources = {str(p.resolve()): hashlib.sha256(p.read_bytes()).hexdigest() for p in paths}
+    output.parent.mkdir(parents=True, exist_ok=True)
+    stage = Usd.Stage.CreateNew(str(output))
+    layer = Sdf.Layer.CreateNew(str(additions))
+    stage.GetRootLayer().subLayerPaths = [additions.name, os.path.relpath(base_scene, output.parent).replace("\\", "/")]
+    UsdGeom.SetStageMetersPerUnit(stage, 1.)
+    UsdGeom.SetStageUpAxis(stage, "Z")
+    stage.SetStartTimeCode(base.GetStartTimeCode())
+    stage.SetEndTimeCode(base.GetEndTimeCode())
+    stage.SetTimeCodesPerSecond(base.GetTimeCodesPerSecond())
+    with Usd.EditContext(stage, layer):
+        target = author_real_asset(stage, kind)
+    layer.Save()
+    stage.GetRootLayer().Save()
+    if any(hashlib.sha256(Path(p).read_bytes()).hexdigest() != h for p, h in sources.items()):
+        raise RuntimeError("source changed during separate scene build")
+    result = dict(scene=str(output), additions=str(additions), source_sha256=sources,
+                  target=target, props=demo_prop_records(stage), fixture_asset=kind,
+                  source_files_unchanged=True, stationary_props_only=True,
+                  scope="Original licensed mesh/texture stationary probe; no category, density, sharpness or factor labels; no navigation acceptance")
+    output.with_suffix(".json").write_text(json.dumps(result, indent=2) + "\n")
+    return result
