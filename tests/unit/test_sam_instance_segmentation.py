@@ -203,3 +203,95 @@ def test_observed_context_box_clamps_to_image_without_inventing_ownership(tmp_pa
     result = segmenter.propose(ids, projection, track_id=7, use_observed_context_box=True)
     assert backend.boxes == [(0, 0, 100, 100)]
     assert result.detection is None  # The supplied mask contains neither return.
+
+
+def extent_fixture(tmp_path, *, enabled=True):
+    original = np.zeros((1, 100, 100), bool)
+    original[0, 20:70, 30:35] = True  # Accepted part, 40 of 64 owned returns.
+    expanded = np.zeros_like(original)
+    expanded[0, 20:70, 20:70] = True
+    segmenter, backend, projection, ids = fixture(tmp_path, original, [.91])
+    segmenter.config = replace(segmenter.config, observed_context_box_retry=True,
+                               track_extent_retry=enabled)
+    backend.expanded, backend.expanded_scores = expanded, np.array([.90])
+
+    def predict(point, *, context_box_xyxy=None):
+        backend.prompts.append(point)
+        backend.boxes.append(context_box_xyxy)
+        return ((backend.masks, backend.scores) if context_box_xyxy is None
+                else (backend.expanded, backend.expanded_scores))
+
+    backend.predict = predict
+    return segmenter, backend, projection, ids
+
+
+def test_track_extent_retry_is_opt_in_and_replaces_only_with_checked_superset(tmp_path):
+    segmenter, backend, projection, ids = extent_fixture(tmp_path, enabled=False)
+    old = segmenter.propose(ids, projection, track_id=7)
+    assert old.mask_track_hits == 40 and len(backend.prompts) == 1
+    assert old.extent_retry_diagnostics is None
+    segmenter.config = replace(segmenter.config, track_extent_retry=True)
+    result = segmenter.propose(ids, projection, track_id=7)
+    assert len(backend.prompts) == 3
+    assert result.mask_track_hits == result.projected_track_points == 64
+    assert np.all(result.detection.mask[old.detection.mask])
+    assert result.detection.confidence == .75
+    assert result.detection.semantic_class == "unknown"
+    assert result.extent_retry_diagnostics["promoted"]
+    assert result.extent_retry_diagnostics["original_track_coverage"] == .625
+    assert result.extent_retry_diagnostics["original_mask_containment"] == 1
+    # The box comes from current owned returns, not dimensions or class labels.
+    assert backend.boxes[-1] == (28, 28, 40, 40)
+
+
+@pytest.mark.parametrize("failure", ["quality", "foreign", "boundary", "ambiguous",
+                                     "coverage", "containment"])
+def test_track_extent_retry_cannot_weaken_acceptance_or_replace_different_region(tmp_path, failure):
+    segmenter, backend, projection, ids = extent_fixture(tmp_path)
+    if failure == "quality":
+        backend.expanded_scores[:] = .84
+    elif failure == "foreign":
+        pixels = np.vstack([projection.pixel_indices_xy, np.tile([60, 60], (30, 1))])
+        projection = ProjectedLidarPoints(np.arange(94), pixels.astype(float), pixels, np.ones(94))
+        ids = np.r_[ids, np.full(30, 8)]
+    elif failure == "boundary":
+        backend.expanded[0, :30, 30] = True
+    elif failure == "ambiguous":
+        backend.expanded = np.concatenate([backend.expanded, backend.expanded.copy()])
+        backend.expanded[1, :, 50:] = False
+        backend.expanded_scores = np.array([.90, .91])
+    elif failure == "coverage":
+        backend.expanded[0, :, 35:] = False
+    else:
+        backend.expanded[0, 20:30, 30:35] = False
+    result = segmenter.propose(ids, projection, track_id=7)
+    assert result.detection is not None  # Original valid part survives failed retry.
+    np.testing.assert_array_equal(result.detection.mask, backend.masks[0])
+    assert not result.extent_retry_diagnostics["promoted"]
+    assert result.mask_track_hits == 40
+    assert len(backend.prompts) == 2
+
+
+@pytest.mark.parametrize("mode", ["complete", "alternate", "box", "rejected"])
+def test_extent_retry_never_recurses_or_retries_an_unaccepted_mask(tmp_path, mode):
+    segmenter, backend, projection, ids = extent_fixture(tmp_path)
+    kwargs = {}
+    if mode == "complete":
+        backend.masks = backend.expanded
+    elif mode == "alternate":
+        kwargs["prompt_source_index"] = 0
+    elif mode == "box":
+        kwargs["use_observed_context_box"] = True
+    else:
+        backend.scores[:] = .84
+    result = segmenter.propose(ids, projection, track_id=7, **kwargs)
+    assert len(backend.prompts) == 1
+    assert result.extent_retry_diagnostics is None
+
+
+def test_extent_retry_requires_explicit_boolean_and_context_permission(tmp_path):
+    segmenter, _, _, _ = fixture(tmp_path)
+    with pytest.raises(TypeError, match="boolean"):
+        replace(segmenter.config, track_extent_retry=1)
+    with pytest.raises(ValueError, match="context-box"):
+        replace(segmenter.config, track_extent_retry=True)

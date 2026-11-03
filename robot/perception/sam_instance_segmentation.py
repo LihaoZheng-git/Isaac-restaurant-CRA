@@ -5,7 +5,7 @@ instances, with a model-quality gate and explicit rejection of ambiguous masks.
 It supplies no class, material, density, physical sharpness, or temperature.
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 import hashlib
 import math
 from pathlib import Path
@@ -38,10 +38,15 @@ class SamInstanceConfig:
     foreground_depth_gap_m: float | None = None
     observed_context_box_retry: bool = False
     context_box_padding_fraction: float = 1.0
+    track_extent_retry: bool = False
 
     def __post_init__(self):
         if not isinstance(self.observed_context_box_retry, bool):
             raise TypeError("observed context-box opt-in must be boolean")
+        if not isinstance(self.track_extent_retry, bool):
+            raise TypeError("track-extent retry opt-in must be boolean")
+        if self.track_extent_retry and not self.observed_context_box_retry:
+            raise ValueError("track-extent retry requires observed context-box opt-in")
         if not math.isfinite(self.context_box_padding_fraction) or not 0 <= self.context_box_padding_fraction <= 1:
             raise ValueError("observed context-box padding must lie in [0, 1]")
         if self.foreground_depth_gap_m is not None and (
@@ -83,6 +88,7 @@ class SamInstanceResult:
     source: str = SAM_INSTANCE_SOURCE
     candidate_diagnostics: tuple[dict, ...] = ()
     observed_context_box_xyxy: tuple[int, int, int, int] | None = None
+    extent_retry_diagnostics: dict | None = None
 
 
 class _UltralyticsBackend:
@@ -162,6 +168,49 @@ class SamInstanceSegmenter:
         self.image_encoder_wall_seconds = time.perf_counter() - start
 
     def propose(
+        self, point_track_ids, projection, *, track_id,
+        prompt_source_index=None, use_observed_context_box=False,
+    ):
+        """Optionally retry a valid but small part using this track's image extent.
+
+        This default-OFF proposal change does not group tracks or weaken gates.
+        A replacement must independently pass every original check, cover >=80%
+        of the track's projected returns, and contain >=98% of the original mask.
+        Neither fraction certifies a whole physical object: a track can be a part.
+        """
+        result = self._propose(
+            point_track_ids, projection, track_id=track_id,
+            prompt_source_index=prompt_source_index,
+            use_observed_context_box=use_observed_context_box)
+        if (not self.config.track_extent_retry or result.detection is None
+                or use_observed_context_box or prompt_source_index is not None
+                or result.mask_track_hits / max(1, result.projected_track_points) >= .8):
+            return result
+        retry = self._propose(
+            point_track_ids, projection, track_id=track_id,
+            use_observed_context_box=True, context_padding_fraction=.25)
+        containment = (float(np.count_nonzero(result.detection.mask & retry.detection.mask))
+                       / max(1, int(result.detection.mask.sum()))
+                       if retry.detection is not None else 0.)
+        coverage = retry.mask_track_hits / max(1, retry.projected_track_points)
+        promote = bool(retry.detection is not None and coverage >= .8 and containment >= .98)
+        diagnostic = {
+            "basis": "same_source_owned_track_extent_proposal_only",
+            "original_track_coverage": result.mask_track_hits / result.projected_track_points,
+            "retry_track_coverage": coverage,
+            "original_mask_containment": containment,
+            "promoted": promote,
+            "retry_context_box_xyxy": retry.observed_context_box_xyxy,
+            "retry_rejections": retry.rejection_reasons,
+            "original_candidates": result.candidate_diagnostics,
+            "retry_candidates": retry.candidate_diagnostics,
+            "scope": "same track and unchanged gates; not whole-object identity or new geometry",
+        }
+        selected = retry if promote else result
+        return replace(selected, extent_retry_diagnostics=diagnostic,
+                       inference_wall_seconds=result.inference_wall_seconds + retry.inference_wall_seconds)
+
+    def _propose(
         self,
         point_track_ids,
         projection: ProjectedLidarPoints,
@@ -169,6 +218,7 @@ class SamInstanceSegmenter:
         track_id,
         prompt_source_index=None,
         use_observed_context_box=False,
+        context_padding_fraction=None,
     ):
         if self.image_shape is None:
             raise RuntimeError("set_image is required for each camera frame")
@@ -221,7 +271,8 @@ class SamInstanceSegmenter:
             # an image proposal, not a claim about the object's physical extent.
             # Only this track's actually projected returns determine the box.
             low, high = points.min(axis=0), points.max(axis=0) + 1
-            padding = (high - low) * self.config.context_box_padding_fraction
+            padding = (high - low) * (self.config.context_box_padding_fraction
+                                      if context_padding_fraction is None else context_padding_fraction)
             context_box = tuple(int(v) for v in np.r_[
                 np.maximum(0, np.floor(low - padding)),
                 np.minimum([width, height], np.ceil(high + padding)),

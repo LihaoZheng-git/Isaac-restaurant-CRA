@@ -1,0 +1,11 @@
+Model Information:
+* title:	Kitchen Cleaver
+* source:	https://sketchfab.com/3d-models/kitchen-cleaver-93d395fa7cf04811a7cc56f5169c30d5
+* author:	KAMAAIL (https://sketchfab.com/KAMAAIL)
+
+Model License:
+* license type:	CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
+* requirements:	Author must be credited. Commercial use is allowed.
+
+If you use this 3D model in your project be sure to copy paste this credit wherever you share it:
+This work is based on "Kitchen Cleaver" (https://sketchfab.com/3d-models/kitchen-cleaver-93d395fa7cf04811a7cc56f5169c30d5) by KAMAAIL (https://sketchfab.com/KAMAAIL) licensed under CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)

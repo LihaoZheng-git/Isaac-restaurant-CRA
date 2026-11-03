@@ -5,6 +5,7 @@ geometry/materials; scene placement and scale are authored in separate layers.
 """
 
 import asyncio
+import argparse
 import hashlib
 import json
 from pathlib import Path
@@ -13,9 +14,9 @@ ROOT = Path(__file__).resolve().parents[2]
 ASSETS = ROOT / "assets/restaurant/sketchfab_contact_props"
 
 
-def audited_jobs():
+def audited_jobs(names=("recycle_bin", "crates")):
     jobs = []
-    for name in ("recycle_bin", "crates"):
+    for name in names:
         folder = ASSETS / name
         manifest = json.loads((folder / "manifest.json").read_text())
         if manifest["license"] != "CC-BY-4.0":
@@ -33,7 +34,13 @@ def audited_jobs():
 
 
 def main():
-    jobs = audited_jobs()
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--assets", nargs="+", choices=("recycle_bin", "crates", "cleaver", "broken_plate"),
+                        default=["recycle_bin", "crates"])
+    args = parser.parse_args()
+    if len(set(args.assets)) != len(args.assets):
+        parser.error("duplicate asset names")
+    jobs = audited_jobs(args.assets)
     from isaacsim import SimulationApp
 
     app = SimulationApp({"headless": True})

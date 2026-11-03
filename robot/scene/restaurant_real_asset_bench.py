@@ -10,10 +10,10 @@ from pxr import Gf, Sdf, Usd, UsdGeom, UsdPhysics
 
 from robot.config import PROJECT_ROOT
 from robot.scene.restaurant_container_bench import CONTAINER_CENTER_XY, CONTAINER_PATH
-from robot.scene.restaurant_demo_build import DEMO_ROOT, demo_prop_records
+from robot.scene.restaurant_demo_build import DEMO_ROOT, _shape, demo_prop_records
 
 ASSETS = PROJECT_ROOT / "assets/restaurant/sketchfab_contact_props"
-KINDS = ("recycle_bin", "intact_crate", "broken_crate")
+KINDS = ("recycle_bin", "intact_crate", "broken_crate", "cleaver", "broken_plate")
 
 
 def author_real_asset(stage, kind):
@@ -22,7 +22,7 @@ def author_real_asset(stage, kind):
     old = stage.GetPrimAtPath(DEMO_ROOT + "/RoundedBin")
     if not old or not old.IsActive() or stage.GetPrimAtPath(CONTAINER_PATH):
         raise ValueError("requires original bin and unused target path")
-    folder = ASSETS / ("recycle_bin" if kind == "recycle_bin" else "crates")
+    folder = ASSETS / ("crates" if kind in ("intact_crate", "broken_crate") else kind)
     source = Usd.Stage.Open(str(folder / "converted.usdc"))
     if UsdGeom.GetStageUpAxis(source) != "Y" or UsdGeom.GetStageMetersPerUnit(source) != 1:
         raise ValueError("unexpected converter units/up axis")
@@ -55,7 +55,7 @@ def author_real_asset(stage, kind):
         cache = UsdGeom.BBoxCache(0, ["default", "render"])
         bounds = cache.ComputeWorldBound(root.GetPrim()).ComputeAlignedRange()
         scale = .65 / (bounds.GetMax()[2] - bounds.GetMin()[2])
-    else:
+    elif kind in ("intact_crate", "broken_crate"):
         parent = stage.GetPrimAtPath(reference_path + "/node_18c1021f1704bc6a4ddc61ad48bf678_fbx/RootNode")
         keep = "Crate_01_GEO" if kind == "intact_crate" else "Crate_02_GEO"
         if {p.GetName() for p in parent.GetChildren()} != {"Crate_01_GEO", "Crate_02_GEO"}:
@@ -63,17 +63,37 @@ def author_real_asset(stage, kind):
         for child in parent.GetChildren():
             child.SetActive(child.GetName() == keep)
         scale = .65  # SAME authored uniform scale for the original crate pair.
+    else:
+        # Original complete meshes, at ordinary utensil/dish scale. The cleaver
+        # lies flat on a low preparation surface; the plate lies on the floor.
+        # These transforms never supply detector boxes or physical evidence.
+        bounds = UsdGeom.BBoxCache(0, ["default", "render"]).ComputeWorldBound(root.GetPrim()).ComputeAlignedRange()
+        extent = np.array(bounds.GetMax()) - np.array(bounds.GetMin())
+        scale = (.32 if kind == "cleaver" else .28) / max(extent[:2])
     scale_op.Set(Gf.Vec3f(scale))
     bounds = UsdGeom.BBoxCache(0, ["default", "render"]).ComputeWorldBound(root.GetPrim()).ComputeAlignedRange()
     lo, hi = np.array(bounds.GetMin()), np.array(bounds.GetMax())
     if not np.isfinite([lo, hi]).all() or np.any(hi <= lo):
         raise ValueError("invalid visible mesh bounds")
     center = (lo + hi) / 2
+    base_height = .45 if kind == "cleaver" else 0.
     shift.Set(Gf.Vec3d(CONTAINER_CENTER_XY[0] - center[0],
-                       CONTAINER_CENTER_XY[1] - center[1], -lo[2]))
+                       CONTAINER_CENTER_XY[1] - center[1], base_height - lo[2]))
+    if kind == "cleaver":
+        support = DEMO_ROOT + "/AssetBenchSupport"
+        UsdGeom.Xform.Define(stage, support)
+        x, y = CONTAINER_CENTER_XY
+        _shape(stage, support + "/Top", UsdGeom.Cube, (x, y, .425),
+               (.275, .275, .025), (.40, .40, .40))
+        for dx in (-.23, .23):
+            for dy in (-.23, .23):
+                _shape(stage, support + f"/Leg{'P' if dx > 0 else 'N'}{'P' if dy > 0 else 'N'}",
+                       UsdGeom.Cube, (x + dx, y + dy, .2),
+                       (.015, .015, .2), (.35, .35, .35))
     meshes = [p for p in Usd.PrimRange(root.GetPrim()) if p.IsA(UsdGeom.Mesh)]
-    if len(meshes) != 1:
-        raise ValueError("each isolated prop must contain one visible original mesh")
+    expected_meshes = 3 if kind in ("cleaver", "broken_plate") else 1
+    if len(meshes) != expected_meshes:
+        raise ValueError("isolated prop must retain all selected original meshes")
     for prim in meshes:
         UsdPhysics.CollisionAPI.Apply(prim)
         UsdPhysics.MeshCollisionAPI.Apply(prim).CreateApproximationAttr("none")

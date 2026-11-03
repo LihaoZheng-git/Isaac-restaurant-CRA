@@ -23,9 +23,13 @@ def test_original_mesh_is_grounded_and_not_a_factor_input(kind):
     assert not stage.GetPrimAtPath("/World/CRAServiceActors/Server").IsActive()
     assert row["available_as_physical_factor_input"] is False
     lo, hi = np.array(row["bounds_minimum"]), np.array(row["bounds_maximum"])
-    assert abs(lo[2]) < 1e-6
+    assert abs(lo[2] - (.45 if kind == "cleaver" else 0.)) < 1e-6
     np.testing.assert_allclose(((lo + hi) / 2)[:2], [28.15, 6.1], atol=1e-6)
-    assert .2 < hi[2] < .7
+    if kind in ("cleaver", "broken_plate"):
+        np.testing.assert_allclose(max((hi - lo)[:2]), .32 if kind == "cleaver" else .28, atol=1e-6)
+        assert 0 < hi[2] - lo[2] < .03  # Do not thicken the edge for LiDAR.
+    else:
+        assert .2 < hi[2] < .7
     meshes = []
     for prim in Usd.PrimRange(stage.GetPrimAtPath(CONTAINER_PATH)):
         assert not prim.HasAPI(UsdPhysics.MassAPI)
@@ -34,6 +38,12 @@ def test_original_mesh_is_grounded_and_not_a_factor_input(kind):
         if prim.IsA(UsdGeom.Mesh):
             meshes.append(prim)
             assert prim.HasAPI(UsdPhysics.CollisionAPI)
-    assert len(meshes) == 1
+    assert len(meshes) == (3 if kind in ("cleaver", "broken_plate") else 1)
+    support = stage.GetPrimAtPath(DEMO_ROOT + "/AssetBenchSupport")
+    assert bool(support) == (kind == "cleaver")
+    if support:
+        # Support is independent occupancy, not part of the target's bounds.
+        support_bounds = UsdGeom.BBoxCache(0, ["default", "render"]).ComputeWorldBound(support).ComputeAlignedRange()
+        assert abs(support_bounds.GetMax()[2] - lo[2]) < 1e-6
     with pytest.raises(ValueError, match="original bin"):
         author_real_asset(stage, kind)

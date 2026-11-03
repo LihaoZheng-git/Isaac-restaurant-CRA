@@ -74,3 +74,10 @@ def test_prop_camera_cannot_enable_general_or_moving_mount(extra, monkeypatch):
 def test_real_stationary_prop_mount_arguments_pass(monkeypatch):
     args = _parse_mount(BASE_ARGS, monkeypatch)
     assert args.human_camera_raise_metres == .6 and not args.motion
+
+
+def test_extent_retry_cli_requires_context_opt_in(monkeypatch):
+    with pytest.raises(SystemExit):
+        _parse_mount([*BASE_ARGS, "--sam-track-extent-retry"], monkeypatch)
+    args = _parse_mount([*BASE_ARGS, "--sam-track-extent-retry", "--sam-observed-context-box"], monkeypatch)
+    assert args.sam_track_extent_retry and args.sam_observed_context_box

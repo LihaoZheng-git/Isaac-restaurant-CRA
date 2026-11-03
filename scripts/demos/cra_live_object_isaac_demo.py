@@ -252,6 +252,8 @@ parser.add_argument("--human-start-view", choices=("original", "approach-forward
                     help="explicit bounded carrying start; fixed world human-service waypoints remain unchanged")
 parser.add_argument("--human-mass-prior", nargs=3, type=float, default=(70.,45.,100.),
                     metavar=("KG", "LOWER", "UPPER"), help="configured adult demonstration mass interval; not measured weight")
+parser.add_argument("--sam-track-extent-retry", action="store_true",
+                    help="separate same-track box proposal for accepted low-coverage masks; original quality/ownership gates stay")
 parser.add_argument("--sam-observed-context-box", action="store_true",
                     help="explicit generic observed-LiDAR context-box retry; unchanged SAM quality/ownership gates")
 parser.add_argument("--restaurant-plume-diagnostic", action="store_true",
@@ -335,6 +337,8 @@ parser.add_argument('--unknown-verified-dynamic-evidence', action='store_true',
 parser.add_argument('--human-verified-part-recovery', action='store_true',
                     help='bounded recovery across a previously verified human parent/part ID swap; complete old region must fit current body')
 args = parser.parse_args()
+if args.sam_track_extent_retry and not args.sam_observed_context_box:
+    parser.error('SAM track-extent retry requires --sam-observed-context-box')
 if args.human_verified_part_recovery and (not args.human_track_recovery
         or not args.human_tracking_uncertainty or not args.human_visual_fragment_association
         or not args.unknown_verified_dynamic_evidence):
@@ -992,6 +996,7 @@ def main():
     segmenter = SamInstanceSegmenter(
         SamInstanceConfig(Path(weights["sam"]["path"]), device=device,
                           observed_context_box_retry=args.sam_observed_context_box,
+                          track_extent_retry=args.sam_track_extent_retry,
                           foreground_depth_gap_m=0.5 if args.fixture_layout == "three" or args.restaurant_scene else None)
     )
     mass = VisualMassRuntimeEstimator(
@@ -3214,6 +3219,7 @@ def main():
         "restaurant_scene": str(SCENE_PATH) if args.restaurant_scene else None,
         "static_restaurant_server": args.restaurant_server,
         "sam_observed_context_box_retry": args.sam_observed_context_box,
+        "sam_track_extent_retry": args.sam_track_extent_retry,
         "server_component_gate": gate.get("server_component_checks"),
         "restaurant_component_gate": gate.get("restaurant_component_checks"),
         "independent_authored_layout_monitor": bool(layout_monitor is not None),

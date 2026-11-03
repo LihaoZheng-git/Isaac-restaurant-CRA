@@ -928,6 +928,7 @@ class LiveObjectPerception:
                     "prompt_basis": prompt_basis,
                     "prompt_xy": proposal.prompt_xy,
                     "candidates": getattr(proposal, "candidate_diagnostics", ()),
+                    "extent_retry": getattr(proposal, "extent_retry_diagnostics", None),
                 }
             )
             if proposal.detection is None and proposal.rejection_reasons == (

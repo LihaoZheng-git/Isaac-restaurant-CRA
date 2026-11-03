@@ -1,5 +1,18 @@
 # CRA repository guidance
 
+- Separate real-prop mask diagnosis adds default-OFF --sam-track-extent-retry:
+  an accepted <80%-coverage first point mask gets one same-source owned-point
+  box proposal with25% padding. Replacement must pass ALL old gates, cover>=80%
+  of that track and contain>=98% of the original mask; else retain the valid
+  part and log failure. This is not whole-object identity, cluster merging,
+  point ownership transfer or new geometry. Bin point prompt hits recycling
+  panel; archived tight box improves extent. Crate slats remain split clusters,
+  and accepted rim is NOT whole-crate acceptance. Licensed cleaver/plate now
+  downloaded/converted, realistic32cm/28cm scale, original thin geometry; each
+  separate stationary test is pending native validation at implementation.
+  No wheels, primary/main/PR117 or accepted-v2 changes. See
+  docs/restaurant_mask_diagnosis.md. Preserve all old failures.
+
 - Licensed real-prop stationary tests at ba13bd5: recycling bin18/18 accepted,
   gate PASS, but native mask mainly covers blue front panel, NOT whole bin.
   17supported contact rows: median outline.452555/contact.124677/phi.544387.

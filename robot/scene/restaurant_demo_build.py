@@ -54,6 +54,9 @@ def demo_prop_records(stage):
     container = stage.GetPrimAtPath(f"{DEMO_ROOT}/ServiceContainer")
     if container and container.IsActive():
         names.append("ServiceContainer")
+    support = stage.GetPrimAtPath(f"{DEMO_ROOT}/AssetBenchSupport")
+    if support and support.IsActive():
+        names.append("AssetBenchSupport")
     for name, path in [(n, f"{DEMO_ROOT}/{n}") for n in names] + [("PulledChair", CHAIR_PATH)]:
         if name == "RoundedBin" and not stage.GetPrimAtPath(path).IsActive():
             continue  # Separate container bench replaces only this prop.
