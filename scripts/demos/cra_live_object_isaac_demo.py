@@ -226,6 +226,8 @@ parser.add_argument("--stationary-prop-standoff-metres", type=float,
                     help="separate zero-wheel demo-container sensing survey, .8..3m from authored fixture center; never an estimator input")
 parser.add_argument("--stationary-prop-view-yaw-degrees", type=float, default=0.,
                     help="stationary standoff survey viewing direction, 0..360 degrees; fixture placement only")
+parser.add_argument("--stationary-prop-rgb-width", type=int, choices=(640, 1280, 1920), default=640,
+                    help="stationary-only native RGB sampling survey, same authored lens/aspect; no image upscaling")
 parser.add_argument("--rgb-camera", choices=("front_hawk_left", "front_hawk_right", "front_owl"),
                     default="front_hawk_left", help="one existing authored camera per trial; actual lens/extrinsics are read, no multi-camera fusion")
 parser.add_argument("--human-crossing-trigger-y", type=float, default=7.8,
@@ -345,6 +347,10 @@ parser.add_argument('--unknown-verified-dynamic-evidence', action='store_true',
 parser.add_argument('--human-verified-part-recovery', action='store_true',
                     help='bounded recovery across a previously verified human parent/part ID swap; complete old region must fit current body')
 args = parser.parse_args()
+if args.stationary_prop_rgb_width != 640 and (
+    not args.stationary_prop_camera or not args.restaurant_scene or args.motion or args.restaurant_human
+):
+    parser.error("higher RGB sampling requires a stationary restaurant prop test without humans/wheels")
 if args.stationary_image_objects and (not args.stationary_prop_camera or args.motion
     or args.restaurant_human or not args.persistent_object_risk_map):
     parser.error("image-object experiment requires stationary prop camera, persistent mapping and no humans/wheels")
@@ -1297,8 +1303,10 @@ def main():
         "anchor_world_xy_yaw": [anchor.x, anchor.y, anchor.yaw],
         "scope": "authored fixture and oracle anchor for independent evaluation/rendering only; never factor input"})
     from robot.scene.camera_mount import apply_experimental_camera_pitch
+    rgb_resolution = ((args.stationary_prop_rgb_width * 5 // 8, args.stationary_prop_rgb_width)
+                      if args.restaurant_scene else (480, 640))
     camera = NovaCarterCamera(camera_prim_path=CAMERA_PRIM_PATHS[args.rgb_camera],
-        resolution=(400,640) if args.restaurant_scene else (480,640))
+        resolution=rgb_resolution)
     save_json("camera-mount-audit.json", apply_experimental_camera_pitch(
         stage, camera.camera_prim_path,
         args.human_camera_upward_degrees, stationary.ROBOT_BASE_PRIM_PATH,
@@ -1307,7 +1315,7 @@ def main():
     calibration = read_fisheye_polynomial_calibration(
         stage,
         camera_prim_path=camera.camera_prim_path,
-        output_resolution=(400, 640) if args.restaurant_scene else (480, 640),
+        output_resolution=rgb_resolution,
     )
     if args.restaurant_scene and (
         calibration.output_width * calibration.nominal_height

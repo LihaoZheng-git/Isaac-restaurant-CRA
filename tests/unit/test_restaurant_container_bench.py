@@ -76,6 +76,19 @@ def test_real_stationary_prop_mount_arguments_pass(monkeypatch):
     assert args.human_camera_raise_metres == .6 and not args.motion
 
 
+def test_native_rgb_sampling_survey_keeps_stationary_scope(monkeypatch):
+    assert _parse_mount(BASE_ARGS, monkeypatch).stationary_prop_rgb_width == 640
+    for width in (1280, 1920):
+        args = _parse_mount([*BASE_ARGS, "--stationary-prop-rgb-width", str(width)], monkeypatch)
+        assert args.stationary_prop_rgb_width == width
+    for extra in (["--motion"], ["--restaurant-human", "standing"],
+                  ["--stationary-prop-rgb-width", "1024"]):
+        with pytest.raises(SystemExit):
+            _parse_mount([*BASE_ARGS, "--stationary-prop-rgb-width", "1920", *extra], monkeypatch)
+    with pytest.raises(SystemExit):
+        _parse_mount(["--stationary-prop-rgb-width", "1920"], monkeypatch)
+
+
 def test_image_object_mode_is_stationary_only(monkeypatch):
     assert _parse_mount([*BASE_ARGS, "--stationary-image-objects"], monkeypatch).stationary_image_objects
     for extra in (["--motion"], ["--restaurant-human", "standing"], ["--image-object-maximum-extent", "nan"]):
