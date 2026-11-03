@@ -191,3 +191,22 @@ checks despite their passing. This was a preflight defect, not a navigation
 failure. The corrected validator explicitly matches the requested route mode
 and requires both additional checks. The failed launch remains archived;
 fresh source-matched prerequisites precede the retry.
+
+The retry at 992993b passed all fresh prerequisites and its own 60 stationary
+updates, but was interrupted after 697 live fields at world (25.9419, 5.2294),
+before the human encounter. It made only 3.34 mm progress over the final five
+source seconds. All 757 archived stationary/live sources passed geometry and
+verified-evidence audits; 18 raw person cues produced no verified human dynamic
+labels, and there were no uncertain-human regions or recovery events. The
+retained pillar surface has 5385 points, of which only 3333 have current raw
+support within 10 cm; the unobserved geometry must remain occupied.
+
+An offline positive-geometry reconstruction rejected all 35 tested constant
+arcs at the stopped pose. This is not native MPC/temporal parity or global
+infeasibility. A separate authored route-design survey moves just the corner
+guide from x=25.8 to x=26.2 m. The original nominal route failed 12/81 dense
+geometry probes in the reconstructed subset; the revised route passed 88/88.
+This motivates a separate native route variant, not a claim that the old corner
+or controller liveness is fixed. The human encounter, CRA, margins and priors
+remain unchanged. All failure records are preserved under
+`outputs/upper-service-departure/long-motion-v2/`.

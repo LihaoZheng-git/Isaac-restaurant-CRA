@@ -1,5 +1,23 @@
 # CRA repository guidance
 
+- Upper-departure992993b PASSED all four fresh prerequisites and own60, then
+  long-motion-v2 was INTERRUPTED after697 live fields/source115.8 at world
+  (25.9419,5.2294), before any human association; last5 source seconds moved
+  only.003341m. No arrival/stopping acceptance. All757 stationary+live sources
+  passed geometry12482references/609archives,582 ambiguous motion proofs and
+  verified-evidence audits:18raw person cues, ZERO verified dynamic human labels,
+  ZERO uncertain-human rows/recovery events. This is a separate corner planning
+  failure, not recurrence of false-mask dynamic enrollment. Retained2557 keeps
+  all5385 old points; current raw supports only3333 within.10m (max.331582m),
+  so do not erase its unobserved geometry. Offline reconstruction of current
+  raw plus all unknown regions rejects35 tested constant arcs under the original
+  dense checker; not full native MPC parity or global infeasibility. Original
+  nominal corner x25.8 fails12/81 geometry probes; x26.2 passes88/88 in this
+  frozen subset. A separate authored route-corner variant may be tested, with
+  unchanged estimator/controller/priors and original human encounter. A planned
+  corner is never counted as CRA avoidance or repair of the old stress case.
+  Preserve long-motion-v1 preflight failure, long-motion-v2 stall and all holds.
+
 - Upper-departure c30ff7a PASSED actor background-v2 (180s hold/210s walk,
   .060520m minimum layout clearance), component104 sources, startup60 and near60.
   Its long-motion-v1 stopped BEFORE Isaac at the inner prerequisite parser:
