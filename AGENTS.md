@@ -1,5 +1,22 @@
 # CRA repository guidance
 
+- Downloaded Fridge vase pair: four18-source ZERO-wheel native components PASS
+  at9fc86b1(640) /4d510d8(1920), source/scene frozen. Each16/18 accepted current
+  image-LiDAR assessments after2 qualification sources, contact supported16/16.
+  One original fragment each; original meshes/materials, common scale gives
+  intact40cm/broken34.8cm. BUT contact ordering is NOT the desired sharpness
+  contrast: medians intact/broken .124841/.114514 at640, .124337/.110948 at1920.
+  All64 archived-mask severity replays match runtime. Intact neck elongation
+  dominates; visible broken rim is mostly interior to the silhouette. Do not
+  label broken risk higher by name or promote a sharpness demo. Potential/
+  thermal use.25 priors; mass uncalibrated/visible extents incomplete, ego pose
+  oracle, no complete fresh4factor or motion acceptance. Preserve all v2/asset
+  hashes and prior failures. Next evaluate local rim/tip cues with smooth/
+  patterned/elongated negatives, not more score overrides or gate relaxation.
+  3711units132.62s/61focused/Ruff PASS. See docs/vase_contact_bench.md and
+  outputs/vase-contact-bench/. Keep all
+  draft/development/main/primary/PR117 holds.
+
 - Broken-plate sensing at4a35d39: three native18-source ZERO-wheel captures,
   sourcefrozen, all runtime component gates FAIL target_uniquely_observed.
   Original28cm/2.6cm-thin mesh, LiDAR and5cm floor filter unchanged. Separate
