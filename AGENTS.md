@@ -1,5 +1,22 @@
 # CRA repository guidance
 
+- Verified-part93c6463 PASSED four fresh prerequisites (actor598.95s,
+  component105 sources, startup60/near60) and own60. Native motion passed all
+  earlier furniture locations and the first encounter, but was INTERRUPTED
+  after1029 fields/source170.1s/local(21.0291,7.6758): no final arrival/stopping
+  acceptance. All1089 stationary+live sources have ZERO uncertain-human rows;
+  262current body joins/4visual-part joins pass, but ZERO native part-recovery
+  events occurred. Do not credit the new recovery for native improvement.
+  Two early inference rejections (5.97s wall/.3833 age, then temporal baseline)
+  recovered before the human. Late commands repeatedly wait for a valid plan
+  while the actor loops back across the delivery corridor; tracking stays live.
+  Whole-geometry34625 references/702 archives and1222 ambiguous motion proofs
+  pass exact audits. Preserve outputs/verified-part-recovery/long-motion-v1 and
+  draftPR216. A separate actor-only continuous upper-aisle departure is being
+  surveyed for the PI demo, preserving the first encounter and all robot controls.
+  A different actor route cannot establish repair of the repeating-loop stress
+  case. Fresh actor/sensor/stationary/arrival gates remain mandatory; all holds stay.
+
 - Separate default-OFF --human-verified-part-recovery repairs a short parent/part
   ID swap only after an actual current visual-part proof. A fresh accepted person
   cue may corroborate the alternate ID; existing identities never merge. Keep

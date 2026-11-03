@@ -598,3 +598,21 @@ Source validation:105 focused tests passed in5.92s and3,617 full unit tests pass
 in122.35s. Ruff, compilation and diff checks passed. Negative cases cover missing
 or stale links, old source mismatch, excessive gap/speed/residual, expired visual
 identity, incomplete old geometry, competing humans and tampered report evidence.
+
+At93c6463, all four fresh prerequisites and the mission's own60 stationary gate
+passed. The full trial cleared every previous furniture-stall location and the
+first human encounter, but was interrupted after1,029 live fields through170.1s
+at local(21.0291,7.6758). It has no final arrival/stopping acceptance. The returning
+human loop repeatedly crossed the immediate delivery corridor and the controller
+spent long intervals waiting for a valid plan. This is not an infeasibility proof.
+
+All1,089 stationary plus live sources had zero uncertain-human rows. There were
+262current body joins and4visual-part joins, but zero native verified-part recovery
+events: the archived recovery replay remains the evidence for that mechanism.
+Two early inference rejections recovered before the human encounter. Exact old
+geometry audits passed34,625 region references/702 files; all1,222 actual motion
+decisions replayed as ambiguous, with zero confirmed movers. Sources stayed frozen.
+The failed trial, commands, camera images and interruption note remain under
+`outputs/verified-part-recovery/long-motion-v1`. A separate actor-only continuous
+departure route is under evaluation; it cannot count as repair of this repeating
+human-loop stress case. All controller and release holds remain.
