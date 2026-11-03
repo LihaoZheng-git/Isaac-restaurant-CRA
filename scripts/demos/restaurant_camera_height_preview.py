@@ -12,6 +12,7 @@ import json
 import math
 from pathlib import Path
 import sys
+import traceback
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
@@ -159,5 +160,11 @@ if __name__ == "__main__":
     simulation_app = SimulationApp({"headless": True})
     try:
         survey(parsed, simulation_app)
+    except Exception:
+        failure = traceback.format_exc()
+        print(failure, flush=True)
+        parsed.output.mkdir(parents=True, exist_ok=True)
+        (parsed.output / "failure.txt").write_text(failure, encoding="utf-8")
+        raise
     finally:
         simulation_app.close()
