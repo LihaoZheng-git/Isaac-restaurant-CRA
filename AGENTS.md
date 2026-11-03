@@ -1,5 +1,31 @@
 # CRA repository guidance
 
+- Separate wide-corner/upper-departure v2 at a830bf7 PASSED all four fresh
+  prerequisites, own60, full native arrival and stopping:8/8 guides,
+  156.083333simsec,1015 live fields/996 translating,.108938m minimum independent
+  clearance,.001530 minimum CBF,.002229m stop drift. Nearby oncoming curve
+  .283401m relative to the actual nominal polyline;107 supported moving-kinetic
+  rows. No inference rejection;246 body/3 visual-part joins and ZERO unresolved
+  human rows across1075 stationary+live sources. ZERO native part-recovery events:
+  do not credit that recovery for the result. The original oncoming-only actual
+  hold is0s, but later adjacent departure yields3.683333s below.02m/s; preserve
+  the complete pause in the video. This is not pause-free or matched smoothing.
+  Geometry30829 refs/692 archives,1276 ambiguous motion proofs,4400 fragment
+  provenance proofs and camera214 masks/33 tracks all pass their scoped audits.
+  Legacy fragment audit falsely required one lifetime origin per track ID:
+ 1449 and3907 have separately verified fresh/pending-qualified epochs; preserve
+  the failed audit. Replacement audit checks real enrollment/qualification,
+  original frame/risk/expiry and continuous observed coverage;9 adversarial tests
+  pass. This is reporting-only, no runtime clock or gate change. Full3633units
+  and Ruff passed at native runtime. Final archive outputs/final demo/v2 has
+  checksums and keeps all12 v1 files unchanged. Video retains all1572 navigation/
+  stopping frames. Keep planned40cm corner change and separate actor departure
+  explicit; old tighter-corner/repeating-loop failures remain unresolved. Paced
+  .04 simulation, labeled priors, ZERO fresh complete generic4factor updates;
+  rendered pot steam/thermal response and utensil contrast remain unvalidated.
+  One bounded native mission only; keep draft development PR218 and main/primary/
+  PR117 holds. See docs/restaurant_service_demo_v2.md for exact scope.
+
 - Separate default-OFF --service-wide-corner changes ONLY the authored long
   service guide (25.8,4.05) to (26.2,4.05). Start, other guides, final goal,
   actor route/trigger, CRA, uncertainty, lambda, margins and controller remain.

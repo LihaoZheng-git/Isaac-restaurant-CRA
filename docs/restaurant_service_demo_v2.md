@@ -224,3 +224,64 @@ replacement. Serialization remains inside worker timing and does not renew
 any age or make a late command usable. Snapshots are local offline diagnostics
 and are never loaded by runtime. This preserves exact failure inputs if a new
 stall occurs without continuously exporting every successful plan.
+
+## Accepted separate wide-corner and upper-departure v2
+
+Runtime `a830bf709c2d313f82fb6ccdc592bab8bb9f27bd` passed all four fresh
+prerequisites, its own 60 stationary updates, and the complete native mission.
+The source remained unchanged. All eight route guides and final arrival/stopping
+completed in 156.083333 simulation seconds, with 1,015 live fields (996 committed
+while translating), 0.108938 m minimum independent clearance, 0.001530 minimum
+analytical CBF margin and 2.229 mm stopping drift. No inference was rejected.
+Native wall time was 4,699.21 seconds: this is paced simulation, not real time.
+
+The nearby oncoming curve passed at 0.283401 m from the actual authored nominal
+polyline, with the selected maximum-deviation sample at 1.996255 m human/robot
+center separation. There were 107 supported moving-kinetic rows. The original
+oncoming-only smoothness metric measured no translation hold below 0.02 m/s.
+Across all nearby walking phases, however, the later adjacent departure produced
+a 3.683333 s hold (source 139.30 through 142.983333). This pause is retained in the
+video. This is not a pause-free result or a matched smoothing comparison.
+
+All 1,075 stationary/live source records passed the scoped post-run audits:
+
+- 30,829 retained-geometry references, 692 exact archives;
+- 1,276 ambiguous motion proofs, no confirmed moving-background proofs;
+- 246 current body joins, three visual-part joins, 210 raw person cues;
+- zero unresolved-human rows and zero native verified-part recovery events;
+- 4,400 fragment provenance proofs, 10 short-fragment geometric proofs (eight
+  current-field coverage proofs);
+- 214 camera masks on 33 tracks, with exact recorded phi/mask/timing parity.
+
+The original fragment reporting script failed because it required one immutable
+origin for each track ID over the entire mission. Actual records show fresh
+observations of IDs 1449 and 3907, creating separately qualified source epochs.
+The failed audit is preserved. A separate epoch-aware reporting audit verifies
+the actual enrollment or bounded pending-candidate qualification, original frame,
+risk, expiry and continuous observation history for each epoch. Nine synthetic
+tests reject altered clocks, frames, risk, invalid support and expired continuity.
+No runtime behavior, source clock or native acceptance gate changed for this
+reporting correction. The short-fragment helper also required the repository on
+its process-local Python import path; its first failed invocation is retained in
+the work record and the corrected audit passed.
+
+Validation at the native revision: 3,633 unit tests passed in 121.60 s; Ruff,
+compilation and diff checks passed. The additional reporting-audit tests passed
+separately. Current code changes remain in draft development PR218, based on
+PR217's development branch; main, primary-controller and PR117 holds remain.
+
+The accepted presentation is archived in `outputs/final demo/v2/`, including
+`restaurant-service-v2.mp4`, route/encounter images, README, source provenance,
+validation records and a checksum manifest. All 1,572 navigation/stopping video
+frames remain at 1x simulation playback. All 12 files in the v1 manifest retain
+their original checksums.
+
+This acceptance applies to the explicit 40 cm wider authored corner and the
+continuously departing upper-aisle actor. It does not repair or validate the old
+tighter-corner or repeated-return stress cases. Unknown surfaces keep the
+approved labeled static geometry prior and fixed unknown phi; validated human
+geometry remains dynamic. The run is prior-assisted, with zero fresh complete
+generic four-factor updates. Steam is visible rendered scenery: pot thermal
+association/response and rounded-versus-utensil contrast remain unvalidated.
+The record supports a bounded navigation demonstration, not a causal CRA
+comparison, general occlusion claim or universal safety/liveness guarantee.
