@@ -19,7 +19,8 @@ DEMO_OBSERVATIONS = {
     "demo-bin": ("RoundedBin", (28.8, 5.9, .07382), 0.0),
     "demo-rounded": ("ClosedCaddy", (29.0, 5.25, .07382), 0.0),
     "demo-utensils": ("UtensilCaddy", (29.0, 6.3, .07382), -.40),
-    "demo-container": ("ServiceContainer", (26.8, 6.1, .07382), 0.),
+    # Longer standoff exposes the lower bin to LiDAR's existing vertical FOV.
+    "demo-container": ("ServiceContainer", (26.3, 6.1, .07382), 0.),
 }
 DEMO_NAMES = ("ClearingStation", "RoundedBin", "ClosedCaddy", "UtensilCaddy")
 DEMO_V2_OBSERVATIONS = {
