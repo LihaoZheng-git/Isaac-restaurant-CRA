@@ -8,6 +8,7 @@ views for inspection only; they are never navigation references.
 import argparse
 from dataclasses import asdict
 import hashlib
+import importlib
 import json
 import math
 from pathlib import Path
@@ -155,6 +156,9 @@ def survey(args, app):
 
 if __name__ == "__main__":
     parsed = arguments()
+    # Match the native demos: resolve the installed vision package pair before
+    # Kit prepends its bundled packages. No installation or environment change.
+    importlib.import_module("robot.perception.camera_lidar_fusion")
     from isaacsim import SimulationApp
 
     simulation_app = SimulationApp({"headless": True})
