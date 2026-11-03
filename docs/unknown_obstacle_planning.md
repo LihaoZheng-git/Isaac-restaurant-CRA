@@ -444,3 +444,32 @@ unit tests passed in140.41s. Ruff, compilation and diff checks passed. Actual
 84.5s archived-scan replay retains all four original points, original84.3s source
 and phi0.68359375 at0.30m versus the recorded1.85m dynamic allowance. It creates
 no support certificate; this is component evidence, not navigation acceptance.
+
+### First static-default native trial and coordinate-provenance correction
+
+At efa22a2, all four fresh prerequisites passed: actor hold/release631.16s wall,
+moving-human component105 sources/317.74s, startup60/279.98s, near60/284.50s.
+Own60 also passed. Navigation then failed at15.85 simulation seconds/99 fields,
+about3.13m from the start, with unknown_obstacle_field_coverage_failure. Minimum
+clearance was0.531474m and stopping drift0.004243m; no route guide or final goal
+was reached. Preserve outputs/unclassified-static-default/long-motion-v1.
+
+This failure was a numeric provenance defect. Fragment449's2144 original
+returns at23.6s were completely represented by current cluster469 at23.8s,
+maximum observed separation0.022818m. Its current field coverage passed. However,
+the field assigned transformed coordinates back into a float32 sensor-array
+copy, while the guard retained float64 transformed coordinates. Exact original-
+surface comparison rejected differences up to4.765659e-7m.
+
+LiveObjectPacket now exposes one canonical float64 world-XY conversion, used
+by the multi-object field and native guard. Original sensor arrays, source times,
+point counts, risk, flux and exact equality remain unchanged. There is no new
+matching tolerance. Regression tests exercise the actual worker and native
+guard function with float32 scans; deliberate geometry changes still reject.
+The archived scan reproduces old rejection and corrected exact coverage using
+a reconstructed component raster. It is not a full-field/controller replay or
+native arrival acceptance. Fresh native prerequisites and mission are required.
+
+Correction validation:141 focused tests passed in8.38s; full3,580 unit tests
+passed in124.39s. Ruff, compilation and diff checks passed. Exact provenance
+checks remain strict; fresh native acceptance is pending.

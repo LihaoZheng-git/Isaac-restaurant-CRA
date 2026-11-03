@@ -2218,9 +2218,7 @@ def main():
             return {}
         if source_packet.sensor_frame_id != result.field.sensor_frame_id:
             raise ValueError("coverage guard packet differs from completed source")
-        c, s = math.cos(source_packet.robot_yaw), math.sin(source_packet.robot_yaw)
-        world = source_packet.obstacle_xyz[:, :2] @ np.array([[c, s], [-s, c]])
-        world += source_packet.robot_position_world_xy
+        world = source_packet.obstacle_points_world_xy()
         return {"current_points_world_xy": world,
             "current_point_track_ids": result.field.tracking_result.point_track_ids,
             "current_visual_part_associations": result.diagnostics.get("current_visual_body_part_associations", ()),

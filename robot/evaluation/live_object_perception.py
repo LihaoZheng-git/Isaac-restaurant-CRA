@@ -101,6 +101,17 @@ class LiveObjectPacket:
     nominal_route_direction_world_xy: tuple | None = None
     nominal_route_terminal_goal_world_xy: tuple | None = None
 
+    def obstacle_points_world_xy(self):
+        """Canonical float64 geometry for field retention and continuity proofs.
+
+        Keep the sensor array unchanged. Assigning a world transform back into
+        float32 sensor storage would round it differently from the guard's
+        float64 copy and break exact original-surface provenance.
+        """
+        c, s = math.cos(self.robot_yaw), math.sin(self.robot_yaw)
+        return (np.asarray(self.obstacle_xyz[:, :2], dtype=float)
+            @ np.array([[c, s], [-s, c]]) + self.robot_position_world_xy)
+
     def __post_init__(self):
         for name in ("sensor_frame_id", "camera_frame_id"):
             if (

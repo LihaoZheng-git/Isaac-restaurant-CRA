@@ -192,11 +192,8 @@ def assess_all_objects(worker, packet):
         attempted-=person_tracks
     if attempted:
         worker.segmenter.set_image(packet.rgb)
-    world = packet.obstacle_xyz.copy()
-    c, s = math.cos(packet.robot_yaw), math.sin(packet.robot_yaw)
-    world[:, :2] = (
-        world[:, :2] @ np.array([[c, s], [-s, c]]) + packet.robot_position_world_xy
-    )
+    world = np.array(packet.obstacle_xyz, dtype=float, copy=True)
+    world[:, :2] = packet.obstacle_points_world_xy()
     world[:, 2] -= packet.floor_height_robot_m
     points = (world[:, :2] - worker.anchor) @ np.array(
         [

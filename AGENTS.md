@@ -1,5 +1,19 @@
 # CRA repository guidance
 
+- Unclassified-static native v1 at efa22a2 PASSED all four fresh prerequisites
+  (actor631.16s, component105sources, startup60, near60) and own60, but FAILED
+  unknown_obstacle_field_coverage_failure at15.85s/99fields/about3.13m progress,
+  before the human: .531474m clearance/.004243m stopping drift, no arrival.
+  Preserve outputs/unclassified-static-default/long-motion-v1. Lost449's2144
+  original returns had a unique current469 replacement within.022818m and all
+  current-field cells passed, but exact guard provenance rejected FLOAT32 world
+  rounding versus FLOAT64 recomputation (max4.765659e-7m). LiveObjectPacket now
+  supplies one canonical float64 world-XY transform to field and guard. Sensor
+  arrays stay unchanged; exact point equality, source/risk/flux and all physical
+  checks remain. Archived scan component replay reproduces old rejection and
+  corrected exact agreement; this is not native navigation acceptance. Require
+  fresh gates/full mission for the correction. All prior failures/holds remain.
+
 - The user NOW APPROVES the separate static default for lost unclassified
   fragments and autonomous tests toward v2. Default-OFF
   --unknown-unclassified-static-prior requires persistent background mode.
