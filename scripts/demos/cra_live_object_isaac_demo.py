@@ -260,6 +260,8 @@ parser.add_argument("--human-mass-prior", nargs=3, type=float, default=(70.,45.,
                     metavar=("KG", "LOWER", "UPPER"), help="configured adult demonstration mass interval; not measured weight")
 parser.add_argument("--stationary-image-objects", action="store_true",
                     help="Separate stationary image-first multi-fragment CRA experiment; no wheels/humans")
+parser.add_argument("--local-contact-geometry", action="store_true",
+                    help="Separate stationary local convex boundary proxy; no global elongation risk term")
 parser.add_argument("--image-object-maximum-extent", type=float, default=.9,
                     help="Labeled separated-prop grouping extent assumption in metres")
 parser.add_argument("--sam-track-extent-retry", action="store_true",
@@ -347,6 +349,8 @@ parser.add_argument('--unknown-verified-dynamic-evidence', action='store_true',
 parser.add_argument('--human-verified-part-recovery', action='store_true',
                     help='bounded recovery across a previously verified human parent/part ID swap; complete old region must fit current body')
 args = parser.parse_args()
+if args.local_contact_geometry and not args.stationary_image_objects:
+    parser.error("local contact geometry requires stationary image-object validation before motion use")
 if args.stationary_prop_rgb_width != 640 and (
     not args.stationary_prop_camera or not args.restaurant_scene or args.motion or args.restaurant_human
 ):
@@ -1373,7 +1377,11 @@ def main():
     from robot.perception.human_body_envelope import HumanBodyEnvelopeConfig
     from robot.perception.human_track_recovery import HumanTrackRecoveryConfig
 
+    from robot.perception.local_contact_geometry import LocalContactGeometryConfig
+    from robot.perception.visual_shape_contact import SilhouetteContactConfig
     perception = LiveObjectPerception(
+        shape_contact_config=(SilhouetteContactConfig(local_geometry=LocalContactGeometryConfig())
+                              if args.local_contact_geometry else None),
         capture_risk_masks=args.presentation_risk_camera,
         human_mass_body_identity_retention=args.human_mass_body_identity_retention,
         predictive_human_geometry_config=HumanGeometryForecastConfig(

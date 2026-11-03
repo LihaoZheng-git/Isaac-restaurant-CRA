@@ -98,6 +98,16 @@ def test_image_object_mode_is_stationary_only(monkeypatch):
         _parse_mount(["--stationary-image-objects"], monkeypatch)
 
 
+def test_local_contact_requires_separate_stationary_validation(monkeypatch):
+    assert not _parse_mount(BASE_ARGS, monkeypatch).local_contact_geometry
+    args = _parse_mount([*BASE_ARGS, "--stationary-image-objects", "--local-contact-geometry"], monkeypatch)
+    assert args.local_contact_geometry
+    for extra in ([], ["--stationary-image-objects", "--motion"],
+                  ["--stationary-image-objects", "--restaurant-human", "standing"]):
+        with pytest.raises(SystemExit):
+            _parse_mount([*BASE_ARGS, "--local-contact-geometry", *extra], monkeypatch)
+
+
 def test_extent_retry_cli_requires_context_opt_in(monkeypatch):
     with pytest.raises(SystemExit):
         _parse_mount([*BASE_ARGS, "--sam-track-extent-retry"], monkeypatch)

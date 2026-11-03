@@ -1,5 +1,18 @@
 # CRA repository guidance
 
+- User-authorized local contact correction is separate defaultOFF
+  --local-contact-geometry, stationary image-object props ONLY. Original mask/
+  ownership/clock/confidence/uncertainty/part-maximum gates remain. Local signed
+  convex turns at3 scales replace global elongation/circularity/concavity as
+  score inputs; thresholds are engineering assumptions, not physical sharpness.
+  Source-mask replay corrects intact/broken vase ordering at640 and1920 without
+  labels or authored break inputs. Smooth/pointed/rotation/resolution negatives
+  pass; signed-zero thin-tip defect fixed using larger-support orientation.
+  Bin acute mask protrusion still high and contact only6/16 available: do not
+  claim generic shape/material safety. Fresh native gates remain pending at
+  implementation; no wheels/main/primary/PR117 promotion. See
+  docs/local_contact_geometry.md and outputs/local-contact-geometry/.
+
 - Downloaded Fridge vase pair: four18-source ZERO-wheel native components PASS
   at9fc86b1(640) /4d510d8(1920), source/scene frozen. Each16/18 accepted current
   image-LiDAR assessments after2 qualification sources, contact supported16/16.

@@ -57,6 +57,7 @@ from robot.perception.temporal_object_evidence import TemporalObjectEvidence
 from robot.perception.visual_shape_contact import (
     SHAPE_CONTACT_BASIS,
     SHAPE_CONTACT_SOURCE,
+    SilhouetteContactConfig,
 )
 from robot.risk.physical_factor_adapter import (
     PhysicalFactorAdapterConfig,
@@ -276,7 +277,11 @@ class LiveObjectPerception:
         human_mass_body_identity_retention=False,
         observed_motion_reference=False,
         capture_risk_masks=False,
+        shape_contact_config=None,
     ):
+        if shape_contact_config is not None and not isinstance(shape_contact_config, SilhouetteContactConfig):
+            raise TypeError("invalid shape contact configuration")
+        self.shape_contact_config = shape_contact_config
         self.capture_risk_masks = capture_risk_masks
         self.segmenter, self.mass_estimator, self.contact_detector = (
             segmenter,
@@ -1300,7 +1305,7 @@ class LiveObjectPerception:
                     links, part_links.segmentations_by_object_detection_index
                 )
             proxy = build_track_shape_contact_proxies(
-                frame, links, part_proxies=parts
+                frame, links, part_proxies=parts, config=self.shape_contact_config
             ).get(target.track_id)
             attributes = replace(attributes, geometry=geometry, mass=mass)
             if (human_body_contact_prior is not None and human_body_contact_prior.is_available
@@ -1434,6 +1439,7 @@ class LiveObjectPerception:
             "reasons": reasons,
             "persistence": persistence_diagnostics,
             "contact_frame": shared_contact_frame,
+            "contact_proxy": asdict(proxy) if proxy is not None else None,
             "human_body_contact_prior": human_body_contact_prior,
             "human_part_contact": part_contact_diagnostic,
         }

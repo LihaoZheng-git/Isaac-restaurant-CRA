@@ -84,6 +84,7 @@ def augment_image_objects(worker, packet, tracking, projection, world, objects,
              "instance_box_xyxy": tuple(getattr(detection.bounding_box, n) for n in ("x_min", "y_min", "x_max", "y_max")),
              "selected_return_count": int(assessment["selected"].sum()), "policy_return_count": int(assessment["selected"].sum()),
              "factor_scores": factors, "geometry_evidence": assessment["geometry_diagnostics"], "property_evidence": {},
+             "contact_proxy": assessment.get("contact_proxy"),
              "instance_ownership_basis": "current_image_mask_repeated_fragment_hypothesis",
              "image_object_association": candidate["diagnostic"], "sam_model_quality": candidate["proposal"].model_quality,
              "sam_rejections": [], "sam_candidate_diagnostics": candidate["proposal"].candidate_diagnostics}

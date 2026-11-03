@@ -89,6 +89,16 @@ def worker(**overrides):
     )
 
 
+def test_contact_config_requires_explicit_typed_configuration():
+    from robot.perception.local_contact_geometry import LocalContactGeometryConfig
+    from robot.perception.visual_shape_contact import SilhouetteContactConfig
+    assert worker().shape_contact_config is None
+    config = SilhouetteContactConfig(local_geometry=LocalContactGeometryConfig())
+    assert worker(shape_contact_config=config).shape_contact_config is config
+    with pytest.raises(TypeError, match="contact configuration"):
+        worker(shape_contact_config=True)
+
+
 @pytest.mark.parametrize("radius,expected_clusters", [(.12, 2), (.18, 1)])
 def test_explicit_3d_connectivity_changes_grouping_without_discarding_returns(radius, expected_clusters):
     runtime = worker(cluster_in_3d=True, cluster_radius_m=radius)

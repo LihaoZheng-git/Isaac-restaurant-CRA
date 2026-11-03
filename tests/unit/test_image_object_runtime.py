@@ -48,6 +48,40 @@ def test_runtime_applies_group_policy_only_to_current_points_without_raw_track_m
     assert result.diagnostics["fixed_lambda"] == 1.25
 
 
+def test_local_contact_flows_into_group_cra_without_geometry_or_prior_changes():
+    from robot.perception.local_contact_geometry import LocalContactGeometryConfig
+    from robot.perception.visual_shape_contact import SilhouetteContactConfig
+    groups, fields = [], []
+    for local in (False, True):
+        runtime = setup()
+        # This contact integration fixture must exceed the unchanged 200-pixel
+        # silhouette gate; the smaller association-only fixture has 174 pixels.
+        def resolved_proposal(ids, projection):
+            mask = np.zeros((100, 100), bool)
+            mask[35:45, 34:67] = True
+            return (proposal(mask),)
+        runtime.segmenter.image_proposals = resolved_proposal
+        if local:
+            runtime.shape_contact_config = SilhouetteContactConfig(local_geometry=LocalContactGeometryConfig())
+        for i, t in enumerate((1., 1.1, 1.2), 1):
+            result = runtime(observed(i, t))
+        group = next(o for o in result.objects if o.diagnostics.get("image_object_association"))
+        groups.append(group)
+        fields.append(result.field)
+        proxy = group.diagnostics["contact_proxy"]
+        assert proxy["timestamp_seconds"] == pytest.approx(1.3)
+        assert any(("local_convex_multiscale" if local else "legacy_global_outline") in e for e in proxy["evidence"])
+        assert result.diagnostics["fixed_lambda"] == 1.25
+        assert group.diagnostics["factor_scores"]["contact"]["mode"] == "evidence_supported"
+    assert groups[0].diagnostics["contact_proxy"]["value"] != groups[1].diagnostics["contact_proxy"]["value"]
+    assert groups[0].diagnostics["factor_scores"]["contact"]["score"] != groups[1].diagnostics["factor_scores"]["contact"]["score"]
+    for factor in ("kinetic", "potential", "thermal"):
+        assert groups[0].diagnostics["factor_scores"][factor] == groups[1].diagnostics["factor_scores"][factor]
+    assert groups[0].attributes.mass == groups[1].attributes.mass
+    assert fields[0].all_obstacle_point_count == fields[1].all_obstacle_point_count == 16
+    np.testing.assert_array_equal(fields[0].tracking_result.point_track_ids, fields[1].tracking_result.point_track_ids)
+
+
 def test_field_failure_does_not_commit_group_history(monkeypatch):
     import robot.evaluation.multi_object_perception as mapping
     runtime = setup()

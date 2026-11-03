@@ -376,6 +376,7 @@ def assess_all_objects(worker, packet):
             "factor_scores": factor_details,
             "property_evidence": assessment["persistence"],
             "geometry_evidence": assessment["geometry_diagnostics"],
+            "contact_proxy": assessment.get("contact_proxy"),
             "sam_rejections": assessment["reasons"],
             "sam_candidate_diagnostics": assessment["sam_candidates"],
             "plume_registration": plume.last_diagnostics.get(track.track_id, {}),

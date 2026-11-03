@@ -18,6 +18,10 @@ from robot.perception.physical_attributes import (
     combine_estimate_statuses,
 )
 from robot.perception.semantic_detection import SemanticDetection
+from robot.perception.local_contact_geometry import (
+    LocalContactGeometryConfig,
+    local_convex_contact_features,
+)
 
 
 SHAPE_CONTACT_SOURCE = "visual_silhouette_contact_proxy"
@@ -33,8 +37,11 @@ class SilhouetteContactConfig:
     polygon_tolerance_fraction: float = 0.01
     confidence_cap: float = 0.8
     uncertainty_floor: float = 0.05
+    local_geometry: LocalContactGeometryConfig | None = None
 
     def __post_init__(self):
+        if self.local_geometry is not None and not isinstance(self.local_geometry, LocalContactGeometryConfig):
+            raise TypeError("local_geometry must be LocalContactGeometryConfig")
         for name in ("minimum_pixels", "border_margin_pixels"):
             value = getattr(self, name)
             if isinstance(value, bool) or not isinstance(value, int) or value < 1:
@@ -66,9 +73,10 @@ def estimate_silhouette_contact_proxy(
 ) -> ScalarEstimate:
     """Score observed outline irregularity/elongation/corners continuously.
 
-    Maximum of circularity deficit, PCA elongation, concavity and large polygon
-    turns. Weights/thresholds and intervals are engineering assumptions, not a
-    trained or calibrated injury model. A class name never changes the result.
+    Legacy defaults retain global shape descriptors. Explicit local_geometry
+    uses signed, scale-persistent convex turns instead. Thresholds/intervals
+    are engineering assumptions, not a calibrated injury model. A class name
+    never changes the result. Both modes keep identical mask acceptance gates.
     """
     if not isinstance(detection, SemanticDetection):
         raise TypeError("detection must be SemanticDetection")
@@ -136,6 +144,23 @@ def estimate_silhouette_contact_proxy(
     maximum_turn = math.pi - float(np.arccos(np.clip(cosine, -1, 1)).min())
     corner_cue = max(0.0, (maximum_turn - math.pi / 6) / (5 * math.pi / 6))
     value = min(1.0, max(1 - circularity, elongation, concavity, corner_cue))
+    method_evidence = (
+        "method=legacy_global_outline",
+        "score=max(circularity deficit, elongation, concavity, large-corner cue)",
+    )
+    if settings.local_geometry is not None:
+        try:
+            local = local_convex_contact_features(contour, settings.local_geometry)
+        except ValueError as error:
+            return unknown(str(error))
+        value = local.score
+        method_evidence = (
+            "method=local_convex_multiscale; no global elongation/circularity/concavity contribution",
+            f"local_geometry_config={settings.local_geometry}",
+            f"peak_pixel_xy={local.peak_pixel_xy}; signed_turns_degrees={local.signed_turns_degrees}",
+            f"support_pixels={local.support_pixels}; smoothing_pixels={local.smoothing_pixels:.6g}",
+            "score=localized convex turn strength * multiscale persistence; inward turns do not score",
+        )
     confidence = min(detection.confidence * fraction, settings.confidence_cap)
     uncertainty = settings.uncertainty_floor + 0.2 * (1 - confidence) + (1 - fraction)
     return ScalarEstimate(
@@ -150,7 +175,7 @@ def estimate_silhouette_contact_proxy(
         (
             f"resolved_pixels={count}; dominant_component_fraction={fraction:.6g}",
             f"circularity={circularity:.6g}; elongation={elongation:.6g}; concavity={concavity:.6g}; maximum_turn_rad={maximum_turn:.6g}",
-            "score=max(circularity deficit, elongation, concavity, large-corner cue)",
+            *method_evidence,
             "2D visible-outline proxy only; hidden surfaces, material hardness, edge radius and physical sharpness unavailable",
             "segmentation confidence is not a guarantee of complete visibility; occlusion can be missed",
         ),
