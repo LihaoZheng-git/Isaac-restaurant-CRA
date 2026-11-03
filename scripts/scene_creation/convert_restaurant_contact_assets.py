@@ -1,4 +1,4 @@
-"""Convert the two licensed user-downloaded glTF assets with installed Isaac.
+"""Convert licensed user-downloaded glTF assets with installed Isaac.
 
 No downloads, installers, factor labels or wheel commands. Preserve original
 geometry/materials; scene placement and scale are authored in separate layers.
@@ -35,7 +35,7 @@ def audited_jobs(names=("recycle_bin", "crates")):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--assets", nargs="+", choices=("recycle_bin", "crates", "cleaver", "broken_plate"),
+    parser.add_argument("--assets", nargs="+", choices=("recycle_bin", "crates", "cleaver", "broken_plate", "vases"),
                         default=["recycle_bin", "crates"])
     args = parser.parse_args()
     if len(set(args.assets)) != len(args.assets):

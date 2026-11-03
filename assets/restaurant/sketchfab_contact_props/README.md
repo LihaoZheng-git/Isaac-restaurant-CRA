@@ -13,6 +13,8 @@ each manifest records the original ZIP SHA256 and extracted file hashes.
 - **Broken Plate (low poly)**, Akimkhan, CC BY 4.0 (original Poly by Google
   credit on the source listing):
   https://sketchfab.com/3d-models/broken-plate-low-poly-1cb31d29ec0d4289b43f1794fa05abe1
+- **Vase (Normal and Broken)**, Fridge, CC BY 4.0:
+  https://sketchfab.com/3d-models/vase-normal-and-broken-aa618cea451d445087925607b4051281
 
 Share these credits with any derived scene images/video. No object identity,
 physical mass, material density, contact label or CRA score is supplied to the
@@ -39,3 +41,12 @@ surface. The broken plate's maximum extent is 0.28 m, lying on the floor.
 Uniform scaling preserves the original thin geometry; no blade/shard thickness
 is enlarged to pass LiDAR gates. Support geometry is independently reported and
 never included in the cleaver's authored evaluation bounds.
+
+The vase bench selects `Vase_ModelMain_0` and `VaseBroken2_ModelMain_2` from
+the user's downloaded four-version set. Both retain their two original meshes
+(outer and inner ceramic) and materials, with one uniform scale derived from
+an intact height of 0.40 m. The broken version is consequently about 0.348 m
+tall; it is not separately enlarged. Each is grounded in its own stationary
+scene. The upright broken version was chosen for its remaining body and exposed
+rim before scoring; neither its name nor authored dimensions enter estimation.
+The other two broken versions remain unchanged in the original source asset.

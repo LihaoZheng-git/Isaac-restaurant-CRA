@@ -6,7 +6,7 @@ import pytest
 
 from robot.scene.restaurant_container_bench import CONTAINER_PATH
 from robot.scene.restaurant_demo_build import DEMO_ROOT, author_demo_props
-from robot.scene.restaurant_real_asset_bench import KINDS, author_real_asset
+from robot.scene.restaurant_real_asset_bench import KINDS, VASE_VARIANTS, author_real_asset
 from test_restaurant_demo_build import _stage
 
 
@@ -38,7 +38,8 @@ def test_original_mesh_is_grounded_and_not_a_factor_input(kind):
         if prim.IsA(UsdGeom.Mesh):
             meshes.append(prim)
             assert prim.HasAPI(UsdPhysics.CollisionAPI)
-    assert len(meshes) == (3 if kind in ("cleaver", "broken_plate") else 1)
+    assert len(meshes) == (3 if kind in ("cleaver", "broken_plate") else
+                           2 if kind in VASE_VARIANTS else 1)
     support = stage.GetPrimAtPath(DEMO_ROOT + "/AssetBenchSupport")
     assert bool(support) == (kind == "cleaver")
     if support:
@@ -47,3 +48,26 @@ def test_original_mesh_is_grounded_and_not_a_factor_input(kind):
         assert abs(support_bounds.GetMax()[2] - lo[2]) < 1e-6
     with pytest.raises(ValueError, match="original bin"):
         author_real_asset(stage, kind)
+
+
+def test_vase_pair_preserves_common_scale_and_original_inner_outer_meshes():
+    extents, scales = {}, []
+    for kind, selected in VASE_VARIANTS.items():
+        stage = _stage()
+        author_demo_props(stage)
+        row = author_real_asset(stage, kind)
+        orient = stage.GetPrimAtPath(CONTAINER_PATH + "/Orientation")
+        scales.append(orient.GetAttribute("xformOp:scale").Get())
+        parent = stage.GetPrimAtPath(str(orient.GetPath()) + "/Asset/root/GLTF_SceneRootNode")
+        assert [p.GetName() for p in parent.GetChildren()] == [selected]
+        meshes = [UsdGeom.Mesh(p) for p in Usd.PrimRange(parent) if p.IsA(UsdGeom.Mesh)]
+        assert len(meshes) == 2
+        # No local point/topology edits: both original ceramic surfaces survive.
+        for mesh in meshes:
+            for attr in (mesh.GetPointsAttr(), mesh.GetFaceVertexIndicesAttr()):
+                assert all(spec.layer != stage.GetRootLayer() for spec in attr.GetPropertyStack())
+        extents[kind] = np.array(row["bounds_maximum"]) - row["bounds_minimum"]
+    np.testing.assert_allclose(scales[0], scales[1], rtol=0, atol=0)
+    np.testing.assert_allclose(extents["intact_vase"][2], .40, atol=1e-6)
+    np.testing.assert_allclose(extents["intact_vase"][:2], extents["broken_vase"][:2], atol=1e-6)
+    assert .34 < extents["broken_vase"][2] < .36  # Not independently enlarged.
