@@ -501,3 +501,36 @@ policy or real-time performance. Actor, component and near prerequisites may be
 reused only through the launcher's exact executed-command/runtime/scene parity
 checks; the changed-command startup gate and own60 are fresh. Full native
 arrival/stopping still determines acceptance; the failed source-gap trial stays.
+
+
+### Verified dynamic evidence after a raw person false positive
+
+The compute-paced run at df49b26 passed fresh startup60 and own60, with exact
+runtime/scene/command parity for the other prerequisites. It had no inference
+rejection before the new stall about11.405m along the aisle, before the real
+human encounter. At64.9s one raw YOLO person mask on furniture (confidence0.50207,
+1189 projected returns) permanently marked unrelated surfaces dynamic. There
+were no validated bodies or uncertain-human regions at that source. The failed
+run and interruption note remain under outputs/unclassified-static-default/long-motion-v3.
+
+The user approved a separate --unknown-verified-dynamic-evidence option. Current
+validated human body/visual-part associations join exact current track/source/
+point counts and retain original visual epochs. These or confirmed geometric
+motion can create persistent dynamic labels. Raw masks and uncertainty-region
+overlap still exclude new stationary learning, but are not human identity or
+motion evidence for unrelated old surfaces. Their entire positive geometry,
+fixed unknown phi/higher prior policy and approved0.30m static allowance remain.
+The known-human uncertainty raster is unchanged and remains dynamic. No raw
+occupancy, clocks, lambda, margins or controller/arrival checks are relaxed.
+This still assumes otherwise unclassified lost fragments stay stationary; it
+does not validate arbitrary hidden or unrecognized movers.
+
+Archived actual-image/model/LiDAR replay reproduces all1189 excluded returns.
+Fragment1614 retains all four original points,64.8s source and phi0.68359375;
+old policy creates1.95m dynamic allowance at64.9s, new policy retains0.30m.
+This is an isolated memory replay, not a full controller or native mission.
+Fresh actor/component/startup/near and own stationary gates precede wheels.
+
+Verified-policy validation:90 focused tests passed in5.57s; full3,597 unit tests
+passed in125.47s. Ruff, compilation and diff checks passed. Native validation
+is pending and must use the frozen committed runtime.

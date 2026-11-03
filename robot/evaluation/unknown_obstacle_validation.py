@@ -41,7 +41,8 @@ def summarize_unknown_obstacles(records):
         now = memory['source_time']
         for evidence in memory.get('observed_dynamic_evidence', ()):
             if (not memory['config'].get('unclassified_static_prior')
-                    or evidence.get('source_time') != now or not _valid_dynamic_evidence(evidence, now)):
+                    or evidence.get('source_time') != now or not _valid_dynamic_evidence(evidence, now,
+                        verified_only=memory['config'].get('require_verified_dynamic_evidence', False))):
                 errors.append('current dynamic evidence mismatch')
         for proof in memory.get('background_motion_proofs', ()):
             point_motion_proofs += 1
@@ -93,7 +94,8 @@ def summarize_unknown_obstacles(records):
                 errors.append('source/risk/geometry field provenance mismatch')
             support = region.get('background_support')
             evidence = region.get('dynamic_evidence')
-            if evidence is not None and not _valid_dynamic_evidence(evidence, now):
+            if evidence is not None and not _valid_dynamic_evidence(evidence, now,
+                    verified_only=memory['config'].get('require_verified_dynamic_evidence', False)):
                 errors.append('retained dynamic evidence mismatch')
             if mode == 'unclassified_static_geometry_prior' and (
                     not memory['config'].get('unclassified_static_prior')
@@ -133,7 +135,7 @@ def summarize_unknown_obstacles(records):
         scope='source/policy/current-grid provenance and available static-human exclusion only; not general uncertainty calibration or navigation acceptance')
 
 
-def _valid_dynamic_evidence(evidence, now):
+def _valid_dynamic_evidence(evidence, now, *, verified_only=False):
     if (not isinstance(evidence, dict) or not isinstance(evidence.get('source_time'), (int, float))
             or not 0 <= evidence['source_time'] <= now):
         return False
@@ -148,7 +150,16 @@ def _valid_dynamic_evidence(evidence, now):
     if evidence.get('kind') == 'confirmed_geometric_motion':
         return (_valid_motion_confirmation(evidence.get('motion_confirmation'), evidence['source_time'])
             and evidence['motion_confirmation']['confirmed'])
-    return evidence.get('kind') in ('positive_human_region', 'positive_person_or_confirmed_motion_overlap')
+    if evidence.get('kind') == 'verified_human_association':
+        proof = evidence.get('human_association') or {}
+        return (proof.get('source_time') == evidence['source_time']
+            and proof.get('track_id') == evidence.get('track_id')
+            and proof.get('current_support_count', 0) >= 3
+            and proof.get('basis') in ('validated_current_body', 'validated_current_visual_part')
+            and 0 <= proof.get('original_person_camera_timestamp', -1) <= evidence['source_time']+.25
+            and proof.get('original_person_camera_frame_id', -1) >= 0
+            and proof.get('parent_track_id', -1) >= 0)
+    return not verified_only and evidence.get('kind') in ('positive_human_region', 'positive_person_or_confirmed_motion_overlap')
 
 
 def _valid_motion_confirmation(proof, now):

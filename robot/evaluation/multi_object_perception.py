@@ -756,6 +756,7 @@ def assess_all_objects(worker, packet):
     unknown_snapshot = None
     if unknown_memory is not None:
         from robot.perception.unknown_obstacle_memory import SOURCE as UNKNOWN_SOURCE
+        from robot.perception.verified_dynamic_evidence import verified_human_associations
         # A policy cannot be inferred from an authored object or nearby mask.
         # Preserve the strongest policy actually applied to each raw surface.
         raw_guidance = {}
@@ -772,6 +773,8 @@ def assess_all_objects(worker, packet):
             furniture_memory=furniture_memory,
             excluded_points=excluded if furniture_memory is not None else (),
             human_regions=human_regions,
+            verified_human_associations=verified_human_associations(tracking, envelope_audit, visual_part_groups)
+                if unknown_memory.config.require_verified_dynamic_evidence else (),
             covered_human_fragments=fragment_audit.get("covered", ()) if fragment_audit else ())
         for region in unknown_snapshot.regions:
             extra, _, _, _ = region.cells(grid_config, worker.anchor, worker.anchor_yaw)

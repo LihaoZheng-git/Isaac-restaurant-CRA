@@ -1,5 +1,26 @@
 # CRA repository guidance
 
+- The user NOW APPROVES requiring verified image-LiDAR human association or
+  confirmed physical motion before permanently labeling unknown geometry dynamic.
+  Separate default-OFF --unknown-verified-dynamic-evidence requires the explicit
+  unclassified static prior. Only current validated body/visual-part associations
+  (original visual epochs retained) or existing repeated-shape motion proofs
+  create sticky dynamic evidence. Raw person masks and overlaps with expanding
+  human uncertainty still exclude NEW stationary learning, but cannot classify
+  unrelated retained surfaces as moving. Keep their whole geometry, fixed unknown
+  phi/higher original policy and .30m static default. Known-human uncertainty
+  remains independently dynamic and rasterized; no source/identity/factor clocks,
+  raw occupancy, lambda, margins or command checks change. Legacy policy stays
+  available. Hidden/unrecognized movers remain outside validated scope.
+  Compute-paced df49b26 passed fresh startup60/own60 with exact reused remaining
+  gates, then FAILED before the human around11.405m: raw false person cue at64.9s,
+  confidence.50207/1189 returns, zero verified or uncertain humans, made furniture
+  permanently dynamic. Preserve long-motion-v3 and its interruption note. Actual
+  archived image/model/scan replay reproduces this cue and shows old fragment1614
+  radius1.95m versus new .30m with all four original points/64.8s source/phi retained.
+  Replay is component evidence only. Fresh native gates and full mission required;
+  v1/failures/main/primary/PR117 holds remain.
+
 - Canonical-world correction59b8bc3 PASSED fresh actor612.46s, component104,
   startup60 and near60 plus own60. Wheels cleared all old furniture stalls and
   reached the live human encounter, then stalled after one5.4817s wall inference

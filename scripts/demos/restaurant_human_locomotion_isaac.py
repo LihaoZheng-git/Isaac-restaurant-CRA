@@ -100,7 +100,11 @@ parser.add_argument('--unknown-persistent-background-prior', action='store_true'
                     help='persistent qualified static-map PRIOR, capped at .30m until person/motion contradiction')
 parser.add_argument('--unknown-unclassified-static-prior', action='store_true',
                     help='separate static default for unclassified lost geometry, .30m; excludes people/confirmed movers')
+parser.add_argument('--unknown-verified-dynamic-evidence', action='store_true',
+                    help='require validated human association or confirmed motion for persistent dynamic labels')
 args = parser.parse_args()
+if args.unknown_verified_dynamic_evidence and not args.unknown_unclassified_static_prior:
+    parser.error('verified dynamic evidence requires explicit unclassified static prior')
 if args.unknown_unclassified_static_prior and not args.unknown_persistent_background_prior:
     parser.error('unclassified static prior requires explicit persistent background prior')
 if args.unknown_persistent_background_prior and not args.unknown_supported_background_prior:
@@ -516,6 +520,7 @@ def main():
             unknown_supported_background_prior=args.unknown_supported_background_prior,
             unknown_persistent_background_prior=args.unknown_persistent_background_prior,
             unknown_unclassified_static_prior=args.unknown_unclassified_static_prior,
+            unknown_verified_dynamic_evidence=args.unknown_verified_dynamic_evidence,
             human_short_fragment_coverage=args.human_short_fragment_coverage,
             predictive_human_geometry=args.predictive_human_geometry,
             human_prediction_uncertainty_rate=args.human_prediction_uncertainty_rate,

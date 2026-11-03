@@ -39,16 +39,20 @@ class UnknownObstacleConfig:
     persistent_background_prior: bool = False
     background_maximum_radius_m: float = .30
     unclassified_static_prior: bool = False
+    require_verified_dynamic_evidence: bool = False
 
     def __post_init__(self):
         if (not isinstance(self.supported_background_prior, bool)
                 or not isinstance(self.persistent_background_prior, bool)
                 or not isinstance(self.unclassified_static_prior, bool)
+                or not isinstance(self.require_verified_dynamic_evidence, bool)
+                or self.require_verified_dynamic_evidence and not self.unclassified_static_prior
                 or self.unclassified_static_prior and not self.persistent_background_prior
                 or self.persistent_background_prior and not self.supported_background_prior):
             raise ValueError("background prior requires explicit boolean opt-in")
         for name, value in vars(self).items():
-            if name in ('supported_background_prior', 'persistent_background_prior', 'unclassified_static_prior'):
+            if name in ('supported_background_prior', 'persistent_background_prior', 'unclassified_static_prior',
+                        'require_verified_dynamic_evidence'):
                 continue
             if isinstance(value, bool) or not math.isfinite(value) or value <= 0:
                 raise ValueError("finite positive unknown-obstacle configuration required")
@@ -245,7 +249,7 @@ class UnknownObstacleMemory:
 
     def update(self, points, ids, tracks, guidance, *, source_time, source_frame,
                robot_xy, furniture_memory=None, excluded_points=(), human_regions=(),
-               covered_human_fragments=()):
+               covered_human_fragments=(), verified_human_associations=()):
         points, ids = np.asarray(points, float), np.asarray(ids)
         current = {t.track_id: t for t in tracks}
         if (not math.isfinite(source_time) or source_time < 0
@@ -258,6 +262,13 @@ class UnknownObstacleMemory:
                 or np.shape(robot_xy) != (2,) or not np.isfinite(robot_xy).all()):
             raise ValueError("increasing aligned positive geometry required")
         cfg = self.config
+        verified = {p['track_id']: p for p in verified_human_associations}
+        if (len(verified) != len(verified_human_associations)
+                or any(key not in current or p['source_time'] != source_time
+                    or p['current_support_count'] != current[key].point_count
+                    or p.get('basis') not in ('validated_current_body', 'validated_current_visual_part')
+                    for key, p in verified.items())):
+            raise ValueError('verified human associations require unique current positive geometry')
         records = dict(self.records)
         # Current geometry is a real new observation. Factors are not copied to
         # new IDs. A known higher policy is never lowered because a mask is lost.
@@ -351,20 +362,28 @@ class UnknownObstacleMemory:
             for key in current:
                 if key not in records:
                     continue
-                person = not np.all(clear[ids == key])
+                person = key in verified if cfg.require_verified_dynamic_evidence else not np.all(clear[ids == key])
                 confirmation = confirmations.get(key, {})
                 if person or confirmation.get('confirmed'):
                     evidence = dict(track_id=key, source_time=source_time,
-                        kind='positive_human_region' if person else 'confirmed_geometric_motion',
+                        kind=('verified_human_association' if cfg.require_verified_dynamic_evidence
+                            else 'positive_human_region') if person else 'confirmed_geometric_motion',
+                        human_association=verified.get(key) if person and cfg.require_verified_dynamic_evidence else None,
                         motion_confirmation=None if person else confirmation)
                     dynamic_evidence.append(evidence)
                     records[key] = replace(records[key], dynamic_evidence=records[key].dynamic_evidence or evidence,
                         stationary_support_time=None, background_support=None)
 
         def excluded_surface(surface, qualified=None):
-            excluded = bool(exclusion_tree is not None and np.any(exclusion_tree.query(surface)[0] <= 1.))
-            for center, radius in human_regions:
-                excluded |= bool(np.any(np.linalg.norm(surface-center, axis=1) <= radius))
+            # Raw masks and reachable human PRIOR regions still exclude new
+            # stationary learning above. They do not identify an old surface as
+            # human or prove its motion. Keep the separate human raster intact.
+            evidence_required = cfg.require_verified_dynamic_evidence and qualified is not None
+            excluded = False
+            if not evidence_required:
+                excluded = bool(exclusion_tree is not None and np.any(exclusion_tree.query(surface)[0] <= 1.))
+                for center, radius in human_regions:
+                    excluded |= bool(np.any(np.linalg.norm(surface-center, axis=1) <= radius))
             tree = moving_tree
             if cfg.persistent_background_prior and qualified is not None and (
                     qualified.background_support is not None or cfg.unclassified_static_prior):
@@ -457,8 +476,17 @@ class UnknownObstacleMemory:
             human_near = excluded_surface(old.points, qualified=old)
             if cfg.unclassified_static_prior:
                 if human_near and old.dynamic_evidence is None:
-                    old = replace(old, dynamic_evidence=dict(track_id=key, source_time=source_time,
-                        kind='positive_person_or_confirmed_motion_overlap', motion_confirmation=None))
+                    if cfg.require_verified_dynamic_evidence:
+                        moving_id = next(k for k, subset, _ in moving_parts
+                            if confirmations.get(k, {}).get('confirmed')
+                            and np.any(cKDTree(subset).query(old.points)[0] <= .06))
+                        evidence = dict(track_id=key, source_time=source_time,
+                            kind='confirmed_geometric_motion', moving_track_id=moving_id,
+                            motion_confirmation=confirmations[moving_id])
+                    else:
+                        evidence = dict(track_id=key, source_time=source_time,
+                            kind='positive_person_or_confirmed_motion_overlap', motion_confirmation=None)
+                    old = replace(old, dynamic_evidence=evidence)
                 human_near |= old.dynamic_evidence is not None
             # A real motion/person contradiction invalidates the stationary
             # assumption. It does not erase geometry or stop the mission.
