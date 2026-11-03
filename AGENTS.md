@@ -1,5 +1,20 @@
 # CRA repository guidance
 
+- Licensed real-prop stationary tests at ba13bd5: recycling bin18/18 accepted,
+  gate PASS, but native mask mainly covers blue front panel, NOT whole bin.
+  17supported contact rows: median outline.452555/contact.124677/phi.544387.
+  Intact crate0/18 visual acceptance (18geometric matches); broken crate0/18
+  and0unique target matches. Whole-object SAM masks contain competing LiDAR
+  clusters; cleaner fragment masks fail unchanged quality. Do not claim a
+  sharpness contrast from their prior-only scores or widen gates for a pass.
+  All three zero-wheel/source-frozen;3644units124.60s/11focused/Ruff PASS.
+  Bin potential stays.25 prior; no authored plume yet positive thermal cue
+  appears (final~.401), requiring a separate negative review, not hot-bin evidence.
+  Originals/CC-BY credits preserved; real assets are separate test layers only.
+  All107accepted-v2 archive files unchanged. Main/primary/PR117 holds stay.
+  Cleaver/broken-plate candidates researched, NOT downloaded/tested. See
+  docs/restaurant_real_asset_bench.md and outputs/restaurant-online-assets/.
+
 - Separate service-container bench at a5a4ac7 PASSED angular and rounded
   stationary native components: each18/18 matched accepted RGB/LiDAR instances,
   17 fresh supported contact updates, zero wheel commands, frozen sources.
