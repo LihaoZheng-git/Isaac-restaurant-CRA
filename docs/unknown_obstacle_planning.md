@@ -534,3 +534,30 @@ Fresh actor/component/startup/near and own stationary gates precede wheels.
 Verified-policy validation:90 focused tests passed in5.57s; full3,597 unit tests
 passed in125.47s. Ruff, compilation and diff checks passed. Native validation
 is pending and must use the frozen committed runtime.
+
+
+### Verified-policy native outcome: bounded human part ID swap
+
+At11bae4c all four fresh prerequisites passed (actor615.78s, component104
+sources/316.33s, startup60/279.53s, near60/282.54s), followed by own60. The native
+run passed every earlier furniture-stall location and the first human encounter.
+One6.0365s inference was stale at0.383333s age and the recovery baseline rejected;
+subsequent current human support recovered without unresolved uncertainty.
+
+The mission nevertheless failed late and was interrupted after936 fields through
+source149.8s, at local(21.0064,7.5913). No final arrival/stopping acceptance exists.
+At142.1s, current visual evidence associated75-point child3710 with1140-point
+human2523. At142.3s only3710 remained, with1634 returns and a fresh SAM person cue.
+At142.5s2523 returned with1517 returns. The recovery implementation excludes
+fresh-cue targets, so it enrolled the alternate ID independently; missing3710
+then remained an expanding human/positive-surface uncertainty region despite
+current2523 support. This is a separate identity-enrollment failure, not the raw
+furniture mask failure. Preserve all sources and the duplicate-human diagnosis
+under outputs/verified-dynamic-evidence/long-motion-v1.
+
+Archived complete old bounds plus the unchanged1m/s*.2s allowance fit the current
+0.65m envelope at both transitions:0.626276m and0.509600m. Raw whole-surface10cm
+correspondence fails (max0.215444m/0.107036m), so it cannot be relabeled observed.
+A bounded verified parent/part recovery must preserve original clocks, unique
+association, existing short gaps/residuals/competitors, full-region coverage and
+risk/flux. No long-gap merge or margin change follows from this diagnosis.

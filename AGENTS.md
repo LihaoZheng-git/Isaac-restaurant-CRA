@@ -1,5 +1,23 @@
 # CRA repository guidance
 
+- Verified-dynamic11bae4c PASSED fresh actor615.78s, component104 sources,
+  startup60/near60 and own60;3597units/Ruff/archived false-person replay PASS.
+  Native mission cleared every previous furniture stall and the first human
+  encounter, but FAILED late:936fields through149.8s, stopped around local
+  (21.0064,7.5913), no final arrival/stop report. One6.0365s inference at109.58
+  navigation seconds exceeded.35 age; the next baseline rejected, then current
+  human support recovered. The final stall instead came from a verified part ID
+  swap:142.1s child3710(75points) belongs to parent2523(1140);142.3s only3710
+  remains(1634points) with a fresh SAM person cue;142.5s2523 returns(1517).
+  Existing recovery excludes fresh-cue targets, so two identities are enrolled
+  in succession; missing3710 then expands while2523 remains current. Preserve
+  outputs/verified-dynamic-evidence/long-motion-v1 and draftPR215. Actual archived
+  full old bounds plus original1m/s*.2s fit current.65m body envelopes at both
+  transitions (.626276/.509600m); raw10cm whole-surface matches do NOT pass.
+  Next bounded diagnosis targets verified parent/part short-ID-swap recovery,
+  with original gap/residual/competitor/risk/clocks and whole-region coverage;
+  no long-gap identity merge or relaxed geometric margin is authorized.
+
 - The user NOW APPROVES requiring verified image-LiDAR human association or
   confirmed physical motion before permanently labeling unknown geometry dynamic.
   Separate default-OFF --unknown-verified-dynamic-evidence requires the explicit
