@@ -247,7 +247,8 @@ and both stationary gates. The wheel run's own60 stationary frames passed.
 The original expiry failure was cleared: the analogous seven-point fragment254
 retained original source/support17.4s at radius0.30m beyond the ten-second lease,
 and the robot passed3.93m. However, it later stalled at5.3875m. The run was
-interrupted after213 committed fields through source41.1s; there is no final
+interrupted after214 committed fields through source41.3s (the interruption
+request recorded213 fields at41.1s); there is no final
 arrival/stopping report. Preserve outputs/persistent-background-prior/long-motion-v1.
 
 At34.9s the whole-cluster motion exclusion removed the stationary certificate
@@ -266,3 +267,36 @@ stationary overlap from unconfirmed moving portions for ALREADY-qualified
 background only. New enrollment, human exclusions, all current raw occupancy,
 unknown-motion handling and every physical/control check stay unchanged.
 Require fresh gates and full arrival after this correction; no v2 release yet.
+
+### Correcting whole-cluster motion contradictions
+
+Within the separate persistent-background option, moving-cluster exclusions
+now distinguish the current points with actual repeated fixed-world support
+from the unconfirmed remainder. The same three-real-source/0.2s/0.06m support
+and source-gap rules apply. Only an already-qualified retained background
+surface can use this distinction. New enrollment and legacy modes retain
+whole-cluster exclusions. People, body regions and uncertain-human regions
+still exclude unconditionally. A source gap removes the point-level proof.
+
+If any unconfirmed point of any current moving cluster lies within the original
+0.06m exclusion distance, the whole old prior still becomes dynamic. If overlap
+is confined to repeatedly stationary points, a centroid shift of the larger
+cluster does not supply a positive motion contradiction at that old surface.
+All current points remain occupied, current velocity and kinetic evidence are
+unchanged, and every retained old point and original clock remains. The change
+implements the approved persistent static-map policy rather than qualifying
+unseen geometry as measured or declaring the unconfirmed part stationary.
+
+Each source logs the old/current IDs and original/current epochs, repeated and
+unconfirmed counts, support epochs and nearest unconfirmed distance. The
+provenance auditor checks these separately from native human exclusion and
+actual field coverage. Fixed-world correspondence is still an engineering
+stationary hypothesis; it does not establish a general hidden-mover detector.
+
+Archived component replay at34.9s preserves all3474 original points, source33.2s
+and support34.6s at radius0.2515m; whole-cluster exclusion produced2.10m dynamic
+uncertainty instead. It uses actual34.3/34.4/34.6/34.9 scans, a subset of the
+native history, with the recorded original certificate. No actor truth enters
+this replay.85 focused tests pass in5.45s. Full regression/fresh native gates
+remain pending for the correction. Full3,535 unit tests passed in122.30s;
+Ruff and diff checks passed.

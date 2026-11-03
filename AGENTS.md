@@ -1,5 +1,26 @@
 # CRA repository guidance
 
+- Persistent background at9036e8b passed all four fresh native prerequisites
+  and its own60 startup gate. It cleared the old3.93m expiry stall: fragment254
+  kept original17.4s source/support and capped.30m beyond ten seconds. A NEW
+  motion-exclusion stall occurred at5.3875m; preserve the interrupted trial,
+  exact archives and no-arrival status. Original3474-point642 at33.2s last had
+  support34.6s; at34.9s cluster679's centroid-speed.9354m/s removed its prior.
+  Archived34.3/34.4/34.6/34.9 evidence shows the overlap is ONLY22 repeatedly
+  stationary current points; ten unconfirmed points are >=.18599m away.
+  The persistent-mode correction scopes motion contradiction to UNCONFIRMED
+  points of that current moving cluster. Repeated points need the existing
+  three-real-source/.2s/.06m/gap proof. This applies ONLY to already-qualified
+  persistent background, not new enrollment or legacy modes. People/body/
+  uncertain-human exclusions stay unconditional; source gaps remove the point
+  exemption. Any nearby unconfirmed moving point still invalidates the whole
+  old prior. Preserve ALL raw occupancy and old geometry, original clocks,
+  velocities/kinetic/CRA/risk/flux/lambda and control gates. Log each point proof.
+  Replay retains642 at.2515m rather than2.10m with identical old geometry and
+  clocks, but is component-only with a subset of actual support sources, not
+  native navigation acceptance. Require fresh four gates and full mission;
+  all failures/v1/main/primary/PR117 holds remain.
+
 - The user now APPROVES a persistent qualified stationary-background PRIOR.
   Separate default-OFF --unknown-persistent-background-prior requires the
   supported-background and unknown-obstacle modes. Retain EVERY qualified

@@ -26,6 +26,7 @@ def audit_static_human_exclusion(snapshot, truth):
 
 def summarize_unknown_obstacles(records):
     count = regions = replacements = 0
+    point_motion_proofs = 0
     errors = []
     modes = {}
     for record in records:
@@ -37,6 +38,25 @@ def summarize_unknown_obstacles(records):
             continue
         count += 1
         now = memory['source_time']
+        for proof in memory.get('background_motion_proofs', ()):
+            point_motion_proofs += 1
+            distance = proof['minimum_unconfirmed_distance_m']
+            times = proof['support_source_times']
+            if (not memory['config'].get('persistent_background_prior')
+                    or proof['current_source_time'] != now
+                    or not 0 <= proof['original_source_time'] <= now
+                    or proof['current_point_count'] <= 0
+                    or proof['repeated_stationary_point_count'] < 0
+                    or proof['unconfirmed_motion_point_count'] < 0
+                    or proof['repeated_stationary_point_count']+proof['unconfirmed_motion_point_count'] != proof['current_point_count']
+                    or (distance is None) != (proof['unconfirmed_motion_point_count'] == 0)
+                    or distance is not None and (not math.isfinite(distance) or distance < 0)
+                    or proof['stationary_overlap_only'] != (distance is None or distance > .06)
+                    or proof['stationary_overlap_only'] and (
+                        proof['repeated_stationary_point_count'] == 0
+                        or len(set(times)) < 3 or max(times) != now
+                        or max(times)-min(times) < .2-1e-9)):
+                errors.append('point-motion contradiction proof mismatch')
         if len(memory['regions']) != len(checks):
             errors.append('region/field-check count mismatch')
         for region, proof in zip(memory['regions'], checks):
@@ -83,7 +103,8 @@ def summarize_unknown_obstacles(records):
         if human is not None and not human.get('passed'):
             errors.append('static memory overlaps independent human reference')
     return dict(passed=bool(count and not errors), sources=count, regions=regions,
-        geometry_replacements=replacements, modes=modes, errors=errors[:20],
+        geometry_replacements=replacements, point_motion_proofs=point_motion_proofs,
+        modes=modes, errors=errors[:20],
         scope='source/policy/current-grid provenance and available static-human exclusion only; not general uncertainty calibration or navigation acceptance')
 
 
