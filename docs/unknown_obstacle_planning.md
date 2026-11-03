@@ -169,3 +169,32 @@ Pre-native checks:3,500 unit regressions passed in125.03s. A final independent
 risk/flux-floor correction then passed51 focused tests in6.05s; Ruff and diff
 checks passed. Higher old boundary flux is retained even when the current risk
 is higher. Native validation is pending at this revision.
+
+### Native follow-up at875a564
+
+The exact frozen revision passed3,501 unit tests in143.63s and all four fresh
+native prerequisites: actor704.49s wall, moving-human component320.82s/108
+sources, route-start60/283.48s and near-human60/286.66s. The component exercised
+28 retained-region events:14 current whole-surface replacements, two body-prior
+replacements,11 retained supported-background regions and one generic motion
+region. All original component and new provenance/human-exclusion audits passed.
+
+The wheel trial passed its own60 stationary frames, progressed approximately
+3.93m, then stalled. It was deliberately interrupted after184 fields, source
+8.2..41.9s, with final saved local position(3.93107,-.00072)m. No final arrival
+or stopping report exists. Preserve outputs/supported-background-prior/long-motion-v1.
+Six-point background263 at(10.43973,1.89368)m had original/support time17.4s.
+Its ten-second support lease expired; generic1m/s uncertainty then grew to
+6.75m at source32.3s despite unchanged phi.68359375 and no observed motion
+trigger. This is a geometry-lifetime failure, not an automatic lost-ID stop.
+
+The exact final six-point source was not archived; saved earlier same-ID data
+contains15 points at16.9s and cannot substitute for it. Nearby current returns
+remain, but no exact whole-six-point replay is claimed. Add exact retained
+geometry logging before another trial.
+
+The user then explicitly approved a separate persistent stationary-background
+prior: retain every qualified original point with a capped0.30m allowance until
+positive motion/person contradiction, keeping original clocks and unknown phi.
+People/observed movers remain dynamic. This assumes unobserved restaurant
+background stays stationary and does not validate arbitrary hidden movers.
