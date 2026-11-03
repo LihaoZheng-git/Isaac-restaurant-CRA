@@ -236,3 +236,33 @@ to recover the old missing sample.
 Focused validation:72 tests passed in6.37s across unknown obstacles, supported
 background and persistence. Full regression:3,522 unit tests passed in129.42s;
 Ruff, compilation and diff checks passed. Fresh native gates are pending.
+
+### Persistent-option native outcome at9036e8b
+
+All four fresh prerequisites passed: actor660.62s wall; parked moving-human
+component323.11s/107 sources; startup60/281.17s; near-human60/284.50s. Exact
+geometry archive integrity passed for the component (30 references/20 files)
+and both stationary gates. The wheel run's own60 stationary frames passed.
+
+The original expiry failure was cleared: the analogous seven-point fragment254
+retained original source/support17.4s at radius0.30m beyond the ten-second lease,
+and the robot passed3.93m. However, it later stalled at5.3875m. The run was
+interrupted after213 committed fields through source41.1s; there is no final
+arrival/stopping report. Preserve outputs/persistent-background-prior/long-motion-v1.
+
+At34.9s the whole-cluster motion exclusion removed the stationary certificate
+from original3474-point surface642 (source33.2s, last support34.6s). Generic
+uncertainty then grew from2.10m to5.20m at38.0s. Exact archived geometry now
+exists. A source-subset replay using real34.3/34.4/34.6/34.9 raw geometry found
+cluster679 (32 returns, centroid speed0.9354m/s) overlapping the old surface
+only through22 repeatedly fixed-world points. Its10 unconfirmed points were
+at least0.18599m from the old surface, outside the unchanged0.06m exclusion.
+The full cluster therefore supplied a false motion contradiction through its
+already stationary portion. This is a grouping defect, not a failed phi change.
+The subset replay is not a complete native tracker/control replay.
+
+Follow-up within the approved persistent policy will distinguish repeated
+stationary overlap from unconfirmed moving portions for ALREADY-qualified
+background only. New enrollment, human exclusions, all current raw occupancy,
+unknown-motion handling and every physical/control check stay unchanged.
+Require fresh gates and full arrival after this correction; no v2 release yet.
