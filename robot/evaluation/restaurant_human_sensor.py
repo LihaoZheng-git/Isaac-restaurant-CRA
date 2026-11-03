@@ -559,6 +559,8 @@ class RestaurantHumanSensorDiagnostic:
                     "motion_aware_passing":result.diagnostics.get("motion_aware_passing"),
                     "human_body_envelope_priors":result.diagnostics.get("human_body_envelope_priors", ()),
                     "human_track_recovery":result.diagnostics.get("human_track_recovery"),
+                    "human_track_recovery_config":result.diagnostics.get("human_track_recovery_config"),
+                    "current_visual_body_part_associations":result.diagnostics.get("current_visual_body_part_associations", ()),
                     "tracking_uncertainty_regions":result.diagnostics.get("tracking_uncertainty_regions", ()),
                     "human_mass_body_identity_retention":result.diagnostics.get("human_mass_body_identity_retention"),
                     "predictive_human_geometry":result.diagnostics.get("predictive_human_geometry"),

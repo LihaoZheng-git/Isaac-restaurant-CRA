@@ -8,12 +8,19 @@ BACKGROUND_ROUTE = ((29.8, 12.8, 0.), (28.5, 12.8, 0.),
 BACKGROUND_ENCOUNTER_TRIGGER_Y = 7.0
 CONTINUATION_ROUTE = ((27.8, 7., 0.), (27.8, 11.2, 0.),
                       (28.5, 12.8, 0.), (29.8, 12.8, 0.))
+# Separate demo authoring: keep the first encounter, then leave its corridor.
+# This route is never supplied to perception, nominal control, MPC or CBF.
+UPPER_DEPARTURE_ROUTE = ((27.8, 7., 0.), (27.8, 11.2, 0.), (27.8, 14.4, 0.),
+                         (29.7, 15.1, 0.), (29.7, 23.5, 0.), (29.7, 18.5, 0.))
 
 
 class BackgroundServiceWalk:
     """Walk continuously before/after the existing bounded oncoming segment."""
 
-    def __init__(self):
+    def __init__(self, *, upper_departure=False):
+        if not isinstance(upper_departure, bool):
+            raise ValueError('upper departure requires explicit boolean opt-in')
+        self.upper_departure = upper_departure
         self.phase = "background_walk"
         self.index = 0
         self.encounter_requested = False
@@ -25,8 +32,12 @@ class BackgroundServiceWalk:
             return (29.8, 10.5, 0.)
         if self.phase == "move":
             return (29.8, 7., 0.)
-        route = CONTINUATION_ROUTE if self.phase == "continue_walk" else BACKGROUND_ROUTE
+        route = self.continuation_route if self.phase == "continue_walk" else BACKGROUND_ROUTE
         return route[self.index]
+
+    @property
+    def continuation_route(self):
+        return UPPER_DEPARTURE_ROUTE if self.upper_departure else CONTINUATION_ROUTE
 
     def advance(self, xyz, now, *, encounter_due=False):
         xyz = np.asarray(xyz, dtype=float)
@@ -47,15 +58,15 @@ class BackgroundServiceWalk:
             self.phase, self.index = "continue_walk", 0
         else:
             self.index += 1
-            if self.index == len(CONTINUATION_ROUTE):
-                self.index = 1
+            if self.index == len(self.continuation_route):
+                self.index = 4 if self.upper_departure else 1
         self.events.append(dict(time=float(now), previous_goal=old_goal,
                                actual_xyz=xyz.tolist(), previous_phase=old_phase,
                                next_phase=self.phase, next_goal=self.goal))
         return True
 
 
-def audit_background_walk(records, events, *, minimum_background_seconds=20.):
+def audit_background_walk(records, events, *, minimum_background_seconds=20., upper_departure=False):
     """Independent native progress/whole-route geometry gate, no sensor claim."""
     times = np.array([r['time'] for r in records], float)
     xyz = np.array([r['actor_xyz'] for r in records], float)
@@ -76,7 +87,12 @@ def audit_background_walk(records, events, *, minimum_background_seconds=20.):
         independent_geometry=all(r['actor_layout_clearance_m'] > .02 and r['collider_alignment_error_m'] <= .03 for r in records),
         grounded=bool(np.isfinite(xyz).all() and np.max(np.abs(xyz[:, 2])) <= .05),
         bounded_region=bool(((xyz[:, 0] >= 27.3) & (xyz[:, 0] <= 30.3) &
-                             (xyz[:, 1] >= 6.5) & (xyz[:, 1] <= 13.4)).all()))
+                             (xyz[:, 1] >= 6.5) & (xyz[:, 1] <= (24.1 if upper_departure else 13.4))).all()))
+    if upper_departure:
+        checks.update(
+            explicit_upper_departure=all(r.get('background_upper_departure') is True for r in records),
+            upper_aisle_reached=any(e['previous_phase'] == 'continue_walk' and
+                np.allclose(e['previous_goal'], UPPER_DEPARTURE_ROUTE[3]) for e in events))
     return dict(passed=all(checks.values()), checks={k: bool(v) for k, v in checks.items()},
                 phase_counts={str(k): int(np.count_nonzero(phases == k)) for k in set(phases)},
                 minimum_layout_clearance_m=min(r['actor_layout_clearance_m'] for r in records),

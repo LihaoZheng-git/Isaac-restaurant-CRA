@@ -124,3 +124,45 @@ The correctly placed steam diagnostic still failed thermal association: zero
 matched accepted pot cues in both18-source no-plume and plume phases. Visible
 puffs do not justify a thermal score or heat-driven avoidance claim. The failed
 route and its images are retained; accepted final demo/v1 is unchanged.
+
+## Separate continuous upper-aisle departure
+
+The later93c6463 trial passed all four prerequisites, own60 and every earlier
+furniture-stall location, but did not reach the final goal. The continuously
+walking human repeatedly returned across the delivery corridor. The robot made
+only small gains between repeated yields. All1,089 stationary/live sources had
+zero unresolved human regions; this is distinct from the earlier duplicate-ID
+failure. Preserve `outputs/verified-part-recovery/long-motion-v1` as a failed
+stress case. It does not establish geometric infeasibility or general liveness.
+
+`--background-upper-departure` is a separate actor-only demo variant. The original
+background circuit, approach, oncoming encounter and first continuation goals
+(27.8,7) and(27.8,11.2) stay. The actor then walks through(27.8,14.4) and(29.7,15.1)
+to(29.7,23.5), continuing between upper-aisle y18.5 and23.5. This keeps the human
+walking after the encounter without repeatedly cutting back across the delivery
+corridor. Authored actor waypoints never enter robot perception or control.
+
+Robot waypoints, CRA, fixed lambda1.25, body/factor/unknown priors, margins, source
+and identity clocks, online MPC and analytical checks are unchanged. This new
+scenario cannot be presented as repair of the repeated-return stress case. It
+uses the same v2d scene layer, props and rendered plume, with all existing thermal
+and four-factor perception limitations retained.
+
+The authored layout survey checks the same0.4m half-extent square used by the
+independent actor guard, including pixel allowance and a0.0125m between-sample
+allowance. Minimum planned clearance is0.239645m. Native walking can deviate,
+so this is only a route-design check. The actor diagnostic extends release to
+210s to cover the longer continuation; the explicit region audit allows y24.1
+only for this option. Actual geometry, collider, grounding and walking checks
+remain unchanged. Fresh actor/component/startup/near and own60 stationary gates
+must pass before a complete wheel mission can establish acceptance.
+
+Recipe: `configs/restaurant_service_demo_v2_upper_departure.json`.
+Design survey: `outputs/upper-service-departure/route-survey.json`.
+The parked sensor record now also exports the actual recovery configuration and
+visual-part proofs already computed by the worker, so future recovery events can
+be audited without reconstructing omitted configuration. This is report content,
+not a new estimator or recovery rule.
+
+Source validation:63 focused tests passed in5.58s; all3,622 unit tests passed
+in122.08s. Ruff, compilation and diff checks passed. Native validation is pending.

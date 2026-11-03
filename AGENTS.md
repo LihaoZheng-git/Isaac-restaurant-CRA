@@ -1,5 +1,21 @@
 # CRA repository guidance
 
+- Separate default-OFF --background-upper-departure is an ACTOR-ONLY PI-demo
+  variant, not a fix of the returning-loop stress case. Keep the original
+  background circuit, approach, oncoming segment and first two continuation
+  goals; then walk (27.8,14.4)->(29.7,15.1)->(29.7,23.5), continuously looping
+  between upper-aisle y18.5 and23.5. No actor route/truth enters robot perception,
+  CRA, nominal, MPC or CBF. Robot route, fixed lambda, priors, source/identity
+  limits, margins and all command/arrival/stop checks stay unchanged. Independent
+  actor region auditing is explicitly extended to y24.1 only for this mode;
+  actual .02m geometry/.03m collider/grounding/walking gates remain. The separate
+  actor release diagnostic runs210s to cover the longer route. Exact authored
+  raster/square-footprint survey has minimum .239645m clearance including pixel
+  and between-sample allowances, not native acceptance. Require fresh four gates
+  and own60 before full wheels. Component exports now include actual recovery
+  config and visual-part proofs; no inference behavior changes. Preserve v1,
+  repeated-loop1029-field failure, draft development PRs and all main holds.
+
 - Verified-part93c6463 PASSED four fresh prerequisites (actor598.95s,
   component105 sources, startup60/near60) and own60. Native motion passed all
   earlier furniture locations and the first encounter, but was INTERRUPTED

@@ -13,7 +13,10 @@ parser.add_argument('--scene', type=Path, required=True)
 parser.add_argument('--layout-survey', type=Path, required=True)
 parser.add_argument('--output', type=Path, required=True)
 parser.add_argument('--background-service-walk', action='store_true')
+parser.add_argument('--background-upper-departure', action='store_true')
 args = parser.parse_args()
+if args.background_upper_departure and not args.background_service_walk:
+    parser.error('upper departure requires background service walk')
 if args.output.exists():
     parser.error('preserve existing outputs')
 args.output.mkdir(parents=True)
@@ -59,7 +62,8 @@ try:
     layout = load_authored_layout_monitor(args.layout_survey, additions)
     human = RestaurantHumanEpisode(stage, mode='parallel', output=args.output,
         trigger_robot_y=9., speed_mps=.5, long_service_parallel=True,
-        background_service_walk=args.background_service_walk)
+        background_service_walk=args.background_service_walk,
+        background_upper_departure=args.background_upper_departure)
     for _ in range(20):
         app.update()
     human.bake()
@@ -85,7 +89,7 @@ try:
     held = list(human.records)
     release = float(timeline.get_current_time())
     human.start_video()
-    for step in range((180 if args.background_service_walk else 20)*60):
+    for step in range((210 if args.background_upper_departure else 180 if args.background_service_walk else 20)*60):
         # The supplied position triggers only the authored actor, no robot exists.
         elapsed = float(timeline.get_current_time())-release
         human.update(float(timeline.get_current_time()),
@@ -109,7 +113,8 @@ try:
     if args.background_service_walk:
         from robot.scene.restaurant_background_walk import audit_background_walk
         circuit = audit_background_walk(walked, human.background_walk.events,
-                                        minimum_background_seconds=120.)
+                                        minimum_background_seconds=120.,
+                                        upper_departure=args.background_upper_departure)
         checks = {k: checks[k] for k in ('hold_at_least_180_seconds',
                   'held_agent_disabled', 'idle_drift_below_1mm')}
         checks.update(circuit['checks'])

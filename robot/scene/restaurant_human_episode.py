@@ -34,11 +34,14 @@ class RestaurantHumanEpisode:
         crossing_layout="legacy",
         long_service_parallel=False,
         background_service_walk=False,
+        background_upper_departure=False,
     ):
+        if background_upper_departure and not background_service_walk:
+            raise ValueError('upper departure requires the separate background service walk')
         if background_service_walk and not long_service_parallel:
             raise ValueError("background service walk requires the separate long parallel demo")
         from robot.scene.restaurant_background_walk import BackgroundServiceWalk
-        self.background_walk = BackgroundServiceWalk() if background_service_walk else None
+        self.background_walk = BackgroundServiceWalk(upper_departure=background_upper_departure) if background_service_walk else None
         self.background_walk_requested = False
         if long_service_parallel and (mode != "parallel" or crossing_delay_seconds is not None
             or not 8.8 <= trigger_robot_y <= 9.2):
@@ -318,6 +321,7 @@ class RestaurantHumanEpisode:
             "initial_idle_held": self.initial_idle_held,
             "native_agent_enabled": bool(self.agent.is_enabled()),
             "background_service_walk": self.background_walk is not None,
+            "background_upper_departure": self.background_walk.upper_departure if self.background_walk is not None else False,
             "actor_xyz": xyz.tolist(),
             "left_foot_xyz": feet["L"],
             "right_foot_xyz": feet["R"],

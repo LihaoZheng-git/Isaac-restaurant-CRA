@@ -195,6 +195,8 @@ parser.add_argument("--long-service-parallel", action="store_true",
                     help="separate long-route native parallel actor; requires independent near-view component gate")
 parser.add_argument("--background-service-walk", action="store_true",
                     help="v2 actor-only background walking circuit before/after the parallel encounter; separate native route gate required")
+parser.add_argument("--background-upper-departure", action="store_true",
+                    help="separate actor-only upper-aisle departure after the unchanged encounter; requires fresh route gates")
 parser.add_argument("--stationary-furniture-memory", action="store_true",
                     help="separate bounded repeated-surface background PRIOR; current people/motion excluded, no source renewal")
 parser.add_argument("--stationary-furniture-fragment-proof", action="store_true",
@@ -679,6 +681,8 @@ if args.presentation_follow_camera and not args.restaurant_scene:
     parser.error("presentation follow camera requires a restaurant scene")
 if args.background_service_walk and not args.long_service_parallel:
     parser.error("background service walk requires the separate long-service parallel experiment")
+if args.background_upper_departure and not args.background_service_walk:
+    parser.error('upper departure requires background service walk')
 if args.service_demo_v2 and not args.restaurant_scene:
     parser.error("v2 presentation requires its separate restaurant scene")
 if args.presentation_risk_camera and not (args.restaurant_scene and args.persistent_object_risk_map):
@@ -1025,6 +1029,7 @@ def main():
                                        continuing_away=args.human_continuing_away,
                                        long_service_parallel=args.long_service_parallel,
                                        background_service_walk=args.background_service_walk,
+                                       background_upper_departure=args.background_upper_departure,
                                        crossing_extension_m=args.human_crossing_extension,
                                        crossing_y_m=args.human_crossing_line_y, crossing_layout=args.human_crossing_layout)
         ACTIVE_HUMAN = human
@@ -2787,7 +2792,8 @@ def main():
         from robot.evaluation.human_navigation_validation import summarize_human_navigation
         if human.background_walk is not None:
             from robot.scene.restaurant_background_walk import audit_background_walk
-            background_validation = audit_background_walk(human.records, human.background_walk.events)
+            background_validation = audit_background_walk(human.records, human.background_walk.events,
+                upper_departure=args.background_upper_departure)
             save_json('background-walk-validation.json', background_validation)
             completed = completed and background_validation['passed']
         human_validation = summarize_human_navigation(live_fields, human.records,
