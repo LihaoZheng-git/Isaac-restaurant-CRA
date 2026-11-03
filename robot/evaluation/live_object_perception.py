@@ -1017,6 +1017,7 @@ class LiveObjectPerception:
                 frame = replace(
                     frame,
                     detections=(proposal.detection,),
+                    model_name=proposal.source,
                     inference_wall_seconds=proposal.inference_wall_seconds
                     + proposal.image_encoder_wall_seconds,
                 )
@@ -1059,7 +1060,7 @@ class LiveObjectPerception:
             track_id=target.track_id,
             timestamp_seconds=timestamp,
             semantic_class="unknown",
-            semantic_source=SAM_INSTANCE_SOURCE
+            semantic_source=frame.model_name
             if accepted
             else "geometric_track_without_visual_instance",
             semantic_confidence=frame.detections[0].confidence if accepted else 0.0,

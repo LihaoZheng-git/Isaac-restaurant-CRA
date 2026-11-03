@@ -1,5 +1,21 @@
 # CRA repository guidance
 
+- Separate default-OFF --stationary-image-objects adds image-first SAM plus
+  current extent prompts and bounded multi-fragment hypotheses, stationary
+  prop-only/no humans/wheels. Require original pixel/quality gates, >=4 hits
+  and80% visible coverage per fragment, >=8 total, <=15% unresolved foreground,
+  configurable .9m maximum extent, disjoint-child/competing-mask rejection,
+  three sources/.2s/.06m original support/.75 maskIoU with <=.35s gaps.
+  Original outline reference may reject parts for10s without renewing clocks
+  or publishing geometry/factors. Preserve raw IDs/points/unmatched occupancy;
+  only current exact verified points acquire grouped CRA. State/plume admission
+  is transactional. This is inferred separated-prop grouping, NOT a general
+  whole-object/adjacent-object proof. Native validation pending at implementation.
+  Plate survey: clear south2.8m has only3 raw region returns ~2.5cm, zero past
+  original5cm filter; closer views unsampled. Original-axis far poses failed
+  setup clearance. Preserve all failures, no floor-gate weakening or enlarged
+  plate. Keep acceptedv2/main/primary/PR117 holds. See docs/image_object_association.md.
+
 - Mask-extent native at ae599d3: bin18/18 accepted/gatePASS,13 broader masks
   plus5 old panel fallbacks. Last body mask1970pixels/827of832returns(99.40%),
   quality.875/no foreign hits. NOT consistent whole-object acceptance: mass

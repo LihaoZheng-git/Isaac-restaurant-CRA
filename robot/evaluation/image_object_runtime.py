@@ -1,0 +1,76 @@
+"""Stationary-only experimental CRA assessment of verified image-object groups."""
+
+import copy
+from dataclasses import replace
+
+import numpy as np
+
+from robot.evaluation.cra_experiments import RestaurantScenario
+from robot.evaluation.perception_readiness import evaluate_perception_readiness, runtime_factor_evidence_mode
+from robot.perception.image_object_association import StationaryImageObjects, associate_image_objects
+from robot.risk.object_risk_policy import evaluate_object_risk
+from robot.safety.obstacle_tracking import TrackedObstacle
+from robot.safety.semantic_obstacle import SemanticObstacle
+
+
+def augment_image_objects(worker, packet, tracking, projection, world, objects,
+                          frames, policies, point_ids, semantics, contact_frame, plume):
+    """Stage state until the current field commits; original occupancy is untouched."""
+    from robot.evaluation.multi_object_perception import ObjectAssessment
+
+    config = worker.image_object_config
+    state = copy.deepcopy(getattr(worker, "image_object_state", None)) or StationaryImageObjects(config)
+    worker.segmenter.set_image(packet.rgb)
+    proposals = worker.segmenter.image_proposals(tracking.point_track_ids, projection)
+    candidates, audit = associate_image_objects(proposals, projection, tracking.point_track_ids,
+                                                packet.obstacle_xyz, config)
+    verified = state.update(candidates, world, packet.sensor_timestamp_seconds)
+    detail = {"scope": "stationary separated-prop image grouping hypothesis; no geometry creation or raw identity merge",
+              "source_frame": packet.sensor_frame_id, "source_time": packet.sensor_timestamp_seconds,
+              "candidates": audit, "accepted_object_ids": []}
+    for candidate in verified:
+        key, selected = candidate["object_id"], candidate["selected"]
+        center = packet.obstacle_xyz[selected, :2].mean(axis=0)
+        world_center = world[selected, :2].mean(axis=0)
+        # Do not turn a stationary-support hypothesis into measured zero speed.
+        # Original per-return inferred velocities remain available to CRA.
+        velocity = tracking.point_velocities_robot_xy[selected].mean(axis=0)
+        c, s = np.cos(packet.robot_yaw), np.sin(packet.robot_yaw)
+        world_velocity = velocity @ np.array([[c, s], [-s, c]])
+        track = TrackedObstacle(key, tuple(world_center), tuple(center), tuple(world_velocity),
+            tuple(velocity), int(selected.sum()), candidate["diagnostic"]["observations"], True)
+        ids = tracking.point_track_ids.copy()
+        ids[selected] = key
+        adapted_tracking = replace(tracking, point_track_ids=ids, tracked_obstacles=(track,))
+        assessment = worker._assess_track(packet, adapted_tracking, projection, track, True,
+            plume, None, image_is_set=True, shared_contact_frame=contact_frame,
+            proposal_override=candidate["proposal"])
+        candidate["diagnostic"]["final_assessment_rejections"] = assessment["reasons"]
+        if not assessment["accepted"]:
+            continue
+        # Only the verified exact point set may acquire this object's policy.
+        if np.any(assessment["selected"] & ~selected):
+            raise RuntimeError("image-object assessment expanded verified ownership")
+        policy, factors = evaluate_object_risk(assessment["adapted"], worker.object_factor_prior_config,
+            height_evidence=assessment.get("height_evidence"))
+        readiness = evaluate_perception_readiness(RestaurantScenario("image_object", "contact",
+            "stationary current mask and repeated positive fragments", runtime_factor_evidence_mode(assessment["adapted"]), 0),
+            assessment["adapted"])
+        detection = assessment["frame"].detections[0]
+        d = {"track_id": key, "accepted_instance": True, "camera_observable": True, "visual_attempted": True,
+             "centroid_world_xy": tuple(world_center), "velocity_world_xy": tuple(world_velocity),
+             "instance_centroid_world_xyz": world[selected].mean(axis=0).tolist(),
+             "instance_mask_pixels": detection.mask_pixel_count,
+             "instance_box_xyxy": tuple(getattr(detection.bounding_box, n) for n in ("x_min", "y_min", "x_max", "y_max")),
+             "selected_return_count": int(assessment["selected"].sum()), "policy_return_count": int(assessment["selected"].sum()),
+             "factor_scores": factors, "geometry_evidence": assessment["geometry_diagnostics"], "property_evidence": {},
+             "instance_ownership_basis": "current_image_mask_repeated_fragment_hypothesis",
+             "image_object_association": candidate["diagnostic"], "sam_model_quality": candidate["proposal"].model_quality,
+             "sam_rejections": [], "sam_candidate_diagnostics": candidate["proposal"].candidate_diagnostics}
+        objects.append(ObjectAssessment(assessment["attributes"], assessment["adapted"], policy, readiness, d))
+        frames.append(assessment)
+        point_ids[assessment["selected"]] = key
+        policies[key] = policy
+        semantics.append(SemanticObstacle(track, "unknown", detection.confidence, "inferred_image_object_fragments"))
+        detail["accepted_object_ids"].append(key)
+    return state, detail

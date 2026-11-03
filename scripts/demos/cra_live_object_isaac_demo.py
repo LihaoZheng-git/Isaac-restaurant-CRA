@@ -256,6 +256,10 @@ parser.add_argument("--human-start-view", choices=("original", "approach-forward
                     help="explicit bounded carrying start; fixed world human-service waypoints remain unchanged")
 parser.add_argument("--human-mass-prior", nargs=3, type=float, default=(70.,45.,100.),
                     metavar=("KG", "LOWER", "UPPER"), help="configured adult demonstration mass interval; not measured weight")
+parser.add_argument("--stationary-image-objects", action="store_true",
+                    help="Separate stationary image-first multi-fragment CRA experiment; no wheels/humans")
+parser.add_argument("--image-object-maximum-extent", type=float, default=.9,
+                    help="Labeled separated-prop grouping extent assumption in metres")
 parser.add_argument("--sam-track-extent-retry", action="store_true",
                     help="separate same-track box proposal for accepted low-coverage masks; original quality/ownership gates stay")
 parser.add_argument("--sam-observed-context-box", action="store_true",
@@ -341,6 +345,11 @@ parser.add_argument('--unknown-verified-dynamic-evidence', action='store_true',
 parser.add_argument('--human-verified-part-recovery', action='store_true',
                     help='bounded recovery across a previously verified human parent/part ID swap; complete old region must fit current body')
 args = parser.parse_args()
+if args.stationary_image_objects and (not args.stationary_prop_camera or args.motion
+    or args.restaurant_human or not args.persistent_object_risk_map):
+    parser.error("image-object experiment requires stationary prop camera, persistent mapping and no humans/wheels")
+if not math.isfinite(args.image_object_maximum_extent) or not .1 <= args.image_object_maximum_extent <= 1.5:
+    parser.error("image-object extent assumption must lie in [.1, 1.5] m")
 if (not math.isfinite(args.stationary_prop_view_yaw_degrees)
     or not 0 <= args.stationary_prop_view_yaw_degrees < 360
     or args.stationary_prop_view_yaw_degrees != 0 and args.stationary_prop_standoff_metres is None):
@@ -1464,6 +1473,9 @@ def main():
         mask_foreground_depth_gap_m=0.5 if args.fixture_layout == "three" or args.actor_shape == "upright_capsule" or args.restaurant_scene else None,
         plume_view_fov_degrees=args.plume_view_fov,
     )
+    if args.stationary_image_objects:
+        from robot.perception.image_object_association import ImageObjectConfig
+        perception.image_object_config = ImageObjectConfig(maximum_extent_m=args.image_object_maximum_extent)
     if args.stationary_furniture_memory:
         if not (args.restaurant_human == "parallel" and args.rolling_local_field and args.persistent_object_risk_map) or args.static_occupancy_memory_prior:
             raise ValueError("furniture memory requires the separate long-human rolling experiment, not global static memory")
@@ -3238,6 +3250,8 @@ def main():
         "static_restaurant_server": args.restaurant_server,
         "sam_observed_context_box_retry": args.sam_observed_context_box,
         "sam_track_extent_retry": args.sam_track_extent_retry,
+        "stationary_image_objects": args.stationary_image_objects,
+        "image_object_maximum_extent_prior_m": args.image_object_maximum_extent,
         "server_component_gate": gate.get("server_component_checks"),
         "restaurant_component_gate": gate.get("restaurant_component_checks"),
         "independent_authored_layout_monitor": bool(layout_monitor is not None),

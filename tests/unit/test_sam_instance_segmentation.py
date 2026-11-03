@@ -295,3 +295,22 @@ def test_extent_retry_requires_explicit_boolean_and_context_permission(tmp_path)
         replace(segmenter.config, track_extent_retry=1)
     with pytest.raises(ValueError, match="context-box"):
         replace(segmenter.config, track_extent_retry=True)
+
+
+def test_image_proposals_are_unassociated_and_preserve_quality_boundary_gates(tmp_path):
+    segmenter, backend, projection, ids = fixture(tmp_path)
+    invalid = backend.masks[0].copy()
+    invalid[0, 25] = True
+    backend.generate = lambda: (np.array([backend.masks[0], invalid, backend.masks[0]]), np.array([.94, .99, .7]))
+    proposals = segmenter.image_proposals(ids, projection)
+    assert proposals and all(p.detection.semantic_class == "unknown" for p in proposals)
+    assert all(p.model_quality >= .85 and not p.detection.mask[0].any() for p in proposals)
+    assert all(p.mask_track_hits == 0 and p.projected_track_points == 0 for p in proposals)
+    assert any(p.candidate_diagnostics[0]["basis"] == "automatic_image_grid" for p in proposals)
+
+
+def test_image_proposals_reject_backend_shape_mismatch(tmp_path):
+    segmenter, backend, projection, ids = fixture(tmp_path)
+    backend.generate = lambda: (np.zeros((1, 10, 10)), np.array([.99]))
+    with pytest.raises(ValueError, match="shape mismatch"):
+        segmenter.image_proposals(ids, projection)

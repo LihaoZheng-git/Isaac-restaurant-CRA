@@ -190,6 +190,11 @@ def assess_all_objects(worker, packet):
         person_tracks={track_id for track_id in attempted if np.count_nonzero(person_hits &
             (tracking.point_track_ids[projection.source_indices]==track_id))>=4}
         attempted-=person_tracks
+    image_object_config = getattr(worker, "image_object_config", None)
+    if image_object_config is not None:
+        # Separate stationary experiment: assess each verified visual object once.
+        # Original raw tracks remain occupied with their ordinary factor priors.
+        attempted = set()
     if attempted:
         worker.segmenter.set_image(packet.rgb)
     world = np.array(packet.obstacle_xyz, dtype=float, copy=True)
@@ -381,6 +386,14 @@ def assess_all_objects(worker, packet):
             )
         )
         frames.append(assessment)
+    image_state, image_detail = None, None
+    if image_object_config is not None:
+        from robot.evaluation.image_object_runtime import augment_image_objects
+        image_state, image_detail = augment_image_objects(worker, packet, tracking, projection,
+            world, objects, frames, policies, point_ids, semantics, contact_frame, plume)
+        selected_count = int(np.logical_or.reduce([f["selected"] for f in frames]).sum())
+        for item in objects:
+            item.diagnostics["policy_return_count"] = int(np.count_nonzero(point_ids == item.attributes.track_id))
     carried_state,carried_detail=None,None
     if worker.carried_object_config is not None:
         from robot.evaluation.carried_object_runtime import augment_carried_object
@@ -997,6 +1010,8 @@ def assess_all_objects(worker, packet):
     worker.temporal_recovery_baseline = None
     if carried_state is not None:
         worker.carried_runtime_state=carried_state
+    if image_state is not None:
+        worker.image_object_state = image_state
     worker.multi_retained = (
         retained + [current_placement] if worker.occupancy_retention_seconds else []
     )
@@ -1038,6 +1053,7 @@ def assess_all_objects(worker, packet):
         "object_count": len(objects),
         "objects": [item.diagnostics for item in objects],
         "carried_object_groups":carried_detail,
+        "image_object_groups": image_detail,
         "occupancy_policies": [
             {
                 "track_or_group_id": key,

@@ -76,6 +76,15 @@ def test_real_stationary_prop_mount_arguments_pass(monkeypatch):
     assert args.human_camera_raise_metres == .6 and not args.motion
 
 
+def test_image_object_mode_is_stationary_only(monkeypatch):
+    assert _parse_mount([*BASE_ARGS, "--stationary-image-objects"], monkeypatch).stationary_image_objects
+    for extra in (["--motion"], ["--restaurant-human", "standing"], ["--image-object-maximum-extent", "nan"]):
+        with pytest.raises(SystemExit):
+            _parse_mount([*BASE_ARGS, "--stationary-image-objects", *extra], monkeypatch)
+    with pytest.raises(SystemExit):
+        _parse_mount(["--stationary-image-objects"], monkeypatch)
+
+
 def test_extent_retry_cli_requires_context_opt_in(monkeypatch):
     with pytest.raises(SystemExit):
         _parse_mount([*BASE_ARGS, "--sam-track-extent-retry"], monkeypatch)

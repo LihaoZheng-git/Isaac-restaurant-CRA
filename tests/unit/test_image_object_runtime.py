@@ -1,0 +1,66 @@
+from dataclasses import replace
+from types import SimpleNamespace
+
+import numpy as np
+import pytest
+
+from test_live_object_perception import packet
+from test_object_risk_map import mapped_worker, scalar
+from test_image_object_association import proposal
+from robot.perception.image_object_association import ImageObjectConfig
+from robot.perception.physical_attributes import MassAttributes
+
+
+def setup():
+    runtime = mapped_worker()
+    runtime.image_object_config = ImageObjectConfig()
+    runtime.grid_config = replace(runtime.grid_config, resolution=.1)
+    def proposals(ids, projection):
+        mask = np.zeros((100, 100), bool)
+        xy = projection.pixel_indices_xy
+        lo, hi = xy.min(axis=0), xy.max(axis=0)
+        mask[max(1,lo[1]-2):min(99,hi[1]+3), max(1,lo[0]-2):min(99,hi[0]+3)] = True
+        return (proposal(mask),)
+    runtime.segmenter = SimpleNamespace(set_image=lambda rgb: None, image_proposals=proposals)
+    runtime.mass_estimator = SimpleNamespace(estimate_instance=lambda *a, **kw:
+        MassAttributes(scalar(2, "kg", kw["timestamp_seconds"])))
+    return runtime
+
+
+def observed(frame, time):
+    xyz = np.array([[x,y,z] for x in (2., 2.03) for y in (-.25,-.22,.22,.25) for z in (.2,.23)])
+    transform = np.eye(4)
+    transform[:3,:3] = [[0,-1,0],[0,0,1],[-1,0,0]]
+    return replace(packet(frame,time), obstacle_xyz=xyz, scene_xyz=xyz, camera_from_scan_robot=transform)
+
+
+def test_runtime_applies_group_policy_only_to_current_points_without_raw_track_merge():
+    runtime = setup()
+    for i,t in enumerate((1.,1.1,1.2),1):
+        result = runtime(observed(i,t))
+    groups = [o for o in result.objects if o.diagnostics.get("image_object_association")]
+    assert len(groups) == 1
+    assert groups[0].attributes.mass.mass_kg.value == 2
+    assert result.field.all_obstacle_point_count == 16
+    assert len(result.field.tracking_result.tracked_obstacles) == 2
+    assert max(result.field.tracking_result.point_track_ids) < 5_000_000_000
+    assert sum(o.diagnostics["policy_return_count"] for o in result.objects) == 16
+    assert result.diagnostics["fixed_lambda"] == 1.25
+
+
+def test_field_failure_does_not_commit_group_history(monkeypatch):
+    import robot.evaluation.multi_object_perception as mapping
+    runtime = setup()
+    first = runtime(observed(1,1.))
+    state = runtime.image_object_state
+    original = mapping.build_safe_sage_field_pipeline
+    def fail(*a,**kw):
+        raise RuntimeError("controlled field failure")
+    monkeypatch.setattr(mapping, "build_safe_sage_field_pipeline", fail)
+    with pytest.raises(RuntimeError, match="field failure"):
+        runtime(observed(2,1.1))
+    assert runtime.image_object_state is state and state.last_time == 1.
+    assert runtime.previous is first.field
+    monkeypatch.setattr(mapping, "build_safe_sage_field_pipeline", original)
+    runtime(observed(3,1.1))
+    assert runtime.image_object_state.last_time == 1.1

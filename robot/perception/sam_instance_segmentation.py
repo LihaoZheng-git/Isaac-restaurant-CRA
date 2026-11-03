@@ -144,6 +144,17 @@ class _UltralyticsBackend:
             result.boxes.conf.cpu().numpy(),
         )
 
+    def generate(self):
+        """Existing installed SAM backend; no labels, detector boxes or downloads."""
+        result = self.predictor(
+            self.image_bgr, points=None, bboxes=None, labels=None, masks=None,
+            points_stride=32, points_batch_size=64, conf_thres=.85,
+            stability_score_thresh=.95, crop_n_layers=0,
+        )[0]
+        if result.masks is None:
+            return np.empty((0, *self.image_bgr.shape[:2]), bool), np.empty(0)
+        return result.masks.data.cpu().numpy().astype(bool), result.boxes.conf.cpu().numpy()
+
 
 class SamInstanceSegmenter:
     def __init__(self, config: SamInstanceConfig, *, backend=None):
@@ -166,6 +177,49 @@ class SamInstanceSegmenter:
         start = time.perf_counter()
         self.backend.set_image(rgb)
         self.image_encoder_wall_seconds = time.perf_counter() - start
+
+    def image_proposals(self, point_track_ids, projection):
+        """Image-first candidates plus observed extent prompts, NOT associations.
+
+        Separate stationary experiment only. Original pixel/quality gates apply;
+        multi-fragment ownership must be checked by the downstream adapter.
+        No retained mask is used as a new observation.
+        """
+        if self.image_shape is None:
+            raise RuntimeError("set_image is required for each camera frame")
+        batches = [("automatic_image_grid", *self.backend.generate())]
+        ids = np.asarray(point_track_ids)[projection.source_indices]
+        # Bounded same-source extent prompts recover instances missed by the
+        # automatic point grid (e.g. a bin whose decorative panel is salient).
+        eligible = [int(k) for k in np.unique(ids) if k >= 0 and np.sum(ids == k) >= 8]
+        for key in eligible[:16]:
+            xy = projection.pixel_indices_xy[ids == key]
+            lo, hi = xy.min(axis=0), xy.max(axis=0)
+            padding = .25 * np.maximum(hi - lo, 1)
+            a = np.maximum(0, np.floor(lo - padding)).astype(int)
+            b = np.minimum(np.array(self.image_shape[::-1]) - 1, np.ceil(hi + padding)).astype(int)
+            point = xy[np.argmin(np.sum((xy - np.median(xy, axis=0)) ** 2, axis=1))]
+            masks, qualities = self.backend.predict(tuple(point), context_box_xyxy=(*a, *b))
+            batches.append(("current_observed_extent", masks, qualities))
+        proposals = []
+        for basis, masks, qualities in batches:
+            masks, qualities = np.asarray(masks), np.asarray(qualities)
+            if masks.ndim != 3 or masks.shape[1:] != self.image_shape or qualities.shape != (len(masks),):
+                raise ValueError("image proposal backend shape mismatch")
+            for mask, quality in zip(masks.astype(bool), qualities):
+                count = int(mask.sum())
+                if (not np.isfinite(quality) or not self.config.minimum_model_quality <= quality <= 1
+                    or count < self.config.minimum_mask_pixels
+                    or count > mask.size * self.config.maximum_image_fraction
+                    or mask[0].any() or mask[-1].any() or mask[:, 0].any() or mask[:, -1].any()):
+                    continue
+                yy, xx = np.where(mask)
+                detection = SemanticDetection(0, "unknown", min(float(quality), self.config.confidence_cap),
+                    PixelBoundingBox(float(xx.min()), float(yy.min()), float(xx.max()+1), float(yy.max()+1)), mask)
+                proposals.append(SamInstanceResult(detection, (), model_quality=float(quality),
+                    source="sam2_image_object_hypothesis", candidate_diagnostics=({"basis": basis},)))
+        # Stable maximum of 64 image hypotheses, without favoring any target.
+        return tuple(sorted(proposals, key=lambda p: (-p.detection.mask_pixel_count, -p.model_quality))[:64])
 
     def propose(
         self, point_track_ids, projection, *, track_id,
