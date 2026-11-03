@@ -1,5 +1,21 @@
 # CRA repository guidance
 
+- Canonical-world correction59b8bc3 PASSED fresh actor612.46s, component104,
+  startup60 and near60 plus own60. Wheels cleared all old furniture stalls and
+  reached the live human encounter, then stalled after one5.4817s wall inference
+  arrived at.366667s source age (>unchanged.35). Recovery baseline made the actual
+  field gap125.8->126.5s=.7s, beyond existing.6s human reacquisition. Missing2192
+  expanded from its last verified center; its uncertain region also revoked
+  nearby static hypotheses, producing17 dynamic regions by133.7s. Preserve this
+  unresolved gap/secondary-expansion limitation; do not claim free space or
+  successful human occlusion recovery. Interrupted after722fields at local
+  (20.5427,5.4011), no final arrival/stop report; source unchanged. New separate
+  compute-paced recipe changes ONLY long-parallel simulation_rate .05->.04,
+  giving25% more wall time with physical speed, freshness/identity limits and
+  all controls unchanged. Reuse actor/component/near only with exact runtime/
+  scene hashes and unchanged executed commands; require fresh changed-command
+  startup and own60 plus full mission. This is not real-time acceptance.
+
 - Unclassified-static native v1 at efa22a2 PASSED all four fresh prerequisites
   (actor631.16s, component105sources, startup60, near60) and own60, but FAILED
   unknown_obstacle_field_coverage_failure at15.85s/99fields/about3.13m progress,

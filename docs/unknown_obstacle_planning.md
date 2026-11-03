@@ -473,3 +473,31 @@ native arrival acceptance. Fresh native prerequisites and mission are required.
 Correction validation:141 focused tests passed in8.38s; full3,580 unit tests
 passed in124.39s. Ruff, compilation and diff checks passed. Exact provenance
 checks remain strict; fresh native acceptance is pending.
+
+### Corrected native trial: stale-computation source gap
+
+At59b8bc3, fresh actor hold/release612.46s, moving-human component104 sources,
+startup60 and near60 passed, followed by own60. The mission cleared the prior
+1.77m,3.13m,3.93m,5.39m and15.25m stopping locations and reached the live human
+encounter. It then stalled after one inference job took5.4817s wall and arrived
+at0.366667s source age, exceeding the unchanged0.35s freshness limit. The next
+unpublished recovery baseline produced a0.70s actual field gap from125.8s to
+126.5s, beyond the existing0.60s human reacquisition window.
+
+The last verified human2192 center was(29.7060,7.9589) at125.8s. Its all-direction
+uncertainty expanded, and overlap also revoked nearby static hypotheses. By the
+interruption at133.7s there were17 unknown-motion regions. This secondary growth
+and the human recovery gap remain unresolved limitations; neither is evidence
+that those background surfaces actually moved. The source logs and explicit
+interruption note are in outputs/unclassified-static-default/long-motion-v2.
+There were722 live fields and final local pose(20.5427,5.4011,1.2990), with no
+final arrival/stopping acceptance. Runtime hashes stayed unchanged.
+
+A separate compute-paced recipe changes only long-parallel --simulation-rate
+from0.05 to0.04. This grants25% more wall time per simulated second, without
+changing physical speed, source-age/identity limits, CRA, lambda, margins or
+controller checks. It tests computational headroom, not a new missing-human
+policy or real-time performance. Actor, component and near prerequisites may be
+reused only through the launcher's exact executed-command/runtime/scene parity
+checks; the changed-command startup gate and own60 are fresh. Full native
+arrival/stopping still determines acceptance; the failed source-gap trial stays.
