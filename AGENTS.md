@@ -1,5 +1,22 @@
 # CRA repository guidance
 
+- Point-level contradiction at8f50ca4 passed all four fresh prerequisites
+  (actor603.58s, component106sources, startup60, near60) and own60, but wheels
+  stalled at1.77264m:116fields through24.7s, interrupted with NO arrival/stop
+  acceptance. Preserve exact archives and outputs/background-motion-contradiction.
+  At16.8s two-observation cluster290 (11points, centroid speed.21658m/s)
+  invalidated qualified five-point192 (original/support10.2s); no repeated
+  current points, nearest.008467m. Dynamic radius immediately became8.4m.
+  The user NOW APPROVES requiring repeated geometrically consistent physical
+  motion before revoking already-qualified persistent background. Ambiguous
+  grouping retains the capped.30m labeled static-map prior, without renewed
+  source/support/factor clocks. People/body/uncertain-human exclusions remain
+  unconditional; raw occupancy/unqualified movers/risk/lambda/control checks
+  stay. This supersedes the unconfirmed-single-cluster contradiction rule
+  below ONLY for opted-in qualified persistent background. Require tests,
+  archived replay, fresh four native gates and full arrival/stopping; all
+  failures/v1/main/primary/PR117 holds remain.
+
 - Persistent background at9036e8b passed all four fresh native prerequisites
   and its own60 startup gate. It cleared the old3.93m expiry stall: fragment254
   kept original17.4s source/support and capped.30m beyond ten seconds. A NEW

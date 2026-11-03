@@ -300,3 +300,27 @@ native history, with the recorded original certificate. No actor truth enters
 this replay.85 focused tests pass in5.45s. Full regression/fresh native gates
 remain pending for the correction. Full3,535 unit tests passed in122.30s;
 Ruff and diff checks passed.
+
+### Point-level correction native outcome at8f50ca4
+
+All four fresh prerequisites passed: actor603.58s wall; moving-human parked
+component106 sources/318.39s; startup60/283.88s; near60/288.01s. Its own60
+stationary gate passed. Wheels then stalled at1.77264m, with116 committed
+fields through24.7s. The trial was interrupted; it has no final arrival or
+stopping acceptance. Exact geometry audit passed176 sources/121 references/
+19 files. Preserve outputs/background-motion-contradiction/long-motion-v1.
+
+At16.8s cluster290 had11 returns and only two observations. Its centroid
+velocity0.21658m/s, with no repeated stationary current points, contradicted
+qualified five-point192 (original/support10.2s) at0.008467m proximity. The
+old support clock correctly remained unchanged, causing an immediate8.4m
+dynamic region. This is not confirmed displacement of the original surface.
+All12 accepted-v1 checksums remain unchanged; no v2 release is available.
+
+The user approved requiring repeated geometrically consistent motion before
+revoking already-qualified persistent background. Ambiguous grouping retains
+the labeled capped0.30m static-map assumption. This supersedes the previous
+unconfirmed-point contradiction rule in that mode only. It does not certify
+unobserved background as measured or change current raw obstacles, human
+exclusions, unqualified dynamic handling, phi, clocks or controller checks.
+Fresh validation remains required after implementing this policy.
