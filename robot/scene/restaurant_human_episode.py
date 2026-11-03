@@ -102,7 +102,8 @@ class RestaurantHumanEpisode:
         with Usd.EditContext(stage, stage.GetSessionLayer()):
             self.setup = prepare_native_restaurant_human(stage, crossing_direction=crossing_direction,
                 crossing_extension_m=crossing_extension_m,crossing_y_m=crossing_y_m,
-                crossing_layout=crossing_layout, parallel_oncoming=self.parallel_oncoming)
+                crossing_layout=crossing_layout, parallel_oncoming=self.parallel_oncoming,
+                upper_departure=background_upper_departure)
         self.goal = (29.8 if crossing_direction == "left-to-right" else 27.8, 8.9, 0.0)
         if self.departure is not None:
             self.goal = self.departure.goal

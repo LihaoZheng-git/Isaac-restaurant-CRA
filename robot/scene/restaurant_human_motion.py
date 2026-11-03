@@ -18,6 +18,14 @@ HUMAN_MOTION_LIBRARY_PRIM = "/World/CRAServiceActors/HumanMotionLibrary"
 HUMAN_WALK_GOAL = (29.8, 12.5, 0.0)
 
 
+def human_navmesh_extent(*, open_layout=False, parallel_oncoming=False, upper_departure=False):
+    """Actor authoring domain only; no robot planner or geometry input."""
+    if upper_departure and not parallel_oncoming:
+        raise ValueError('upper actor NavMesh requires the parallel encounter')
+    low = (25., 6., -.2) if open_layout or parallel_oncoming else (27., 7., -.2)
+    return low, (31., 25. if upper_departure else 14., 2.5)
+
+
 def configure_human_navmesh(stage):
     """Explicit metre settings, limited to this process's unsaved stage root."""
     if (
@@ -72,7 +80,8 @@ def attach_moving_human_collider(stage, rig, *, radius=0.4, height=1.7):
 
 
 def prepare_native_restaurant_human(stage, *, crossing_direction="right-to-left",
-                                    crossing_extension_m=0., crossing_y_m=8.9, crossing_layout="legacy", parallel_oncoming=False):
+                                    crossing_extension_m=0., crossing_y_m=8.9, crossing_layout="legacy", parallel_oncoming=False,
+                                    upper_departure=False):
     import omni.client
     import omni.kit.commands
     from pxr import NavSchema, Sdf, Usd
@@ -133,8 +142,9 @@ def prepare_native_restaurant_human(stage, *, crossing_direction="right-to-left"
         stage, "/World/CRAServiceActors/HumanNavMeshVolume"
     )
     volume.CreateNavVolumeTypeAttr("Include")
-    volume.CreateExtentAttr([Gf.Vec3f(25, 6, -0.2) if open_layout or parallel_oncoming else Gf.Vec3f(27, 7, -0.2),
-                             Gf.Vec3f(31, 14, 2.5)])
+    extent = human_navmesh_extent(open_layout=open_layout, parallel_oncoming=parallel_oncoming,
+        upper_departure=upper_departure)
+    volume.CreateExtentAttr([Gf.Vec3f(*corner) for corner in extent])
     settings = configure_human_navmesh(stage)
     return {
         "rig_path": str(rig.GetPath()),
@@ -142,6 +152,7 @@ def prepare_native_restaurant_human(stage, *, crossing_direction="right-to-left"
         "motion_library_url": HUMAN_MOTION_LIBRARY_URL,
         "motion_library_sha256": HUMAN_MOTION_LIBRARY_SHA256,
         "navmesh_settings_metres": settings,
+        "actor_navmesh_extent_m": extent,
         "collision_radius_m": 0.4,
         "collision_height_m": 1.7,
         "scope": "native actor motion/render/independent evaluation only; no estimator inputs",

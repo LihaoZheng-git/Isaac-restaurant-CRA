@@ -5,6 +5,7 @@ import importlib
 import json
 from pathlib import Path
 import sys
+import traceback
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
@@ -64,6 +65,7 @@ try:
         trigger_robot_y=9., speed_mps=.5, long_service_parallel=True,
         background_service_walk=args.background_service_walk,
         background_upper_departure=args.background_upper_departure)
+    save('human-native-setup.json', human.setup)
     for _ in range(20):
         app.update()
     human.bake()
@@ -125,6 +127,9 @@ try:
         minimum_layout_clearance_m=min(r['actor_layout_clearance_m'] for r in human.records),
         scope='Actor-only held native idle then released walk. Robot inactive in unsaved session; no robot perception/navigation acceptance. No teleport or relaxed clearance.'))
     print(json.dumps(dict(checks=checks, drift_m=drift, travel_m=travel)), flush=True)
+except Exception as exc:
+    save('failure.json', dict(error_type=type(exc).__name__, error=str(exc), traceback=traceback.format_exc()))
+    raise
 finally:
     if human is not None:
         save('human-truth-evaluation-only.json', human.records)

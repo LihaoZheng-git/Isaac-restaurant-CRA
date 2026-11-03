@@ -34,6 +34,17 @@ def test_upper_route_cannot_skip_actual_arrival():
         BackgroundServiceWalk(upper_departure='yes')
 
 
+def test_native_actor_domain_covers_entire_upper_route_and_keeps_legacy_bounds():
+    from robot.scene.restaurant_human_motion import human_navmesh_extent
+    low, high = human_navmesh_extent(parallel_oncoming=True, upper_departure=True)
+    for goal in UPPER_DEPARTURE_ROUTE:
+        assert all(low[i]+.4 < goal[i] < high[i]-.4 for i in (0,1))
+    assert human_navmesh_extent() == ((27.,7.,-.2),(31.,14.,2.5))
+    assert human_navmesh_extent(parallel_oncoming=True) == ((25.,6.,-.2),(31.,14.,2.5))
+    with pytest.raises(ValueError):
+        human_navmesh_extent(upper_departure=True)
+
+
 def test_upper_actor_audit_requires_explicit_mode_and_actual_upper_entry():
     from robot.scene.restaurant_background_walk import BACKGROUND_ROUTE
     rows = [dict(time=i*.1, actor_xyz=[29.7, 7+i*.05, 0.],

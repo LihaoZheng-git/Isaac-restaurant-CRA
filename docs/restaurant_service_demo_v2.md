@@ -166,3 +166,17 @@ not a new estimator or recovery rule.
 
 Source validation:63 focused tests passed in5.58s; all3,622 unit tests passed
 in122.08s. Ruff, compilation and diff checks passed. Native validation is pending.
+
+The first actor-only upper-departure attempt at7571115 failed before a final
+report or any wheel experiment. Its last actor sample was(27.8815,11.0167) at
+325.4333s, with minimum measured layout clearance0.227185m. The next target at
+y14.4 lay outside the native actor NavMesh's unchanged y14 boundary. The old
+setup is preserved under `outputs/upper-service-departure/background-v1`.
+The explicit option now extends only the actor NavMesh to y25, retaining the
+legacy domain and all collision/clearance checks. Setup exports the actor extent,
+and unexpected actor-diagnostic exceptions are saved before SimulationApp closes.
+Fresh native prerequisites are required; the planned geometry survey is not a pass.
+
+NavMesh correction validation:44 focused tests passed in6.05s; all3,623 unit tests
+passed in122.74s. Ruff, compilation and diff checks passed. Legacy actor domains
+remain unchanged; the upper route is tested to fit within its explicit domain.

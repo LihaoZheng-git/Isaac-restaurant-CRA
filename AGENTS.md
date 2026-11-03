@@ -1,5 +1,14 @@
 # CRA repository guidance
 
+- Upper-departure7571115 FAILED the actor-only prerequisite before wheels:
+  last actor(27.8815,11.0167), source325.4333, minimum layout clearance.227185m;
+  no final report. The next14.4m-y goal lay outside the unchanged native actor
+  NavMesh max-y14. Preserve background-v1 and its original records. Explicit
+  upper-departure mode now extends ONLY the actor NavMesh to y25 (legacy stays
+  y14); all actor collision/geometry thresholds and robot inputs are unchanged.
+  Save actor extent and unexpected diagnostic exceptions for future provenance.
+  Require a fresh actor gate and all other prerequisites before any new wheels.
+
 - Separate default-OFF --background-upper-departure is an ACTOR-ONLY PI-demo
   variant, not a fix of the returning-loop stress case. Keep the original
   background circuit, approach, oncoming segment and first two continuation
