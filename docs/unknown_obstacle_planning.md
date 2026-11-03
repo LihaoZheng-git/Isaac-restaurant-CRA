@@ -324,3 +324,52 @@ unconfirmed-point contradiction rule in that mode only. It does not certify
 unobserved background as measured or change current raw obstacles, human
 exclusions, unqualified dynamic handling, phi, clocks or controller checks.
 Fresh validation remains required after implementing this policy.
+
+### Repeated geometric motion before revoking persistent background
+
+The approved follow-up applies only to already-qualified persistent background.
+It retains the static-map hypothesis when a cluster centroid shifts without
+repeatable shape displacement. Newly observed raw obstacles remain occupied;
+people, validated body regions and uncertain-human regions still contradict
+the prior immediately. Legacy modes and new background enrollment retain their
+existing centroid-motion exclusions. This does not lower a kinetic factor or
+transfer identity, mass, factors or a source clock between tracks.
+
+A short independent history stores non-human current point clouds by their
+observed track ID. Confirmation requires at least three continuous real sources
+spanning0.2s within the original0.7s history, with no source gap over0.35s or
+missing ID. First/middle/current shapes must have at least six distinct points
+and minor-axis variance at least0.06 squared square metres. This deliberately
+rejects straight walls and poorly observable patches. Bounded translation
+registration uses at most256 points per cloud for fitting, then checks EVERY
+point in both directions against0.03m residual and at least0.03m RMS improvement
+over stationary alignment. Both interval speeds must exceed0.2m/s, differ by
+at most a1.5 ratio, agree within direction cosine0.9, and compose within0.03m.
+Total displacement must exceed0.12m. These are engineering inference gates
+derived from the existing0.06m correspondence scale, not calibrated guarantees.
+
+Confirmed current geometry within0.06m of an old qualified surface revokes the
+whole prior, even if individual points incidentally have stationary neighbors.
+Ambiguous motion leaves the original static-map certificate and capped0.30m
+allowance. It never becomes a fresh observation. Contradiction still grows
+dynamic uncertainty from the ORIGINAL last support time and position allowance.
+Current raw occupancy and all exact field/controller checks remain independent.
+Actual candidate history clouds are archived with hashes for offline replay.
+
+The two-observation16.8s archived case now retains all five original points at
+0.283m, preserving source/support10.2s; the recorded old behavior was8.4m.
+Only one raw scan is available for that component replay; the recorded track
+has two observations and cannot meet the three-source requirement. The earlier
+34.9s source-subset replay still preserves3474 points at0.2515m. Neither replay
+is a full tracker/control rerun or native navigation acceptance.
+
+Limitations: this deliberately bounded translation test does not establish a
+general motion detector for thin, partially occluded, rotating or hidden objects.
+Ambiguous qualified background therefore relies on the explicitly approved
+static-map assumption. A genuine obstacle conflict or lack of a verified
+command can still stop the robot. Fresh native gates and full arrival/stopping
+remain required before releasing v2.
+
+Source validation:105 focused tests passed in5.82s; final full regression
+3,555 unit tests passed in115.46s. Ruff, compilation and diff checks passed.
+Accepted v1's12 file checksums remain unchanged. Native validation is pending.

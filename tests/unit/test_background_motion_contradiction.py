@@ -36,16 +36,18 @@ def test_moving_centroid_cannot_invalidate_qualified_background_through_static_p
     assert summarize_unknown_obstacles([proof_record(snapshot)])['passed']
 
 
-def test_new_unconfirmed_motion_near_old_surface_still_invalidates_whole_prior():
+def test_new_unconfirmed_motion_near_old_surface_is_ambiguous():
     m = memory()
     acquire(m)
     snapshot = merged_update(m, [[1.18, 0.], [1.5, 0.]], base=BASE[:20])
     old, = snapshot.regions
-    assert old.mode == 'unknown_motion_reachable_surface_prior'
-    assert old.original.background_support is None
+    assert old.mode == 'retained_supported_background_prior'
+    assert old.original.background_support is not None
     proof, = snapshot.background_motion_proofs
     assert not proof['stationary_overlap_only']
     assert proof['minimum_unconfirmed_distance_m'] == 0.
+    assert not proof['motion_confirmation']['confirmed']
+    assert not proof['motion_contradiction']
     assert summarize_unknown_obstacles([proof_record(snapshot)])['passed']
 
 
@@ -62,7 +64,7 @@ def test_source_gap_cannot_supply_stationary_point_exemption():
     m = memory()
     acquire(m)
     snapshot = merged_update(m, FAR_TAIL, now=2.)
-    assert snapshot.regions[0].mode == 'unknown_motion_reachable_surface_prior'
+    assert snapshot.regions[0].mode == 'retained_supported_background_prior'
     proof, = snapshot.background_motion_proofs
     assert proof['repeated_stationary_point_count'] == 0
     assert not proof['stationary_overlap_only']
@@ -76,7 +78,7 @@ def test_legacy_supported_background_retains_whole_mover_exclusion():
     assert not snapshot.background_motion_proofs
 
 
-def test_one_other_unconfirmed_mover_still_contradicts_background():
+def test_one_other_unconfirmed_mover_cannot_supply_repeated_motion():
     m = memory()
     acquire(m)
     mixed = np.vstack((BASE, FAR_TAIL))
@@ -85,7 +87,7 @@ def test_one_other_unconfirmed_mover_still_contradicts_background():
     snapshot = m.update(points, np.r_[np.full(len(mixed), 2), np.full(len(close), 3)],
         (track(2, mixed, (.5, 0.)), track(3, close, (.5, 0.))), {2: GUIDANCE, 3: GUIDANCE},
         source_time=1.4, source_frame=14, robot_xy=(0., 0.))
-    assert snapshot.regions[0].mode == 'unknown_motion_reachable_surface_prior'
+    assert snapshot.regions[0].mode != 'unknown_motion_reachable_surface_prior'
     assert {p['stationary_overlap_only'] for p in snapshot.background_motion_proofs} == {False, True}
 
 

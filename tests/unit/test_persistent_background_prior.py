@@ -10,7 +10,6 @@ from robot.perception.unknown_obstacle_memory import UnknownObstacleConfig, Unkn
 from robot.evaluation.unknown_obstacle_validation import UnknownObstacleGeometryArchive, summarize_unknown_obstacles
 from test_supported_background_prior import acquire, BASE, PARTIAL
 from test_unknown_obstacle_memory import observe, raster
-from test_stationary_furniture_memory import GUIDANCE, track
 
 
 def memory():
@@ -52,18 +51,13 @@ def test_unqualified_surface_still_dynamic_despite_persistent_option():
     assert region.radius_m == pytest.approx(.1+19+1.55)
 
 
-@pytest.mark.parametrize('kind', ['mask', 'body', 'mover'])
+@pytest.mark.parametrize('kind', ['mask', 'body'])
 def test_persistent_hypothesis_ends_on_positive_person_or_motion_contradiction(kind):
     m = memory()
     acquire(m)
     observe(m, 20., points=np.empty((0, 2)))
-    if kind == 'mover':
-        points = BASE + [.18, 0.]
-        snapshot = m.update(points, np.full(len(points), 2), (track(2, points, (.5, 0.)),),
-            {2: GUIDANCE}, source_time=20.2, source_frame=202, robot_xy=(0., 0.))
-    else:
-        kwargs = {'excluded_points': [[1., 0.]]} if kind == 'mask' else {'human_regions': [(np.array([1., 0.]), .65)]}
-        snapshot = observe(m, 20.2, points=np.empty((0, 2)), **kwargs)
+    kwargs = {'excluded_points': [[1., 0.]]} if kind == 'mask' else {'human_regions': [(np.array([1., 0.]), .65)]}
+    snapshot = observe(m, 20.2, points=np.empty((0, 2)), **kwargs)
     region = next(r for r in snapshot.regions if r.original.track_id == 1)
     assert region.mode == 'unknown_motion_reachable_surface_prior'
     assert region.original.background_support is None

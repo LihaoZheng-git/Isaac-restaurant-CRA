@@ -11,6 +11,8 @@ import math
 import numpy as np
 from scipy.spatial import cKDTree
 
+from robot.perception.background_motion_evidence import confirm_background_motion
+
 from robot.safety.class_safety_policy import ClassSafetyParameters
 from robot.safety.safe_sage_guidance_policy import SafeSAGEGuidanceParameters
 
@@ -147,6 +149,7 @@ class UnknownObstacleSnapshot:
     config: UnknownObstacleConfig
     regions: tuple
     background_motion_proofs: tuple = ()
+    background_motion_geometry: tuple = field(default=(), repr=False, compare=False)
 
     def coverage(self, key, source_time, center, grid, anchor_xy, anchor_yaw, *, original_points=None, original_risk=None):
         matches = [r for r in self.regions if r.original.track_id == key]
@@ -183,6 +186,7 @@ class UnknownObstacleSnapshot:
     def diagnostic(self):
         return dict(source=SOURCE, status="prior", source_time=self.source_time,
             config=asdict(self.config), background_motion_proofs=list(self.background_motion_proofs),
+            background_motion_policy='repeated_geometry' if self.config.persistent_background_prior else 'legacy_centroid',
             regions=[dict(track_id=r.original.track_id,
                 original_source_time=r.original.source_time, original_source_frame=r.original.source_frame,
                 original_point_count=len(r.original.points), center_world_xy=r.original.center,
@@ -205,6 +209,7 @@ class UnknownObstacleMemory:
         self.records = {}
         self.last_time = None
         self.history = []
+        self.motion_history = []
 
     def _background_support(self, points, stable, tree, source_times):
         """Dominant measured support establishes a hypothesis, not all-point observation.
@@ -294,7 +299,6 @@ class UnknownObstacleMemory:
         # dynamic interpretation and exclude it from the background hypothesis.
         background = {}
         moving_points = []
-        unconfirmed_moving_points = []
         moving_parts = []
         if cfg.supported_background_prior:
             for key, t in current.items():
@@ -306,10 +310,30 @@ class UnknownObstacleMemory:
                 if proof is None and np.linalg.norm(t.velocity_world_xy) > .2:
                     moving_points.extend(subset)
                     repeated = repeated_current[ids == key]
-                    unconfirmed_moving_points.extend(subset[~repeated])
                     moving_parts.append((key, subset, repeated))
         moving_tree = cKDTree(moving_points) if len(moving_points) else None
-        unconfirmed_moving_tree = cKDTree(unconfirmed_moving_points) if len(unconfirmed_moving_points) else None
+        motion_history = []
+        confirmations = {}
+        if cfg.persistent_background_prior:
+            motion_history = [(t, dict(clouds)) for t, clouds in self.motion_history
+                if 0 < source_time-t <= 2*cfg.maximum_source_gap_seconds+1e-9]
+            if self.last_time is not None and source_time-self.last_time > cfg.maximum_source_gap_seconds+1e-9:
+                motion_history = []
+            # Current human evidence also invalidates old geometry candidates.
+            for _, clouds in motion_history:
+                for key, cloud in list(clouds.items()):
+                    if (exclusion_tree is not None and np.any(exclusion_tree.query(cloud)[0] <= 1.)
+                            or any(np.any(np.linalg.norm(cloud-center, axis=1) <= radius)
+                                for center, radius in human_regions)):
+                        clouds.pop(key)
+            motion_history.append((source_time, {key:points[ids == key].copy()
+                for key in current if np.all(clear[ids == key])}))
+            confirmations = {key:confirm_background_motion(motion_history, key,
+                maximum_gap=cfg.maximum_source_gap_seconds) for key, _, _ in moving_parts}
+        confirmed_points = [subset for key, subset, _ in moving_parts
+            if confirmations.get(key, {}).get('confirmed')]
+        confirmed_points = np.vstack(confirmed_points) if confirmed_points else np.empty((0, 2))
+        confirmed_tree = cKDTree(confirmed_points) if len(confirmed_points) else None
         motion_proofs = []
 
         def excluded_surface(surface, qualified=None):
@@ -318,13 +342,13 @@ class UnknownObstacleMemory:
                 excluded |= bool(np.any(np.linalg.norm(surface-center, axis=1) <= radius))
             tree = moving_tree
             if cfg.persistent_background_prior and qualified is not None and qualified.background_support is not None:
-                # A changing cluster centroid cannot contradict a static-map
-                # prior through its repeatedly fixed-world portion. Its other
-                # points remain motion exclusions. This does not qualify new
-                # surfaces, change track velocity, or remove any raw occupancy.
-                tree = unconfirmed_moving_tree
+                # The approved static-map assumption survives ambiguous
+                # grouping. Only repeated full-shape motion can revoke it;
+                # this does not establish a new stationary observation.
+                tree = confirmed_tree
                 for moving_id, subset, repeated in moving_parts:
-                    if cKDTree(subset).query(surface)[0].min() > .06:
+                    current_distance = float(cKDTree(subset).query(surface)[0].min())
+                    if current_distance > .06:
                         continue
                     unconfirmed = subset[~repeated]
                     distance = float(cKDTree(unconfirmed).query(surface)[0].min()) if len(unconfirmed) else None
@@ -334,9 +358,12 @@ class UnknownObstacleMemory:
                         repeated_stationary_point_count=int(repeated.sum()),
                         unconfirmed_motion_point_count=len(unconfirmed),
                         minimum_unconfirmed_distance_m=distance,
+                        minimum_current_distance_m=current_distance,
                         support_source_times=tuple(t for t, _ in history),
                         stationary_overlap_only=distance is None or distance > .06,
-                        scope='already-qualified static-map prior; repeated current points only, no identity/factor/velocity transfer'))
+                        motion_confirmation=confirmations[moving_id],
+                        motion_contradiction=bool(confirmations[moving_id]['confirmed']),
+                        scope='qualified static-map prior; inferred repeated geometric motion required, no identity/factor/velocity transfer'))
             excluded |= bool(tree is not None and np.any(tree.query(surface)[0] <= .06))
             return excluded
 
@@ -449,4 +476,8 @@ class UnknownObstacleMemory:
             records[key] = old
             regions.append(UncertainSurface(old, radius, mode, support_distance))
         self.records, self.last_time, self.history = records, source_time, history[-8:]
-        return UnknownObstacleSnapshot(source_time, cfg, tuple(regions), tuple(motion_proofs))
+        self.motion_history = motion_history[-8:]
+        motion_ids = {p['moving_track_id'] for p in motion_proofs}
+        motion_geometry = tuple((key, time, clouds[key]) for time, clouds in motion_history
+            for key in sorted(motion_ids.intersection(clouds)))
+        return UnknownObstacleSnapshot(source_time, cfg, tuple(regions), tuple(motion_proofs), motion_geometry)

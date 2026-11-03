@@ -1,5 +1,22 @@
 # CRA repository guidance
 
+- Qualified persistent background now requires repeated full-shape translation
+  evidence to revoke on centroid motion. Same observed ID needs >=3 continuous
+  real sources spanning>=.2s within.7s, every gap<=.35s; no ID transfer. Compare
+  first/middle/current non-human 2D clouds: >=6 distinct points, minor-axis
+  variance>=.06m squared (linear/cropped walls stay ambiguous), full bidirectional
+  residual<=.03m and RMS improvement>=.03m over zero translation. Both interval
+  speeds>.2m/s, ratio<=1.5, direction cosine>=.9, total displacement>.12m and
+  composition residual<=.03m. These are explicit engineering inference gates,
+  not calibrated motion guarantees. Ambiguous motion preserves ONLY an already
+  qualified capped static prior. Confirmed current geometry within.06m of old
+  geometry revokes it, even if incidental points have repeated fixed-world
+  neighbors. Current person/body/uncertain-human exclusions remain immediate;
+  new enrollment and legacy modes keep whole-centroid exclusion. Archive actual
+  candidate motion clouds for replay, preserve all source/support/factor clocks,
+  raw occupancy, risk/lambda/control checks. Thin/partial/rotating/hidden movers
+  are not generally validated. Fresh four gates and full mission are pending.
+
 - Point-level contradiction at8f50ca4 passed all four fresh prerequisites
   (actor603.58s, component106sources, startup60, near60) and own60, but wheels
   stalled at1.77264m:116fields through24.7s, interrupted with NO arrival/stop
