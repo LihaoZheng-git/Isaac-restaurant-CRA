@@ -1060,7 +1060,8 @@ def main():
          "color": (0.15, 0.45, 0.95), "plume": args.fixture_layout == "single" and args.actor_shape == "sphere"},
     ]
     if args.restaurant_scene:
-        has_server = stage.GetPrimAtPath(SERVER_PRIM_PATH).IsValid()
+        server_prim = stage.GetPrimAtPath(SERVER_PRIM_PATH)
+        has_server = bool(server_prim and server_prim.IsActive())
         if has_server != args.restaurant_server:
             raise RuntimeError("server presence must match explicit --restaurant-server opt-in")
         fixture_specs = []  # Real dressed meshes remain in their saved additions layer.

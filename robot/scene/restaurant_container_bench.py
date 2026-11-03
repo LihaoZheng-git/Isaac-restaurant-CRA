@@ -14,7 +14,7 @@ CONTAINER_PATH = DEMO_ROOT + "/ServiceContainer"
 CONTAINER_CENTER_XY = (28.15, 6.10)
 
 
-def author_service_container(stage, shape):
+def author_service_container(stage, shape, *, props_only=False):
     """Replace the old bin in a separate layer, with matched width/height/color.
 
     A box-like service bin and a rounded lidded bin are contact-outline probes.
@@ -26,6 +26,10 @@ def author_service_container(stage, shape):
     if not old or not old.IsActive() or stage.GetPrimAtPath(CONTAINER_PATH):
         raise ValueError("requires an active original bin and no existing service container")
     old.SetActive(False)
+    if props_only:
+        server = stage.GetPrimAtPath("/World/CRAServiceActors/Server")
+        if server:
+            server.SetActive(False)
     root = UsdGeom.Xform.Define(stage, CONTAINER_PATH)
     root.AddTranslateOp().Set(Gf.Vec3d(*CONTAINER_CENTER_XY, 0.))
     body, lid = (.19, .30, .31), (.28, .39, .40)
@@ -42,7 +46,7 @@ def author_service_container(stage, shape):
     return next(p for p in demo_prop_records(stage) if p["name"] == "ServiceContainer")
 
 
-def build_container_scene(output, *, base_scene, shape):
+def build_container_scene(output, *, base_scene, shape, props_only=False):
     """Write additive layers, preserving every byte of the accepted demo scene."""
     output, base_scene = Path(output).resolve(), Path(base_scene).resolve()
     additions = output.with_name(output.stem + "_container.usda")
@@ -65,7 +69,7 @@ def build_container_scene(output, *, base_scene, shape):
     stage.SetEndTimeCode(base.GetEndTimeCode())
     stage.SetTimeCodesPerSecond(base.GetTimeCodesPerSecond())
     with Usd.EditContext(stage, layer):
-        target = author_service_container(stage, shape)
+        target = author_service_container(stage, shape, props_only=props_only)
         props = demo_prop_records(stage)
     layer.Save()
     stage.GetRootLayer().Save()
@@ -73,6 +77,7 @@ def build_container_scene(output, *, base_scene, shape):
         raise RuntimeError("source scene changed")
     result = dict(scene=str(output), additions=str(additions), source_sha256=sources,
                   source_files_unchanged=True, props=props, target=target, fixture_shape=shape,
+                  stationary_props_only=props_only,
                   scope="authored restaurant service-bin comparison; no supplied risk labels, physical sharpness or navigation acceptance")
     output.with_suffix(".json").write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
     return result

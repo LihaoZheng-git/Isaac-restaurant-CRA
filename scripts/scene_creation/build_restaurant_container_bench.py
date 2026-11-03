@@ -19,8 +19,9 @@ def main():
     parser.add_argument("--base", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--shape", choices=("angular", "rounded"), required=True)
+    parser.add_argument("--props-only", action="store_true", help="isolate the stationary prop test by disabling the background server in this new layer only")
     args = parser.parse_args()
-    result = build_container_scene(args.output, base_scene=args.base, shape=args.shape)
+    result = build_container_scene(args.output, base_scene=args.base, shape=args.shape, props_only=args.props_only)
     print(json.dumps({k: v for k, v in result.items() if k != "source_sha256"}, indent=2))
 
 

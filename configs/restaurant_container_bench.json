@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "scope": "Separate stationary matched service-bin comparison; actual RGB/LiDAR/SAM and unchanged mass/contact estimators. +.60m level camera mount, original lens and no wheels. Matched external dimensions/color/placement, no supplied CRA labels. Contact is a visible-outline proxy, not physical sharpness. No inherited v2 navigation acceptance.",
+  "scope": "Separate stationary matched service-bin comparison; actual RGB/LiDAR/SAM and unchanged mass/contact estimators. +.60m level camera mount, original lens and no wheels. Matched external dimensions/color/placement, no supplied CRA labels. Contact is a visible-outline proxy, not physical sharpness. No inherited v2 navigation acceptance. Stationary prop-only scene: inactive background server, no human acceptance; all original target gates unchanged.",
   "commands": {
     "angular": [
       "scripts/demos/cra_live_object_isaac_demo.py",
@@ -22,7 +22,7 @@
       "--maximum-seconds",
       "90",
       "--restaurant-scene",
-      "scenes/generated/restaurant_container_angular_v1.usda",
+      "scenes/generated/restaurant_container_angular_v2.usda",
       "--restaurant-route",
       "short",
       "--static-occupancy-memory-prior",
@@ -36,7 +36,6 @@
       "--restaurant-layout-survey",
       "outputs/restaurant_service/layout-monitor-v1/geometry-survey.json",
       "--service-demo-v2",
-      "--restaurant-server",
       "--presentation-follow-camera",
       "--presentation-risk-camera",
       "--rgb-camera",
@@ -67,7 +66,7 @@
       "--maximum-seconds",
       "90",
       "--restaurant-scene",
-      "scenes/generated/restaurant_container_rounded_v1.usda",
+      "scenes/generated/restaurant_container_rounded_v2.usda",
       "--restaurant-route",
       "short",
       "--static-occupancy-memory-prior",
@@ -81,7 +80,6 @@
       "--restaurant-layout-survey",
       "outputs/restaurant_service/layout-monitor-v1/geometry-survey.json",
       "--service-demo-v2",
-      "--restaurant-server",
       "--presentation-follow-camera",
       "--presentation-risk-camera",
       "--rgb-camera",

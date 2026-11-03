@@ -4,7 +4,7 @@ import ast
 from pathlib import Path
 
 import numpy as np
-from pxr import Usd, UsdPhysics
+from pxr import Usd, UsdGeom, UsdPhysics
 import pytest
 
 from robot.scene.restaurant_container_bench import CONTAINER_PATH, author_service_container
@@ -30,6 +30,18 @@ def test_matched_container_stays_ground_supported_and_never_supplies_factors(sha
         assert not prim.HasAttribute("semantic:class")
     with pytest.raises(ValueError, match="active original"):
         author_service_container(stage, shape)
+
+
+def test_prop_isolation_disables_only_the_separate_layers_server():
+    stage = _stage()
+    author_demo_props(stage)
+    server = UsdGeom.Xform.Define(stage, "/World/CRAServiceActors/Server").GetPrim()
+    before = stage.GetRootLayer().ExportToString()
+    with Usd.EditContext(stage, stage.GetSessionLayer()):
+        author_service_container(stage, "angular", props_only=True)
+    assert server.IsValid() and not server.IsActive()
+    assert stage.GetRootLayer().ExportToString() == before
+    assert stage.GetPrimAtPath(DEMO_ROOT + "/UtensilCaddy").IsActive()
 
 
 def _parse_mount(argv, monkeypatch):
