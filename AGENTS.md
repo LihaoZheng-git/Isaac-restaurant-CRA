@@ -1,5 +1,20 @@
 # CRA repository guidance
 
+- Broken-plate sensing at4a35d39: three native18-source ZERO-wheel captures,
+  sourcefrozen, all runtime component gates FAIL target_uniquely_observed.
+  Original28cm/2.6cm-thin mesh, LiDAR and5cm floor filter unchanged. Separate
+  stationary-only RGB width1920 (legacy640 default) gives clearer images.
+  Offline sensor-only floor-residual/SAM replay: near1.1m RGB18/18 but0returns;
+  south2.8m RGB10/18 with3..4returns; diagonal2.8m RGB18/18 with9..10returns,
+  all18 meet original8visible-return count. This is NOT runtime ownership/CRA.
+  2mm residual search is diagnostic only, never a new uncertainty permission;
+  original3cm height allowance stays. Sparse rim strip is not whole dimensions.
+  Outline cue varies with view, no calibrated sharpness/mass/phi/new wheels.
+  3708units151.98s/109focused/Ruff PASS; acceptedv2/all asset hashes unchanged.
+  Require bounded near-floor association, negative controls and dimensions
+  validation before integration. Keep draft/development/main/primary/PR117 holds.
+  See docs/broken_plate_sensing.md and outputs/broken-plate-sensing/.
+
 - Image-object native at1124364: all3 final stationary component gates PASS,
   bin/intact-crate/broken-crate each16/18 fresh grouped assessments after2 proof
   sources, zero wheels, all source hashes unchanged. Final raw memberships1/2/3
