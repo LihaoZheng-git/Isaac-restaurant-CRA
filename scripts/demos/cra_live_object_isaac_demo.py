@@ -222,6 +222,8 @@ parser.add_argument("--human-camera-raise-metres", type=float, default=0.,
                     help="explicit experimental RGB mount height increase, 0...6 m")
 parser.add_argument("--stationary-prop-camera", action="store_true",
                     help="allow the experimental RGB mount in a stationary restaurant prop test only; no wheel-motion acceptance")
+parser.add_argument("--stationary-prop-standoff-metres", type=float,
+                    help="separate zero-wheel demo-container sensing survey, .8..3m from authored fixture center; never an estimator input")
 parser.add_argument("--rgb-camera", choices=("front_hawk_left", "front_hawk_right", "front_owl"),
                     default="front_hawk_left", help="one existing authored camera per trial; actual lens/extrinsics are read, no multi-camera fusion")
 parser.add_argument("--human-crossing-trigger-y", type=float, default=7.8,
@@ -337,6 +339,11 @@ parser.add_argument('--unknown-verified-dynamic-evidence', action='store_true',
 parser.add_argument('--human-verified-part-recovery', action='store_true',
                     help='bounded recovery across a previously verified human parent/part ID swap; complete old region must fit current body')
 args = parser.parse_args()
+if args.stationary_prop_standoff_metres is not None and (
+    not args.stationary_prop_camera or args.restaurant_view != 'demo-container'
+    or not math.isfinite(args.stationary_prop_standoff_metres)
+    or not .8 <= args.stationary_prop_standoff_metres <= 3.):
+    parser.error('prop standoff requires stationary demo-container survey and finite .8..3m')
 if args.sam_track_extent_retry and not args.sam_observed_context_box:
     parser.error('SAM track-extent retry requires --sam-observed-context-box')
 if args.human_verified_part_recovery and (not args.human_track_recovery
@@ -868,6 +875,10 @@ if args.restaurant_scene:
         observation_options.update(DEMO_V2_OBSERVATIONS)
     restaurant_target, restaurant_start, restaurant_yaw = (SERVER_OBSERVATION
         if args.restaurant_view == "server" else observation_options[args.restaurant_view])
+    if args.stationary_prop_standoff_metres is not None:
+        from robot.scene.restaurant_container_bench import CONTAINER_CENTER_XY
+        restaurant_start = (CONTAINER_CENTER_XY[0] - args.stationary_prop_standoff_metres,
+                            CONTAINER_CENTER_XY[1], restaurant_start[2])
     if args.human_start_view != "original":
         restaurant_yaw = math.pi / 2
     if args.human_start_view == "crossing-approach":

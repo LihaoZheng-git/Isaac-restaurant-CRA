@@ -81,3 +81,19 @@ def test_extent_retry_cli_requires_context_opt_in(monkeypatch):
         _parse_mount([*BASE_ARGS, "--sam-track-extent-retry"], monkeypatch)
     args = _parse_mount([*BASE_ARGS, "--sam-track-extent-retry", "--sam-observed-context-box"], monkeypatch)
     assert args.sam_track_extent_retry and args.sam_observed_context_box
+
+
+@pytest.mark.parametrize('extra', [[], ['--motion'], ['--restaurant-view', 'pot'],
+                                  ['--stationary-prop-standoff-metres', 'nan'],
+                                  ['--stationary-prop-standoff-metres', '.79'],
+                                  ['--stationary-prop-standoff-metres', '3.1']])
+def test_prop_standoff_is_bounded_stationary_only(extra, monkeypatch):
+    argv = [] if not extra else BASE_ARGS
+    with pytest.raises(SystemExit):
+        _parse_mount([*argv, '--stationary-prop-standoff-metres', '1.1', *extra], monkeypatch)
+
+
+def test_prop_standoff_accepts_separate_near_and_far_surveys(monkeypatch):
+    for distance in ('1.1', '2.5', '2.8'):
+        args = _parse_mount([*BASE_ARGS, '--stationary-prop-standoff-metres', distance], monkeypatch)
+        assert args.stationary_prop_standoff_metres == float(distance) and not args.motion
