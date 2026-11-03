@@ -1,5 +1,22 @@
 # CRA repository guidance
 
+- Mask-extent native at ae599d3: bin18/18 accepted/gatePASS,13 broader masks
+  plus5 old panel fallbacks. Last body mask1970pixels/827of832returns(99.40%),
+  quality.875/no foreign hits. NOT consistent whole-object acceptance: mass
+  fluctuates~.48-.59kg on parts versus3.39-4.34kg on broader masks.17supported
+  contact rows median cue.763993/contact.165907/phi.618809; first phi.968457
+  retains original interaction fallback1/contact-risk.925231. Do not omit it.
+  Potential/thermal remain.25 priors, no new four-factor/thermal/sharpness claim.
+  Cleaver/plate eachFAIL0/18 targetmatches/visual acceptance. Realistic flat
+  cleaver has no distinct above-support LiDAR region returns; plate likewise
+  lacks sampled returns and is below the original5cm obstacle filter. No gate
+  relaxation, enlarged geometry or supplied risk. All3 zero wheels/sourcefrozen;
+  preserve both failed native traces.46focused/3659units116.20s/Ruff PASS;
+  107accepted-v2 files/all original asset hashes unchanged. Next research is
+  part/whole consistency and bounded multi-fragment image-LiDAR ownership,
+  not arbitrary cluster merging. Keep defaultOFF/draft development scope and
+  primary/main/PR117 holds. See docs/restaurant_mask_diagnosis.md and its images.
+
 - Separate real-prop mask diagnosis adds default-OFF --sam-track-extent-retry:
   an accepted <80%-coverage first point mask gets one same-source owned-point
   box proposal with25% padding. Replacement must pass ALL old gates, cover>=80%

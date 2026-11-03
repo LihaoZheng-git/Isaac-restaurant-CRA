@@ -1,5 +1,9 @@
 # Downloaded restaurant prop tests
 
+Follow-up at `ae599d3`: see [mask diagnosis](restaurant_mask_diagnosis.md) for the
+partial-bin prompt improvement and fresh cleaver/plate tests. Results below
+describe the preserved original `ba13bd5` trials.
+
 The real recycling bin passes the existing stationary component gate, but its
 accepted mask mainly covers the front blue panel. This is **not whole-bin
 segmentation acceptance**. Both wooden crates fail visual ownership, so there is
@@ -87,7 +91,8 @@ the edge remains thin and this proxy cannot measure physical blade sharpness.
 is another downloadable CC Attribution candidate (608 triangles, with original
 Poly by Google credit). A dropped dish is a natural restaurant accident, but
 low height and disconnected shards likely make it a harder ownership test.
-Neither additional candidate has been downloaded or tested. Do not exaggerate
+At this original revision neither additional candidate had been downloaded or
+tested; the follow-up linked above now records both tests. Do not exaggerate
 scale, manually increase CRA or replace priors to manufacture a contrast.
 
 ## Reproduction and evidence
