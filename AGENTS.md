@@ -1,5 +1,15 @@
 # CRA repository guidance
 
+- Upper-departure c30ff7a PASSED actor background-v2 (180s hold/210s walk,
+  .060520m minimum layout clearance), component104 sources, startup60 and near60.
+  Its long-motion-v1 stopped BEFORE Isaac at the inner prerequisite parser:
+  the validator expected the legacy exact check set and rejected two required
+  upper-route checks. Preserve that failed launch; it is not a wheel failure.
+  Inner preflight now explicitly matches the upper-departure mode and requires
+  both explicit_upper_departure and upper_aisle_reached in addition to every
+  old check. No controller/actor behavior changes. Require fresh source-matched
+  prerequisites and own60/full arrival/stopping before v2 acceptance.
+
 - Upper-departure7571115 FAILED the actor-only prerequisite before wheels:
   last actor(27.8815,11.0167), source325.4333, minimum layout clearance.227185m;
   no final report. The next14.4m-y goal lay outside the unchanged native actor

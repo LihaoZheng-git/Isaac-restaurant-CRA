@@ -621,7 +621,8 @@ if args.long_service_parallel and args.motion:
     if not args.long_service_human_gates:
         parser.error('long human motion requires component and near-view stationary evidence')
     verify_near_human_gates(args.long_service_human_gates, ROOT, args.restaurant_scene,
-                           require_background_walk=args.background_service_walk)
+                           require_background_walk=args.background_service_walk,
+                           require_upper_departure=args.background_upper_departure)
 elif args.long_service_human_gates:
     parser.error('near-human gate references require explicit long-service human motion')
 if args.restaurant_human == 'parallel' and (args.human_walking_speed != .5

@@ -180,3 +180,14 @@ Fresh native prerequisites are required; the planned geometry survey is not a pa
 NavMesh correction validation:44 focused tests passed in6.05s; all3,623 unit tests
 passed in122.74s. Ruff, compilation and diff checks passed. Legacy actor domains
 remain unchanged; the upper route is tested to fit within its explicit domain.
+# Upper-departure preflight correction
+
+At c30ff7a, all four fresh prerequisites passed: actor background-v2
+(180 s hold, 210 s release, 0.060520 m minimum layout clearance), parked
+component (104 sources), startup (60) and near-human (60). The attempted
+long-motion-v1 exited before Isaac because the inner validator still required
+the legacy exact actor check set. It rejected the two additional upper-route
+checks despite their passing. This was a preflight defect, not a navigation
+failure. The corrected validator explicitly matches the requested route mode
+and requires both additional checks. The failed launch remains archived;
+fresh source-matched prerequisites precede the retry.

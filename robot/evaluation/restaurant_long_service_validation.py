@@ -17,8 +17,11 @@ def distant_start_retention_audit(report):
                 scope='distant-start provenance audit only; five retained sources remain mandatory in the current-source near-view gate and complete navigation audit')
 
 
-def verify_near_human_gates(folders, root, scene, *, require_background_walk=False):
+def verify_near_human_gates(folders, root, scene, *, require_background_walk=False,
+                           require_upper_departure=False):
     """Require current runtime/scene bytes and both independent human gates."""
+    if require_upper_departure and not require_background_walk:
+        raise ValueError('upper departure requires background walk')
     root, scene = Path(root), Path(scene).resolve()
     runtime = {p.relative_to(root).as_posix(): hashlib.sha256(p.read_bytes()).hexdigest()
                for directory in ('robot', 'scripts') for p in (root/directory).rglob('*.py')
@@ -58,6 +61,11 @@ def verify_near_human_gates(folders, root, scene, *, require_background_walk=Fal
                     'grounded', 'bounded_region'}
                 if '--background-service-walk' not in meta['command']:
                     raise ValueError('v2 requires its actual native background circuit gate')
+                upper = '--background-upper-departure' in meta['command']
+                if upper != require_upper_departure:
+                    raise ValueError('actor departure mode must match the motion trial')
+                if require_upper_departure:
+                    required |= {'explicit_upper_departure', 'upper_aisle_reached'}
             if set(report.get('checks', {})) != required or not all(
                 value is True for value in report['checks'].values()
             ):
