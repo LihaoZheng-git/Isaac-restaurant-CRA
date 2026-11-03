@@ -19,7 +19,7 @@ def audit_static_human_exclusion(snapshot, truth):
     static = [r.original for r in snapshot.regions if r.mode in (
         'stationary_positive_support_position_prior', 'retained_stationary_geometry_prior',
         'supported_background_position_prior', 'retained_supported_background_prior',
-        'persistent_stationary_background_prior')]
+        'persistent_stationary_background_prior', 'unclassified_static_geometry_prior')]
     return audit_snapshot(SimpleNamespace(source_time=snapshot.source_time,
         surfaces=static, observed_surfaces=()), truth)
 
@@ -39,6 +39,10 @@ def summarize_unknown_obstacles(records):
             continue
         count += 1
         now = memory['source_time']
+        for evidence in memory.get('observed_dynamic_evidence', ()):
+            if (not memory['config'].get('unclassified_static_prior')
+                    or evidence.get('source_time') != now or not _valid_dynamic_evidence(evidence, now)):
+                errors.append('current dynamic evidence mismatch')
         for proof in memory.get('background_motion_proofs', ()):
             point_motion_proofs += 1
             distance = proof['minimum_unconfirmed_distance_m']
@@ -88,6 +92,13 @@ def summarize_unknown_obstacles(records):
                     or region['stationary_support_time'] is not None and region['stationary_support_time'] > now):
                 errors.append('source/risk/geometry field provenance mismatch')
             support = region.get('background_support')
+            evidence = region.get('dynamic_evidence')
+            if evidence is not None and not _valid_dynamic_evidence(evidence, now):
+                errors.append('retained dynamic evidence mismatch')
+            if mode == 'unclassified_static_geometry_prior' and (
+                    not memory['config'].get('unclassified_static_prior')
+                    or region['radius_m'] != .30 or evidence is not None or support is not None):
+                errors.append('unclassified static prior provenance mismatch')
             if region['mode'] in ('supported_background_position_prior', 'retained_supported_background_prior',
                     'persistent_stationary_background_prior'):
                 cfg = memory['config']
@@ -120,6 +131,24 @@ def summarize_unknown_obstacles(records):
         confirmed_motion_proofs=confirmed_motion_proofs, ambiguous_motion_proofs=ambiguous_motion_proofs,
         modes=modes, errors=errors[:20],
         scope='source/policy/current-grid provenance and available static-human exclusion only; not general uncertainty calibration or navigation acceptance')
+
+
+def _valid_dynamic_evidence(evidence, now):
+    if (not isinstance(evidence, dict) or not isinstance(evidence.get('source_time'), (int, float))
+            or not 0 <= evidence['source_time'] <= now):
+        return False
+    replacement = evidence.get('geometry_replacement')
+    if replacement is not None and (
+            not evidence['source_time'] <= replacement.get('source_time', -1) <= now
+            or not 0 <= replacement.get('maximum_distance_m', math.inf) <= .10
+            or replacement.get('previous_track_id', -1) < 0
+            or replacement.get('current_track_id', -1) < 0
+            or replacement['previous_track_id'] == replacement['current_track_id']):
+        return False
+    if evidence.get('kind') == 'confirmed_geometric_motion':
+        return (_valid_motion_confirmation(evidence.get('motion_confirmation'), evidence['source_time'])
+            and evidence['motion_confirmation']['confirmed'])
+    return evidence.get('kind') in ('positive_human_region', 'positive_person_or_confirmed_motion_overlap')
 
 
 def _valid_motion_confirmation(proof, now):

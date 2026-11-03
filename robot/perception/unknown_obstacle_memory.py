@@ -38,14 +38,17 @@ class UnknownObstacleConfig:
     background_position_radius_m: float = .25
     persistent_background_prior: bool = False
     background_maximum_radius_m: float = .30
+    unclassified_static_prior: bool = False
 
     def __post_init__(self):
         if (not isinstance(self.supported_background_prior, bool)
                 or not isinstance(self.persistent_background_prior, bool)
+                or not isinstance(self.unclassified_static_prior, bool)
+                or self.unclassified_static_prior and not self.persistent_background_prior
                 or self.persistent_background_prior and not self.supported_background_prior):
             raise ValueError("background prior requires explicit boolean opt-in")
         for name, value in vars(self).items():
-            if name in ('supported_background_prior', 'persistent_background_prior'):
+            if name in ('supported_background_prior', 'persistent_background_prior', 'unclassified_static_prior'):
                 continue
             if isinstance(value, bool) or not math.isfinite(value) or value <= 0:
                 raise ValueError("finite positive unknown-obstacle configuration required")
@@ -84,6 +87,7 @@ class UnknownSurface:
     background_support: dict | None = None
     motion_support_time: float | None = None
     motion_position_radius_m: float | None = None
+    dynamic_evidence: dict | None = None
 
     def __post_init__(self):
         points = np.array(self.points, dtype=float, copy=True)
@@ -150,6 +154,7 @@ class UnknownObstacleSnapshot:
     regions: tuple
     background_motion_proofs: tuple = ()
     background_motion_geometry: tuple = field(default=(), repr=False, compare=False)
+    observed_dynamic_evidence: tuple = ()
 
     def coverage(self, key, source_time, center, grid, anchor_xy, anchor_yaw, *, original_points=None, original_risk=None):
         matches = [r for r in self.regions if r.original.track_id == key]
@@ -177,6 +182,7 @@ class UnknownObstacleSnapshot:
             background_support=old.background_support,
             motion_support_time=old.motion_support_time,
             motion_position_radius_m=old.motion_position_radius_m,
+            dynamic_evidence=old.dynamic_evidence,
             radius_m=r.radius_m, fixed_unknown_phi=self.config.unknown_phi,
             applied_risk=old.guidance.risk, checked_cell_count=len(rows),
             replacement_track_id=r.replacement_track_id,
@@ -187,6 +193,7 @@ class UnknownObstacleSnapshot:
         return dict(source=SOURCE, status="prior", source_time=self.source_time,
             config=asdict(self.config), background_motion_proofs=list(self.background_motion_proofs),
             background_motion_policy='repeated_geometry' if self.config.persistent_background_prior else 'legacy_centroid',
+            observed_dynamic_evidence=list(self.observed_dynamic_evidence),
             regions=[dict(track_id=r.original.track_id,
                 original_source_time=r.original.source_time, original_source_frame=r.original.source_frame,
                 original_point_count=len(r.original.points), center_world_xy=r.original.center,
@@ -195,6 +202,7 @@ class UnknownObstacleSnapshot:
                 background_support=r.original.background_support,
                 motion_support_time=r.original.motion_support_time,
                 motion_position_radius_m=r.original.motion_position_radius_m,
+                dynamic_evidence=r.original.dynamic_evidence,
                 radius_m=r.radius_m, mode=r.mode, support_distance_m=r.support_distance_m,
                 replacement_track_id=r.replacement_track_id,
                 fixed_unknown_phi=self.config.unknown_phi, applied_risk=r.original.guidance.risk)
@@ -260,9 +268,12 @@ class UnknownObstacleMemory:
             policy = cfg.guidance(guidance[key], old.guidance if old is not None else None)
             qualified = None if furniture_memory is None else furniture_memory.records.get(key)
             stationary = qualified is not None and qualified.source_time == source_time
+            if cfg.unclassified_static_prior and old is not None and old.dynamic_evidence is not None:
+                stationary = False
             records[key] = UnknownSurface(key, source_time, source_frame, tuple(t.centroid_world_xy),
                 points[ids == key].copy(), policy, source_time if stationary else None,
-                qualified.qualification_source_time if stationary else None)
+                qualified.qualification_source_time if stationary else None,
+                dynamic_evidence=old.dynamic_evidence if old is not None else None)
         excluded = np.asarray(excluded_points, float).reshape((-1, 2))
         exclusion_tree = cKDTree(excluded) if len(excluded) else None
         # Own raw support history excludes people. Repeated fixed-world support
@@ -335,13 +346,28 @@ class UnknownObstacleMemory:
         confirmed_points = np.vstack(confirmed_points) if confirmed_points else np.empty((0, 2))
         confirmed_tree = cKDTree(confirmed_points) if len(confirmed_points) else None
         motion_proofs = []
+        dynamic_evidence = []
+        if cfg.unclassified_static_prior:
+            for key in current:
+                if key not in records:
+                    continue
+                person = not np.all(clear[ids == key])
+                confirmation = confirmations.get(key, {})
+                if person or confirmation.get('confirmed'):
+                    evidence = dict(track_id=key, source_time=source_time,
+                        kind='positive_human_region' if person else 'confirmed_geometric_motion',
+                        motion_confirmation=None if person else confirmation)
+                    dynamic_evidence.append(evidence)
+                    records[key] = replace(records[key], dynamic_evidence=records[key].dynamic_evidence or evidence,
+                        stationary_support_time=None, background_support=None)
 
         def excluded_surface(surface, qualified=None):
             excluded = bool(exclusion_tree is not None and np.any(exclusion_tree.query(surface)[0] <= 1.))
             for center, radius in human_regions:
                 excluded |= bool(np.any(np.linalg.norm(surface-center, axis=1) <= radius))
             tree = moving_tree
-            if cfg.persistent_background_prior and qualified is not None and qualified.background_support is not None:
+            if cfg.persistent_background_prior and qualified is not None and (
+                    qualified.background_support is not None or cfg.unclassified_static_prior):
                 # The approved static-map assumption survives ambiguous
                 # grouping. Only repeated full-shape motion can revoke it;
                 # this does not establish a new stationary observation.
@@ -363,13 +389,14 @@ class UnknownObstacleMemory:
                         stationary_overlap_only=distance is None or distance > .06,
                         motion_confirmation=confirmations[moving_id],
                         motion_contradiction=bool(confirmations[moving_id]['confirmed']),
-                        scope='qualified static-map prior; inferred repeated geometric motion required, no identity/factor/velocity transfer'))
+                        scope='opted-in static prior; inferred repeated geometric motion required, no identity/factor/velocity transfer'))
             excluded |= bool(tree is not None and np.any(tree.query(surface)[0] <= .06))
             return excluded
 
         if cfg.supported_background_prior:
             for key in current:
-                if key not in records or excluded_surface(records[key].points):
+                if (key not in records or excluded_surface(records[key].points)
+                        or cfg.unclassified_static_prior and records[key].dynamic_evidence is not None):
                     continue
                 proof = background[key]
                 if proof is not None:
@@ -415,8 +442,24 @@ class UnknownObstacleMemory:
                         if replacement in records:
                             target = records[replacement]
                             records[replacement] = replace(target, guidance=cfg.guidance(target.guidance, old.guidance))
+                            if cfg.unclassified_static_prior and old.dynamic_evidence is not None:
+                                # Whole current geometry can replace occupancy,
+                                # but cannot erase the observed dynamic hazard.
+                                # This carries an exclusion PRIOR, not visual
+                                # identity or any physical factor measurement.
+                                evidence = dict(old.dynamic_evidence, geometry_replacement=dict(
+                                    source_time=source_time, previous_track_id=key,
+                                    current_track_id=replacement, maximum_distance_m=float(distances.max())))
+                                records[replacement] = replace(records[replacement],
+                                    dynamic_evidence=target.dynamic_evidence or evidence,
+                                    stationary_support_time=None, background_support=None)
                         continue
             human_near = excluded_surface(old.points, qualified=old)
+            if cfg.unclassified_static_prior:
+                if human_near and old.dynamic_evidence is None:
+                    old = replace(old, dynamic_evidence=dict(track_id=key, source_time=source_time,
+                        kind='positive_person_or_confirmed_motion_overlap', motion_confirmation=None))
+                human_near |= old.dynamic_evidence is not None
             # A real motion/person contradiction invalidates the stationary
             # assumption. It does not erase geometry or stop the mission.
             if human_near and old.stationary_support_time is not None:
@@ -462,6 +505,13 @@ class UnknownObstacleMemory:
                         radius = min(radius, cfg.background_maximum_radius_m)
                         if stationary_age > cfg.stationary_lease_seconds:
                             mode = 'persistent_stationary_background_prior'
+            elif cfg.unclassified_static_prior and old.dynamic_evidence is None and not human_near:
+                # Explicit demo-scope static default, NOT measured stationarity
+                # or transferred qualification. Keep every original point and
+                # clock; positive human/motion evidence permanently excludes
+                # this observation from the default.
+                radius = .30
+                mode = 'unclassified_static_geometry_prior'
             else:
                 # Preserve geometry beyond a static lease; apply the explicit
                 # unknown-motion bound, including the complete control horizon.
@@ -471,13 +521,17 @@ class UnknownObstacleMemory:
                 if old.motion_support_time is not None:
                     motion_age = source_time-old.motion_support_time
                     base_radius = old.motion_position_radius_m
+                if cfg.unclassified_static_prior and old.dynamic_evidence is not None:
+                    base_radius = max(base_radius, .30)
                 radius = base_radius + cfg.unknown_speed_mps*(motion_age+cfg.checked_horizon_seconds)
                 mode = "unknown_motion_reachable_surface_prior"
             records[key] = old
             regions.append(UncertainSurface(old, radius, mode, support_distance))
         self.records, self.last_time, self.history = records, source_time, history[-8:]
         self.motion_history = motion_history[-8:]
-        motion_ids = {p['moving_track_id'] for p in motion_proofs}
+        motion_ids = {p['moving_track_id'] for p in motion_proofs} | {
+            p['track_id'] for p in dynamic_evidence if p['kind'] == 'confirmed_geometric_motion'}
         motion_geometry = tuple((key, time, clouds[key]) for time, clouds in motion_history
             for key in sorted(motion_ids.intersection(clouds)))
-        return UnknownObstacleSnapshot(source_time, cfg, tuple(regions), tuple(motion_proofs), motion_geometry)
+        return UnknownObstacleSnapshot(source_time, cfg, tuple(regions), tuple(motion_proofs), motion_geometry,
+            tuple(dynamic_evidence))

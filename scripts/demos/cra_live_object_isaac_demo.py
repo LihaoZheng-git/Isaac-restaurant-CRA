@@ -320,7 +320,11 @@ parser.add_argument(
 )
 parser.add_argument('--unknown-persistent-background-prior', action='store_true',
                     help='persistent qualified static-map PRIOR, capped at .30m until person/motion contradiction')
+parser.add_argument('--unknown-unclassified-static-prior', action='store_true',
+                    help='separate static default for unclassified lost geometry, .30m; excludes people/confirmed movers')
 args = parser.parse_args()
+if args.unknown_unclassified_static_prior and not args.unknown_persistent_background_prior:
+    parser.error('unclassified static prior requires explicit persistent background prior')
 if args.unknown_persistent_background_prior and not args.unknown_supported_background_prior:
     parser.error('persistent background prior requires explicit supported background prior')
 if args.unknown_supported_background_prior and not args.unknown_obstacle_planning:
@@ -1414,7 +1418,8 @@ def main():
         perception.unknown_obstacle_memory = UnknownObstacleMemory(UnknownObstacleConfig(
             unknown_phi=args.unknown_obstacle_phi,
             supported_background_prior=args.unknown_supported_background_prior,
-            persistent_background_prior=args.unknown_persistent_background_prior))
+            persistent_background_prior=args.unknown_persistent_background_prior,
+            unclassified_static_prior=args.unknown_unclassified_static_prior))
         from robot.evaluation.unknown_obstacle_validation import UnknownObstacleGeometryArchive
         unknown_geometry_archive = UnknownObstacleGeometryArchive(args.output)
     history = EgoPoseHistory()

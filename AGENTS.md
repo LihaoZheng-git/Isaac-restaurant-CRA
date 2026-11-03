@@ -1,5 +1,22 @@
 # CRA repository guidance
 
+- The user NOW APPROVES the separate static default for lost unclassified
+  fragments and autonomous tests toward v2. Default-OFF
+  --unknown-unclassified-static-prior requires persistent background mode.
+  Retain every original point at fixed.30m allowance and unchanged unknown phi/
+  higher risk/flux when no positive human or confirmed geometric motion exists.
+  Label unclassified_static_geometry_prior; NEVER call this observed stationarity
+  or grant a support certificate/renew source or factor clocks. Raw person/body/
+  uncertain-human exclusions and repeated full-shape motion make the observation
+  dynamically excluded, persisting after the cue disappears. A verified whole-
+  surface geometry replacement carries this exclusion prior (not visual identity
+  or physical factors) so ID churn cannot erase a known dynamic hazard. Current
+  raw occupancy, fixed lambda, exact control checks, independent human exclusion
+  and full arrival/stopping stay mandatory. Arbitrary hidden/thin/partial movers
+  remain outside validation; the demo assumes other unclassified lost fragments
+  stay stationary. Fresh native gates and full v2 mission pending. This supersedes
+  the pending authorization note below, not its preserved failed evidence.
+
 - Confirmed-motion15c80ae PASSED all four fresh prerequisites (actor636.21s,
   component103sources, startup60, near60) and own60. Wheels passed previous
   1.77/3.93/5.39m stalls, but stalled at15.2546m BEFORE the human encounter:

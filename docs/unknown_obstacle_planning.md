@@ -406,3 +406,41 @@ There was no retained qualified prior covering this fragment in the recorded
 snapshot. Extending a capped static default to unclassified one-observation
 fragments requires a separate explicit uncertainty-policy decision. It is not
 part of the user's narrower approval to preserve already-qualified background.
+
+### Approved unclassified static default
+
+The user subsequently approved a separate static default and autonomous testing
+toward the v2 demo. `--unknown-unclassified-static-prior` is default OFF and
+requires persistent background mode. The matched recipe is
+`configs/restaurant_service_demo_v2_unclassified_static.json`.
+
+Lost unclassified geometry without positive human or confirmed geometric motion
+keeps EVERY original point at a fixed0.30m allowance and original unknown phi
+(or higher retained risk/flux). Diagnostic mode `unclassified_static_geometry_prior`
+is a declared assumption. It does not create stationary support, a background
+certificate, visual identity, factor measurements or a fresh source clock.
+The previously failed four-point fragment therefore remains an occupied obstacle
+without an indefinitely expanding walking-speed region.
+
+Current raw person masks, validated/uncertain human regions, and the existing
+repeated full-shape translation test exclude observations from that default.
+The exclusion remains when a cue disappears. Whole-surface current geometry
+replacement can retire old occupancy, but carries the dynamic exclusion PRIOR
+to the covering current surface; it cannot erase a known dynamic hazard through
+an ID change. This is geometry-hazard continuity, not transferred semantic
+identity or factor evidence. Human and confirmed-mover regions keep the original
+1m/s plus1.55s checked-horizon dynamic treatment and at least the0.30m allowance.
+Original actual observations and timestamps remain separate from these priors.
+
+The independent static-human exclusion audit now includes unclassified static
+regions. All current raw occupancy, field/risk coverage, fixed lambda and exact
+MPC/dense/analytical checks remain unchanged. A genuine geometric obstruction
+or no verified command can still stop. Arbitrary hidden, thin, rotating or
+partially observed movers are not validated by this demo-scope assumption.
+Native acceptance still requires all fresh prerequisites and full arrival/stop.
+
+Validation before native testing:126 focused tests passed in6.64s; full3,576
+unit tests passed in140.41s. Ruff, compilation and diff checks passed. Actual
+84.5s archived-scan replay retains all four original points, original84.3s source
+and phi0.68359375 at0.30m versus the recorded1.85m dynamic allowance. It creates
+no support certificate; this is component evidence, not navigation acceptance.

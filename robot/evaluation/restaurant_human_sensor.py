@@ -109,6 +109,7 @@ class RestaurantHumanSensorDiagnostic:
         unknown_obstacle_phi=.68359375,
         unknown_supported_background_prior=False,
         unknown_persistent_background_prior=False,
+        unknown_unclassified_static_prior=False,
         human_short_fragment_coverage=False,
         lidar_range_m=7.5,
     ):
@@ -348,6 +349,8 @@ class RestaurantHumanSensorDiagnostic:
             self.worker.stationary_furniture_memory = StationaryFurnitureMemory(FurnitureMemoryConfig(
                 fragment_level_proof=stationary_furniture_fragment_proof))
         self.unknown_geometry_archive = None
+        if unknown_unclassified_static_prior and not unknown_persistent_background_prior:
+            raise ValueError('unclassified static prior requires explicit persistent background prior')
         if unknown_persistent_background_prior and not unknown_supported_background_prior:
             raise ValueError('persistent background prior requires explicit supported background prior')
         if unknown_supported_background_prior and not unknown_obstacle_planning:
@@ -358,7 +361,8 @@ class RestaurantHumanSensorDiagnostic:
             from robot.perception.unknown_obstacle_memory import UnknownObstacleConfig, UnknownObstacleMemory
             self.worker.unknown_obstacle_memory = UnknownObstacleMemory(UnknownObstacleConfig(
                 unknown_phi=unknown_obstacle_phi, supported_background_prior=unknown_supported_background_prior,
-                persistent_background_prior=unknown_persistent_background_prior))
+                persistent_background_prior=unknown_persistent_background_prior,
+                unclassified_static_prior=unknown_unclassified_static_prior))
             from robot.evaluation.unknown_obstacle_validation import UnknownObstacleGeometryArchive
             self.unknown_geometry_archive = UnknownObstacleGeometryArchive(self.output)
         self.history = EgoPoseHistory(maximum_samples=2048)

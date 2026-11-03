@@ -98,7 +98,11 @@ parser.add_argument(
 )
 parser.add_argument('--unknown-persistent-background-prior', action='store_true',
                     help='persistent qualified static-map PRIOR, capped at .30m until person/motion contradiction')
+parser.add_argument('--unknown-unclassified-static-prior', action='store_true',
+                    help='separate static default for unclassified lost geometry, .30m; excludes people/confirmed movers')
 args = parser.parse_args()
+if args.unknown_unclassified_static_prior and not args.unknown_persistent_background_prior:
+    parser.error('unclassified static prior requires explicit persistent background prior')
 if args.unknown_persistent_background_prior and not args.unknown_supported_background_prior:
     parser.error('persistent background prior requires explicit supported background prior')
 if args.unknown_supported_background_prior and not args.unknown_obstacle_planning:
@@ -511,6 +515,7 @@ def main():
             unknown_obstacle_phi=args.unknown_obstacle_phi,
             unknown_supported_background_prior=args.unknown_supported_background_prior,
             unknown_persistent_background_prior=args.unknown_persistent_background_prior,
+            unknown_unclassified_static_prior=args.unknown_unclassified_static_prior,
             human_short_fragment_coverage=args.human_short_fragment_coverage,
             predictive_human_geometry=args.predictive_human_geometry,
             human_prediction_uncertainty_rate=args.human_prediction_uncertainty_rate,
