@@ -1,5 +1,23 @@
 # CRA repository guidance
 
+- Image-object native at1124364: all3 final stationary component gates PASS,
+  bin/intact-crate/broken-crate each16/18 fresh grouped assessments after2 proof
+  sources, zero wheels, all source hashes unchanged. Final raw memberships1/2/3
+  fragments with824/118/66 exact selected returns. Broader masks stay1941..1975,
+  1601..1606,1554..1564pixels; no bin panel/body switch. Rough mass remains
+  uncalibrated:3.31..4.12/2.12..2.49/2.66..3.10kg. Contact supported6/16 bin
+  updates versus16/16 each crate; bin unresolved interior masks still use.25
+  prior. Do NOT call contact consistently solved. Median contact intact.12464,
+  broken.13580 is a small proxy contrast, not calibrated sharpness. Median
+  phi.65724/.59995/.60505 includes potential/thermal.25 priors; no complete
+  fresh4factor claim. Paced stationary field builds~1.87..1.95s, not real-time.
+  3693units149.15s/53focused/Ruff PASS. Preserve v1 integration failures, v2/v3
+  bin contact failures and all plate/setup failures. Plate best tested2.8m view
+  has3..4 raw region returns, zero past unchanged5cm filter. No plate/contact
+  contrast or new wheels/demo acceptance. Acceptedv2 and all asset-source hashes
+  unchanged. Keep defaultOFF/draft development scope and main/primary/PR117 holds.
+  See docs/image_object_association.md and outputs/image-object-association/.
+
 - Separate default-OFF --stationary-image-objects adds image-first SAM plus
   current extent prompts and bounded multi-fragment hypotheses, stationary
   prop-only/no humans/wheels. Require original pixel/quality gates, >=4 hits

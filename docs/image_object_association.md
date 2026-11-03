@@ -104,3 +104,56 @@ the same half-open pixel bounds as the existing audited retry (maximum pixel
 +1 before padding). Archived replay improves the cue availability but does not
 make it universal. Preserve this bin failure; no hole filling or contact-gate
 relaxation is permitted to manufacture acceptance.
+
+## Final stationary results
+
+Frozen runtime `1124364`, fresh `*-native-v4` captures:
+
+| Object | Component gate | Fresh masks / sources | Raw fragments (last) | Rough mass range, kg | Supported contact updates | Median phi |
+| --- | --- | --- | --- | --- | --- | --- |
+| Recycling bin | PASS | 16 / 18 | 1 | 3.31--4.12 | 6 / 16 | .65724 |
+| Intact crate | PASS | 16 / 18 | 2 | 2.12--2.49 | 16 / 16 | .59995 |
+| Broken crate | PASS | 16 / 18 | 3 | 2.66--3.10 | 16 / 16 | .60505 |
+
+The first two sources qualify repeated support. Final selected return counts are
+824/118/66 respectively. Mask sizes remain 1941--1975 / 1601--1606 / 1554--1564
+pixels; the bin no longer alternates between a decorative panel and its body.
+All three runs used zero wheel commands and unchanged source fingerprints.
+The original component gate requires a current supported contact result, not
+support on every frame: the bin passes at the final frame but remains intermittent
+(ten of its sixteen assessments use the labeled .25 contact prior). Preserve
+the earlier failures; this is not consistent bin-contact acceptance.
+
+Both crates have sixteen supported silhouette cues. Their median contact factor
+scores are .12464 (intact) and .13580 (broken): a modest observed difference,
+not a strong sharpness demonstration or calibrated physical edge-risk estimate.
+Potential and thermal remain .25 configured priors. Kinetic uses inferred raw
+track motion plus rough inferred mass. Mass confidence remains capped at .25;
+visible LiDAR extents are not complete dimensions and simulator ego pose is
+still used for frame placement. No complete fresh four-factor claim is made.
+
+Full regression: **3693 unit tests passed in 149.15 s**, 53 focused tests passed,
+Ruff and diff checks passed. Median complete field-build wall times are 1.87,
+1.95 and 1.95 s: paced stationary inference, not real-time acceptance. The 106
+files indexed by the accepted-v2 manifest and all original asset-file hashes
+match; that archive and its manifest were not modified.
+
+Final stationary-gate SHA256 values:
+
+- Bin: `ef6eed25dba42ec3f8624a4dcfe9a399946f30fc1f3b9ac16668b3fe056af7ad`
+- Intact: `99c9ce8ab8ed52a77764ca5f7cab01065fc3f96df78f2d54926656da4c4128f1`
+- Broken: `eda0c8dae858511ce2c3aedd8db151b8d28a5113a66bde5ee3e7bc986e23d242`
+
+Local figure/data: `outputs/image-object-association/native-comparison-v4.png`
+and `.json`; raw captures, all failures, plate surveys and the final full test
+log remain alongside them. Asset credits are in
+`assets/restaurant/sketchfab_contact_props/README.md` and on the figure.
+
+The plate is still not an accepted obstacle instance. Across all eighteen sources
+at the best tested south 2.8 m pose it has only 3--4 raw above-floor region
+returns and zero filtered obstacle returns. A dedicated near-floor sensing and
+localization study is needed before selecting it for the final demo. Do not
+lower the global floor filter or add fake thickness for a pass. Dense neighboring
+objects, moving-camera grouping, sustained contact reliability and navigation
+integration also remain unvalidated. Keep this branch default OFF and draft;
+no main merge or accepted-v2 replacement.
