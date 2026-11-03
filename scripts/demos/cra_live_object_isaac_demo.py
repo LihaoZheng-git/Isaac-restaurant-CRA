@@ -1031,6 +1031,7 @@ def main():
             Path(weights["mass"]["path"]),
             device=device,
             allow_category_free_instances=True,
+            allow_stationary_image_objects=args.stationary_image_objects,
         )
     )
     contact = YoloSegmentationDetector(
@@ -1984,7 +1985,13 @@ def main():
         else "live fresh stationary RGB/LiDAR; category-free rough mass, explicit local ground/fall interaction priors, visual contact/plume proxies",
     }
     if args.restaurant_scene:
-        object_summary = summarize_fixture_assessments(records, fixtures, maximum_distance_m=0.20)
+        evaluation_records = records
+        if args.stationary_image_objects:
+            from robot.evaluation.image_object_runtime import coalesce_image_members_for_evaluation
+            evaluation_records = coalesce_image_members_for_evaluation(records)
+        object_summary = summarize_fixture_assessments(evaluation_records, fixtures, maximum_distance_m=0.20)
+        if args.stationary_image_objects:
+            object_summary["image_object_scope"] = "verified image groups replace only their listed raw members in object-level evaluation; original records/occupancy preserved; same .20m unique fixture gate"
         if args.restaurant_server and human is None:
             server_summary = summarize_fixture_assessments(records,[f for f in fixtures if f["name"]=="Server"],maximum_distance_m=.40)
             object_summary["fixtures"]["Server"] = server_summary["fixtures"]["Server"]

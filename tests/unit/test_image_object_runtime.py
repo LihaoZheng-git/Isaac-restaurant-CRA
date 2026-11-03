@@ -64,3 +64,16 @@ def test_field_failure_does_not_commit_group_history(monkeypatch):
     monkeypatch.setattr(mapping, "build_safe_sage_field_pipeline", original)
     runtime(observed(3,1.1))
     assert runtime.image_object_state.last_time == 1.1
+
+
+def test_evaluation_coalesces_only_fresh_verified_members_and_retains_competitors():
+    from robot.evaluation.image_object_runtime import coalesce_image_members_for_evaluation
+    raw = [{"track_id": k, "diagnostics": {"accepted_instance": False}} for k in (1,2,3)]
+    group = {"track_id": 5_000_000_000, "diagnostics": {"accepted_instance": True, "policy_return_count": 8,
+        "image_object_association": {"observations": 3, "current_source_time": 1., "rejections": [],
+                                     "fragments": [{"raw_track_id": 1}, {"raw_track_id": 2}]}}}
+    record = {"sensor_timestamp": 1., "objects": [*raw, group]}
+    result = coalesce_image_members_for_evaluation([record])
+    assert [o["track_id"] for o in result[0]["objects"]] == [3, 5_000_000_000]
+    assert len(record["objects"]) == 4
+    assert len(coalesce_image_members_for_evaluation([{**record, "sensor_timestamp": 1.1}])[0]["objects"]) == 4

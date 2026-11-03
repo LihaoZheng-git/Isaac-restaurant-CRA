@@ -81,6 +81,18 @@ def associate_image_objects(proposals, projection, point_track_ids, xyz, config)
     rejected = set()
     for i, a in enumerate(candidates):
         am = a["proposal"].detection.mask
+        for j in range(i+1, len(candidates)):
+            b = candidates[j]
+            bm = b["proposal"].detection.mask
+            overlap = np.sum(am & bm)
+            equivalent = overlap / max(1, np.sum(am | bm)) >= .85
+            nested = overlap >= .98 * min(am.sum(), bm.sum())
+            if np.any(a["selected"] & b["selected"]) and not equivalent and not nested:
+                rejected.update((i, j))
+                a["diagnostic"]["rejections"].append("competing nonnested masks")
+                b["diagnostic"]["rejections"].append("competing nonnested masks")
+    for i, a in enumerate(candidates):
+        am = a["proposal"].detection.mask
         children = [b for b in candidates[i+1:] if np.sum(am & b["proposal"].detection.mask)
                     >= .98 * b["proposal"].detection.mask_pixel_count]
         for j, b in enumerate(children):
@@ -88,7 +100,7 @@ def associate_image_objects(proposals, projection, point_track_ids, xyz, config)
                 bm, cm = b["proposal"].detection.mask, c["proposal"].detection.mask
                 if np.sum(bm & cm) < .1 * min(bm.sum(), cm.sum()) and not np.any(b["selected"] & c["selected"]):
                     rejected.add(i)
-        if i in rejected:
+        if children and i in rejected and "competing nonnested masks" not in a["diagnostic"]["rejections"]:
             a["diagnostic"]["rejections"].append("merged mask contains disjoint object hypotheses")
     chosen = []
     for i, a in enumerate(candidates):
@@ -96,15 +108,7 @@ def associate_image_objects(proposals, projection, point_track_ids, xyz, config)
             continue
         overlaps = [b for b in chosen if np.any(a["selected"] & b["selected"])]
         if overlaps:
-            am = a["proposal"].detection.mask
-            if any(np.sum(am & b["proposal"].detection.mask) < .98 * am.sum() for b in overlaps):
-                # Competing nonnested masks: neither may claim shared points.
-                for b in overlaps:
-                    b["diagnostic"]["rejections"].append("competing nonnested masks")
-                    chosen = [item for item in chosen if item is not b]
-                a["diagnostic"]["rejections"].append("competing nonnested masks")
-            else:
-                a["diagnostic"]["rejections"].append("contained part suppressed")
+            a["diagnostic"]["rejections"].append("contained part or equivalent mask suppressed")
             continue
         chosen.append(a)
     return chosen, audit

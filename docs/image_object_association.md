@@ -65,3 +65,20 @@ and the complete regression run remain pending at this commit.
 Recipes: `configs/restaurant_image_objects.json` and
 `configs/restaurant_plate_survey.json`. Local evidence is retained under
 `outputs/image-object-association/`. No navigation or final-demo acceptance.
+
+The first fresh native series at `56c8db6` completed all three 18-source
+zero-wheel runs with frozen source but FAILED the component gates. All three
+targets had 16 consecutive verified broader masks after qualification. Two
+integration defects remained: the strict mass adapter rejected the new source
+name, and fixture reporting counted raw member fragments as competing objects.
+The new source now needs a separate explicit mass opt-in (same geometry,
+confidence, freshness and domain limits); it is never disguised as the old
+point-prompted source. Object-level evaluation coalesces only the listed members
+of a fresh verified group, retaining unrelated competitors and the original
+.20 m unique fixture gate. Original records and occupancy are untouched.
+
+Four regression failures came from old mock proposals lacking a source field;
+the original source is now the backward-compatible default. A further adversarial
+test prevents a duplicate mask from reviving a rejected nonnested conflict.
+Fresh native repetition is required after these repairs. The initial stale
+asset-README manifest rejection and every v1 failed native record are retained.

@@ -80,6 +80,15 @@ def test_part_suppressed_when_larger_unique_mask_owns_both_fragments():
     assert len(candidates) == 1 and candidates[0]["selected"].sum() == 16
 
 
+def test_duplicate_candidate_cannot_revive_a_rejected_nonnested_conflict():
+    mask, projection, xyz, ids = fixture()
+    a, b = mask.copy(), mask.copy()
+    a[45:, :] = False
+    b[15:25, :] = False
+    candidates, _ = associate_image_objects([proposal(a), proposal(b), proposal(a)], projection, ids, xyz, ImageObjectConfig())
+    assert not candidates
+
+
 def test_repetition_gap_duplicate_and_partial_mask_never_refresh_original_evidence():
     mask, projection, xyz, ids = fixture()
     config = ImageObjectConfig()

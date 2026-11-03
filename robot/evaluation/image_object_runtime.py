@@ -13,6 +13,26 @@ from robot.safety.obstacle_tracking import TrackedObstacle
 from robot.safety.semantic_obstacle import SemanticObstacle
 
 
+def coalesce_image_members_for_evaluation(records):
+    """Do not count a verified object AND its raw member fragments as competitors.
+
+    No truth is used here. Unrelated/ambiguous raw tracks remain competitors;
+    factor values, original records and the independent matching gate stay intact.
+    """
+    result = []
+    for record in records:
+        members = set()
+        for item in record["objects"]:
+            d = item["diagnostics"]
+            a = d.get("image_object_association", {})
+            if (d.get("accepted_instance") and d.get("policy_return_count", 0) > 0
+                and a.get("observations", 0) >= 3 and not a.get("rejections")
+                and a.get("current_source_time") == record["sensor_timestamp"]):
+                members.update(f["raw_track_id"] for f in a.get("fragments", []))
+        result.append({**record, "objects": [o for o in record["objects"] if o["track_id"] not in members]})
+    return result
+
+
 def augment_image_objects(worker, packet, tracking, projection, world, objects,
                           frames, policies, point_ids, semantics, contact_frame, plume):
     """Stage state until the current field commits; original occupancy is untouched."""

@@ -1017,7 +1017,7 @@ class LiveObjectPerception:
                 frame = replace(
                     frame,
                     detections=(proposal.detection,),
-                    model_name=proposal.source,
+                    model_name=getattr(proposal, "source", SAM_INSTANCE_SOURCE),
                     inference_wall_seconds=proposal.inference_wall_seconds
                     + proposal.image_encoder_wall_seconds,
                 )

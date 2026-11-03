@@ -18,6 +18,7 @@ from robot.perception.semantic_detection import PixelBoundingBox, SemanticDetect
 
 
 SAM_INSTANCE_SOURCE = "sam2_lidar_prompted_rgb_instance"
+SAM_IMAGE_OBJECT_SOURCE = "sam2_image_object_hypothesis"
 SAM_TINY_SHA256 = "7402e0d864fa82708a20fbd15bc84245c2f26dff0eb43a4b5b93452deb34be69"
 
 
@@ -217,7 +218,7 @@ class SamInstanceSegmenter:
                 detection = SemanticDetection(0, "unknown", min(float(quality), self.config.confidence_cap),
                     PixelBoundingBox(float(xx.min()), float(yy.min()), float(xx.max()+1), float(yy.max()+1)), mask)
                 proposals.append(SamInstanceResult(detection, (), model_quality=float(quality),
-                    source="sam2_image_object_hypothesis", candidate_diagnostics=({"basis": basis},)))
+                    source=SAM_IMAGE_OBJECT_SOURCE, candidate_diagnostics=({"basis": basis},)))
         # Stable maximum of 64 image hypotheses, without favoring any target.
         return tuple(sorted(proposals, key=lambda p: (-p.detection.mask_pixel_count, -p.model_quality))[:64])
 

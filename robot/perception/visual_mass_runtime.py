@@ -22,7 +22,7 @@ from robot.perception.physical_attributes import (
     combine_estimate_statuses,
 )
 from robot.perception.physical_geometry import GEOMETRY_SOURCE
-from robot.perception.sam_instance_segmentation import SAM_INSTANCE_SOURCE
+from robot.perception.sam_instance_segmentation import SAM_INSTANCE_SOURCE, SAM_IMAGE_OBJECT_SOURCE
 from robot.perception.semantic_detection import (
     SemanticDetection,
     SemanticDetectionFrame,
@@ -61,6 +61,7 @@ class VisualMassRuntimeConfig:
     supported_classes: tuple[str, ...] = ABO_SUPPORTED_CLASSES
     maximum_geometry_age_seconds: float = 0.5
     allow_category_free_instances: bool = False
+    allow_stationary_image_objects: bool = False
     minimum_instance_mask_pixels: int = 200
     minimum_instance_confidence: float = 0.35
 
@@ -97,6 +98,10 @@ class VisualMassRuntimeConfig:
         object.__setattr__(self, "supported_classes", classes)
         if not isinstance(self.allow_category_free_instances, bool):
             raise TypeError("allow_category_free_instances must be boolean")
+        if not isinstance(self.allow_stationary_image_objects, bool):
+            raise TypeError("allow_stationary_image_objects must be boolean")
+        if self.allow_stationary_image_objects and not self.allow_category_free_instances:
+            raise ValueError("stationary image objects require category-free mass opt-in")
         if (
             isinstance(self.minimum_instance_mask_pixels, bool)
             or not isinstance(self.minimum_instance_mask_pixels, int)
@@ -242,7 +247,8 @@ class VisualMassRuntimeEstimator:
             or not 0 <= association.detection_index < len(frame.detections)
         ):
             reason = "instance detection index does not belong to the source frame"
-        elif SAM_INSTANCE_SOURCE not in frame.model_name.split("+"):
+        elif (SAM_INSTANCE_SOURCE not in frame.model_name.split("+")
+              and not (self.config.allow_stationary_image_objects and frame.model_name == SAM_IMAGE_OBJECT_SOURCE)):
             reason = "instance source is not the validated SAM adapter"
         elif (
             not 0
@@ -286,7 +292,7 @@ class VisualMassRuntimeEstimator:
             extra_evidence=(
                 CATEGORY_FREE_MASS_EVIDENCE,
                 f"accepted_instance_track_id={track_id}",
-                f"instance_source={SAM_INSTANCE_SOURCE}; frame_id={frame.source_frame_id}; timestamp={frame.source_timestamp_seconds}",
+                f"instance_source={frame.model_name}; frame_id={frame.source_frame_id}; timestamp={frame.source_timestamp_seconds}",
                 "category and density are not model inputs; rough heaviness only",
                 "visible LiDAR extents can underestimate complete object dimensions",
             ),
