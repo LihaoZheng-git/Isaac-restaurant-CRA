@@ -102,7 +102,13 @@ parser.add_argument('--unknown-unclassified-static-prior', action='store_true',
                     help='separate static default for unclassified lost geometry, .30m; excludes people/confirmed movers')
 parser.add_argument('--unknown-verified-dynamic-evidence', action='store_true',
                     help='require validated human association or confirmed motion for persistent dynamic labels')
+parser.add_argument('--human-verified-part-recovery', action='store_true',
+                    help='bounded recovery across a previously verified human parent/part ID swap; complete old region must fit current body')
 args = parser.parse_args()
+if args.human_verified_part_recovery and (not args.human_track_recovery
+        or not args.human_tracking_uncertainty or not args.identity_selection_body_envelope
+        or not args.unknown_verified_dynamic_evidence):
+    parser.error('verified part recovery requires tracking uncertainty, visual fragments and verified unknown-obstacle mode')
 if args.unknown_verified_dynamic_evidence and not args.unknown_unclassified_static_prior:
     parser.error('verified dynamic evidence requires explicit unclassified static prior')
 if args.unknown_unclassified_static_prior and not args.unknown_persistent_background_prior:
@@ -512,6 +518,7 @@ def main():
             maximum_identity_prior_selection_age_seconds=args.human_passing_identity_prior_max_age,
             identity_selection_body_envelope=args.identity_selection_body_envelope,
             human_track_recovery=args.human_track_recovery,
+            human_verified_part_recovery=args.human_verified_part_recovery,
             human_tracking_uncertainty=args.human_tracking_uncertainty,
             stationary_furniture_memory=args.stationary_furniture_memory,
             stationary_furniture_fragment_proof=args.stationary_furniture_fragment_proof,

@@ -119,6 +119,7 @@ class UncertainSurface:
     mode: str
     support_distance_m: float | None = None
     replacement_track_id: int | None = None
+    verified_recovery: dict | None = None
     _cell_cache: dict = field(default_factory=dict, repr=False, compare=False)
 
     def __post_init__(self):
@@ -190,6 +191,7 @@ class UnknownObstacleSnapshot:
             radius_m=r.radius_m, fixed_unknown_phi=self.config.unknown_phi,
             applied_risk=old.guidance.risk, checked_cell_count=len(rows),
             replacement_track_id=r.replacement_track_id,
+            verified_recovery=r.verified_recovery,
             region_clipped_to_local_field=clipped, local_region_current_field_covered=True,
             scope="positive geometry prior in current local field; no free-space, identity or factor renewal")
 
@@ -209,6 +211,7 @@ class UnknownObstacleSnapshot:
                 dynamic_evidence=r.original.dynamic_evidence,
                 radius_m=r.radius_m, mode=r.mode, support_distance_m=r.support_distance_m,
                 replacement_track_id=r.replacement_track_id,
+                verified_recovery=r.verified_recovery,
                 fixed_unknown_phi=self.config.unknown_phi, applied_risk=r.original.guidance.risk)
                 for r in self.regions])
 
@@ -249,7 +252,8 @@ class UnknownObstacleMemory:
 
     def update(self, points, ids, tracks, guidance, *, source_time, source_frame,
                robot_xy, furniture_memory=None, excluded_points=(), human_regions=(),
-               covered_human_fragments=(), verified_human_associations=()):
+               covered_human_fragments=(), verified_human_associations=(),
+               verified_body_recoveries=(), current_verified_bodies=()):
         points, ids = np.asarray(points, float), np.asarray(ids)
         current = {t.track_id: t for t in tracks}
         if (not math.isfinite(source_time) or source_time < 0
@@ -427,6 +431,26 @@ class UnknownObstacleMemory:
                 continue
             age = source_time-old.source_time
             support_distance = None
+            recovery = next((p for p in verified_body_recoveries if p['previous_track_id'] == key), None)
+            if recovery is not None:
+                from robot.perception.verified_part_recovery import surface_coverage
+                target = recovery['track_id']
+                bodies = [b for b in current_verified_bodies if b['track_id'] == target]
+                if (not cfg.require_verified_dynamic_evidence or target not in current or len(bodies) != 1
+                        or bodies[0]['lidar_timestamp_seconds'] != source_time
+                        or bodies[0]['current_support_count'] != current[target].point_count
+                        or recovery['decision'] != 'reacquired_verified_visual_part_geometry'):
+                    raise ValueError('verified recovery requires current validated body geometry')
+                proof = surface_coverage(old, center=np.asarray(bodies[0]['center_world_xy']),
+                    radius=bodies[0]['radius_m'], now=source_time, speed=cfg.unknown_speed_mps)
+                if proof is None or proof != recovery['geometry_coverage']:
+                    raise ValueError('verified recovery must cover exact original whole geometry and policy')
+                regions.append(UncertainSurface(old, age*cfg.unknown_speed_mps,
+                    'current_verified_part_geometry_replacement', None, target, recovery))
+                records.pop(key)
+                if target in records:
+                    records[target] = replace(records[target], guidance=cfg.guidance(records[target].guidance, old.guidance))
+                continue
             human_proof = next((p for p in covered_human_fragments
                 if p["track_id"] == key and p["original_source_time"] == old.source_time), None)
             if human_proof is not None:

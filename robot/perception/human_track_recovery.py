@@ -17,9 +17,14 @@ class HumanTrackRecoveryConfig:
     checked_horizon_seconds: float = 1.55  # 1.2 s MPC plus .35 s field age
     maximum_robot_speed_mps: float = .25
     robot_radius_m: float = math.hypot(.587351 + .05, .2466 + .05)
+    verified_part_recovery: bool = False
 
     def __post_init__(self):
         for name, value in vars(self).items():
+            if name == 'verified_part_recovery':
+                if not isinstance(value, bool):
+                    raise ValueError('verified part recovery requires explicit boolean opt-in')
+                continue
             if isinstance(value, bool) or not math.isfinite(value) or value <= 0:
                 raise ValueError(f"{name} must be positive and finite")
         if self.maximum_gap_seconds > .6:

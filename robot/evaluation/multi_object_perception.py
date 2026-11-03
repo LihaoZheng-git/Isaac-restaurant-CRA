@@ -504,7 +504,8 @@ def assess_all_objects(worker, packet):
         envelope_audit = envelope_memory.update(tracking,
             fresh_person_selection_evidence(objects, packet.camera_timestamp_seconds, packet.camera_frame_id),
             camera_timestamp_seconds=packet.camera_timestamp_seconds,
-            robot_world_xy=packet.robot_position_world_xy)
+            robot_world_xy=packet.robot_position_world_xy,
+            positive_surfaces=unknown_memory.records if unknown_memory is not None else None)
         if human_mass_memory is not None:
             from robot.evaluation.human_mass_runtime import apply_body_identity_mass_retention
             objects, human_mass_audit = apply_body_identity_mass_retention(human_mass_memory,
@@ -544,12 +545,19 @@ def assess_all_objects(worker, packet):
             camera_timestamp_seconds=packet.camera_timestamp_seconds,
             camera_frame_id=packet.camera_frame_id,
             mask_boundary_tolerance_pixels=getattr(worker, "human_fragment_mask_boundary_pixels", 0))
+    if envelope_memory is not None:
+        envelope_memory.remember_visual_parts(visual_part_groups, packet.sensor_timestamp_seconds)
     applied_guidance, baseline_audit = applied_field_policies(
         getattr(worker, "experiment_baseline", None), policies, objects, envelope_origins=envelope_origins,
         human_boundary_flux=worker.human_boundary_flux,
         verified_human_identities=envelope_audit,
         sensor_timestamp_seconds=packet.sensor_timestamp_seconds,
     )
+    recovery_geometry = [p for p in envelope_memory.recovery_audit
+        if p['decision'] == 'reacquired_verified_visual_part_geometry'] if envelope_memory is not None else []
+    if recovery_geometry:
+        from robot.perception.verified_part_recovery import apply_recovery_risk_floors
+        apply_recovery_risk_floors(applied_guidance, baseline_audit, recovery_geometry, envelope_audit)
     fragment_audit = None
     if fragment_memory is not None:
         from robot.perception.human_fragment_coverage import apply_coverage_risk_floors
@@ -775,6 +783,7 @@ def assess_all_objects(worker, packet):
             human_regions=human_regions,
             verified_human_associations=verified_human_associations(tracking, envelope_audit, visual_part_groups)
                 if unknown_memory.config.require_verified_dynamic_evidence else (),
+            verified_body_recoveries=recovery_geometry, current_verified_bodies=envelope_audit,
             covered_human_fragments=fragment_audit.get("covered", ()) if fragment_audit else ())
         for region in unknown_snapshot.regions:
             extra, _, _, _ = region.cells(grid_config, worker.anchor, worker.anchor_yaw)

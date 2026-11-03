@@ -561,3 +561,40 @@ correspondence fails (max0.215444m/0.107036m), so it cannot be relabeled observe
 A bounded verified parent/part recovery must preserve original clocks, unique
 association, existing short gaps/residuals/competitors, full-region coverage and
 risk/flux. No long-gap merge or margin change follows from this diagnosis.
+
+### Bounded verified parent/part recovery
+
+The separate default-OFF `--human-verified-part-recovery` uses an already accepted
+image-LiDAR parent/part relationship to corroborate a fresh accepted person cue
+on the alternate ID. It requires the existing unique short-gap recovery gates:
+at most0.6s, residual at most0.25m, speeds at most1m/s, original identity within
+30s, and no competing current or missing human. Existing distinct identities
+cannot merge. The verified link retains its original source and expires at0.6s.
+
+An additional geometry test requires the exact previous positive surface at the
+last verified LiDAR source. All corners of its XY bounds, expanded by1m/s times
+the original missing age, must fit the current validated0.65m body envelope;
+the missing age is at most0.35s. The entire old surface remains rasterized for
+the transition field with its original source/frame and risk/flux. Current raw
+and body policies retain at least that risk/flux, separately from current CRA
+factor evidence. Only actual full current-field coverage retires the old guard
+query. No raw return, margin or controller check is removed.
+
+The recovery result is an inferred association, not measured identity. A genuinely
+fresh accepted camera cue has its actual new epoch; neither the old link nor any
+old factor source is renewed. Missing, stale, ambiguous or incompletely covered
+evidence preserves the original uncertainty policy. Actor truth never enters
+matching. This remains a separated-human engineering assumption, not general
+occlusion or multi-person tracking validation.
+
+The archived142.1/142.3/142.5 replay now retains one human identity at both swaps
+and passes complete old-surface raster coverage. The option-OFF counterfactual
+retains the duplicate uncertain identity. This replay tests identity, positive
+geometry and current raster behavior only, not full MPC or native navigation.
+The matched recipe is `configs/restaurant_service_demo_v2_part_recovery.json`.
+Fresh native prerequisites and actual final arrival/stopping remain required.
+
+Source validation:105 focused tests passed in5.92s and3,617 full unit tests passed
+in122.35s. Ruff, compilation and diff checks passed. Negative cases cover missing
+or stale links, old source mismatch, excessive gap/speed/residual, expired visual
+identity, incomplete old geometry, competing humans and tampered report evidence.

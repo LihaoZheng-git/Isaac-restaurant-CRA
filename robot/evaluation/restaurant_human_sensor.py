@@ -94,6 +94,7 @@ class RestaurantHumanSensorDiagnostic:
         maximum_identity_prior_selection_age_seconds=0.,
         identity_selection_body_envelope=False,
         human_track_recovery=False,
+        human_verified_part_recovery=False,
         human_tracking_uncertainty=False,
         predictive_human_geometry=False,
         human_prediction_uncertainty_rate=.25,
@@ -135,6 +136,9 @@ class RestaurantHumanSensorDiagnostic:
             raise ValueError('identity-selection component requires explicit current body envelope')
         if identity_selection_body_envelope and not parallel_guidance_selection:
             raise ValueError('component body envelope requires explicit parallel selector')
+        if human_verified_part_recovery and (not human_track_recovery or not human_tracking_uncertainty
+                or not identity_selection_body_envelope or not unknown_verified_dynamic_evidence):
+            raise ValueError('verified part recovery requires verified unknown geometry, visual fragments and tracking uncertainty')
         if human_track_recovery and not identity_selection_body_envelope:
             raise ValueError('track recovery requires explicit body envelope')
         from robot.perception.human_track_recovery import HumanTrackRecoveryConfig
@@ -265,8 +269,11 @@ class RestaurantHumanSensorDiagnostic:
             motion_passing_config=passing_config if motion_aware_passing else None,
             human_body_envelope_config=self._identity_selection_envelope_config()
                 if identity_selection_body_envelope else None,
-            human_track_recovery_config=HumanTrackRecoveryConfig() if human_track_recovery else None,
+            human_track_recovery_config=HumanTrackRecoveryConfig(verified_part_recovery=human_verified_part_recovery) if human_track_recovery else None,
             human_tracking_uncertainty=human_tracking_uncertainty,
+            human_prior_geometry_associations=human_verified_part_recovery,
+            human_visual_fragment_association=human_verified_part_recovery,
+            human_fragment_mask_boundary_pixels=1 if human_verified_part_recovery else 0,
             segmenter=SamInstanceSegmenter(
                 SamInstanceConfig(
                     paths["sam"],

@@ -93,8 +93,10 @@ class HumanBodyEnvelope:
         self.geometry_policies = {}
         self.identities = {}
         self.recovery_audit = []
+        self.visual_part_links = ()
 
-    def update(self, tracking, fresh_person_cues, *, camera_timestamp_seconds, robot_world_xy=None):
+    def update(self, tracking, fresh_person_cues, *, camera_timestamp_seconds, robot_world_xy=None,
+               positive_surfaces=None):
         """Return circles, or block publication rather than erase an old body.
 
         The caller works on a transaction copy. Legacy unresolved identities
@@ -129,6 +131,13 @@ class HumanBodyEnvelope:
             recovery_audit.append(dict(decision='planning_geometry_uncertainty', **region.diagnostic()))
             return True
         candidates = {}
+        part_proposals = {}
+        if self.recovery_config is not None and self.recovery_config.verified_part_recovery:
+            from robot.perception.verified_part_recovery import recovery_proposals
+            if positive_surfaces is None:
+                raise ValueError('verified part recovery requires original positive surfaces')
+            part_proposals = recovery_proposals(self, tracking, fresh_person_cues,
+                positive_surfaces, camera_timestamp_seconds)
         if self.recovery_config is not None:
             # Only missing identities may move to a NEW, uniquely compatible
             # positive track. Existing different identities are never merged.
@@ -142,7 +151,13 @@ class HumanBodyEnvelope:
                     and t.point_count >= self.config.minimum_points
                     and np.linalg.norm(np.asarray(t.centroid_world_xy) - predicted)
                     <= self.config.maximum_centroid_residual_m]
-        for key in sorted(set(self.identities) | set(fresh_person_cues)):
+            for old, proof in part_proposals.items():
+                # The original unique/competitor checks below remain mandatory.
+                candidates[old] = list(dict.fromkeys([*candidates.get(old, ()), proof['track_id']]))
+        claimed = {p['track_id'] for old, p in part_proposals.items()
+            if candidates.get(old) == [p['track_id']]
+            and sum(p['track_id'] in choices for choices in candidates.values()) == 1}
+        for key in sorted(set(self.identities) | (set(fresh_person_cues)-claimed)):
             old_key = key
             previous = self.identities.get(key)
             track = tracks.get(key)
@@ -263,6 +278,11 @@ class HumanBodyEnvelope:
                         centroid_prediction_residual_m=float(residual), changed_track_id=reassociated))
             if reassociated:
                 updated.pop(old_key)
+                if key in claimed:
+                    proof = part_proposals[old_key]
+                    recovery_audit.append(dict(proof, decision='reacquired_verified_visual_part_geometry',
+                        status='inferred', changed_track_id=True,
+                        scope='previous verified part relationship and fresh accepted cue; original bounded recovery and complete old-region coverage'))
             updated[key] = dict(
                 camera_timestamp=source_time,
                 camera_frame=source_frame,
@@ -296,6 +316,21 @@ class HumanBodyEnvelope:
         self.recovery_audit = recovery_audit
         self.uncertainty_regions = tuple(uncertain)
         return result
+
+    def remember_visual_parts(self, proofs, source_time):
+        if self.recovery_config is None or not self.recovery_config.verified_part_recovery:
+            return
+        retained = { (p['child_track_id'], p['parent_track_id']):p for p in self.visual_part_links
+            if 0 <= source_time-p['source_timestamp_seconds'] <= self.recovery_config.maximum_gap_seconds+1e-9 }
+        for proof in proofs:
+            parent = self.identities.get(proof['parent_track_id'])
+            if (proof['source_timestamp_seconds'] != source_time or parent is None
+                    or parent['lidar_timestamp'] != source_time
+                    or parent['camera_timestamp'] != proof['original_person_camera_timestamp']
+                    or parent['camera_frame'] != proof['original_person_camera_frame_id']):
+                raise ValueError('visual part links require current positive association')
+            retained[(proof['child_track_id'], proof['parent_track_id'])] = dict(proof)
+        self.visual_part_links = tuple(retained.values())
 
     def passing_selection_priors(self, tracking, *, camera_timestamp_seconds, maximum_age_seconds):
         """Only a successfully updated current envelope may authorize this ablation.

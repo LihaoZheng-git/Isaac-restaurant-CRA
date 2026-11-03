@@ -324,7 +324,13 @@ parser.add_argument('--unknown-unclassified-static-prior', action='store_true',
                     help='separate static default for unclassified lost geometry, .30m; excludes people/confirmed movers')
 parser.add_argument('--unknown-verified-dynamic-evidence', action='store_true',
                     help='require validated human association or confirmed motion for persistent dynamic labels')
+parser.add_argument('--human-verified-part-recovery', action='store_true',
+                    help='bounded recovery across a previously verified human parent/part ID swap; complete old region must fit current body')
 args = parser.parse_args()
+if args.human_verified_part_recovery and (not args.human_track_recovery
+        or not args.human_tracking_uncertainty or not args.human_visual_fragment_association
+        or not args.unknown_verified_dynamic_evidence):
+    parser.error('verified part recovery requires tracking uncertainty, visual fragments and verified unknown-obstacle mode')
 if args.unknown_verified_dynamic_evidence and not args.unknown_unclassified_static_prior:
     parser.error('verified dynamic evidence requires explicit unclassified static prior')
 if args.unknown_unclassified_static_prior and not args.unknown_persistent_background_prior:
@@ -1334,6 +1340,7 @@ def main():
         human_observed_occupancy_only=args.human_observed_occupancy_only,
         human_tracking_uncertainty=args.human_tracking_uncertainty,
         human_track_recovery_config=HumanTrackRecoveryConfig(
+            verified_part_recovery=args.human_verified_part_recovery,
             robot_radius_m=math.hypot(max(stationary.ROBOT_FRONT_EXTENT, stationary.ROBOT_REAR_EXTENT) + stationary.ROBOT_SAFETY_MARGIN,
                 max(stationary.ROBOT_LEFT_EXTENT, stationary.ROBOT_RIGHT_EXTENT) + stationary.ROBOT_SAFETY_MARGIN))
             if args.human_track_recovery else None,

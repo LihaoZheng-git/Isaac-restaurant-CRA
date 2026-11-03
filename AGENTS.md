@@ -1,5 +1,21 @@
 # CRA repository guidance
 
+- Separate default-OFF --human-verified-part-recovery repairs a short parent/part
+  ID swap only after an actual current visual-part proof. A fresh accepted person
+  cue may corroborate the alternate ID; existing identities never merge. Keep
+  original .6s link/recovery, .25m residual, 1m/s speed, 30s identity and competitor
+  gates. Additionally require the EXACT old positive surface source and complete
+  old XY bounds plus 1m/s*age inside the current .65m body, age<=.35s. Retain that
+  whole old region for the transition field, floor current raw/body policy by old
+  risk/flux, and require actual current-grid coverage before retiring the guard
+  query. Source/frame/factor clocks remain original; only an actual fresh accepted
+  cue creates a new visual epoch. Links expire at their original source. No actor
+  truth, long-gap merge, relaxed raw correspondence or margin change. Replay of
+  actual142.1/142.3/142.5 sources keeps one identity and covers both old surfaces;
+  this is isolated identity/geometry replay, not native acceptance. Require fresh
+  actor/component/startup/near/own stationary gates and full arrival/stopping.
+  Preserve PR215's late failure, v1, all earlier failures and main/primary holds.
+
 - Verified-dynamic11bae4c PASSED fresh actor615.78s, component104 sources,
   startup60/near60 and own60;3597units/Ruff/archived false-person replay PASS.
   Native mission cleared every previous furniture stall and the first human

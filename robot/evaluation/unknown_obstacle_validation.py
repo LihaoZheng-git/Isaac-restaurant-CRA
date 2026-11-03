@@ -94,6 +94,10 @@ def summarize_unknown_obstacles(records):
                 errors.append('source/risk/geometry field provenance mismatch')
             support = region.get('background_support')
             evidence = region.get('dynamic_evidence')
+            if mode == 'current_verified_part_geometry_replacement':
+                recovery = region.get('verified_recovery')
+                if not _valid_verified_part_recovery(recovery, region, d, now):
+                    errors.append('verified part recovery provenance mismatch')
             if evidence is not None and not _valid_dynamic_evidence(evidence, now,
                     verified_only=memory['config'].get('require_verified_dynamic_evidence', False)):
                 errors.append('retained dynamic evidence mismatch')
@@ -160,6 +164,49 @@ def _valid_dynamic_evidence(evidence, now, *, verified_only=False):
             and proof.get('original_person_camera_frame_id', -1) >= 0
             and proof.get('parent_track_id', -1) >= 0)
     return not verified_only and evidence.get('kind') in ('positive_human_region', 'positive_person_or_confirmed_motion_overlap')
+
+
+def _valid_verified_part_recovery(proof, region, diagnostics, now):
+    if not isinstance(proof, dict):
+        return False
+    cfg = diagnostics.get('human_track_recovery_config') or {}
+    geometry, part = proof.get('geometry_coverage', {}), proof.get('visual_part_proof', {})
+    bodies = [b for b in diagnostics.get('human_body_envelope_priors', ())
+        if b['track_id'] == proof.get('track_id')]
+    if (not cfg.get('verified_part_recovery') or len(bodies) != 1
+            or proof not in diagnostics.get('human_track_recovery', ())
+            or proof.get('decision') != 'reacquired_verified_visual_part_geometry'
+            or proof.get('previous_track_id') != region['track_id']
+            or proof.get('track_id') != region['replacement_track_id']
+            or geometry.get('original_source_time') != region['original_source_time']
+            or geometry.get('original_source_frame') != region['original_source_frame']
+            or geometry.get('original_point_count') != region['original_point_count']
+            or geometry.get('current_source_time') != now
+            or geometry.get('original_risk') != region['applied_risk']
+            or not 0 < geometry.get('missing_seconds', -1) <= .35+1e-9
+            or abs(geometry['missing_seconds']-(now-region['original_source_time'])) > 1e-9
+            or proof.get('source_gap_seconds') != geometry['missing_seconds']
+            or geometry.get('maximum_point_speed_prior_mps') != cfg.get('maximum_human_speed_mps')
+            or region['radius_m'] != geometry['missing_seconds']*geometry['maximum_point_speed_prior_mps']
+            or not 0 <= proof.get('centroid_prediction_residual_m', math.inf) <= .25
+            or {part.get('child_track_id'), part.get('parent_track_id')}
+                != {proof['previous_track_id'], proof['track_id']}
+            or not 0 < now-part.get('source_timestamp_seconds', -math.inf) <= cfg['maximum_gap_seconds']+1e-9):
+        return False
+    body = bodies[0]
+    low, high = geometry.get('original_bounds_min_world_xy'), geometry.get('original_bounds_max_world_xy')
+    if (np.shape(low) != (2,) or np.shape(high) != (2,) or not np.isfinite([low, high]).all()
+            or np.any(np.asarray(low) > high) or body['lidar_timestamp_seconds'] != now
+            or body['center_world_xy'] != geometry.get('current_center_world_xy')
+            or body['radius_m'] != geometry.get('current_radius_m')
+            or body['applied_cra_phi'] < geometry['original_risk']
+            or body['original_person_camera_timestamp'] != proof.get('fresh_person_camera_timestamp')
+            or body['original_person_camera_frame_id'] != proof.get('fresh_person_camera_frame_id')):
+        return False
+    corners = np.array([[low[0], low[1]], [low[0], high[1]], [high[0], low[1]], [high[0], high[1]]])
+    extent = float(np.linalg.norm(corners-body['center_world_xy'], axis=1).max()+region['radius_m'])
+    return (abs(extent-geometry.get('whole_bounds_plus_motion_extent_m', math.inf)) <= 1e-12
+        and extent <= body['radius_m']+1e-9)
 
 
 def _valid_motion_confirmation(proof, now):
