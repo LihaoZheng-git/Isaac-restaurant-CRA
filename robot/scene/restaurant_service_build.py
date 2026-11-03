@@ -24,6 +24,7 @@ LONG_ROUTE_WORLD_XY = (
     (7.8, 4.05), (12.0, 4.05), (20.0, 4.05), (25.8, 4.05),
     (27.4, 7.4), (28.8, 9.5), (28.8, 12.2), (29.8, 14.6), (30.4, 15.8),
 )
+WIDE_CORNER_ROUTE_WORLD_XY = (*LONG_ROUTE_WORLD_XY[:3], (26.2, 4.05), *LONG_ROUTE_WORLD_XY[4:])
 # Separate bounded development route: the final long route is not yet accepted.
 SHORT_START_WORLD_XYZ = (28.8, 5.6, 0.07382)
 SHORT_START_YAW = math.pi / 3
@@ -39,12 +40,14 @@ RESTAURANT_OBSERVATIONS = {
 }
 
 
-def restaurant_route_local_xy(name="short", *, human_start_view="original"):
+def restaurant_route_local_xy(name="short", *, human_start_view="original", wide_corner=False):
     """Obstacle-unaware nominal waypoints in the original bowl start frame.
 
     The 3.95 m service segment stays in the existing bounded field; it is not
     the 30.88 m final route and does not extend evidence timestamps.
     """
+    if not isinstance(wide_corner, bool) or wide_corner and name != 'long-service':
+        raise ValueError('wide corner is an explicit long-service route variant')
     if human_start_view not in {"original", "approach-forward", "crossing-approach"}:
         raise ValueError("unknown human start view")
     if human_start_view != "original" and name != "human-service":
@@ -53,8 +56,9 @@ def restaurant_route_local_xy(name="short", *, human_start_view="original"):
         return (SHORT_GOAL_LOCAL_XY,)
     if name == "long-service":
         # A geometric route only; hazards never alter nominal waypoints.
-        start = np.asarray(LONG_ROUTE_WORLD_XY[0])
-        return tuple(map(tuple, np.asarray(LONG_ROUTE_WORLD_XY[1:]) - start))
+        route = WIDE_CORNER_ROUTE_WORLD_XY if wide_corner else LONG_ROUTE_WORLD_XY
+        start = np.asarray(route[0])
+        return tuple(map(tuple, np.asarray(route[1:]) - start))
     if name not in {"service", "human-service"}:
         raise ValueError("unknown restaurant route")
     start = np.asarray(SHORT_START_WORLD_XYZ[:2])

@@ -210,3 +210,17 @@ This motivates a separate native route variant, not a claim that the old corner
 or controller liveness is fixed. The human encounter, CRA, margins and priors
 remain unchanged. All failure records are preserved under
 `outputs/upper-service-departure/long-motion-v2/`.
+
+The separate `--service-wide-corner` recipe changes only the authored guide
+(25.8, 4.05) to (26.2, 4.05). It preserves the start, seven other guides, final
+goal, actor route/trigger and every controller/perception setting. The nominal
+controller still receives fixed waypoints only. This is route design around
+restaurant architecture; the planned bend is not counted as CRA avoidance.
+Native prerequisites and full mission validation remain required.
+
+The retry also enables `--save-failed-planner-replay`: one original rejected
+numeric request per five-second source bucket, no success snapshots or later
+replacement. Serialization remains inside worker timing and does not renew
+any age or make a late command usable. Snapshots are local offline diagnostics
+and are never loaded by runtime. This preserves exact failure inputs if a new
+stall occurs without continuously exporting every successful plan.

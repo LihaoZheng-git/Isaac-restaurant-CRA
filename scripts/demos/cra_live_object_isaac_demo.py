@@ -151,6 +151,8 @@ parser.add_argument('--planner-replay-source-window', nargs=2, type=float,
     help='Keep every offline planner snapshot in this source-time window (at most 5 seconds).')
 parser.add_argument("--save-planner-replay", action="store_true",
                     help="trusted local offline numeric snapshots, latest request per five-second source-time bucket; export counts against worker age")
+parser.add_argument('--save-failed-planner-replay', action='store_true',
+    help='diagnostic first rejected request per five-second source bucket; export counts against worker age; never runtime input')
 parser.add_argument("--guidance-reference-search-width", type=int, choices=(0,4,8), default=0,
                     help="opt-in exact/guidance-checked local search only when greedy references fail; primary/default disabled")
 parser.add_argument("--guidance-reference-search-candidates", type=int, default=4800)
@@ -183,6 +185,8 @@ parser.add_argument("--restaurant-layout-survey", type=Path,
 parser.add_argument("--restaurant-view", choices=("bowl", "pot", "counter", "front", "server", "demo-bin", "demo-rounded", "demo-utensils"), default="bowl",
                     help="explicit stationary robot view; target names are evaluation metadata only")
 parser.add_argument("--restaurant-route", choices=("short", "service", "human-service", "long-service"), default="short")
+parser.add_argument('--service-wide-corner', action='store_true',
+    help='separate authored long-service route: corner x26.2 instead of25.8; unchanged hazard encounter and safety checks')
 parser.add_argument("--rolling-local-field", action="store_true",
                     help="opt-in translating window with original timestamps and strict temporal-overlap queries")
 parser.add_argument("--presentation-follow-camera", action="store_true",
@@ -346,6 +350,8 @@ if (not math.isfinite(args.unknown_obstacle_phi) or not 0 < args.unknown_obstacl
     parser.error("unknown obstacle planning requires explicit furniture memory and phi in (0,1]")
 if args.stationary_furniture_fragment_proof and not args.stationary_furniture_memory:
     parser.error("fragment-level proof requires explicit stationary furniture memory")
+if args.save_planner_replay and args.save_failed_planner_replay:
+    parser.error('choose full or bounded failed planner replay, not both')
 if args.planner_replay_source_window is not None:
     window_start, window_end = args.planner_replay_source_window
     if (not args.save_planner_replay or not math.isfinite(window_start)
@@ -686,6 +692,8 @@ if args.background_upper_departure and not args.background_service_walk:
     parser.error('upper departure requires background service walk')
 if args.service_demo_v2 and not args.restaurant_scene:
     parser.error("v2 presentation requires its separate restaurant scene")
+if args.service_wide_corner and not (args.service_demo_v2 and args.long_service_parallel):
+    parser.error('wide corner requires the separate v2 long-service human experiment')
 if args.presentation_risk_camera and not (args.restaurant_scene and args.persistent_object_risk_map):
     parser.error("presentation risk camera requires a restaurant scene and the transactional all-track map")
 if args.restaurant_layout_survey and not args.restaurant_scene:
@@ -860,8 +868,10 @@ if args.restaurant_scene:
         from robot.scene.restaurant_service_build import LONG_ROUTE_WORLD_XY
         stationary.ROBOT_START_POSITION_WORLD = (*LONG_ROUTE_WORLD_XY[0], restaurant_start[2])
         stationary.ROBOT_START_YAW_RADIANS = 0.
-    GOAL = restaurant_route_local_xy(args.restaurant_route, human_start_view=args.human_start_view)[-1]
-ROUTE = restaurant_route_local_xy(args.restaurant_route, human_start_view=args.human_start_view) if args.restaurant_scene else (GOAL,)
+    GOAL = restaurant_route_local_xy(args.restaurant_route, human_start_view=args.human_start_view,
+                                     wide_corner=args.service_wide_corner)[-1]
+ROUTE = restaurant_route_local_xy(args.restaurant_route, human_start_view=args.human_start_view,
+                                wide_corner=args.service_wide_corner) if args.restaurant_scene else (GOAL,)
 if open_crossing_layout:
     stationary.ROBOT_START_POSITION_WORLD = OPEN_ROBOT_START_WORLD
     stationary.ROBOT_START_YAW_RADIANS = OPEN_ROBOT_YAW
@@ -2304,6 +2314,9 @@ def main():
             from robot.evaluation.planner_replay import save_planner_replay
             save_planner_replay(args.output / "planner-replays", control, data, result,
                 source_window=args.planner_replay_source_window)
+        elif args.save_failed_planner_replay:
+            from robot.evaluation.planner_replay import save_first_failed_planner_replay
+            save_first_failed_planner_replay(args.output / 'planner-replays', control, data, result)
         elapsed = time.perf_counter() - started
         if elapsed > 3.0:
             print(json.dumps({"slow_planner_compute": {

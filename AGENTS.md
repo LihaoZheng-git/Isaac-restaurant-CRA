@@ -1,5 +1,18 @@
 # CRA repository guidance
 
+- Separate default-OFF --service-wide-corner changes ONLY the authored long
+  service guide (25.8,4.05) to (26.2,4.05). Start, other guides, final goal,
+  actor route/trigger, CRA, uncertainty, lambda, margins and controller remain.
+  This is route design within the restaurant, never obstacle-aware runtime
+  nominal control or a claim of fixing the archived corner stress failure.
+  Require fresh source-matched prerequisites, own60 and actual full arrival/
+  stopping. Human curvature must still be measured relative to this actual
+  settled nominal polyline; do not count the planned architecture corner as
+  CRA intervention. The recipe also enables bounded failure-only numeric
+  snapshots: first rejected planner request per5s source bucket, original
+  clocks/inputs, export inside worker timing, never loaded by runtime.
+  All prior failure archives/main/primary/PR117 holds stay.
+
 - Upper-departure992993b PASSED all four fresh prerequisites and own60, then
   long-motion-v2 was INTERRUPTED after697 live fields/source115.8 at world
   (25.9419,5.2294), before any human association; last5 source seconds moved

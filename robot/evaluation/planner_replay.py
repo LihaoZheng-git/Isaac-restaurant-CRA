@@ -17,6 +17,24 @@ import numpy as np
 from robot.safety.safe_sage_runtime import SafeSAGEControlRuntime
 
 
+def save_first_failed_planner_replay(directory, control, request, result):
+    """Record one original rejected request per bucket; never record successes.
+
+    This diagnostic stays inside worker timing and is never loaded by runtime.
+    Separate subdirectories prevent later failures from replacing the first.
+    """
+    if result.success:
+        return None
+    if not isinstance(control, SafeSAGEControlRuntime) or len(request) not in (5, 6):
+        raise TypeError('failed replay requires a native runtime request')
+    control._validate_field(request[2])
+    bucket = math.floor(request[2].sensor_timestamp_seconds / 5.)
+    folder = Path(directory) / f'failed-{bucket:06d}'
+    if (folder / f'planner-{bucket:06d}.json').exists():
+        return None
+    return save_planner_replay(folder, control, request, result)
+
+
 def save_planner_replay(directory, control, request, result, *, source_window=None):
     if not isinstance(control, SafeSAGEControlRuntime) or len(request) not in (5, 6):
         raise TypeError("planner replay requires the native runtime and five/six-part request")

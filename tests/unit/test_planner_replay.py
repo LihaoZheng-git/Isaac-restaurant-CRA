@@ -16,6 +16,34 @@ from robot.safety.safe_sage_runtime import SafeSAGEControlRuntime
 from robot.safety.safe_sage_unicycle_cbf_filter import SafeSAGEUnicycleCBFFilter
 
 
+def test_bounded_failure_replay_skips_success_and_preserves_first_request(tmp_path):
+    from robot.evaluation.planner_replay import save_first_failed_planner_replay
+    perception=make_runtime()
+    perception.initialize(make_observation(1,1.),make_provider())
+    paper=make_filter()
+    control=SafeSAGEControlRuntime(mpc=LaplaceGuidanceTrackingMPC(paper,config()),
+        backup_filter=SafeSAGEUnicycleCBFFilter(paper))
+    request=(np.zeros(3),(.2,0.),perception.field,None,(1.,0.))
+    result=control.plan(*request[:3],nominal_goal_grid_xy=request[4])
+    assert not result.success
+    directory=tmp_path/'records'
+    assert save_first_failed_planner_replay(directory,control,request,replace(result,success=True)) is None
+    assert not directory.exists()
+    meta=save_first_failed_planner_replay(directory,control,request,result)
+    path=directory/'failed-000000'/meta['file']
+    original=path.read_bytes()
+    assert save_first_failed_planner_replay(directory,control,(np.ones(3),*request[1:]),result) is None
+    assert path.read_bytes()==original
+    assert hashlib.sha256(original).hexdigest()==meta['sha256']
+    restored=pickle.loads(original) # Generated locally by this test.
+    np.testing.assert_array_equal(restored['request'][0],np.zeros(3))
+    assert restored['request'][2].sensor_timestamp_seconds==1.
+    later=replace(perception.field,sensor_frame_id=2,sensor_timestamp_seconds=6.)
+    next_meta=save_first_failed_planner_replay(directory,control,(request[0],request[1],later,*request[3:]),result)
+    assert next_meta['sensor_timestamp_seconds']==6.
+    assert len(list(directory.glob('failed-*')))==2
+
+
 @pytest.mark.parametrize("position,accepted", [((0., 0., 0.), False), ((-2., 2., 0.), True)])
 def test_native_numeric_snapshot_replays_same_plan_without_renewing_field(tmp_path, position, accepted):
     perception = make_runtime()
