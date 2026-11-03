@@ -10,7 +10,10 @@ tiny backend. Automatic image proposals (32 by 32 point grid) are supplemented
 by at most 16 current observed-fragment extent prompts. No category, authored
 target box, simulator instance mask, material or density enters inference.
 At most 64 proposals survive the existing .85 quality, 200 pixel, image-boundary
-and 40% image-area checks. These are image hypotheses, not accepted objects.
+and 40% image-area checks. The existing silhouette criterion also requires at
+least 98% of mask pixels in one connected component, rejecting larger masks
+with detached background patches. Masks are never filled or cropped to pass.
+These are image hypotheses, not accepted objects.
 
 For each mask, the adapter selects exact current projected foreground returns.
 Each included fragment needs at least four hits and 80% visible coverage; the
@@ -82,3 +85,13 @@ the original source is now the backward-compatible default. A further adversaria
 test prevents a duplicate mask from reviving a rejected nonnested conflict.
 Fresh native repetition is required after these repairs. The initial stale
 asset-README manifest rejection and every v1 failed native record are retained.
+
+At `5934b86`, both crate stationary components PASSED, each with 16/18 current
+group assessments (first two sources qualify support). Bin mask/mass/motion
+passed but its contact gate FAILED: the selected larger mask had 2084/2171
+pixels in the main component, with two detached patches. The original 98%
+contact connectivity gate correctly rejected it. The image proposal stage now
+reuses that existing criterion to reject the fragmented candidate; a connected
+broader body proposal is already present. No contact formula or threshold is
+relaxed. This correction requires another fresh stationary series. All 3692
+unit tests passed before that final proposal tightening.

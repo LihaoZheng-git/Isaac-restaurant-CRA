@@ -314,3 +314,14 @@ def test_image_proposals_reject_backend_shape_mismatch(tmp_path):
     backend.generate = lambda: (np.zeros((1, 10, 10)), np.array([.99]))
     with pytest.raises(ValueError, match="shape mismatch"):
         segmenter.image_proposals(ids, projection)
+
+
+def test_image_proposals_reject_disconnected_background_islands_without_filling(tmp_path):
+    segmenter, backend, projection, ids = fixture(tmp_path)
+    fragmented = backend.masks[0].copy()
+    fragmented[5:15, 5:15] = True
+    backend.generate = lambda: (np.array([fragmented]), np.array([.99]))
+    proposals = segmenter.image_proposals(ids, projection)
+    assert proposals  # original connected extent proposal still survives
+    assert all(not np.array_equal(p.detection.mask, fragmented) for p in proposals)
+    assert all(np.array_equal(p.detection.mask, backend.masks[0]) for p in proposals)

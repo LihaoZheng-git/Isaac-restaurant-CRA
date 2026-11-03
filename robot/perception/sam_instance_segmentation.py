@@ -186,6 +186,9 @@ class SamInstanceSegmenter:
         multi-fragment ownership must be checked by the downstream adapter.
         No retained mask is used as a new observation.
         """
+        import cv2
+        from robot.perception.visual_shape_contact import SilhouetteContactConfig
+
         if self.image_shape is None:
             raise RuntimeError("set_image is required for each camera frame")
         batches = [("automatic_image_grid", *self.backend.generate())]
@@ -213,6 +216,12 @@ class SamInstanceSegmenter:
                     or count < self.config.minimum_mask_pixels
                     or count > mask.size * self.config.maximum_image_fraction
                     or mask[0].any() or mask[-1].any() or mask[:, 0].any() or mask[:, -1].any()):
+                    continue
+                # A larger mask with disconnected background islands is not a
+                # better whole-object proposal. Reuse the existing silhouette
+                # connected-component criterion; reject, never fill/crop masks.
+                _, _, stats, _ = cv2.connectedComponentsWithStats(mask.astype(np.uint8), 8)
+                if stats[1:, cv2.CC_STAT_AREA].max() / count < SilhouetteContactConfig().minimum_component_fraction:
                     continue
                 yy, xx = np.where(mask)
                 detection = SemanticDetection(0, "unknown", min(float(quality), self.config.confidence_cap),
