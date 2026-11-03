@@ -224,6 +224,8 @@ parser.add_argument("--stationary-prop-camera", action="store_true",
                     help="allow the experimental RGB mount in a stationary restaurant prop test only; no wheel-motion acceptance")
 parser.add_argument("--stationary-prop-standoff-metres", type=float,
                     help="separate zero-wheel demo-container sensing survey, .8..3m from authored fixture center; never an estimator input")
+parser.add_argument("--stationary-prop-view-yaw-degrees", type=float, default=0.,
+                    help="stationary standoff survey viewing direction, 0..360 degrees; fixture placement only")
 parser.add_argument("--rgb-camera", choices=("front_hawk_left", "front_hawk_right", "front_owl"),
                     default="front_hawk_left", help="one existing authored camera per trial; actual lens/extrinsics are read, no multi-camera fusion")
 parser.add_argument("--human-crossing-trigger-y", type=float, default=7.8,
@@ -339,6 +341,10 @@ parser.add_argument('--unknown-verified-dynamic-evidence', action='store_true',
 parser.add_argument('--human-verified-part-recovery', action='store_true',
                     help='bounded recovery across a previously verified human parent/part ID swap; complete old region must fit current body')
 args = parser.parse_args()
+if (not math.isfinite(args.stationary_prop_view_yaw_degrees)
+    or not 0 <= args.stationary_prop_view_yaw_degrees < 360
+    or args.stationary_prop_view_yaw_degrees != 0 and args.stationary_prop_standoff_metres is None):
+    parser.error('prop viewing yaw requires explicit standoff and finite angle in [0,360)')
 if args.stationary_prop_standoff_metres is not None and (
     not args.stationary_prop_camera or args.restaurant_view != 'demo-container'
     or not math.isfinite(args.stationary_prop_standoff_metres)
@@ -877,8 +883,9 @@ if args.restaurant_scene:
         if args.restaurant_view == "server" else observation_options[args.restaurant_view])
     if args.stationary_prop_standoff_metres is not None:
         from robot.scene.restaurant_container_bench import CONTAINER_CENTER_XY
-        restaurant_start = (CONTAINER_CENTER_XY[0] - args.stationary_prop_standoff_metres,
-                            CONTAINER_CENTER_XY[1], restaurant_start[2])
+        restaurant_yaw = math.radians(args.stationary_prop_view_yaw_degrees)
+        restaurant_start = (CONTAINER_CENTER_XY[0] - args.stationary_prop_standoff_metres * math.cos(restaurant_yaw),
+                            CONTAINER_CENTER_XY[1] - args.stationary_prop_standoff_metres * math.sin(restaurant_yaw), restaurant_start[2])
     if args.human_start_view != "original":
         restaurant_yaw = math.pi / 2
     if args.human_start_view == "crossing-approach":

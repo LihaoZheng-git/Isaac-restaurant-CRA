@@ -97,3 +97,18 @@ def test_prop_standoff_accepts_separate_near_and_far_surveys(monkeypatch):
     for distance in ('1.1', '2.5', '2.8'):
         args = _parse_mount([*BASE_ARGS, '--stationary-prop-standoff-metres', distance], monkeypatch)
         assert args.stationary_prop_standoff_metres == float(distance) and not args.motion
+
+
+@pytest.mark.parametrize('angle', ['nan', '-1', '360'])
+def test_prop_view_angle_rejects_invalid_values(angle, monkeypatch):
+    with pytest.raises(SystemExit):
+        _parse_mount([*BASE_ARGS, '--stationary-prop-standoff-metres', '2.5',
+                      '--stationary-prop-view-yaw-degrees', angle], monkeypatch)
+
+
+def test_prop_view_angle_needs_standoff_and_cannot_enable_wheels(monkeypatch):
+    with pytest.raises(SystemExit):
+        _parse_mount([*BASE_ARGS, '--stationary-prop-view-yaw-degrees', '90'], monkeypatch)
+    args = _parse_mount([*BASE_ARGS, '--stationary-prop-standoff-metres', '2.5',
+                         '--stationary-prop-view-yaw-degrees', '90'], monkeypatch)
+    assert args.stationary_prop_view_yaw_degrees == 90 and not args.motion
