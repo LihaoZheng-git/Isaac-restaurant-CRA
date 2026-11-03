@@ -1,5 +1,23 @@
 # CRA repository guidance
 
+- Separate service-container bench at a5a4ac7 PASSED angular and rounded
+  stationary native components: each18/18 matched accepted RGB/LiDAR instances,
+  17 fresh supported contact updates, zero wheel commands, frozen sources.
+  Matched .32x.32x.48m bins at(28.15,6.10), robot(26.3,6.1), Owl+.60m level;
+  background server disabled only in prop-only layers. Original mask/ownership/
+  .20m target gates unchanged. Median outline cues angular.375848/rounded.420314,
+  contact factors.116033/.121116, phi.596008/.598332: NOT a high-contact contrast;
+  rounded elongation dominates. Do not relabel these bins as physical sharpness.
+  Potential/thermal remain labeled.25 priors at final sources; mass uncalibrated,
+  simulator ego reference oracle, no fresh complete four-factor claim. Preserve
+  angular-v1 .214227m target-centroid failure and angular-v2 background-human
+  failure; rounded-v1 passed separately. Local v3_container_candidate adds the
+  visible angular bin with server retained but has NO new full-scene/motion
+  acceptance. Approved straight one-way human walk and pot/plume test remain
+  pending; inherited human commands are placeholders, not final v3 behavior.
+  3641units123.05s/70focused/Ruff PASS. Accepted v2/main/primary/PR117 holds stay.
+  See docs/restaurant_container_bench.md and outputs/container-bench/comparison.png.
+
 - User-approved simplified camera-height survey at4032675 captured16 paused
   native Owl RGB views with raises0/.2/.4/.6m, unchanged lens640x480 and props.
   Zero physics/wheels/time advancement;72 source hashes/bounds passed. Preferred
