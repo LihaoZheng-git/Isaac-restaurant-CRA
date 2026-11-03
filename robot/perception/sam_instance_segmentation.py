@@ -198,10 +198,11 @@ class SamInstanceSegmenter:
         eligible = [int(k) for k in np.unique(ids) if k >= 0 and np.sum(ids == k) >= 8]
         for key in eligible[:16]:
             xy = projection.pixel_indices_xy[ids == key]
-            lo, hi = xy.min(axis=0), xy.max(axis=0)
+            # Match the audited extent prompt's half-open pixel-box contract.
+            lo, hi = xy.min(axis=0), xy.max(axis=0) + 1
             padding = .25 * np.maximum(hi - lo, 1)
             a = np.maximum(0, np.floor(lo - padding)).astype(int)
-            b = np.minimum(np.array(self.image_shape[::-1]) - 1, np.ceil(hi + padding)).astype(int)
+            b = np.minimum(np.array(self.image_shape[::-1]), np.ceil(hi + padding)).astype(int)
             point = xy[np.argmin(np.sum((xy - np.median(xy, axis=0)) ** 2, axis=1))]
             masks, qualities = self.backend.predict(tuple(point), context_box_xyxy=(*a, *b))
             batches.append(("current_observed_extent", masks, qualities))

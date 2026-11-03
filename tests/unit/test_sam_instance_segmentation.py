@@ -307,6 +307,7 @@ def test_image_proposals_are_unassociated_and_preserve_quality_boundary_gates(tm
     assert all(p.model_quality >= .85 and not p.detection.mask[0].any() for p in proposals)
     assert all(p.mask_track_hits == 0 and p.projected_track_points == 0 for p in proposals)
     assert any(p.candidate_diagnostics[0]["basis"] == "automatic_image_grid" for p in proposals)
+    assert backend.boxes == [(28, 28, 40, 40)]  # same half-open extent as original retry
 
 
 def test_image_proposals_reject_backend_shape_mismatch(tmp_path):

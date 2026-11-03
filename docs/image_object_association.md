@@ -95,3 +95,12 @@ reuses that existing criterion to reject the fragmented candidate; a connected
 broader body proposal is already present. No contact formula or threshold is
 relaxed. This correction requires another fresh stationary series. All 3692
 unit tests passed before that final proposal tightening.
+
+At `2fbf8ab`, both crate components again PASSED; the bin kept a consistent
+1953--1968 pixel body mask and rough mass 3.47--4.37 kg, but FAILED the current
+contact gate (4/16 fresh shape cues; other masks had unresolved interior gaps).
+All 3693 unit tests passed. The image extent prompt was then corrected to use
+the same half-open pixel bounds as the existing audited retry (maximum pixel
++1 before padding). Archived replay improves the cue availability but does not
+make it universal. Preserve this bin failure; no hole filling or contact-gate
+relaxation is permitted to manufacture acceptance.
