@@ -22,7 +22,7 @@
       "--maximum-seconds",
       "90",
       "--restaurant-scene",
-      "scenes/generated/restaurant_real_recycle_bin_v1.usda",
+      "scenes/generated/restaurant_image_objects_recycle_bin_v1.usda",
       "--restaurant-route",
       "short",
       "--static-occupancy-memory-prior",
@@ -67,7 +67,7 @@
       "--maximum-seconds",
       "90",
       "--restaurant-scene",
-      "scenes/generated/restaurant_real_intact_crate_v1.usda",
+      "scenes/generated/restaurant_image_objects_intact_crate_v1.usda",
       "--restaurant-route",
       "short",
       "--static-occupancy-memory-prior",
@@ -112,7 +112,7 @@
       "--maximum-seconds",
       "90",
       "--restaurant-scene",
-      "scenes/generated/restaurant_real_broken_crate_v1.usda",
+      "scenes/generated/restaurant_image_objects_broken_crate_v1.usda",
       "--restaurant-route",
       "short",
       "--static-occupancy-memory-prior",
@@ -139,3 +139,4 @@
     ]
   }
 }
+
