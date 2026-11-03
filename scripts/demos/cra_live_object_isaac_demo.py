@@ -318,7 +318,11 @@ parser.add_argument(
     default=0.2,
     help="optimizer candidate age cap; every executed horizon still needs fresh exact validation",
 )
+parser.add_argument('--unknown-persistent-background-prior', action='store_true',
+                    help='persistent qualified static-map PRIOR, capped at .30m until person/motion contradiction')
 args = parser.parse_args()
+if args.unknown_persistent_background_prior and not args.unknown_supported_background_prior:
+    parser.error('persistent background prior requires explicit supported background prior')
 if args.unknown_supported_background_prior and not args.unknown_obstacle_planning:
     parser.error("supported background prior requires explicit unknown obstacle planning")
 if (not math.isfinite(args.unknown_obstacle_phi) or not 0 < args.unknown_obstacle_phi <= 1
@@ -1409,7 +1413,10 @@ def main():
         from robot.perception.unknown_obstacle_memory import UnknownObstacleConfig, UnknownObstacleMemory
         perception.unknown_obstacle_memory = UnknownObstacleMemory(UnknownObstacleConfig(
             unknown_phi=args.unknown_obstacle_phi,
-            supported_background_prior=args.unknown_supported_background_prior))
+            supported_background_prior=args.unknown_supported_background_prior,
+            persistent_background_prior=args.unknown_persistent_background_prior))
+        from robot.evaluation.unknown_obstacle_validation import UnknownObstacleGeometryArchive
+        unknown_geometry_archive = UnknownObstacleGeometryArchive(args.output)
     history = EgoPoseHistory()
     if args.rolling_local_field:
         from robot.safety.rolling_local_field import RollingLocalField
@@ -1813,6 +1820,7 @@ def main():
         if args.unknown_obstacle_planning:
             from robot.evaluation.unknown_obstacle_validation import audit_static_human_exclusion
             latest.diagnostics["unknown_obstacle_static_human_audit"] = audit_static_human_exclusion(latest.unknown_obstacle_snapshot, human.records)
+            latest.diagnostics["unknown_obstacle_geometry_archive"] = unknown_geometry_archive.save(latest.unknown_obstacle_snapshot)
         records.append(field_record(latest, now))
         if human is not None and human.background_walk is not None and len(records) >= args.stationary_frames-20:
             # Actor-only pre-roll during the last zero-wheel assessments. This
@@ -2457,6 +2465,7 @@ def main():
                     if args.unknown_obstacle_planning:
                         from robot.evaluation.unknown_obstacle_validation import audit_static_human_exclusion
                         latest.diagnostics["unknown_obstacle_static_human_audit"] = audit_static_human_exclusion(latest.unknown_obstacle_snapshot, human.records)
+                        latest.diagnostics["unknown_obstacle_geometry_archive"] = unknown_geometry_archive.save(latest.unknown_obstacle_snapshot)
                     live_fields.append(field_record(latest, now, current))
                     if args.moving_actor:
                         elapsed = latest.field.sensor_timestamp_seconds - actor_start_time

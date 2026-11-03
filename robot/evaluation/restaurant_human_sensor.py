@@ -108,6 +108,7 @@ class RestaurantHumanSensorDiagnostic:
         unknown_obstacle_planning=False,
         unknown_obstacle_phi=.68359375,
         unknown_supported_background_prior=False,
+        unknown_persistent_background_prior=False,
         human_short_fragment_coverage=False,
         lidar_range_m=7.5,
     ):
@@ -346,6 +347,9 @@ class RestaurantHumanSensorDiagnostic:
             from robot.perception.stationary_furniture_memory import FurnitureMemoryConfig, StationaryFurnitureMemory
             self.worker.stationary_furniture_memory = StationaryFurnitureMemory(FurnitureMemoryConfig(
                 fragment_level_proof=stationary_furniture_fragment_proof))
+        self.unknown_geometry_archive = None
+        if unknown_persistent_background_prior and not unknown_supported_background_prior:
+            raise ValueError('persistent background prior requires explicit supported background prior')
         if unknown_supported_background_prior and not unknown_obstacle_planning:
             raise ValueError("supported background prior requires explicit unknown obstacle planning")
         if unknown_obstacle_planning:
@@ -353,7 +357,10 @@ class RestaurantHumanSensorDiagnostic:
                 raise ValueError("unknown obstacle planning requires explicit furniture memory")
             from robot.perception.unknown_obstacle_memory import UnknownObstacleConfig, UnknownObstacleMemory
             self.worker.unknown_obstacle_memory = UnknownObstacleMemory(UnknownObstacleConfig(
-                unknown_phi=unknown_obstacle_phi, supported_background_prior=unknown_supported_background_prior))
+                unknown_phi=unknown_obstacle_phi, supported_background_prior=unknown_supported_background_prior,
+                persistent_background_prior=unknown_persistent_background_prior))
+            from robot.evaluation.unknown_obstacle_validation import UnknownObstacleGeometryArchive
+            self.unknown_geometry_archive = UnknownObstacleGeometryArchive(self.output)
         self.history = EgoPoseHistory(maximum_samples=2048)
         self.truth, self.records, self.rejections = [], [], []
         self.executor = ThreadPoolExecutor(max_workers=1)
@@ -526,6 +533,8 @@ class RestaurantHumanSensorDiagnostic:
                     "unknown_obstacle_memory": result.diagnostics.get("unknown_obstacle_memory"),
                     "unknown_obstacle_field_checks": result.diagnostics.get("unknown_obstacle_field_checks"),
                     "unknown_obstacle_static_human_audit": unknown_audit,
+                    "unknown_obstacle_geometry_archive": self.unknown_geometry_archive.save(result.unknown_obstacle_snapshot)
+                        if self.unknown_geometry_archive is not None else None,
                     "furniture_memory_human_audit": furniture_audit,
                     "human_fragment_coverage_prior": result.diagnostics.get("human_fragment_coverage_prior"),
                     "completion_age_sim_seconds": now - packet.sensor_timestamp_seconds,

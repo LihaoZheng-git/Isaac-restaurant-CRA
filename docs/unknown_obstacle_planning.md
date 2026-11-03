@@ -198,3 +198,41 @@ prior: retain every qualified original point with a capped0.30m allowance until
 positive motion/person contradiction, keeping original clocks and unknown phi.
 People/observed movers remain dynamic. This assumes unobserved restaurant
 background stays stationary and does not validate arbitrary hidden movers.
+
+## Persistent qualified-background option
+
+`--unknown-persistent-background-prior` is a separate, default-OFF policy. It
+requires the supported-background mode and uses the matched recipe
+`configs/restaurant_service_demo_v2_persistent_background.json`. Only a surface
+with the existing repeated-support certificate can persist. Its entire original
+point set stays occupied with `min(0.30, 0.25 + 0.005 * support_age)` metres of
+position allowance. After ten seconds its diagnostic mode explicitly becomes
+`persistent_stationary_background_prior`; the support/source/qualification
+clocks do not advance. Actual new repeated support can update the separate
+support epoch, while the original query and factor epochs remain unchanged.
+
+This is the user's approved static-map assumption: previously qualified,
+unobserved restaurant background stays stationary until positive person or
+motion contradiction. It is not inferred free space or a universal motion
+bound. Current people, validated body regions, uncertain-human regions and
+observed movers retain their original exclusions and dynamic handling. A
+contradiction removes the stationary certificate. Unqualified surfaces still
+use generic motion uncertainty. Legacy recipes still expire after ten seconds.
+
+All raw occupancy, risk/flux floors, fixed lambda and exact control checks stay
+unchanged. The cap can prevent an old stationary piece from filling the whole
+field merely through elapsed time; it cannot promise progress through genuinely
+blocked geometry or invalid sensing.
+
+Every accepted native field now archives exact original geometry for every
+retained unknown region, including pieces outside the nearby guard's watch.
+Content-addressed NPZ files hold the original points, center, source time/frame
+and ID; per-field references include geometry and file SHA-256 hashes. Evolving
+radii, support certificates and applied risk remain in the corresponding field
+diagnostics. Archives are evaluation output only, never runtime inputs. They
+resolve the missing-six-point diagnostic gap for future runs without pretending
+to recover the old missing sample.
+
+Focused validation:72 tests passed in6.37s across unknown obstacles, supported
+background and persistence. Full regression:3,522 unit tests passed in129.42s;
+Ruff, compilation and diff checks passed. Fresh native gates are pending.

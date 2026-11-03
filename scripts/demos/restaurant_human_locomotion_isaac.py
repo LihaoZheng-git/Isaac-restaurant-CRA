@@ -96,7 +96,11 @@ parser.add_argument(
     default=(70.0, 45.0, 100.0),
     metavar=("KG", "LOWER", "UPPER"),
 )
+parser.add_argument('--unknown-persistent-background-prior', action='store_true',
+                    help='persistent qualified static-map PRIOR, capped at .30m until person/motion contradiction')
 args = parser.parse_args()
+if args.unknown_persistent_background_prior and not args.unknown_supported_background_prior:
+    parser.error('persistent background prior requires explicit supported background prior')
 if args.unknown_supported_background_prior and not args.unknown_obstacle_planning:
     parser.error('supported background prior requires explicit unknown obstacle planning')
 if args.human_short_fragment_coverage and not args.identity_selection_body_envelope:
@@ -506,6 +510,7 @@ def main():
             unknown_obstacle_planning=args.unknown_obstacle_planning,
             unknown_obstacle_phi=args.unknown_obstacle_phi,
             unknown_supported_background_prior=args.unknown_supported_background_prior,
+            unknown_persistent_background_prior=args.unknown_persistent_background_prior,
             human_short_fragment_coverage=args.human_short_fragment_coverage,
             predictive_human_geometry=args.predictive_human_geometry,
             human_prediction_uncertainty_rate=args.human_prediction_uncertainty_rate,

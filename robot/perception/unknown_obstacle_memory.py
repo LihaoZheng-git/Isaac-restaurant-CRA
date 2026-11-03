@@ -34,12 +34,16 @@ class UnknownObstacleConfig:
     background_support_fraction: float = .99
     background_maximum_gap_m: float = .25
     background_position_radius_m: float = .25
+    persistent_background_prior: bool = False
+    background_maximum_radius_m: float = .30
 
     def __post_init__(self):
-        if not isinstance(self.supported_background_prior, bool):
+        if (not isinstance(self.supported_background_prior, bool)
+                or not isinstance(self.persistent_background_prior, bool)
+                or self.persistent_background_prior and not self.supported_background_prior):
             raise ValueError("background prior requires explicit boolean opt-in")
         for name, value in vars(self).items():
-            if name == 'supported_background_prior':
+            if name in ('supported_background_prior', 'persistent_background_prior'):
                 continue
             if isinstance(value, bool) or not math.isfinite(value) or value <= 0:
                 raise ValueError("finite positive unknown-obstacle configuration required")
@@ -49,7 +53,11 @@ class UnknownObstacleConfig:
                 or self.maximum_source_gap_seconds > .35
                 or not .99 <= self.background_support_fraction <= 1
                 or self.background_maximum_gap_m > .25
-                or self.background_position_radius_m < self.background_maximum_gap_m):
+                or self.background_position_radius_m < self.background_maximum_gap_m
+                or self.persistent_background_prior and (
+                    self.background_maximum_radius_m > .30
+                    or self.background_maximum_radius_m < max(self.background_position_radius_m,
+                        self.stationary_radius_m, self.stationary_support_distance_m))):
             raise ValueError("invalid risk or original motion/horizon/source bounds")
 
     def guidance(self, previous=None, retained=None):
@@ -380,13 +388,21 @@ class UnknownObstacleMemory:
                 if support_distance <= cfg.stationary_support_distance_m and len(np.unique(stable[indices], axis=0)) >= 3:
                     old = replace(old, stationary_support_time=source_time)
                     stationary_age = 0.
-            if stationary_age <= cfg.stationary_lease_seconds:
+            persistent = (cfg.persistent_background_prior and old.background_support is not None
+                and old.stationary_support_time is not None and not human_near)
+            if stationary_age <= cfg.stationary_lease_seconds or persistent:
                 radius = max(cfg.stationary_radius_m + cfg.stationary_growth_mps*stationary_age,
                     cfg.stationary_support_distance_m if old.stationary_support_time != old.source_time else 0.)
                 mode = "stationary_positive_support_position_prior" if stationary_age == 0 else "retained_stationary_geometry_prior"
                 if old.background_support is not None:
                     radius = max(radius, cfg.background_position_radius_m + cfg.stationary_growth_mps*stationary_age)
                     mode = 'supported_background_position_prior' if stationary_age == 0 else 'retained_supported_background_prior'
+                    if persistent:
+                        # An explicit static-map assumption, not an extended
+                        # observation lease. No source/support clock advances.
+                        radius = min(radius, cfg.background_maximum_radius_m)
+                        if stationary_age > cfg.stationary_lease_seconds:
+                            mode = 'persistent_stationary_background_prior'
             else:
                 # Preserve geometry beyond a static lease; apply the explicit
                 # unknown-motion bound, including the complete control horizon.

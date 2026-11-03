@@ -1,5 +1,27 @@
 # CRA repository guidance
 
+- The user now APPROVES a persistent qualified stationary-background PRIOR.
+  Separate default-OFF --unknown-persistent-background-prior requires the
+  supported-background and unknown-obstacle modes. Retain EVERY qualified
+  original point with .25m+.005m/s position allowance capped at .30m, even
+  after the ten-second geometric support lease. This is an explicit static-map
+  assumption for unobserved restaurant background, not renewed observation.
+  Original source/frame/qualification/support/factor clocks stay unchanged.
+  Positive person/body/uncertain-human or observed-motion contradiction removes
+  the stationary hypothesis; unqualified surfaces and movers remain dynamic.
+  Preserve fixed unknown phi/higher old risk and flux, current raw occupancy,
+  lambda and every actual field/MPC/dense/analytical/arrival/stop check. Archive
+  exact original geometry for ALL retained regions, including unwatched pieces.
+  Arbitrary hidden movers/general occlusion remain unvalidated. Fresh four
+  prerequisites and full native arrival/stopping are required before v2 release.
+  Preserve all failed/interrupted runs, accepted v1 and main/primary/PR117 holds.
+  This explicitly supersedes ten-second expiry ONLY in the new opted-in mode.
+  At875a564 all four gates passed (108 component sources/startup60/near60), but
+  wheels stalled after3.93m and184fields; interrupted with no final report.
+  Qualified six-point263 expired at27.4s and grew to6.75m by32.3s, unchanged phi.
+  Exact final six points were not archived; earlier15-point same-ID data cannot
+  substitute. See docs/unknown_obstacle_planning.md and preserved outputs.
+
 - The user now APPROVES an evidence-based stationary-background PRIOR for
   partially observed non-human surfaces. Separate default-OFF
   --unknown-supported-background-prior requires unknown-obstacle planning.
