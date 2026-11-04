@@ -1,5 +1,18 @@
 # CRA repository guidance
 
+- Crate association native ata81fa05: original1.85m bin/intact/broken allPASS,
+  15/16/16 target assessments of18sources, zero wheels/sourcefrozen. Median
+  contact .090913/.101168/.109458, phi .584530/.589222/.593010; overlapping ranges,
+  modest proxy contrast only. Bin badsource84 remains rejected at.061964m>.06;
+  next valid source recovers original identity. Six non-target bin-run groups
+  retained separately. Broken1.6m stillFAIL: five groups21--23returns,3D center
+  error.3138--.3176m, zero target matches; eight candidate holds. Missing slats
+  are not repaired. The gain is a passing common-view comparison, not general
+  broken-crate recovery or sharpness/navigation acceptance.3774units177.75s/
+  31focused36.69s/Ruff/branchdiffPASS;1322 prior v2/asset/native files unchanged.
+  See docs/crate_surface_association.md and outputs/crate-surface-association/.
+  Keep all failures, priors and defaultOFF/draft/main/primary/PR117 holds.
+
 - Bounded crate-surface association branch adds defaultOFF
   --image-object-overlap-hold, stationary image-object props ONLY. When complete
   original support fails but maskIoU>=.75 and any point is within.06m of an
@@ -10,7 +23,7 @@
   remain16; broken1.6m11->7 (stricter support), centroid failure NOT repaired.
   Point audit shows all20--26 sparse crate returns survive association; missing
   slats were not measured. Center diagnostics now say observed surface, not full
-  object center. Fresh four native stationary runs pending at implementation.
+  object center. Fresh native outcomes are recorded above.
   See docs/crate_surface_association.md and outputs/crate-surface-association/.
   Preserve all failures/defaultOFF/draft/main/primary/PR117 and zero-wheel holds.
 

@@ -70,8 +70,61 @@ assessments: the sources that violate the original support do not gain new
 identities and cannot qualify. This is deliberately stricter, not a repair of
 its missing physical samples or fixture-center failure. See `replay-v1/summary.json`.
 
-Fresh native validation is pending at implementation. Even a component pass
-does not establish strong contact separation, calibrated sharpness, complete
-four-factor sensing or navigation readiness. Potential/thermal priors and
-uncalibrated mass remain explicit. A successful original-view comparison will
-not establish repair of the sparse closer view.
+## Fresh native results at a81fa05
+
+All four fresh runs complete eighteen sources with zero wheel commands and
+unchanged runtime/scene hashes. Three original-view components pass; the closer
+broken-crate stress case fails. No acceptance limit or score changed.
+
+| View | Object | Component | Target assessments | Median contact | Median phi |
+| --- | --- | --- | ---: | ---: | ---: |
+| 1.85 m | Rounded bin | PASS | 15/18 | .090913 | .584530 |
+| 1.85 m | Intact crate | PASS | 16/18 | .101168 | .589222 |
+| 1.85 m | Broken crate | PASS | 16/18 | .109458 | .593010 |
+| 1.6 m | Broken crate | FAIL | 0/18 | -- | -- |
+
+The bin's source84 violates complete original support by .061964 m versus the
+unchanged .06 m limit. It remains rejected; source90 again satisfies the original
+hypothesis and recovers without a competing bin identity. Both crates pass the
+same original-view setup. The bin run also has six non-target grouped assessments,
+retained separately in `native-summary.json`; they are not bin successes.
+
+At 1.85 m the bin/intact/broken raw cue medians are .142786/.228227/.317193.
+No exposed-edge specialist joins occur on these matched targets. Exact current
+selected-return ranges are 366--377, 115--121 and 63--66 respectively. The three
+contact ranges overlap: .085811--.148186, .093597--.151737 and .096030--.155194.
+All matched sources, including startup, are included. Each pair has the intended
+ordering in 14/15 common recorded frame indices, but these are separate runs,
+not synchronized samples or a statistical calibration. The contrast is modest.
+
+The closer broken crate still lacks sufficient spatial coverage: five runtime
+group assessments have 21--23 returns and 3D surface-centroid distances
+.3138--.3176 m from the independently authored center. None passes the original
+.20 m fixture test. Eight candidate sources are held rather than enrolling
+overlapping histories. This stricter association does not recover unsampled
+slats; preserve `native/broken_crate_mid-v1` as a failure. The replay's seven
+groups and the fresh run's five are different captures, not interchangeable.
+
+Median field builds are 1.87--1.97 s. These are paced stationary diagnostics,
+partly overlapping the unit suite, not real-time acceptance. All original
+synchronization-rejection logs are preserved, including those in passing runs.
+
+Validation: **3,774 unit tests passed in 177.75 s**, **31 focused tests passed in
+36.69 s**, Ruff across `robot scripts tests` and the complete branch diff check
+pass. The first integration test used a point-tight synthetic mask that changed
+IoU with its perturbed return; its failed log is preserved. The corrected fixture
+uses a fixed visual silhouette to test the intended same-mask support defect;
+no runtime threshold was loosened.
+
+All **1,322** files in the preservation snapshot remain byte-identical: the full
+accepted-v2 tree, prior assets and all twelve original rounded-trash native
+archives. See `preservation-final.json`, `native-summary.json`,
+`ranking-diagnostic.json` and `comparison.png` under the output directory.
+
+We now have a passing shared-view stationary bin/crate comparison. The improved
+native acceptance is the bin's recovery; the broken crate already passed this
+original view and remains a valid candidate here. Its sparse closer view is
+NOT repaired. No component result establishes strong contact separation,
+calibrated sharpness, complete four-factor sensing or navigation readiness.
+Potential/thermal .25 priors, uncalibrated mass and simulator ego reference remain
+explicit. Keep the draft/default-OFF scope and all main/primary/PR117 holds.
