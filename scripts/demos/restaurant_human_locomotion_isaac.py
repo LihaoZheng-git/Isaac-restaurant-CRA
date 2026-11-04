@@ -278,7 +278,7 @@ from robot.scene.restaurant_service_build import (
     SERVICE_ROOT,
     SHORT_START_WORLD_XYZ,
     SHORT_START_YAW,
-    service_props,
+    active_service_props,
 )
 from robot.scene.transforms import get_prim_planar_pose
 
@@ -342,7 +342,7 @@ def main():
         app.update()
     stage = omni.usd.get_context().get_stage()
     additions = []
-    for prop in service_props():
+    for prop in active_service_props(stage):
         b = read_world_bounds(stage, SERVICE_ROOT + "/" + prop.name)
         additions.append({"bounds_minimum": b.minimum, "bounds_maximum": b.maximum})
     from robot.scene.restaurant_demo_build import demo_prop_records

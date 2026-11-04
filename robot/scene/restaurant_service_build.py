@@ -110,6 +110,18 @@ def service_props() -> tuple[ServiceProp, ...]:
     )
 
 
+def active_service_props(stage):
+    """Omit explicitly deactivated dressing, but reject missing scene structure."""
+    result = []
+    for spec in service_props():
+        prim = stage.GetPrimAtPath(f'{SERVICE_ROOT}/{spec.name}')
+        if not prim:
+            raise ValueError(f'missing restaurant dressing: {spec.name}')
+        if prim.IsActive():
+            result.append(spec)
+    return tuple(result)
+
+
 def audit_source_assets(asset_root: Path = ASSET_ROOT) -> dict:
     """Verify every selected original file against the intake manifest."""
     manifest = json.loads((asset_root / "manifest.json").read_text(encoding="utf-8"))

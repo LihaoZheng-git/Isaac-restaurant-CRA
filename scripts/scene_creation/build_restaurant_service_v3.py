@@ -15,8 +15,13 @@ from robot.scene.restaurant_service_v3 import build_service_v3
 if __name__=='__main__':
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--output',type=Path,required=True)
+    parser.add_argument('--separated-contact',action='store_true',
+        help='separate bin/crate along the earlier aisle; remove unused pot/plume/clearing station')
+    parser.add_argument('--props-only',action='store_true',
+        help='separate stationary prop diagnostic layer, without the native server')
     args=parser.parse_args()
     result=build_service_v3(args.output,ROOT/'scenes/generated/restaurant_service_demo_v2d.usda',
         ROOT/'scenes/generated/restaurant_rounded_trash_simple_trash_can_v1.usda',
-        ROOT/'scenes/generated/restaurant_rounded_trash_broken_crate_v1.usda')
+        ROOT/'scenes/generated/restaurant_rounded_trash_broken_crate_v1.usda',
+        separated_contact=args.separated_contact,props_only=args.props_only)
     print(json.dumps({k:v for k,v in result.items() if k!='source_sha256'},indent=2))

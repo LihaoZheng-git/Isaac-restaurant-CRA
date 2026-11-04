@@ -43,7 +43,7 @@ from robot.evaluation.restaurant_service_validation import load_authored_layout_
 from robot.scene.controlled_semantic_obstacle import read_world_bounds
 from robot.scene.restaurant_demo_build import demo_prop_records
 from robot.scene.restaurant_human_episode import RestaurantHumanEpisode
-from robot.scene.restaurant_service_build import SERVICE_ROOT, service_props
+from robot.scene.restaurant_service_build import SERVICE_ROOT, active_service_props
 
 
 def save(name, value):
@@ -60,7 +60,7 @@ try:
     with Usd.EditContext(stage, stage.GetSessionLayer()):
         stage.GetPrimAtPath(ROBOT_PRIM_PATH).SetActive(False)
     additions = demo_prop_records(stage)
-    for prop in service_props():
+    for prop in active_service_props(stage):
         b = read_world_bounds(stage, SERVICE_ROOT+'/'+prop.name)
         additions.append(dict(bounds_minimum=b.minimum, bounds_maximum=b.maximum))
     layout = load_authored_layout_monitor(args.layout_survey, additions)

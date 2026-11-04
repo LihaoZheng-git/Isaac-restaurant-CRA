@@ -61,8 +61,9 @@ def demo_prop_records(stage):
     if support and support.IsActive():
         names.append("AssetBenchSupport")
     for name, path in [(n, f"{DEMO_ROOT}/{n}") for n in names] + [("PulledChair", CHAIR_PATH)]:
-        if name == "RoundedBin" and not stage.GetPrimAtPath(path).IsActive():
-            continue  # Separate container bench replaces only this prop.
+        prim = stage.GetPrimAtPath(path)
+        if prim and not prim.IsActive():
+            continue  # Explicit additive scene removal; never report an empty box.
         bounds = read_world_bounds(stage, path)
         result.append(dict(name=name, prim_path=path, bounds_minimum=bounds.minimum,
                            bounds_maximum=bounds.maximum,

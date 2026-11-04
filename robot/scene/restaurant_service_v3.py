@@ -12,7 +12,15 @@ from robot.scene.restaurant_container_bench import CONTAINER_PATH
 from robot.scene.restaurant_demo_build import DEMO_ROOT, demo_prop_records
 
 
-def build_service_v3(output, base_scene, bin_scene, crate_scene):
+SEPARATED_CONTACT_CENTERS = ((22.0, 4.65), (25.7, 4.9))
+REMOVED_CONTACT_DEMO_PATHS = (
+    DEMO_ROOT+'/ClearingStation', DEMO_ROOT+'/ClosedCaddy',
+    DEMO_ROOT+'/UtensilCaddy', '/World/CRAServiceDressing/SecondPot',
+    '/World/CRAServiceDemoV2Steam',
+)
+
+
+def build_service_v3(output, base_scene, bin_scene, crate_scene, *, separated_contact=False, props_only=False):
     output = Path(output).resolve()
     additions = output.with_name(output.stem + '_props.usda')
     if any(p.exists() for p in (output, additions, output.with_suffix('.json'))):
@@ -35,9 +43,18 @@ def build_service_v3(output, base_scene, bin_scene, crate_scene):
     stage.SetEndTimeCode(base.GetEndTimeCode())
     stage.SetTimeCodesPerSecond(base.GetTimeCodesPerSecond())
     with Usd.EditContext(stage,layer):
+        if props_only:
+            stage.GetPrimAtPath('/World/CRAServiceActors/Server').SetActive(False)
         stage.GetPrimAtPath(DEMO_ROOT+'/RoundedBin').SetActive(False)
-        for scene, target, xy in ((bin_scene,CONTAINER_PATH,(28.15,4.9)),
-                                  (crate_scene,DEMO_ROOT+'/BrokenCrate',(28.15,6.1))):
+        centers = SEPARATED_CONTACT_CENTERS if separated_contact else ((28.15,4.9), (28.15,6.1))
+        if separated_contact:
+            for path in REMOVED_CONTACT_DEMO_PATHS:
+                prim = stage.GetPrimAtPath(path)
+                if not prim or not prim.IsActive():
+                    raise ValueError(f'expected original active dressing: {path}')
+                prim.SetActive(False)
+        for scene, target, xy in ((bin_scene,CONTAINER_PATH,centers[0]),
+                                  (crate_scene,DEMO_ROOT+'/BrokenCrate',centers[1])):
             manifest=json.loads(Path(scene).with_suffix('.json').read_text())
             donor=Sdf.Layer.FindOrOpen(manifest['additions'])
             if Path(donor.realPath).parent != output.parent:
@@ -59,6 +76,10 @@ def build_service_v3(output, base_scene, bin_scene, crate_scene):
         raise RuntimeError('original scene or asset changed')
     result=dict(scene=str(output),additions=str(additions),source_sha256=sources,
         props=props,source_files_unchanged=True,
+        separated_contact_layout=separated_contact,
+        stationary_props_only=props_only,
+        removed_paths=list(REMOVED_CONTACT_DEMO_PATHS) if separated_contact else [],
+        contact_prop_centers_world_xy=centers,
         scope='Separate v3 authored arrangement; original meshes/materials/scales. No geometry, labels or scores supplied to perception. Human one-way timing is actor-only. Native acceptance pending.')
     output.with_suffix('.json').write_text(json.dumps(result,indent=2)+'\n')
     return result

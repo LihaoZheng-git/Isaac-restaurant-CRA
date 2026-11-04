@@ -1,5 +1,17 @@
 # CRA repository guidance
 
+- User-approved separated v3 contact layout in progress: remove unused clearing
+  station/caddies, SecondPot and visual steam in a NEW additive scene; retain
+  original licensed bin(22,4.65) and broken crate(25.7,4.9), 3.708m apart before
+  the human encounter. Original long route/one-way actor/CRA/lambda/priors and
+  gates stay. Explicit zero-wheel prop poses are evaluation setup only; no
+  supplied property/risk/identity. Inactive dressing is omitted from independent
+  obstacle boxes. Fresh prop/stationary/human prerequisites and full native
+  mission required; old v3 crate-acquisition failure is NOT repaired by claim.
+  Preserve all archives and draft/main/primary/PR117 holds. Keep requested
+  left perception/right map+follow-camera presentation. See
+  docs/restaurant_service_demo_v3_separated.md.
+
 - V3 presentation-only map layout requested by user: left original annotated
   perception panel; upper-right v1 authored floor map/actual recorded route and
   human marker; lower-right native follow camera. Separate outputs/final demo/

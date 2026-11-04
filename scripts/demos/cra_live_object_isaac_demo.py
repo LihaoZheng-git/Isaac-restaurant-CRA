@@ -230,6 +230,11 @@ parser.add_argument("--stationary-prop-standoff-metres", type=float,
                     help="separate zero-wheel demo-container sensing survey, .8..3m from authored fixture center; never an estimator input")
 parser.add_argument("--stationary-prop-view-yaw-degrees", type=float, default=0.,
                     help="stationary standoff survey viewing direction, 0..360 degrees; fixture placement only")
+parser.add_argument("--stationary-prop-world-pose", type=float, nargs=3,
+                    metavar=("X", "Y", "YAW_DEGREES"),
+                    help="explicit zero-wheel observation pose for a separately placed prop; never an estimator input")
+parser.add_argument("--stationary-prop-target", choices=("ServiceContainer", "BrokenCrate"),
+                    help="independent evaluation target for an explicit zero-wheel prop pose; never perception input")
 parser.add_argument("--stationary-prop-rgb-width", type=int, choices=(640, 1280, 1920), default=640,
                     help="stationary-only native RGB sampling survey, same authored lens/aspect; no image upscaling")
 parser.add_argument("--rgb-camera", choices=("front_hawk_left", "front_hawk_right", "front_owl"),
@@ -410,6 +415,16 @@ if args.stationary_prop_standoff_metres is not None and (
     or not math.isfinite(args.stationary_prop_standoff_metres)
     or not .8 <= args.stationary_prop_standoff_metres <= 3.):
     parser.error('prop standoff requires stationary demo-container survey and finite .8..3m')
+if args.stationary_prop_world_pose is not None:
+    if (args.motion or args.restaurant_human or args.restaurant_server
+        or not args.stationary_prop_camera or args.restaurant_view != 'demo-container'
+        or not args.restaurant_scene or args.stationary_prop_target is None
+        or args.stationary_prop_standoff_metres is not None
+        or args.stationary_prop_view_yaw_degrees != 0
+        or not all(math.isfinite(v) for v in args.stationary_prop_world_pose)):
+        parser.error('explicit prop pose requires a zero-wheel stationary prop test and evaluation target')
+elif args.stationary_prop_target is not None:
+    parser.error('independent prop target requires an explicit stationary pose')
 if args.sam_track_extent_retry and not args.sam_observed_context_box:
     parser.error('SAM track-extent retry requires --sam-observed-context-box')
 if args.human_verified_part_recovery and (not args.human_track_recovery
@@ -920,7 +935,7 @@ from robot.scene.loader import load_robot_scene
 from robot.scene.transforms import compute_relative_prim_transform
 from robot.scene.controlled_semantic_obstacle import read_world_bounds
 from robot.scene.restaurant_service_build import (
-    RESTAURANT_OBSERVATIONS, SERVICE_ROOT, restaurant_route_local_xy, service_props,
+    RESTAURANT_OBSERVATIONS, SERVICE_ROOT, active_service_props, restaurant_route_local_xy,
 )
 from robot.scene.restaurant_server import SERVER_OBSERVATION, SERVER_PRIM_PATH
 from robot.sensor.camera import NovaCarterCamera, CAMERA_PRIM_PATHS
@@ -949,6 +964,11 @@ if args.restaurant_scene:
         restaurant_yaw = math.radians(args.stationary_prop_view_yaw_degrees)
         restaurant_start = (CONTAINER_CENTER_XY[0] - args.stationary_prop_standoff_metres * math.cos(restaurant_yaw),
                             CONTAINER_CENTER_XY[1] - args.stationary_prop_standoff_metres * math.sin(restaurant_yaw), restaurant_start[2])
+    if args.stationary_prop_world_pose is not None:
+        x, y, yaw = args.stationary_prop_world_pose
+        restaurant_start = (x, y, restaurant_start[2])
+        restaurant_yaw = math.radians(yaw)
+        restaurant_target = args.stationary_prop_target
     if args.human_start_view != "original":
         restaurant_yaw = math.pi / 2
     if args.human_start_view == "crossing-approach":
@@ -1233,7 +1253,7 @@ def main():
                 with Usd.EditContext(stage, stage.GetSessionLayer()):
                     steam.MakeInvisible()
                 puffs.append(steam)
-        for spec in service_props():
+        for spec in active_service_props(stage):
             path = f"{SERVICE_ROOT}/{spec.name}"
             bounds = read_world_bounds(stage, path)
             restaurant_props.append({"name":spec.name,"prim_path":path,
