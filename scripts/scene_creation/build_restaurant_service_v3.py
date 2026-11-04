@@ -21,10 +21,13 @@ if __name__=='__main__':
         help='separate stationary prop diagnostic layer, without the native server')
     parser.add_argument('--straight-contact',action='store_true',
         help='separate contact variant earlier on the straight aisle, with more route clearance')
+    parser.add_argument('--open-aisle-contact',action='store_true',
+        help='separate props in surveyed furniture gaps on the opposite side of the early aisle')
     args=parser.parse_args()
     result=build_service_v3(args.output,ROOT/'scenes/generated/restaurant_service_demo_v2d.usda',
         ROOT/'scenes/generated/restaurant_rounded_trash_simple_trash_can_v1.usda',
         ROOT/'scenes/generated/restaurant_rounded_trash_broken_crate_v1.usda',
-        separated_contact=args.separated_contact or args.straight_contact,
-        props_only=args.props_only,straight_contact=args.straight_contact)
+        separated_contact=args.separated_contact or args.straight_contact or args.open_aisle_contact,
+        props_only=args.props_only,straight_contact=args.straight_contact,
+        open_aisle_contact=args.open_aisle_contact)
     print(json.dumps({k:v for k,v in result.items() if k!='source_sha256'},indent=2))

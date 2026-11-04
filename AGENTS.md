@@ -1,5 +1,18 @@
 # CRA repository guidance
 
+- Straight32cec10 bin bench FAIL60zero wheels despite58fresh target assessments:
+  nearby barstoolraw89 center(20.2703,5.0818) lieswithin original.30m competitor
+  gate of bin observedcenter(20.1889,4.8088); legacygroupmemory absent though
+  freshmass/contact andstaticrecord exist. Also1startupcamera/LiDARepoch rejection.
+  Preserve both failures, no gate weakening. Separate --open-aisle-contact puts
+  crateFIRST(17.5,3.0), bin(21.2,3.2),3.705mapart in opposite-side furniture gaps.
+  Authored prop/background separation>.52mcrate/>.37mbin; unchangednominalguide
+  survey clearance.355545m, zero below2cm; NOTnativeacceptance. Recipe
+  restaurant_service_demo_v3_open_aisle.json, outputs/service-demo-v3-open-aisle/.
+  All estimator/controller/retention/margins/route/actor settings unchanged.
+  Requirefreshsixgates/own60/fullmission; all oldlayouts/failures/holds stay.
+  3851units201.61s/Ruff/diff PASS for this recipe; native validation pending.
+
 - Separated 7e932b7 passes six fresh gates/own60; bin48/crate58 stationary target
   assessments. Full long-motion-v2 clears ID failure and acquires both props,
   but is INTERRUPTED at source~109.8/world(24.997,4.216), yaw.644: sustained

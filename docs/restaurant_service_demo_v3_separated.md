@@ -88,3 +88,27 @@ Require fresh prop/actor/component/startup/near/own60 and full mission gates.
 3848 unit tests (198.42s), seven explicit scene/CLI checks and Ruff pass for
 this variant. The initial two CLI-test failures (numeric JSON argv values)
 are preserved; the recipe now uses strings consistently with existing recipes.
+
+## Furniture-gap placement
+
+The straight variant's bin-only gate at 32cec10 FAILED with zero wheels despite
+58/60 fresh target assessments: barstool raw89 centered at (20.2703,5.0818)
+is within the unchanged 0.30m competitor distance of the bin surface center
+(20.1889,4.8088). Fresh mass/contact and a static record exist, but the legacy
+group property-memory prerequisite correctly refuses the ambiguous neighbor.
+One initial camera/LiDAR epoch rejection is also retained. Do not weaken or
+remove either prerequisite, or call the failed view a passing retention test.
+
+A separate `--open-aisle-contact` arrangement puts the crate first at(17.5,3.0)
+and the bin at(21.2,3.2), 3.705m apart in surveyed furniture gaps across the
+aisle. The conservative authored prop-to-background separations are >0.52m
+for the crate and >0.37m for the bin (0.1--1.8m height raster; not sensing).
+The actual nominal-guide rollout has minimum aisle clearance 0.355545m and
+zero samples below the original 2cm gate. Stationary robot setup clearances
+are 1.359822m (crate) and 0.530545m (bin). Both remain before the guide turn.
+No robot/controller/estimator/memory policy or threshold changes.
+
+Recipe `configs/restaurant_service_demo_v3_open_aisle.json`, outputs
+`outputs/service-demo-v3-open-aisle/`. All earlier layouts/failures stay.
+Fresh gates and full mission are required; no native acceptance yet.
+3851 unit tests (201.61s), Ruff and diff checks pass for this placement recipe.

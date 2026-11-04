@@ -24,7 +24,7 @@ def test_removed_dressing_has_no_independent_obstacle_box():
         active_service_props(Usd.Stage.CreateInMemory())
 
 
-@pytest.mark.parametrize('variant',['separated','straight'])
+@pytest.mark.parametrize('variant',['separated','straight','open_aisle'])
 def test_separated_mission_changes_only_the_scene_reference(variant):
     old=json.loads(Path('configs/restaurant_service_demo_v3.json').read_text())['commands']
     new=json.loads(Path(f'configs/restaurant_service_demo_v3_{variant}.json').read_text())['commands']
@@ -37,7 +37,7 @@ def test_separated_mission_changes_only_the_scene_reference(variant):
 
 
 @pytest.mark.parametrize('case',['bin-static','crate-static'])
-@pytest.mark.parametrize('variant',['separated','straight'])
+@pytest.mark.parametrize('variant',['separated','straight','open_aisle'])
 def test_explicit_prop_pose_is_zero_wheel_only(monkeypatch,case,variant):
     path=Path('scripts/demos/cra_live_object_isaac_demo.py').resolve()
     cmd=json.loads(Path(f'configs/restaurant_service_demo_v3_{variant}.json').read_text())['commands'][case]
