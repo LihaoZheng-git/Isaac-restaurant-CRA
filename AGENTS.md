@@ -1,5 +1,17 @@
 # CRA repository guidance
 
+- Static-prop674c893 native PASS both bin/crate independent60+own60 and short
+  approaches. Each16/16 live rows retain exact original mass/contact sources;
+  kinetic live, no fabricated fresh masks. .303904m travel/16fields15moving/
+  .550631clearance/.002686stopdrift, CBFcrate.694667/bin.687801. Mass2.71491/
+  .44670kg,cue.34156/.15138,contact.15812/.14385,phi~.6153/.6088: modest proxy
+  contrast only. Old whole-center gate stillcrate1/16,bin16/16; do not erase
+  partial-surface limitation. Initial audit sensor/camera-frame mixup preserved;
+  corrected original-camera-source and exactpoint audits PASS.3816unit+1CLI/
+  40focused/Ruff/compile/diffPASS,4604 priorfilesunchanged. User condition now
+  met: proceed v3 integration, retaining defaultOFF/draft/main/primary/PR117
+  holds. See docs/static_prop_evidence.md,outputs/static-prop-evidence/.
+
 - User NOW APPROVES the simpler static-prop method for bin/broken crate and v3
   integration after short tests pass. Separate defaultOFF --static-prop-evidence
   supersedes immediate property deletion ONLY for this scoped mode. Seed from

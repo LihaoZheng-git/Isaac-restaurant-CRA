@@ -49,5 +49,28 @@ audits and stopping are required before v3 integration. Earlier whole-center,
 mask and complete-perception failures remain separate and preserved.
 
 Keep this mode default-OFF and the current draft/main/primary/PR117 holds.
-The user's next step is v3 integration if both short tests pass; no new full v3
-acceptance is implied here. Artifacts: `outputs/static-prop-evidence/`.
+At frozen runtime `674c893`, both fresh independent60 and own60 gates PASS.
+Both native short approaches PASS: .303904 m measured travel,16 live fields,
+15 translating fields,.550631 m minimum independent clearance and .002686 m
+stop drift. Minimum CBF margins are .694667 crate/.687801 bin. Both retain
+their original target evidence in16/16 live updates, with exact recorded-point
+association and original value/bounds/source/time/frame audits. Kinetic is live:
+relative speed ranges .0053--.2630 m/s crate and .0126--.2010 m/s bin.
+
+Retained rough masses are2.71491 kg crate/.44670 kg bin; contact cues are
+.34156/.15138. Confidence/prior handling gives contact factors .15812/.14385
+and phi ranges .61528--.61585/.60876--.60930. These are modest proxy contrasts,
+not calibrated physical sharpness or complete fresh four-factor perception.
+Potential/thermal remain .25 priors. The old complete-center .20 m audit still
+passes only1/16 crate rows versus16/16 bin rows; partial observed surfaces are
+not full object centers. All crate selected points lie inside its independent
+mesh box; maximum bin box excess is .00204 m, retained in the report.
+
+The first audit incorrectly compared the sensor frame with the camera frame;
+that failed audit is retained separately. The corrected audit uses the actual
+original camera-frame provenance and passes with zero source/point errors.
+Full unit suite3816PASS194.19s plus the final CLI test1PASS; focused40PASS,
+Ruff/compile/diff PASS. All4604 protected prior files remain unchanged.
+
+The short-test condition is met: proceed directly to separate v3 integration.
+No full v3 acceptance is implied here. Artifacts: `outputs/static-prop-evidence/`.
