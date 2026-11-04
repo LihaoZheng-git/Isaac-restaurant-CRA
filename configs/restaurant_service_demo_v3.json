@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "scope": "Separate v3 integration: original licensed bin/broken crate, verified static-location mass/contact priors, live kinetic/current raw geometry, human exclusions. Raised Owl .60m. One straight actor walk from far end, triggered before encounter; actor data never enters perception/control. Original robot route, lambda, margins and checks. Paced simulation. No full native acceptance yet; pot thermal remains unvalidated.",
+  "scope": "Separate v3 integration: original licensed bin/broken crate, verified static-location mass/contact priors, live kinetic/current raw geometry, human exclusions. Raised Owl .60m. One straight actor walk from far end, triggered before encounter; actor data never enters perception/control. Original robot route, lambda, margins and checks. Paced simulation. No full native acceptance yet; pot thermal remains unvalidated. Corrected variant separates static-prop 120s/60s evidence clocks from unchanged human 3s/1.5s. Full mission paced at .025, matching the near bench, to preserve original inference freshness and human continuity limits; original .04 failure retained.",
   "commands": {
     "long-parallel": [
       "scripts/demos/cra_live_object_isaac_demo.py",
@@ -109,7 +109,7 @@
       "--plume-control",
       "none",
       "--simulation-rate",
-      "0.04",
+      "0.025",
       "--maximum-seconds",
       "300",
       "--planner-result-max-age",

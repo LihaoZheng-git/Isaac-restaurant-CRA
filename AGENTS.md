@@ -1,5 +1,16 @@
 # CRA repository guidance
 
+- V3 long-motion-v1 at5e51871 interrupted after human pass/stall, no final arrival
+  or stop acceptance. Four fresh prerequisites and own60 passed. Bin64/crate68
+  acquired/retained real evidence, BUT mixed scene accidentally inherited human
+  3s/1.5s property clocks. Correct static cache to its original configurable
+  120s/60s; leave human config unchanged. Post-pass human rawID2437 remains live,
+  but stale inference + recovery baseline caused committed130.2->130.9s gap,
+  beyond unchanged.6s continuity; expanding uncertainty blocked route. Separate
+  corrected recipe uses already-tested.025 pacing, no physical/freshness/identity
+  or safety changes. Preserve original.04 failure, all earlier assets/v2/holds.
+  Corrected fresh gates/fullmission pending. See docs/restaurant_service_demo_v3.md.
+
 - V3 actor0540da4 completed16.364m/no reverse/zerohelddrift/allgeometryPASS,
   but straight-line gateFAIL: native gait lateral drift .32446m>.25m. Preserve
   actor-v1; no robotwheels. Next collinear2m actor guides keep same start/goal/

@@ -43,3 +43,32 @@ until the final endpoint, to correct accumulated native heading drift. It keeps
 the same start/goal/speed, unchanged .25m gate and all physical checks.
 Artifacts: `outputs/service-demo-v3/`; recipe:
 `configs/restaurant_service_demo_v3.json`. Full native v3 validation pending.
+
+The corrected actor run5e51871 passed:16.364m straight travel, maximum lateral
+deviation .06578m, zero held drift, minimum layout clearance .20277m. The fresh
+human component, startup60 and near60 also passed. Full mission long-motion-v1
+passed its own60 and reached both props and the human pass, but was interrupted
+after a post-pass stall; no final arrival/stopping acceptance is claimed.
+
+Two concrete integration issues are preserved in that run. Static props inherited
+the mixed scene's human3s expiry/1.5s confidence half-life, instead of their
+intended120s/60s. Bin64 and crate68 did acquire real evidence, but expired early.
+The correction gives static props their own configurable clock and exports it;
+human property configuration and source timestamps remain unchanged.
+
+The later stall was caused by compute freshness, not disappearance of raw human
+returns: ID2437 remains tracked at130.9s and later, but an inference rejection
+and unpublished recovery baseline left a committed130.2->130.9s gap. This exceeds
+the unchanged.6s identity continuity gate. The resulting reachable region
+expanded across the local field. The separate corrected recipe uses the already
+tested near-bench simulation pace.025 instead of.04; physical speeds, freshness,
+identity, uncertainty, CRA, MPC/CBF and arrival/stop thresholds stay unchanged.
+This is compute-paced simulation, never real-time performance. Fresh exact-source
+prerequisites and a full mission remain mandatory for the corrected variant.
+
+Corrected configuration validation:25 focused tests,3825 full unit tests in
+207.40s, and Ruff/diff checks pass. Legacy native source audit passes138 retained
+rows across10 objects; independent mesh-box diagnostics identify15 bin rows
+(103.1--105.9s) and6 crate rows(105.7--106.7s). These are original3s-clock
+diagnostics, not corrected native acceptance. Original sources, clocks, values,
+decay and current selected-point joins replay without errors.

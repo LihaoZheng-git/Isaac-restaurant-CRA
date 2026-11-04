@@ -23,6 +23,8 @@ class StaticPropEvidenceConfig:
     minimum_current_support_fraction: float = .6
     minimum_fragment_coverage: float = .8
     maximum_acquisition_range_m: float = 2.5
+    maximum_property_age_seconds: float = 120.
+    confidence_half_life_seconds: float = 60.
 
     def __post_init__(self):
         for name, value in vars(self).items():
@@ -41,7 +43,14 @@ class StaticPropEvidence:
 
     def __init__(self, config, property_config):
         self.config = config
-        self.property_config = property_config
+        # Static props must not inherit a mixed scene's short human-mass clock.
+        # Their existing explicit acquisition/expiry assumption is independent;
+        # the caller's human configuration remains immutable and unchanged.
+        self.property_config = replace(property_config,
+            scope='verified static separated-prop mass/contact; original source clocks, current LiDAR support required',
+            maximum_property_age_seconds=config.maximum_property_age_seconds,
+            confidence_half_life_seconds=config.confidence_half_life_seconds,
+            retained_properties=('mass','contact'))
         self.records = {}
 
     def enroll(self, key, points, mass, contact, *, frame_id, source_time,

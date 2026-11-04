@@ -102,6 +102,32 @@ def test_expired_properties_cannot_be_renewed_by_lidar():
     assert not matched and not m.records
 
 
+def test_static_props_keep_their_clock_in_a_mixed_human_scene():
+    human = PersistentObjectEvidenceConfig(scope='human only',
+        maximum_property_age_seconds=3., confidence_half_life_seconds=1.5,
+        retained_properties=('mass',))
+    m = StaticPropEvidence(StaticPropEvidenceConfig(), human)
+    points = observed(1,1.).obstacle_xyz
+    mass, contact = scalar(2,'kg',1.), scalar(.3,'1',1.)
+    assert m.enroll(5,points,mass,contact,frame_id=1,source_time=1.,robot_xy=(0,0),frozen=True)
+    assert m.match(points,np.ones(len(points),int),11.)[0]
+    values, details = m.retained(5,11.)
+    assert values['mass'].value == 2 and values['contact'].value == .3
+    assert values['mass'].confidence == pytest.approx(mass.confidence*2**(-10/60))
+    assert details['mass']['source_timestamp'] == 1.
+    assert human.maximum_property_age_seconds == 3.
+    assert human.confidence_half_life_seconds == 1.5
+    assert human.retained_properties == ('mass',)
+    assert not m.match(points,np.ones(len(points),int),122.)[0]
+
+
+def test_static_property_clock_is_explicitly_configurable():
+    cfg = StaticPropEvidenceConfig(maximum_property_age_seconds=10.,confidence_half_life_seconds=5.)
+    m = StaticPropEvidence(cfg,PersistentObjectEvidenceConfig(scope='unit'))
+    assert m.property_config.maximum_property_age_seconds == 10.
+    assert m.property_config.confidence_half_life_seconds == 5.
+
+
 def test_competing_locations_and_excluded_people_withhold_policy():
     m, points = memory()
     m.records[6] = copy.deepcopy(m.records[5])

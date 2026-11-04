@@ -229,5 +229,6 @@ def augment_image_objects(worker, packet, tracking, projection, world, objects,
         detail['static_prop_evidence'] = dict(
             records=list(static_memory.records), current_matches=list(static_matches),
             comparisons=static_audit, configuration=vars(static_config),
+            property_configuration=vars(static_memory.property_config),
             scope='user-approved stationary separated-prop prior; original mass/contact clocks; current LiDAR geometry and motion')
     return state, detail
