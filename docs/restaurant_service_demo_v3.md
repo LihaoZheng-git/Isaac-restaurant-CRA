@@ -1,5 +1,54 @@
 # Restaurant service demo v3
 
+Final recorded route completed at runtime revision `72b89ed`: 8/8 guides,
+152.600 simulation seconds, minimum independent clearance 0.473051 m,
+stopping drift 0.002291 m, and 1083 live fields (1081 while translating).
+The shareable package is `outputs/final demo/v3/restaurant-service-v3.mp4`.
+It preserves all 1537 navigation/stopping frames and adds six seconds of asset
+credits. Playback is 1x simulation time; execution was paced at .025, not real time.
+
+The original automatic report is **FAIL**, preserved unchanged. Its only failing
+navigation gates came from the legacy parallel-actor region `y <= 11`, although
+this explicitly selected one-way protocol starts at `y=23.5`. The separate
+straight-walk check had already passed. The corrected evaluator requires the
+explicit protocol, uses its authored start with the same 0.5 m region allowance,
+keeps every original speed/limb/grounding/geometry check, and additionally requires
+the complete one-way audit. `scripts/evaluation/reevaluate_straight_service.py`
+exactly reproduces the old summaries before re-evaluating the same archived data.
+The corrected post-run audit passes; this is **not a new native wheel run**.
+Original reports, exception, input hashes, and corrected reports are all included.
+The far-start human-mass diagnostic has no five retained human sources; it is
+preserved as a non-gating diagnostic. Fresh near-human and live retention gates pass.
+
+The nearby curve is 0.371162 m from the actual nominal polyline, at 1.426776 m
+human/robot center separation. Minimum human center separation is 1.407279 m.
+The longest actual translation hold while walking within 2 m is one simulation
+frame (0.016667 s); the longest interval below .05 m/s is .05 s. This is one scene
+variant, not a matched smoothing or causal CRA comparison. The human visual
+identity expires after its original 30 seconds near mission end: 19 uncertainty
+rows remain behind the robot with zero occupied cells in the current field.
+No identity clock was renewed and no native part-recovery event occurred.
+
+The bin retains original verified mass/contact in 82 current-point rows from
+103.0 to116.5 s, up to13.6667 s property age; phi remains live at .62516--.63256.
+All82 satisfy the separate original center/mesh-box diagnostics. The full source
+audit passes1220 retained rows across13 objects with exact source/value/clock/
+confidence/current-point replay. **The broken crate does not acquire a qualified
+image-LiDAR group in this full mission**, so it uses ordinary obstacle policy.
+An early surface reference and later newly visible surfaces prevent the initial
+proof; applying the existing2.5m range limit earlier also fails in read-only replay.
+No gate was relaxed. The passing16/16 bin and crate short approaches are included
+as separate component videos; they do not establish full-mission crate acquisition
+or a contact-risk contrast. Pot thermal response remains unvalidated.
+
+All seven scoped archive audits pass: geometry34459 references/752 archives,
+1067 motion proofs,5498 fragment provenance proofs,217 current human body joins/
+one visual-part join, exact camera parity for943 masks/65 tracks, static properties,
+and zero-event recovery accounting. All6692 previously protected files are unchanged.
+Final validation:3838 unit tests in210.25 s,61 focused tests, Ruff and diff checks.
+Draft/main/primary/PR117 holds remain. The earlier stages and failures below are
+historical records, not superseded claims of full perception acceptance.
+
 Separate development branch after both static-prop short tests passed at674c893.
 The accepted v2 archive, source layers, licensed assets and earlier failures stay
 unchanged. Draft/main/primary/PR117 holds remain.

@@ -101,9 +101,13 @@ def validate_parallel_selection(records, *, maximum_identity_prior_selection_age
             + 'away tangent only; no rear passing, geometry/arrival/stopping or fresh four-factor claim')
 
 
-def validate_parallel_actor(records, *, parked_robot):
+def validate_parallel_actor(records, *, parked_robot, straight_service_walk=False):
+    if not isinstance(straight_service_walk, bool):
+        raise TypeError('straight service evaluation must be explicit')
     extra_phases = {'background_walk', 'approach_parallel', 'continue_walk'}
     if any(r['phase'] in extra_phases for r in records):
+        if straight_service_walk:
+            raise ValueError('one-way service walk cannot use the background circuit')
         if not all(r.get('background_service_walk') is True for r in records):
             raise ValueError('extra walking phases require the explicit v2 actor circuit')
         # Keep the original oncoming-region/direction/limb gates on that exact
@@ -139,23 +143,36 @@ def validate_parallel_actor(records, *, parked_robot):
     median = float(np.median(speed[steady])) if steady.any() else None
     foot = np.array([np.array(r['left_foot_xyz']) - r['right_foot_xyz'] for r in records])
     geometry = np.array([[r['actor_layout_clearance_m'], r['collider_alignment_error_m']] for r in records])
+    # The v3 actor starts at y=23.5, not the legacy y=10.5. Keep the same
+    # half-metre authored-region allowance and every physical/motion gate.
+    # An explicit protocol flag AND the complete one-way audit are required;
+    # merely observing an out-of-region actor never selects this variant.
+    maximum_y = 11.
+    if straight_service_walk:
+        from robot.scene.restaurant_straight_walk import STRAIGHT_START
+        maximum_y = STRAIGHT_START[1] + .5
     checks = dict(
         actual_oncoming_travel=xyz[0, 1] >= 10.2 and xyz[-1, 1] <= 7.3 and steady.sum() >= 10,
         bounded_parallel_direction=steady.any() and float(np.median(velocity[steady, 1])) < -.3
             and float(np.median(np.abs(velocity[steady, 0]))) <= .2,
         requested_half_metre_speed_observed=median is not None and .325 <= median <= .7,
         bounded_actor_region=bool(((xyz[:, 0] >= 29.3) & (xyz[:, 0] <= 30.3)
-            & (xyz[:, 1] >= 6.5) & (xyz[:, 1] <= 11.)).all()),
+            & (xyz[:, 1] >= 6.5) & (xyz[:, 1] <= maximum_y)).all()),
         articulated_limbs=np.isfinite(foot).all() and moving.any() and np.max(np.ptp(foot[moving], axis=0)) >= .1,
         grounded_actor=np.max(np.abs(xyz[:, 2])) <= .05,
         independent_geometry=np.isfinite(geometry).all() and geometry[:, 0].min() > .02 and geometry[:, 1].max() <= .03,
         robot_zero_wheels=not parked_robot or (np.linalg.norm(robot-robot[0], axis=1).max() <= .02
             and all(r['nonzero_wheel_command_count'] == 0 for r in records)),
     )
+    if straight_service_walk:
+        from robot.scene.restaurant_straight_walk import audit_straight_walk
+        checks['explicit_complete_one_way_service_walk'] = audit_straight_walk(records)['passed']
     return dict(passed=all(checks.values()), checks={k: bool(v) for k, v in checks.items()},
         median_moving_speed_mps=median, minimum_actor_layout_clearance_m=float(geometry[:, 0].min()),
         maximum_collider_alignment_error_m=float(geometry[:, 1].max()),
-        scope='authored oncoming aisle component; independent root/limbs/geometry only; away_endpoint is not a human stopping claim')
+        scope=('explicit v3 one-way aisle plus original root/limbs/geometry gates; '
+               if straight_service_walk else 'authored oncoming aisle component; independent root/limbs/geometry only; ')
+              + 'away_endpoint is not a human stopping claim')
 
 
 def anchored_nominal_route_world(anchor_xy_yaw, local_waypoints):
@@ -186,9 +203,11 @@ def route_projection(query, route):
     return float(distance[i]), delta[i]/np.sqrt(length2[i])
 
 
-def validate_parallel_curve(records, truth, *, goal_world_xy, nominal_route_world_xy=None):
+def validate_parallel_curve(records, truth, *, goal_world_xy, nominal_route_world_xy=None,
+                            straight_service_walk=False):
     """A late curve or restored lambda alone cannot establish parallel avoidance."""
-    actor = validate_parallel_actor(truth, parked_robot=False)
+    actor = validate_parallel_actor(truth, parked_robot=False,
+                                    straight_service_walk=straight_service_walk)
     if len(truth) < 30:
         return dict(passed=False, checks=dict(enough_actual_samples=False))
     t = np.array([r['time'] for r in truth], float)

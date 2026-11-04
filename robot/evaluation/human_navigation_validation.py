@@ -53,9 +53,11 @@ def _current_contact_policy(obj):
     )
 
 
-def summarize_human_navigation(records, truth, *, mode, upper_continuation=False, crossing_direction="right-to-left", continuing_away=False, crossing_y_m=8.9, crossing_layout="legacy"):
+def summarize_human_navigation(records, truth, *, mode, upper_continuation=False, crossing_direction="right-to-left", continuing_away=False, crossing_y_m=8.9, crossing_layout="legacy", straight_service_walk=False):
     if mode not in {"standing", "crossing", "continuous-crossing", "parallel"}:
         raise ValueError("unknown human navigation mode")
+    if straight_service_walk and mode != 'parallel':
+        raise ValueError('one-way service evaluation requires parallel mode')
     if crossing_direction not in {"right-to-left", "left-to-right"}:
         raise ValueError("unsupported crossing evaluation direction")
     if continuing_away and mode != "crossing":
@@ -236,7 +238,8 @@ def summarize_human_navigation(records, truth, *, mode, upper_continuation=False
         if mode == 'parallel':
             from robot.evaluation.parallel_walking_validation import validate_parallel_actor
             checks.pop('actual_crossing')
-            checks['actual_parallel_walking'] = validate_parallel_actor(truth, parked_robot=False)['passed']
+            checks['actual_parallel_walking'] = validate_parallel_actor(truth, parked_robot=False,
+                straight_service_walk=straight_service_walk)['passed']
     else:
         checks["stationary_world_velocity_error"] = (
             bool(rows)

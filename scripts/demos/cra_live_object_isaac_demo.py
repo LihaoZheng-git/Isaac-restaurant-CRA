@@ -2962,7 +2962,8 @@ def main():
         human_validation = summarize_human_navigation(live_fields, human.records,
             mode=args.restaurant_human, upper_continuation=args.human_upper_continuation,
             crossing_direction=args.human_crossing_direction, continuing_away=args.human_continuing_away,
-            crossing_y_m=args.human_crossing_line_y, crossing_layout=args.human_crossing_layout)
+            crossing_y_m=args.human_crossing_line_y, crossing_layout=args.human_crossing_layout,
+            straight_service_walk=args.straight_service_walk)
         if args.crossing_strategy == "yield-then-go" and not args.checked_rear_pass_reference:
             # Waiting deliberately need not include simultaneous translation.
             # Keep the original motion benchmark and its result untouched.
@@ -3028,7 +3029,8 @@ def main():
             parallel_route = anchored_nominal_route_world((anchor.x, anchor.y, anchor.yaw), ROUTE)
             parallel_goal = parallel_route[-1]
             parallel_validation = validate_parallel_curve(live_fields, human.records, goal_world_xy=parallel_goal,
-                nominal_route_world_xy=parallel_route if args.long_service_parallel else None)
+                nominal_route_world_xy=parallel_route if args.long_service_parallel else None,
+                straight_service_walk=args.straight_service_walk)
             human_validation['parallel_curve'] = parallel_validation
             completed = completed and parallel_validation['passed']
             save_json('parallel-walking-validation.json', parallel_validation)

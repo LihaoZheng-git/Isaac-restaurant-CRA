@@ -1,5 +1,29 @@
 # CRA repository guidance
 
+- V3 runtime72b89ed long-motion-v2 reaches8/8 guides/152.600simsec,
+  clearance.473051m/stopdrift.002291m/1083fields1081translating. Original native
+  report FAIL is preserved: legacy parallel actor check assumed y<=11 although
+  explicit one-way start is23.5. Separate post-run protocol correction exactly
+  reproduces legacy results, then passes all original physical gates plus the
+  already-approved one-way audit. No new wheels/changed trajectory/tolerances;
+  scripts/evaluation/reevaluate_straight_service.py records original hashes.
+  Nearby curve.371162m at1.426776m center separation; actual nearby hold1frame
+  (.016667s), not a matched smoothing comparison. Late30s human identity expiry
+  has19 uncertainty rows behind robot/zero current-field cells; no indefinite
+  tracking or native recovery claim (zero recovery events). Static source audit
+  PASS1220rows/13objects; bin82rows103--116.5s/age13.6667/phi.62516--.63256.
+  Crate ZERO full-mission qualified/retained rows: changing-view acquisition
+  fails before retention; ordinary obstacle policy stays. Both short tests pass
+  16/16 separately, NOT full-scene contact contrast. Range-before-reference
+  replay also fails; no threshold tuning/runtime change applied. Camera943masks/
+  65tracks, geometry34459refs/752archives, motion1067, fragment5498 audits PASS.
+  3838units210.25s/61focused/Ruff PASS;6692 protected priorfiles unchanged.
+  outputs/final demo/v3 contains all1537 navigation/stopping frames plus credits,
+  short component videos, original failed report and separate correction. Pot
+  thermal unvalidated; paced.025, priors explicit. Keep draftPR232/main/primary/
+  PR117 holds. See docs/restaurant_service_demo_v3.md. Do not silently relabel
+  original native FAIL as PASS or claim the crate acquired CRA in this mission.
+
 - V3 long-motion-v1 at5e51871 interrupted after human pass/stall, no final arrival
   or stop acceptance. Four fresh prerequisites and own60 passed. Bin64/crate68
   acquired/retained real evidence, BUT mixed scene accidentally inherited human
