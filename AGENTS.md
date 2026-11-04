@@ -1,5 +1,19 @@
 # CRA repository guidance
 
+- User NOW APPROVES the simpler static-prop method for bin/broken crate and v3
+  integration after short tests pass. Separate defaultOFF --static-prop-evidence
+  supersedes immediate property deletion ONLY for this scoped mode. Seed from
+  actual verified image/LiDAR mass/contact; retain original sources/120s expiry/
+  confidence decay at fixed observed bounds. Current LiDAR within bounds+.06m,
+  >=8returns/8distinct original anchors/60%within.06m/80%raw fragment coverage;
+  unique static location PRIOR, not complete surface proof. No hidden geometry,
+  supplied risk or actor truth; raw occupancy/kinetic/control stay live. Current
+  point overlay explicitly says retained evidence, never a fabricated SAM mask.
+  Replay both old15-field traces PASS location association; focused40PASS after
+  sandbox temp-directory-only errors. Native gates pending. Preserve all prior
+  failures/4604priorfiles/defaultOFF/draft/main/primary/PR117 holds. See
+  docs/static_prop_evidence.md and outputs/static-prop-evidence/.
+
 - Moving-view native18b7bce: crate+bin independent/own60 PASS; both short
   approaches PASS .303904m/15fields14translating/.550631clearance/.002686stopdrift.
   BUT continuous association FAIL: originalID0 crate8/15, bin7/15. Crate original

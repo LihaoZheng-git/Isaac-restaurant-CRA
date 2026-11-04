@@ -68,6 +68,18 @@ def augment_image_objects(worker, packet, tracking, projection, world, objects,
         # never renews original evidence clocks; group proof remains mandatory.
         property_memory.frozen = worker.persistent_properties.frozen
     memory_tracks = []
+    static_config = getattr(worker, 'static_prop_evidence_config', None)
+    static_memory = None
+    static_matches, static_audit = {}, []
+    if static_config is not None:
+        from robot.perception.static_prop_evidence import StaticPropEvidence
+        static_memory = getattr(state, 'static_properties', None)
+        if static_memory is None:
+            static_memory = StaticPropEvidence(static_config, worker.persistent_properties.config)
+        static_memory.expire(packet.camera_timestamp_seconds)
+        if worker.persistent_properties.frozen:
+            static_matches, static_audit = static_memory.match(world, tracking.point_track_ids,
+                packet.camera_timestamp_seconds)
     worker.segmenter.set_image(packet.rgb)
     proposals = worker.segmenter.image_proposals(tracking.point_track_ids, projection)
     candidates, audit = associate_image_objects(proposals, projection, tracking.point_track_ids,
@@ -91,6 +103,8 @@ def augment_image_objects(worker, packet, tracking, projection, world, objects,
             attempt += 1
         np.savez_compressed(archive_path,
             world_xyz=world, robot_xyz=packet.obstacle_xyz,
+            raw_track_ids=tracking.point_track_ids,
+            raw_velocities_robot_xy=tracking.point_velocities_robot_xy,
             selected=np.stack([c['selected'] for c in candidates]) if candidates else np.empty((0,len(world)),bool),
             masks=np.stack([c['proposal'].detection.mask for c in candidates]) if candidates else np.empty((0,*packet.rgb.shape[:2]),bool),
             camera_from_world=view.camera_from_world if view is not None else np.empty((0,0)),
@@ -109,6 +123,11 @@ def augment_image_objects(worker, packet, tracking, projection, world, objects,
         detail['candidate_archive'] = str(archive_path)
     for candidate_index, candidate in enumerate(verified):
         key, selected = candidate["object_id"], candidate["selected"]
+        if static_memory is not None and worker.persistent_properties.frozen and (
+                key in static_memory.records or any(
+                    np.any(selected & match[0]) for match in static_matches.values())):
+            candidate['diagnostic']['static_property_acquisition'] = 'retained original static-location evidence'
+            continue
         center = packet.obstacle_xyz[selected, :2].mean(axis=0)
         world_center = world[selected, :2].mean(axis=0)
         # Do not turn a stationary-support hypothesis into measured zero speed.
@@ -134,6 +153,10 @@ def augment_image_objects(worker, packet, tracking, projection, world, objects,
         candidate["diagnostic"]["final_assessment_rejections"] = assessment["reasons"]
         if not assessment["accepted"]:
             continue
+        if static_memory is not None:
+            from robot.evaluation.static_prop_runtime import enroll_static_group
+            enroll_static_group(static_memory, assessment, key, world[selected], packet,
+                                worker.persistent_properties.frozen)
         property_memory = candidate_memory
         memory_tracks.append(track)
         # Only the verified exact point set may acquire this object's policy.
@@ -171,4 +194,13 @@ def augment_image_objects(worker, packet, tracking, projection, world, objects,
         property_memory.finish_epoch(memory_tracks, packet.camera_timestamp_seconds)
         state.property_memory = property_memory
         detail["property_persistence_scope"] = "existing guarded evidence memory on currently verified groups; original clocks, live motion; no partial-support identity transfer"
+    if static_memory is not None:
+        from robot.evaluation.static_prop_runtime import append_static_props
+        append_static_props(worker, static_memory, static_matches, packet, tracking,
+            projection, world, objects, frames, policies, point_ids, semantics, plume)
+        state.static_properties = static_memory
+        detail['static_prop_evidence'] = dict(
+            records=list(static_memory.records), current_matches=list(static_matches),
+            comparisons=static_audit, configuration=vars(static_config),
+            scope='user-approved stationary separated-prop prior; original mass/contact clocks; current LiDAR geometry and motion')
     return state, detail

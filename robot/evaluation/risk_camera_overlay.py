@@ -14,9 +14,12 @@ class RiskCameraMask:
     applied_phi: float
     factor_modes: tuple
     mask: np.ndarray
+    retained_lidar_points: bool = False
 
     @property
     def basis(self):
+        if self.retained_lidar_points:
+            return 'retained evidence / LiDAR points'
         modes = [mode for _, mode in self.factor_modes]
         if len(modes) == 4 and all(mode in {
             "configured_prior", "configured_human_body_contact_prior"
@@ -64,6 +67,30 @@ def capture_risk_camera_frame(packet, objects, assessments, policies):
         objects, assessments = (), ()
     for obj, raw in zip(objects, assessments):
         detail = obj.diagnostics
+        if detail.get('static_prop_policy') and raw.get('static_prop_policy'):
+            # Explicit point overlay, not a fabricated current image mask.
+            pixels = np.asarray(raw.get('static_prop_display_pixels', []))
+            selected = np.asarray(raw['selected'])
+            valid = (raw['attributes'].track_id == obj.attributes.track_id
+                     and raw['frame'].source_frame_id == packet.camera_frame_id
+                     and raw['frame'].source_timestamp_seconds == packet.camera_timestamp_seconds
+                     and selected.shape == (len(packet.obstacle_xyz),)
+                     and selected.sum() == detail.get('selected_return_count')
+                     and selected.sum() >= 8 and pixels.ndim == 2 and pixels.shape[1] == 2)
+            if not valid:
+                rejected.append(dict(track_id=obj.attributes.track_id, reason='invalid_retained_point_overlay'))
+                continue
+            mask = np.zeros(packet.rgb.shape[:2], np.uint8)
+            for x,y in pixels:
+                if 0 <= x < mask.shape[1] and 0 <= y < mask.shape[0]:
+                    cv2.circle(mask, (int(x),int(y)), 1, 1, -1)
+            if mask.any():
+                mask = mask.astype(bool)
+                mask.setflags(write=False)
+                modes = tuple(sorted((k,v['mode']) for k,v in detail['factor_scores'].items()))
+                masks.append(RiskCameraMask(obj.attributes.track_id, float(obj.policy.risk),
+                    float(policies[obj.attributes.track_id].risk), modes, mask, True))
+            continue
         if not (detail.get("accepted_instance") and raw.get("accepted")):
             continue
         track_id = obj.attributes.track_id
@@ -144,7 +171,9 @@ def render_risk_panel(frame, now):
         cv2.putText(canvas, text, (12, y), cv2.FONT_HERSHEY_SIMPLEX, scale, color, 1,
                     cv2.LINE_AA)
 
-    line("ROBOT CAMERA | VERIFIED IMAGE + LiDAR", 25, scale=.58)
+    retained_points = frame is not None and any(m.retained_lidar_points for m in frame.masks)
+    line("ROBOT CAMERA | RETAINED EVIDENCE + LiDAR" if retained_points
+         else "ROBOT CAMERA | VERIFIED IMAGE + LiDAR", 25, scale=.51 if retained_points else .58)
     metadata = dict(status="awaiting_assessment", source_age_seconds=None, masks=[])
     if frame is None:
         line("Waiting for the first source-aligned assessment", 240)
