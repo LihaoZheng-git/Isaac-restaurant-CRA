@@ -55,6 +55,17 @@ def test_one_way_actor_audit_rejects_return_and_side_excursion():
         human_navmesh_extent(straight_service_walk=True)
 
 
+def test_collinear_actor_guides_never_reverse_or_loop():
+    from robot.scene.restaurant_straight_walk import StraightServiceWalk, STRAIGHT_GUIDES
+    walk=StraightServiceWalk()
+    for i,goal in enumerate(STRAIGHT_GUIDES):
+        assert walk.goal==goal and goal[0]==STRAIGHT_START[0]
+        assert goal[1]<(STRAIGHT_START if i==0 else STRAIGHT_GUIDES[i-1])[1]
+        assert not walk.advance((goal[0],goal[1]+.5,0))
+        assert walk.advance(goal)==(i<len(STRAIGHT_GUIDES)-1)
+    assert walk.final and walk.goal==STRAIGHT_GOAL
+
+
 @pytest.mark.parametrize('case',['long-parallel','long-parallel-near'])
 def test_v3_cli_preserves_mixed_scene_constraints(monkeypatch,case):
     path=Path('scripts/demos/cra_live_object_isaac_demo.py').resolve()

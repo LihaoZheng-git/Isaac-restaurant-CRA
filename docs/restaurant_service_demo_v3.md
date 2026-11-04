@@ -34,5 +34,12 @@ The robot retains the existing long service waypoints, wide corner, fixedlambda
 1.25, online guidance/MPC/CBF, physical wheel limits and arrival/stopping gates.
 Fresh actor-only, human sensor, near stationary and distant-start stationary
 gates plus the mission's own60 are required before navigation acceptance.
+
+First actor-only native run0540da4 completed16.364m with zero held drift,
+no reverse motion and all geometry/grounding/walking checks, but FAILED the
+new .25m straight-aisle check: maximum lateral gait drift .32446m. Preserve
+actor-v1. The next actor-only variant uses collinear2m guides with no braking
+until the final endpoint, to correct accumulated native heading drift. It keeps
+the same start/goal/speed, unchanged .25m gate and all physical checks.
 Artifacts: `outputs/service-demo-v3/`; recipe:
 `configs/restaurant_service_demo_v3.json`. Full native v3 validation pending.

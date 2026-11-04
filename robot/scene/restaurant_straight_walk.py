@@ -4,6 +4,27 @@ import numpy as np
 STRAIGHT_START=(29.8,23.5,0.)
 STRAIGHT_GOAL=(29.8,7.,0.)
 STRAIGHT_TRIGGER_X=26.
+STRAIGHT_GUIDES=tuple((29.8,y,0.) for y in (21.5,19.5,17.5,15.5,13.5,11.5,9.5,7.))
+
+
+class StraightServiceWalk:
+    """Collinear actor goals constrain accumulated native gait heading drift."""
+    def __init__(self):
+        self.index=0
+
+    @property
+    def goal(self):
+        return STRAIGHT_GUIDES[self.index]
+
+    @property
+    def final(self):
+        return self.index==len(STRAIGHT_GUIDES)-1
+
+    def advance(self,xyz):
+        if not self.final and np.linalg.norm(np.asarray(xyz)[:2]-self.goal[:2])<=.20:
+            self.index+=1
+            return True
+        return False
 
 
 def audit_straight_walk(records):

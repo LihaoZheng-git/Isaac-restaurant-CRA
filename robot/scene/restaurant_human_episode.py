@@ -40,6 +40,8 @@ class RestaurantHumanEpisode:
         if straight_service_walk and (not long_service_parallel or background_service_walk or background_upper_departure):
             raise ValueError('one-way service walk requires a separate long parallel episode')
         self.straight_service_walk = straight_service_walk
+        from robot.scene.restaurant_straight_walk import StraightServiceWalk
+        self.straight_walk = StraightServiceWalk() if straight_service_walk else None
         if background_upper_departure and not background_service_walk:
             raise ValueError('upper departure requires the separate background service walk')
         if background_service_walk and not long_service_parallel:
@@ -115,8 +117,7 @@ class RestaurantHumanEpisode:
             from robot.scene.parallel_walk_encounter import PARALLEL_ACTOR_GOAL
             self.goal = PARALLEL_ACTOR_GOAL
         if straight_service_walk:
-            from robot.scene.restaurant_straight_walk import STRAIGHT_GOAL
-            self.goal = STRAIGHT_GOAL
+            self.goal = self.straight_walk.goal
         self.speed = speed_mps
         self.phase = "idle_before"
         self.task = None
@@ -269,7 +270,7 @@ class RestaurantHumanEpisode:
             self.agent.set_speed(self.speed)
             self.task = self.agent.move_to(
                 self.background_walk.goal if self.background_walk else self.circuit.goal if self.circuit else self.goal,
-                auto_brake=self.circuit is None and self.departure is None and self.background_walk is None,
+                auto_brake=self.circuit is None and self.departure is None and self.background_walk is None and self.straight_walk is None,
             )
             if self.task == bh.BEHAVIOR_TASK_ID_INVALID:
                 raise RuntimeError("native crossing task rejected")
@@ -292,6 +293,10 @@ class RestaurantHumanEpisode:
                     self.phase = self.background_walk.phase
                 elif status == bh.BehaviorTaskStatus.SUCCEEDED:
                     raise RuntimeError("native background walk success without actual progress")
+            elif self.straight_walk is not None and self.straight_walk.advance(self.position()):
+                self.task = self.agent.move_to(self.straight_walk.goal,auto_brake=self.straight_walk.final)
+                if self.task == bh.BEHAVIOR_TASK_ID_INVALID:
+                    raise RuntimeError('native straight walk next collinear goal rejected')
             elif self.departure is not None and self.departure.advance(self.position(), now):
                 self.task = self.agent.move_to(self.departure.goal, auto_brake=True)
                 if self.task == bh.BEHAVIOR_TASK_ID_INVALID:

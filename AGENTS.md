@@ -1,5 +1,10 @@
 # CRA repository guidance
 
+- V3 actor0540da4 completed16.364m/no reverse/zerohelddrift/allgeometryPASS,
+  but straight-line gateFAIL: native gait lateral drift .32446m>.25m. Preserve
+  actor-v1; no robotwheels. Next collinear2m actor guides keep same start/goal/
+  speed and original.25m/geometry gates, no authored turn or intermediate stop.
+
 - V3 integration in progress after short static-prop PASS: separate additive
   bin(28.15,4.9)/brokencrate(28.15,6.1) originallicensedmeshes/scales/materials;
   Owl+.60m. DefaultOFF --service-static-props retains original generic/human
