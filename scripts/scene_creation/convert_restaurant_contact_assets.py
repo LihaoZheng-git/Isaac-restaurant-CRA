@@ -35,7 +35,7 @@ def audited_jobs(names=("recycle_bin", "crates")):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--assets", nargs="+", choices=("recycle_bin", "crates", "cleaver", "broken_plate", "vases"),
+    parser.add_argument("--assets", nargs="+", choices=("recycle_bin", "crates", "cleaver", "broken_plate", "vases", "simple_trash_can"),
                         default=["recycle_bin", "crates"])
     args = parser.parse_args()
     if len(set(args.assets)) != len(args.assets):

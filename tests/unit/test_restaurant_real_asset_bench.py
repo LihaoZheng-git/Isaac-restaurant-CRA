@@ -30,6 +30,9 @@ def test_original_mesh_is_grounded_and_not_a_factor_input(kind):
         assert 0 < hi[2] - lo[2] < .03  # Do not thicken the edge for LiDAR.
     else:
         assert .2 < hi[2] < .7
+    if kind == "simple_trash_can":
+        np.testing.assert_allclose(hi[2], .50, atol=1e-6)
+        np.testing.assert_allclose((hi - lo)[:2], [.29600188, .29600188], atol=1e-5)
     meshes = []
     for prim in Usd.PrimRange(stage.GetPrimAtPath(CONTAINER_PATH)):
         assert not prim.HasAPI(UsdPhysics.MassAPI)
@@ -38,6 +41,12 @@ def test_original_mesh_is_grounded_and_not_a_factor_input(kind):
         if prim.IsA(UsdGeom.Mesh):
             meshes.append(prim)
             assert prim.HasAPI(UsdPhysics.CollisionAPI)
+            if kind == "simple_trash_can":
+                mesh = UsdGeom.Mesh(prim)
+                assert len(mesh.GetFaceVertexCountsAttr().Get()) == 668
+                for attr in (mesh.GetPointsAttr(), mesh.GetFaceVertexIndicesAttr()):
+                    assert all(spec.layer not in (stage.GetRootLayer(), stage.GetSessionLayer())
+                               for spec in attr.GetPropertyStack())
     assert len(meshes) == (3 if kind in ("cleaver", "broken_plate") else
                            2 if kind in VASE_VARIANTS else 1)
     support = stage.GetPrimAtPath(DEMO_ROOT + "/AssetBenchSupport")

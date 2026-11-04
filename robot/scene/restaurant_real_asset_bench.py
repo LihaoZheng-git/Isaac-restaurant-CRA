@@ -17,7 +17,7 @@ VASE_VARIANTS = {
     "intact_vase": "Vase_ModelMain_0",
     "broken_vase": "VaseBroken2_ModelMain_2",
 }
-KINDS = ("recycle_bin", "intact_crate", "broken_crate", "cleaver", "broken_plate", *VASE_VARIANTS)
+KINDS = ("recycle_bin", "intact_crate", "broken_crate", "cleaver", "broken_plate", *VASE_VARIANTS, "simple_trash_can")
 
 
 def author_real_asset(stage, kind):
@@ -61,6 +61,11 @@ def author_real_asset(stage, kind):
         cache = UsdGeom.BBoxCache(0, ["default", "render"])
         bounds = cache.ComputeWorldBound(root.GetPrim()).ComputeAlignedRange()
         scale = .65 / (bounds.GetMax()[2] - bounds.GetMin()[2])
+    elif kind == "simple_trash_can":
+        # Preserve the complete downloaded body/lid mesh and its proportions.
+        # 50 cm is an authored indoor-bin size, not a measured physical input.
+        bounds = UsdGeom.BBoxCache(0, ["default", "render"]).ComputeWorldBound(root.GetPrim()).ComputeAlignedRange()
+        scale = .50 / (bounds.GetMax()[2] - bounds.GetMin()[2])
     elif kind in ("intact_crate", "broken_crate"):
         parent = stage.GetPrimAtPath(reference_path + "/node_18c1021f1704bc6a4ddc61ad48bf678_fbx/RootNode")
         keep = "Crate_01_GEO" if kind == "intact_crate" else "Crate_02_GEO"
