@@ -44,4 +44,29 @@ Evaluate component acceptance separately from risk ranking. Report all accepted
 objects, usable contact cues, priors, cue/factor/phi ranges and medians. Inspect
 actual masks and preserve every adverse result. A component pass is not a
 sharpness or navigation pass; no score overrides, row removal or prior reduction
-are allowed to manufacture the expected comparison. Native results pending.
+are allowed to manufacture the expected comparison.
+
+## Original-distance outcome and closer follow-up
+
+All six fresh 18-source runs at `f6d8f88` retain frozen source hashes and zero
+wheel commands. At both resolutions the bin has only ONE accepted source and
+fails its final component gate. Original frame66 has 372 raw target returns;
+frame84 has 371, but their whole-cloud correspondence gap is 0.062895 m,
+exceeding the original 0.06 m. A second hypothesis is enrolled. Later sources
+match both references and reject as ambiguous, preventing a continuous proof.
+This is association failure, not evidence that the bin is sharp or invisible.
+The whole-raw-cluster diagnostic does not substitute for masked ownership proof.
+
+The 640 crate controls both pass 16/18 accepted assessments. Broken-crate
+high-resolution ownership fails entirely; the intact high-resolution control
+passes. Preserve all outcomes, including the lone bin scores; they cannot
+establish a bin/crate risk comparison. See `baseline-summary.json` and the six
+original native folders under `outputs/rounded-trash-contact/`.
+
+The explicit closer follow-up uses the existing stationary pose-survey option
+at **1.3 m** standoff and 640-pixel RGB for ALL three targets. This changes only
+the authored observation pose, not mesh size, LiDAR, quality/correspondence
+thresholds, model settings, clocks, priors or scores. Use the separate
+`configs/restaurant_rounded_trash_close_contact.json` recipe and fresh outputs
+under `outputs/rounded-trash-contact/close/`. It is a view-dependent diagnostic,
+not repair of the preserved 1.85 m association failures. Results pending.
