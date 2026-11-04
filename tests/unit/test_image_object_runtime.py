@@ -48,6 +48,58 @@ def test_runtime_applies_group_policy_only_to_current_points_without_raw_track_m
     assert result.diagnostics["fixed_lambda"] == 1.25
 
 
+@pytest.mark.parametrize("legacy_namespace", [False, True])
+def test_image_group_and_retained_furniture_keep_distinct_geometry_and_policy(monkeypatch, legacy_namespace):
+    """The separated-demo failure reused furniture's 5B ID for an image group."""
+    import robot.evaluation.multi_object_perception as mapping
+    from robot.perception.image_object_association import IMAGE_OBJECT_ID_START, StationaryImageObjects
+    from robot.perception.stationary_furniture_memory import ID_OFFSET, StationaryFurnitureMemory
+    from test_stationary_furniture_memory import acquire
+
+    if legacy_namespace:
+        monkeypatch.setattr("robot.perception.image_object_association.IMAGE_OBJECT_ID_START", ID_OFFSET)
+    runtime = setup()
+    runtime.stationary_furniture_memory = StationaryFurnitureMemory()
+    acquire(runtime.stationary_furniture_memory, keys=(2, 2, 2))
+    original = runtime.stationary_furniture_memory.records[2]
+    runtime.image_object_state = StationaryImageObjects(runtime.image_object_config)
+    # Two earlier hypotheses consumed IDs; current raw tracks are 0/1, while
+    # furniture raw ID 2 is absent and must keep its original retained surface.
+    runtime.image_object_state.next_id += 2
+    furniture_id = ID_OFFSET + 2
+    captured = []
+    build = mapping.build_safe_sage_field_pipeline
+
+    def capture(grid, **kwargs):
+        captured.append((grid, kwargs))
+        return build(grid, **kwargs)
+
+    monkeypatch.setattr(mapping, "build_safe_sage_field_pipeline", capture)
+    for i, t in enumerate((1.3, 1.4, 1.5), 1):
+        if legacy_namespace and i == 3:
+            with pytest.raises(ValueError, match="duplicate track ID 5000000002"):
+                runtime(observed(i, t))
+            return
+        result = runtime(observed(i, t))
+    group = next(o for o in result.objects if o.diagnostics.get("image_object_association"))
+    key = group.diagnostics["track_id"]
+    assert key == IMAGE_OBJECT_ID_START + 2 and key != furniture_id
+    grid, inputs = captured[-1]
+    semantics = [s.track_id for s in inputs["semantic_obstacles"]]
+    assert key in semantics and furniture_id in semantics
+    assert len(semantics) == len(set(semantics))
+    assert {key, furniture_id} <= set(grid.cell_track_ids[grid.occupied_mask])
+    policies = inputs["track_guidance_parameters"]
+    assert policies[furniture_id] == original.guidance
+    assert policies[key].risk == group.policy.assessment.phi
+    assert policies[key].risk != policies[furniture_id].risk
+    retained = runtime.stationary_furniture_memory.records[2]
+    np.testing.assert_array_equal(retained.points, original.points)
+    assert retained.source_time == original.source_time == 1.2
+    assert retained.source_frame == original.source_frame == 12
+    assert result.field.all_obstacle_point_count == 16
+
+
 def test_local_contact_flows_into_group_cra_without_geometry_or_prior_changes():
     from robot.perception.local_contact_geometry import LocalContactGeometryConfig
     from robot.perception.visual_shape_contact import SilhouetteContactConfig

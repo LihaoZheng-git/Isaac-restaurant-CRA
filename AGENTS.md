@@ -1,5 +1,18 @@
 # CRA repository guidance
 
+- Separated v3 ff98d5c prop benches PASS60 each (bin28/crate58 accepted target
+  assessments), all four fresh prerequisites and own60 PASS. Full mission-v1
+  FAILED before props: image group5000000001 collided with furniture5B+raw1;
+  five rejected fields triggered stop at~40.2source/243fields242translating,
+  .526364m clearance/.001250m stopdrift, no arrival. Preserve failure. Bounded
+  correction gives image groups a distinct [8B,9B) namespace; no dedup/drop,
+  geometry/clock/risk/gate change. Mixed-runtime regression reproduces old
+  collision and checks separate policies;308 archived candidates/90 accepted
+  hypotheses replay identically except ID rename.124focused/3845units206.73s/
+  Ruff/diff PASS (workspace pytest temp; old sandbox-temp errors retained). Require fresh
+  corrected native gates/full mission before revised video acceptance. All holds
+  remain. See docs/restaurant_service_demo_v3_separated.md.
+
 - User-approved separated v3 contact layout in progress: remove unused clearing
   station/caddies, SecondPot and visual steam in a NEW additive scene; retain
   original licensed bin(22,4.65) and broken crate(25.7,4.9), 3.708m apart before

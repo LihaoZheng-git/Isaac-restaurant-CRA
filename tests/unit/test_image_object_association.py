@@ -36,6 +36,17 @@ def test_disconnected_fragments_form_one_hypothesis_without_changing_inputs():
     np.testing.assert_array_equal(ids, original)
 
 
+def test_exhausted_group_id_range_cannot_enter_another_namespace():
+    from robot.perception.image_object_association import IMAGE_OBJECT_ID_LIMIT
+    mask, projection, xyz, ids = fixture()
+    state = StationaryImageObjects(ImageObjectConfig())
+    state.next_id = IMAGE_OBJECT_ID_LIMIT
+    candidates, _ = associate_image_objects([proposal(mask)], projection, ids, xyz, state.config)
+    with pytest.raises(RuntimeError, match="identity range exhausted"):
+        state.update(candidates, xyz, 1.)
+    assert not state.records
+
+
 @pytest.mark.parametrize("case", ["unclustered", "extent", "coverage"])
 def test_unknown_ownership_large_geometry_or_partial_fragment_reject(case):
     mask, projection, xyz, ids = fixture()

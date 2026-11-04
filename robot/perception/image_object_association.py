@@ -14,6 +14,12 @@ from scipy.spatial import cKDTree
 from robot.perception.camera_lidar_fusion import mask_foreground_hits
 
 
+# Furniture retention owns 5B+raw_track_id. Image hypotheses are a different
+# identity domain and must not overwrite that geometry's field policy.
+IMAGE_OBJECT_ID_START = 8_000_000_000
+IMAGE_OBJECT_ID_LIMIT = 9_000_000_000
+
+
 @dataclass(frozen=True)
 class ImageObjectConfig:
     maximum_extent_m: float = .9
@@ -123,7 +129,7 @@ class StationaryImageObjects:
     def __init__(self, config):
         self.config = config
         self.records = {}
-        self.next_id = 5_000_000_000
+        self.next_id = IMAGE_OBJECT_ID_START
         self.last_time = -math.inf
 
     def update(self, candidates, world_xyz, timestamp, *, view=None):
@@ -197,6 +203,8 @@ class StationaryImageObjects:
                     candidate["diagnostic"]["temporal_rejection"] = "unmatched support overlaps an original image hypothesis"
                     candidate["diagnostic"]["overlapping_original_hypotheses"] = overlapping
                     continue
+                if self.next_id >= IMAGE_OBJECT_ID_LIMIT:
+                    raise RuntimeError("image-object identity range exhausted")
                 key = self.next_id
                 self.next_id += 1
                 old = {"first": timestamp, "proof_start": timestamp, "last": timestamp, "count": 1,
