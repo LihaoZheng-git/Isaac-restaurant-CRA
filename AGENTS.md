@@ -1,5 +1,16 @@
 # CRA repository guidance
 
+- User-requested bounded live crate test adds defaultOFF group property memory
+  and a separate --image-object-approach. Existing full current association,
+  original source clocks/expiry/confidence, support/competitor checks remain.
+  Failed groups lose memory; raw occupancy stays. Live kinetic/route interaction
+  are recomputed. Static prop only, original640/1.85m view, own60 plus matching
+  independent stationary gate; .40m authored nominal segment/original tolerance,
+  original MPC/CBF/lambda/limits/clearance/stopping. This opt-in alone supersedes
+  the prior zero-wheel hold; native acceptance pending, no partial-surface repair.
+  Preserve old failures/acceptedv2/assets/defaultOFF/draft/main/primary/PR117.
+  See docs/crate_live_persistence.md and outputs/crate-live-persistence/.
+
 - Crate association native ata81fa05: original1.85m bin/intact/broken allPASS,
   15/16/16 target assessments of18sources, zero wheels/sourcefrozen. Median
   contact .090913/.101168/.109458, phi .584530/.589222/.593010; overlapping ranges,

@@ -1,4 +1,4 @@
-"""Stationary-only experimental CRA assessment of verified image-object groups."""
+"""Experimental CRA on verified groups of static props; optional evidence memory."""
 
 import copy
 from dataclasses import replace
@@ -40,6 +40,16 @@ def augment_image_objects(worker, packet, tracking, projection, world, objects,
 
     config = worker.image_object_config
     state = copy.deepcopy(getattr(worker, "image_object_state", None)) or StationaryImageObjects(config)
+    property_memory = None
+    if getattr(worker, "image_object_property_persistence", False):
+        from robot.perception.persistent_object_evidence import PersistentObjectEvidence
+        property_memory = getattr(state, "property_memory", None)
+        if property_memory is None:
+            property_memory = PersistentObjectEvidence(worker.persistent_properties.config)
+        # Follow the existing explicit acquisition/freeze lifecycle. Borrowing
+        # never renews original evidence clocks; group proof remains mandatory.
+        property_memory.frozen = worker.persistent_properties.frozen
+    memory_tracks = []
     worker.segmenter.set_image(packet.rgb)
     proposals = worker.segmenter.image_proposals(tracking.point_track_ids, projection)
     candidates, audit = associate_image_objects(proposals, projection, tracking.point_track_ids,
@@ -62,15 +72,22 @@ def augment_image_objects(worker, packet, tracking, projection, world, objects,
             tuple(velocity), int(selected.sum()), candidate["diagnostic"]["observations"], True)
         ids = tracking.point_track_ids.copy()
         ids[selected] = key
-        adapted_tracking = replace(tracking, point_track_ids=ids, tracked_obstacles=(track,))
+        members = {f["raw_track_id"] for f in candidate["diagnostic"]["fragments"]}
+        competitors = (tuple(t for t in tracking.tracked_obstacles if t.track_id not in members)
+                       if property_memory is not None else ())
+        adapted_tracking = replace(tracking, point_track_ids=ids, tracked_obstacles=(track, *competitors))
+        candidate_memory = copy.deepcopy(property_memory)
         assessment = worker._assess_track(packet, adapted_tracking, projection, track, True,
             plume, None, image_is_set=True, shared_contact_frame=contact_frame,
+            candidate_persistent=candidate_memory,
             refine_contact_boundary=(worker.contact_mask_refinement_config is not None
                 and candidate_index < worker.contact_mask_refinement_config.maximum_objects_per_frame),
             proposal_override=candidate["proposal"])
         candidate["diagnostic"]["final_assessment_rejections"] = assessment["reasons"]
         if not assessment["accepted"]:
             continue
+        property_memory = candidate_memory
+        memory_tracks.append(track)
         # Only the verified exact point set may acquire this object's policy.
         if np.any(assessment["selected"] & ~selected):
             raise RuntimeError("image-object assessment expanded verified ownership")
@@ -87,7 +104,8 @@ def augment_image_objects(worker, packet, tracking, projection, world, objects,
              "instance_mask_pixels": detection.mask_pixel_count,
              "instance_box_xyxy": tuple(getattr(detection.bounding_box, n) for n in ("x_min", "y_min", "x_max", "y_max")),
              "selected_return_count": int(assessment["selected"].sum()), "policy_return_count": int(assessment["selected"].sum()),
-             "factor_scores": factors, "geometry_evidence": assessment["geometry_diagnostics"], "property_evidence": {},
+             "factor_scores": factors, "geometry_evidence": assessment["geometry_diagnostics"],
+             "property_evidence": assessment["persistence"] or {},
              "contact_proxy": assessment.get("contact_proxy"),
              "contact_mask_refinement": assessment.get("contact_mask_refinement"),
              "instance_ownership_basis": "current_image_mask_repeated_fragment_hypothesis",
@@ -99,4 +117,10 @@ def augment_image_objects(worker, packet, tracking, projection, world, objects,
         policies[key] = policy
         semantics.append(SemanticObstacle(track, "unknown", detection.confidence, "inferred_image_object_fragments"))
         detail["accepted_object_ids"].append(key)
+    if property_memory is not None:
+        # No rejected/absent group may borrow an old policy. Unmatched current
+        # returns remain in the ordinary raw-track/unknown occupancy pipeline.
+        property_memory.finish_epoch(memory_tracks, packet.camera_timestamp_seconds)
+        state.property_memory = property_memory
+        detail["property_persistence_scope"] = "existing guarded evidence memory on currently verified groups; original clocks, live motion; no partial-support identity transfer"
     return state, detail

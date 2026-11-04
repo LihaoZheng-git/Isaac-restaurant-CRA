@@ -292,6 +292,10 @@ parser.add_argument("--visual-reassessment-interval", type=float, default=1.0,
 parser.add_argument("--live-visual-tracks", type=int, choices=(1, 2), default=2,
                     help="existing fair visual-attempt budget per live update; all tracks still receive geometry/motion and numeric policies")
 parser.add_argument("--vectorized-fields", action="store_true")
+parser.add_argument("--image-object-property-persistence", action="store_true",
+                    help="reuse existing guarded physical evidence memory for currently verified image groups; default OFF")
+parser.add_argument("--image-object-approach", action="store_true",
+                    help="separate static-prop 40cm nominal approach with original group gates, own60 and ordinary unknown fallback; default OFF")
 parser.add_argument("--object-height-evidence", action="store_true",
                     help="opt-in general LiDAR floor/elevation/support evidence; no carried-object relationship or hidden-base inference")
 parser.add_argument("--height-support-margin", type=float, default=.12,
@@ -363,7 +367,17 @@ if args.stationary_prop_rgb_width != 640 and (
     not args.stationary_prop_camera or not args.restaurant_scene or args.motion or args.restaurant_human
 ):
     parser.error("higher RGB sampling requires a stationary restaurant prop test without humans/wheels")
-if args.stationary_image_objects and (not args.stationary_prop_camera or args.motion
+if args.image_object_property_persistence and not args.stationary_image_objects:
+    parser.error("group property memory requires the explicit image-object experiment")
+if args.image_object_approach and (not args.image_object_property_persistence
+    or not args.stationary_prop_camera or args.restaurant_view != "demo-container"
+    or args.restaurant_route != "short" or args.restaurant_human or args.restaurant_server
+    or args.stationary_frames != 60 or args.stationary_prop_rgb_width != 640
+    or args.stationary_prop_standoff_metres is not None or args.stationary_prop_view_yaw_degrees != 0
+    or not args.image_object_overlap_hold or not args.local_contact_geometry
+    or args.contact_mask_refinement or args.disable_lidar_deskew):
+    parser.error("image-object approach requires original container view, own60, guarded group memory/hold/local contact, deskew and no humans/refinement/view changes")
+if args.stationary_image_objects and (not args.stationary_prop_camera or (args.motion and not args.image_object_approach)
     or args.restaurant_human or not args.persistent_object_risk_map):
     parser.error("image-object experiment requires stationary prop camera, persistent mapping and no humans/wheels")
 if not math.isfinite(args.image_object_maximum_extent) or not .1 <= args.image_object_maximum_extent <= 1.5:
@@ -706,7 +720,7 @@ if args.human_carry_facing_crossing and not args.human_carry_bowl:
     parser.error("initial carrying heading requires the carried bowl")
 if args.human_start_view != "original" and (not args.human_carry_bowl or args.restaurant_route != "human-service"):
     parser.error("forward robot start requires carrying and the human-service world route")
-if args.stationary_prop_camera and (not args.restaurant_scene or args.motion
+if args.stationary_prop_camera and (not args.restaurant_scene or (args.motion and not args.image_object_approach)
     or args.restaurant_human or args.restaurant_view not in {"demo-container", "demo-bin", "demo-rounded", "demo-utensils", "pot"}):
     parser.error("stationary prop camera requires a restaurant prop view, no native human and no motion")
 if not 0 <= args.human_camera_upward_degrees <= 25 or not 0 <= args.human_camera_raise_metres <= .6 or (
@@ -748,7 +762,7 @@ if args.presentation_risk_camera and not (args.restaurant_scene and args.persist
     parser.error("presentation risk camera requires a restaurant scene and the transactional all-track map")
 if args.restaurant_layout_survey and not args.restaurant_scene:
     parser.error("restaurant layout survey requires the explicit restaurant scene")
-if args.restaurant_view != "bowl" and (not args.restaurant_scene or args.motion):
+if args.restaurant_view != "bowl" and (not args.restaurant_scene or (args.motion and not args.image_object_approach)):
     parser.error("additional restaurant views are stationary-only component diagnostics")
 if args.restaurant_route != "short" and (not args.restaurant_scene or args.restaurant_view != "bowl"):
     parser.error("restaurant service route requires the validated bowl start view")
@@ -927,6 +941,11 @@ if args.restaurant_scene:
                                      wide_corner=args.service_wide_corner)[-1]
 ROUTE = restaurant_route_local_xy(args.restaurant_route, human_start_view=args.human_start_view,
                                 wide_corner=args.service_wide_corner) if args.restaurant_scene else (GOAL,)
+if args.image_object_approach:
+    # Authored short measurement route, independent of obstacle/factor outputs.
+    # Original waypoint arrival tolerance and all physical controller checks stay.
+    ROUTE = ((.40, 0.),)
+    GOAL = ROUTE[-1]
 if open_crossing_layout:
     stationary.ROBOT_START_POSITION_WORLD = OPEN_ROBOT_START_WORLD
     stationary.ROBOT_START_YAW_RADIANS = OPEN_ROBOT_YAW
@@ -1504,6 +1523,7 @@ def main():
         from robot.perception.image_object_association import ImageObjectConfig
         perception.image_object_config = ImageObjectConfig(maximum_extent_m=args.image_object_maximum_extent,
             hold_overlapping_hypotheses=args.image_object_overlap_hold)
+        perception.image_object_property_persistence = args.image_object_property_persistence
     if args.stationary_furniture_memory:
         if not (args.restaurant_human == "parallel" and args.rolling_local_field and args.persistent_object_risk_map) or args.static_occupancy_memory_prior:
             raise ValueError("furniture memory requires the separate long-human rolling experiment, not global static memory")
@@ -2111,6 +2131,14 @@ def main():
             gate['distant_start_mass_retention_scope'] = applied_mass_gate
         gate['passed'] = stationary_ready = bool(stationary_ready and applied_mass_gate['passed'])
         save_json('stationary-human-mass-identity-retention-validation.json', mass_gate)
+    if args.image_object_approach:
+        group_memory = getattr(getattr(perception, "image_object_state", None), "property_memory", None)
+        grouped_sources = {k[0] for k in group_memory.properties} if group_memory is not None else set()
+        memory_ready = any(all((key, name) in group_memory.properties for name in ("mass", "contact"))
+                           for key in grouped_sources)
+        gate["image_object_memory_checks"] = {"sixty_current_fields": len(records) >= 60,
+            "current_group_has_mass_and_contact_sources": memory_ready}
+        gate["passed"] = stationary_ready = bool(stationary_ready and all(gate["image_object_memory_checks"].values()))
     save_json("stationary-gate.json", gate)
     print(json.dumps({key: value for key, value in gate.items() if key != "last_objects"}, default=json_default), flush=True)
     if not stationary_ready:
@@ -3285,6 +3313,8 @@ def main():
         "sam_observed_context_box_retry": args.sam_observed_context_box,
         "sam_track_extent_retry": args.sam_track_extent_retry,
         "stationary_image_objects": args.stationary_image_objects,
+        "image_object_property_persistence": args.image_object_property_persistence,
+        "image_object_approach": args.image_object_approach,
         "image_object_overlap_hold": args.image_object_overlap_hold,
         "image_object_maximum_extent_prior_m": args.image_object_maximum_extent,
         "server_component_gate": gate.get("server_component_checks"),
