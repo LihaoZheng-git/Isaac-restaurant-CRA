@@ -1,5 +1,19 @@
 # CRA repository guidance
 
+- Final contact correction at26d6502: three fresh18-source ZERO-wheel components
+  PASS,16 current accepted image-LiDAR objects each. Vase1920 raw cue medians
+  intact/broken .101993/.121700, BUT CRA contact .094247/.089997 and phi
+  .586053/.584110 still reverse desired contrast. Ranges overlap; no final vase
+  cue saturation. Dataflow PASS is NOT risk-ranking acceptance. Bin9/16 contact
+  available/5refinements, cue.323450 median supported/.917825max;7 prior updates.
+  Keep defaultOFF/draft/unpromoted, all main/primary/PR117 holds. Do not change
+  uncertainty prior/confidence or remove startup rows for a favorable ranking.
+  Whole-outline evidence misses interior broken rim; crop PACO body predictions
+  were rejected. Next needs validated local rim/edge evidence with negative
+  controls, not score tuning.3766units148.57s/79focused/Ruff/diffPASS;106 v2 files
+  and all original assets unchanged. See docs/local_contact_geometry.md and
+  outputs/local-contact-geometry/final-native-summary.json; preserve all failures.
+
 - Contact refinement atc6455fd: four fresh vase components PASS16/18 each,
   median broken>intact at640/1920, BUT intact1920 source156 follows a floor
   grout filament and cue saturates1.0. Preserve failure, no generic acceptance.

@@ -178,3 +178,57 @@ The first bin launch at this revision failed its preflight before Isaac because
 the old generated scene indexed the earlier asset README hash. Only the README
 changed. Preserve the failure; regenerate a separate scene with the same base,
 mesh and placement instead of rewriting the original manifest or bypassing it.
+
+## Final native validation and unresolved ranking
+
+Corrected revision `26d6502` passed three fresh 18-source stationary components,
+with frozen source/scene hashes and zero wheel commands. Each has 16 accepted
+image--LiDAR object assessments after two qualification sources. **These are
+perception/dataflow passes, not contact-risk contrast acceptance.**
+
+| Current native case | Contact available | Refined masks | Median visual cue | Median CRA contact factor | Median phi |
+| --- | --- | --- | --- | --- | --- |
+| Intact vase, 1920 | 16/16 | 11/16 | 0.101993 | 0.094247 | 0.586053 |
+| Broken vase, 1920 | 16/16 | 16/16 | 0.121700 | 0.089997 | 0.584110 |
+| Bin, 640 | 9/16 | 5/16 | 0.323450 (supported only) | 0.179272 (all 16) | 0.624918 |
+
+The corrected intact cue spans 0.042466..0.283697, broken 0.099080..0.174942;
+there is substantial overlap. No vase cue saturates in these final runs.
+The raw median ordering improves over the original global proxy, but the
+**final contact factor and phi STILL reverse the desired vase ordering**.
+The bin's nine available cues span 0.302236..0.917825; seven updates use the
+explicit contact prior. It is not a consistently resolved low-contact control.
+
+The factor calculation is operating as configured. Contact interaction is 0.15
+in these records. The first two accepted observations have motion-limited
+confidence 0.4875/0.625, later at most 0.75, and a 0.25 uncertainty prior increases
+low-confidence risks. Small changes in dominant-component fraction also affect
+the contact uncertainty interval/confidence. The intact vase's weak and variable
+visual separation is therefore insufficient to establish conservative risk
+ordering. Do not remove startup rows, reduce the prior, alter confidence, clamp
+scores or use a vase/broken label to force the comparison. A good median in the
+earlier 640 pair does not repair this later adverse result.
+
+The geometric correction removes a real elongation confound, and boundary
+admission removes a demonstrated false-tip source. It does **not** solve
+general visual sharpness: the visible interior ceramic rim is largely absent
+from an outer-silhouette representation, and small mask changes still dominate.
+The existing exposed-edge specialist was also unsuitable in the crop diagnosis.
+The next meaningful perception step is validated local rim/edge evidence with
+smooth rims, texture/shadow and hollow-container negatives. Further tuning of
+CRA priors or selecting only a favorable frame is not supported by this result.
+Keep the options default-OFF and unpromoted to the final navigation demo.
+
+Final regression: **3766 unit tests passed in 148.57 s**, **79 focused tests
+passed**, Ruff across `robot scripts tests` and Git diff checks passed. The
+source-joined replay retains every original mask and report, including the
+filament and failed control cases. All 106 indexed accepted-v2 files and all
+original licensed asset hashes match. The regenerated bin asset layer is
+byte-identical to its predecessor (SHA256
+`26b2f06fd76869c70090c3c4210cbb56e0d9ea53b2b656e8a5124b4ca1f8a092`).
+Final run directories are `outputs/local-contact-geometry/refined-{intact,broken}-rgb1920-v2`
+and `refined-bin-v2`; `final-native-summary.json` records exact outcomes.
+Median full field builds are about 2.81/2.74 s for the high-resolution pair;
+these paced tests are not real-time validation. Potential/thermal priors, mass
+calibration limitations, the ego-pose oracle and all main/primary/PR117 holds
+remain unchanged.
