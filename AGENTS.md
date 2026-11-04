@@ -1,5 +1,23 @@
 # CRA repository guidance
 
+- Rounded-trash bench atf6d8f88/e0821eb/70d0bcb preserves original licensed
+  Andrew.Mischenko Simple Trash Can mesh/material (668triangles, uniform50cm).
+  Twelve fresh18-source ZERO-wheel runs, sixPASS/sixFAIL, all sourcefrozen.
+  Bin1.3m/1.6m PASS16 matched/contact updates each;1.6m median contact/phi
+  .084192/.581458. Intact1.6m PASS16, .099793/.588591. Broken1.6m FAIL:11 runtime
+  groups on20--26returns/twofragments, centroid .304--.308m from fixture beyond
+  unchanged.20m gate; preserve unmatched rows, not accepted whole-target data.
+  Bin1.85m FAIL both640/1920 (one assessment then ambiguous hypotheses); crate
+  640pair PASS16each with small overlapping contact contrast; broken1920 FAIL.
+  Both1.3m crates FAIL. Bin1.3m has4exposed-edge joins/contact peaks~.210;
+  do not suppress them or claim uniform low risk. Crop refinement OFF, all
+  estimator/ownership/uncertainty/priors unchanged. No validated matched bin/
+  broken-crate comparison, full4factor or wheels.3767units169.79s/68focused/
+  Ruff/diffPASS;106v2files/49oldassetfiles unchanged. Next bounded work is partial
+  surface/whole-object association, not threshold tuning. See
+  docs/rounded_trash_contact_bench.md and outputs/rounded-trash-contact/.
+  Preserve all failures and defaultOFF/draft/main/primary/PR117 holds.
+
 - Final contact correction at26d6502: three fresh18-source ZERO-wheel components
   PASS,16 current accepted image-LiDAR objects each. Vase1920 raw cue medians
   intact/broken .101993/.121700, BUT CRA contact .094247/.089997 and phi

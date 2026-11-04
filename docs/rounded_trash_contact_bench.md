@@ -86,4 +86,84 @@ three original assets and every unchanged estimator/association/CRA setting.
 Use `configs/restaurant_rounded_trash_mid_contact.json`, fresh outputs under
 `outputs/rounded-trash-contact/mid/`. This pose is chosen to test common
 observability between the two earlier distances, not by optimizing contact
-scores. Native results pending.
+scores. At `70d0bcb`, bin and intact crate each pass with 16 target-matched,
+contact-supported updates. Broken crate fails the unchanged target match:
+11 runtime image-group assessments have only 20--26 returns on two fragments,
+with observed centroids 0.304--0.308 m from the fixture center (limit 0.20 m).
+Its broad RGB mask is visible, but the sampled geometry is biased toward an
+edge. There are also renewed hypotheses and late ambiguous temporal matches.
+These are not 11 accepted whole-target observations. The grouping records and
+their scores are retained separately as unmatched rows, rather than erased or
+counted as target successes. No matching/ownership threshold is changed.
+
+## Complete native outcomes
+
+Each row below contains 18 fresh sources with zero wheel commands. Contact and
+phi medians cover every target-matched assessment, including the early lower-
+confidence scores; they are not selected steady-state or best-frame scores.
+"Other groups" are runtime image-group assessments that fail the independent
+fixture-center match. They do not establish successful target observation.
+
+| Distance / RGB | Asset | Component | Target matches | Other groups | Median contact | Median phi |
+| --- | --- | --- | ---: | ---: | ---: | ---: |
+| 1.85 m / 640 | Rounded bin | FAIL | 1 | 0 | .143897 | .608745 |
+| 1.85 m / 1920 | Rounded bin | FAIL | 1 | 0 | .148919 | .611040 |
+| 1.85 m / 640 | Intact crate | PASS | 16 | 0 | .105372 | .591142 |
+| 1.85 m / 1920 | Intact crate | PASS | 16 | 0 | .119002 | .597374 |
+| 1.85 m / 640 | Broken crate | PASS | 16 | 0 | .107604 | .592162 |
+| 1.85 m / 1920 | Broken crate | FAIL | 0 | 0 | -- | -- |
+| 1.3 m / 640 | Rounded bin | PASS | 16 | 0 | .088028 | .583211 |
+| 1.3 m / 640 | Intact crate | FAIL | 0 | 16 | -- | -- |
+| 1.3 m / 640 | Broken crate | FAIL | 0 | 0 | -- | -- |
+| 1.6 m / 640 | Rounded bin | PASS | 16 | 0 | .084192 | .581458 |
+| 1.6 m / 640 | Intact crate | PASS | 16 | 0 | .099793 | .588591 |
+| 1.6 m / 640 | Broken crate | FAIL | 0 | 11 | -- | -- |
+
+At 1.6 m the bin's raw combined contact cue is .046978--.140245 (median .092558),
+CRA contact is .079035--.145693, phi is .579101--.609566 and uncalibrated visual
+mass is .409979--.509806 kg. No exposed-edge specialist joins occurred in these
+16 bin updates. At 1.3 m, four joins produced the larger contact range
+.084254--.209768. An archived-mask outline-only replay gives .048474--.128668
+for that closer bin; it explains the difference from the combined runtime cue
+but does not replace the runtime scores or prove those specialist responses
+are false. See `close/bin-contact-source-audit.json`.
+
+The unmatched broken-crate groups at 1.6 m have median contact/phi
+.112774/.594525. These diagnostic numbers suggest the intended direction but
+are NOT a valid accepted bin/broken-crate comparison. The successful 1.85 m
+crate pair has only a small median contact contrast, with overlapping ranges.
+The intact crate's 1.3 m unmatched group centers are .298--.302 m from truth;
+its failure similarly must not be presented as a missing RGB silhouette.
+
+All 12 launches retain their recorded initial sensor synchronization rejections
+(also present in passing runs). All three 1920 runs additionally record a pose-
+history rejection. Every native `source_unchanged` check passes; source hashes,
+full records, failed reports, masks and videos remain in their original folders.
+Median field-build times are about 1.85--1.95 s at 640 and 2.49--2.67 s at 1920.
+This is paced stationary inference, not real-time navigation; the final set also
+overlapped the unit regression and is not a controlled performance benchmark.
+
+## Validation and remaining scope
+
+- Full unit suite: **3,767 passed in 169.79 s**. Focused asset/contact/image-object/
+  runner regression: **68 passed in 29.26 s**. Ruff across `robot scripts tests`
+  and `git diff --check` pass.
+- Final SHA audits preserve all **106** accepted-v2 manifest files, all **49**
+  pre-existing tracked asset files, and all three new original source files.
+  Runtime sources still match every native invocation. See
+  `outputs/rounded-trash-contact/preservation-final.json`.
+- Final reporting is in `summary.json`, `close/summary.json`, `mid/summary.json`
+  and their `comparison.png` images. Unmatched group rows are explicit; the
+  original baseline reports and every failure are retained.
+- Bin versus intact crate at 1.6 m supports a small view-specific contact-proxy
+  contrast. It does not establish calibrated sharpness, material hardness,
+  uniformly low risk, complete fresh four-factor estimation or navigation.
+  Potential/thermal retain labeled .25 priors; mass and partial visible extent
+  are uncalibrated, and ego reference is simulator-supplied.
+
+The rounded bin is a reasonable asset candidate. A robust paired demonstration
+with the broken crate remains unvalidated: the next bounded work is to diagnose
+partial-surface geometry/whole-object association, including negative controls,
+without widening a gate simply to pass this fixture. No more view search, motion
+trial or accepted-demo integration is part of this branch. Keep default-OFF
+development scope, draft status and all main/primary/PR117 holds.
