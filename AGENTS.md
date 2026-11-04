@@ -1,5 +1,20 @@
 # CRA repository guidance
 
+- Contact correction first native atbf544c3: four18-source stationary gates
+  PASS/16accepted each, but1920 intact/broken contact .105705/.103038 reverses
+  desired ranking; preserve it. 640 pair .097883/.113385 orders as expected.
+  Small mask corners remain a confound. Separate defaultOFF
+  --contact-mask-refinement now uses SAME audited SAM/original RGB crop after
+  verified image-object qualification; quality/parentIoU/equivalence>=.85,
+  original pixel/component/border/hole gates, crop truncation rejection. Choose
+  agreement, never score; rejection retains old mask. Contact-only: no original
+  mask/mass/ownership/raw-point/clock/otherfactor changes. Restore full backend
+  image even on exceptions; budget16. Existing part maximum remains. Cropped
+  PACO edge proposal was WITHDRAWN after masks covered vase body, not rim.
+  Recorded replay improves both vase pairs and bin spike, not native acceptance
+  yet. Preserve failed variants, all holds; no wheels or primary/main promotion.
+  See docs/local_contact_geometry.md; fresh matched components required.
+
 - User-authorized local contact correction is separate defaultOFF
   --local-contact-geometry, stationary image-object props ONLY. Original mask/
   ownership/clock/confidence/uncertainty/part-maximum gates remain. Local signed

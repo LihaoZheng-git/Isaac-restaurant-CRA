@@ -97,3 +97,65 @@ Fresh native results and final validation are recorded below after completion.
 This is prior-assisted contact-factor validation; potential/thermal remain
 labeled priors, mass is uncalibrated, and Isaac supplies the ego reference.
 No new complete four-factor, navigation or universal sharpness claim.
+
+## First native repetition and boundary diagnosis
+
+At `bf544c3` all four 18-source stationary component gates passed, with 16
+accepted object assessments each and frozen sources. The 640-pixel pair had
+contact medians intact/broken 0.097883/0.113385. However, the 1920-pixel repeat
+reversed the ordering again: 0.105705/0.103038. These component passes establish
+dataflow, not successful sharpness ranking. Preserve all four original captures
+in `outputs/local-contact-geometry/`; the high-resolution failure is not erased.
+
+Mask inspection found a small stair-stepped corner on the intact rim. A full
+image SAM pass uses a fixed 1024-pixel model input; simply increasing sensor
+resolution does not force its small-object mask to resolve the actual boundary.
+Changing the curvature support floors or requiring all three turns to be
+positive did not solve the recorded pair consistently; neither experiment was
+integrated. A crop of the existing PACO exposed-edge model detected 14/16 broken
+high-resolution images, but its masks covered much of the vase body rather than
+the rim. That is invalid evidence for this purpose. Its proposed runtime wiring
+was withdrawn, with code and results preserved under ignored diagnostic output.
+
+## Contact-only same-image mask refinement
+
+Separate default-OFF `--contact-mask-refinement` requires the stationary local
+contact mode. After the existing three-source image--LiDAR object qualification,
+the same audited SAM checkpoint receives an original RGB crop with 25% padding.
+The prompt is the interior distance-transform maximum and the original mask
+bounding box. No class, authored break, scene geometry, desired score, or label
+selects a mask. The full image is restored in the shared backend afterwards,
+including after inference exceptions. At most 16 verified objects are refined
+per frame; the code does not resize the sensor image or invent new pixels.
+
+Candidates require model quality >=0.85 and original-parent IoU >=0.85, as well
+as the original contact pixel, connected-component, border and hole gates.
+Crop truncation also rejects. Selection maximizes parent agreement, not contact
+score or quality; plausible masks must be mutually equivalent at IoU >=0.85.
+Failure retains the original contact mask. Accepted refinement changes only the
+outline used by the contact proxy. Original object masks, mass inputs, raw
+LiDAR IDs/points, ownership, all other factor evidence and clocks remain intact.
+Full-frame specialist evidence still takes its original maximum. No cropped
+PACO outputs enter runtime. Confidence cannot exceed the original parent's.
+These are configurable correspondence assumptions for separated props, not a
+general crowded-scene proof. Diagnostics save chosen contour, mask hash,
+source time, candidate rejection reasons and actual extra inference time.
+
+Recorded-frame replay with these fixed settings refines all 64 vase masks.
+Raw cue medians intact/broken are 0.234409/0.362267 at640 and
+0.077676/0.165295 at1920. The bin refines15/16; all16 then have usable contact
+outlines, median0.459891 versus0.849935 among the six earlier usable masks.
+That moderate bin cue describes visible corners, not physical sharpness.
+Replay is not fresh Isaac acceptance. Fresh matched component runs use
+`configs/restaurant_contact_refinement.json` and new output directories.
+
+The source-joined replay also retains an adverse control: refined intact crate
+cue0.458182 exceeds broken crate0.321903 (the latter retains original masks
+after refinement rejection). This is not a general broken-object classifier.
+Corners, occlusion, mask uncertainty and viewpoint can dominate; internal edges
+and material remain unmeasured. Do not promote the option as universal contact
+perception or silently replace accepted-demo settings. Reproduce these controls
+with `scripts/evaluation/audit_contact_geometry.py --refine-sam-checkpoint
+outputs/sam2_integration/sam2.1_t.pt` plus the original source folders. Original
+recorded factor/phi fields in that report remain historical, not recalculated
+runtime claims.

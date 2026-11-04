@@ -48,7 +48,7 @@ def augment_image_objects(worker, packet, tracking, projection, world, objects,
     detail = {"scope": "stationary separated-prop image grouping hypothesis; no geometry creation or raw identity merge",
               "source_frame": packet.sensor_frame_id, "source_time": packet.sensor_timestamp_seconds,
               "candidates": audit, "accepted_object_ids": []}
-    for candidate in verified:
+    for candidate_index, candidate in enumerate(verified):
         key, selected = candidate["object_id"], candidate["selected"]
         center = packet.obstacle_xyz[selected, :2].mean(axis=0)
         world_center = world[selected, :2].mean(axis=0)
@@ -64,6 +64,8 @@ def augment_image_objects(worker, packet, tracking, projection, world, objects,
         adapted_tracking = replace(tracking, point_track_ids=ids, tracked_obstacles=(track,))
         assessment = worker._assess_track(packet, adapted_tracking, projection, track, True,
             plume, None, image_is_set=True, shared_contact_frame=contact_frame,
+            refine_contact_boundary=(worker.contact_mask_refinement_config is not None
+                and candidate_index < worker.contact_mask_refinement_config.maximum_objects_per_frame),
             proposal_override=candidate["proposal"])
         candidate["diagnostic"]["final_assessment_rejections"] = assessment["reasons"]
         if not assessment["accepted"]:
@@ -85,6 +87,7 @@ def augment_image_objects(worker, packet, tracking, projection, world, objects,
              "selected_return_count": int(assessment["selected"].sum()), "policy_return_count": int(assessment["selected"].sum()),
              "factor_scores": factors, "geometry_evidence": assessment["geometry_diagnostics"], "property_evidence": {},
              "contact_proxy": assessment.get("contact_proxy"),
+             "contact_mask_refinement": assessment.get("contact_mask_refinement"),
              "instance_ownership_basis": "current_image_mask_repeated_fragment_hypothesis",
              "image_object_association": candidate["diagnostic"], "sam_model_quality": candidate["proposal"].model_quality,
              "sam_rejections": [], "sam_candidate_diagnostics": candidate["proposal"].candidate_diagnostics}

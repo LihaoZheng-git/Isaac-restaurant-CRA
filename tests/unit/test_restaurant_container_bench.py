@@ -108,6 +108,17 @@ def test_local_contact_requires_separate_stationary_validation(monkeypatch):
             _parse_mount([*BASE_ARGS, "--local-contact-geometry", *extra], monkeypatch)
 
 
+def test_contact_refinement_requires_stationary_local_mode(monkeypatch):
+    assert not _parse_mount(BASE_ARGS, monkeypatch).contact_mask_refinement
+    args = _parse_mount([*BASE_ARGS, "--stationary-image-objects", "--local-contact-geometry",
+                        "--contact-mask-refinement"], monkeypatch)
+    assert args.contact_mask_refinement
+    for extra in ([], ["--stationary-image-objects"],
+                  ["--stationary-image-objects", "--local-contact-geometry", "--motion"]):
+        with pytest.raises(SystemExit):
+            _parse_mount([*BASE_ARGS, "--contact-mask-refinement", *extra], monkeypatch)
+
+
 def test_extent_retry_cli_requires_context_opt_in(monkeypatch):
     with pytest.raises(SystemExit):
         _parse_mount([*BASE_ARGS, "--sam-track-extent-retry"], monkeypatch)

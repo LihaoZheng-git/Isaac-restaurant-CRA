@@ -21,7 +21,7 @@ from robot.perception.semantic_detection import PixelBoundingBox, SemanticDetect
 from robot.perception.visual_shape_contact import SilhouetteContactConfig, estimate_silhouette_contact_proxy
 
 
-def audit_source(folder):
+def audit_source(folder, segmenter=None):
     fields_path = folder / "stationary-fields.json"
     records = {r["sensor_frame_id"]: r for r in json.loads(fields_path.read_text())}
     rows, hashes = [], {str(fields_path): hashlib.sha256(fields_path.read_bytes()).hexdigest()}
@@ -53,6 +53,13 @@ def audit_source(folder):
                         local_geometry=LocalContactGeometryConfig()))):
                     values[method] = asdict(estimate_silhouette_contact_proxy(
                         detection, timestamp_seconds=timestamp, config=config))
+                if segmenter is not None:
+                    from robot.perception.contact_mask_refinement import refine_contact_mask
+                    refined, values["refinement_diagnostics"] = refine_contact_mask(
+                        data["rgb"], detection, segmenter.backend)
+                    values["refined"] = asdict(estimate_silhouette_contact_proxy(refined,
+                        timestamp_seconds=timestamp,
+                        config=SilhouetteContactConfig(local_geometry=LocalContactGeometryConfig())))
                 recorded = obj["diagnostics"].get("contact_proxy")
                 rows.append(dict(sensor_frame=meta["sensor_frame_id"], object_id=item["track_id"],
                     camera_timestamp=timestamp, mask_pixels=int(mask.sum()), **values,
@@ -60,7 +67,7 @@ def audit_source(folder):
                     recorded_contact_factor=obj["diagnostics"]["factor_scores"]["contact"],
                     recorded_phi=obj["cra_control"]["cra"]["phi"]))
     summary = {}
-    for method in ("legacy", "local"):
+    for method in (("legacy", "local", "refined") if segmenter is not None else ("legacy", "local")):
         supported = [r[method]["value"] for r in rows if r[method]["value"] is not None]
         summary[method] = dict(available=len(supported), median=float(np.median(supported)) if supported else None)
     if any(hashlib.sha256(Path(p).read_bytes()).hexdigest() != h for p, h in hashes.items()):
@@ -72,15 +79,22 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--source", type=Path, nargs="+", required=True)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--refine-sam-checkpoint", type=Path,
+                        help="Optional existing audited sam2.1_t.pt; no download or install")
     args = parser.parse_args()
     if args.output.exists():
         parser.error("use a fresh output path; preserve previous diagnostics")
     sources = [p.resolve() for p in args.source]
     if len(sources) != len(set(sources)):
         parser.error("source folders must be distinct")
-    result = dict(scope="Offline unchanged accepted-mask replay; local versus legacy visible boundary cue, not physical sharpness or executed CRA",
+    segmenter = None
+    if args.refine_sam_checkpoint is not None:
+        from robot.perception.sam_instance_segmentation import SamInstanceConfig, SamInstanceSegmenter
+        segmenter = SamInstanceSegmenter(SamInstanceConfig(args.refine_sam_checkpoint))
+    result = dict(scope="Offline recorded-mask/RGB replay; visible boundary cues, not physical sharpness or newly executed CRA",
                   local_configuration=asdict(LocalContactGeometryConfig()),
-                  cases=[audit_source(p) for p in sources])
+                  refinement_checkpoint_sha256=segmenter.checkpoint_sha256 if segmenter is not None else None,
+                  cases=[audit_source(p, segmenter) for p in sources])
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(result, indent=2) + "\n")
     print(json.dumps([{k: c[k] for k in ("source", "summary")} for c in result["cases"]], indent=2))

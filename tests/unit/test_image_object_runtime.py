@@ -100,6 +100,55 @@ def test_field_failure_does_not_commit_group_history(monkeypatch):
     assert runtime.image_object_state.last_time == 1.1
 
 
+def test_refinement_changes_only_contact_after_group_qualification():
+    import cv2
+    from robot.perception.contact_mask_refinement import ContactMaskRefinementConfig
+    from robot.perception.local_contact_geometry import LocalContactGeometryConfig
+    from robot.perception.visual_shape_contact import SilhouetteContactConfig
+    class Backend:
+        calls = 0
+        def set_image(self,rgb):
+            self.shape = rgb.shape[:2]
+        def predict(self,point,*,context_box_xyxy):
+            self.calls += 1
+            x0,y0,x1,y1 = context_box_xyxy
+            mask = np.zeros(self.shape,np.uint8)
+            cy = (y0+y1-1)//2
+            cv2.rectangle(mask,(x0+4,y0),(x1-5,y1-1),1,-1)
+            for cx in (x0+4,x1-5):
+                cv2.circle(mask,(cx,cy),4,1,-1)
+            return mask[None].astype(bool),np.array([.95])
+    groups,fields = [],[]
+    for refinement in (False,True):
+        runtime = setup()
+        runtime.shape_contact_config = SilhouetteContactConfig(local_geometry=LocalContactGeometryConfig())
+        runtime.segmenter.backend = Backend()
+        if refinement:
+            runtime.contact_mask_refinement_config = ContactMaskRefinementConfig()
+        def resolved_proposal(ids,projection):
+            mask = np.zeros((100,100),bool)
+            mask[35:45,34:67] = True
+            return (proposal(mask),)
+        runtime.segmenter.image_proposals = resolved_proposal
+        for i,t in enumerate((1.,1.1,1.2),1):
+            result = runtime(observed(i,t))
+            if i < 3:
+                assert runtime.segmenter.backend.calls == 0
+        groups.append(next(o for o in result.objects if o.diagnostics.get("image_object_association")))
+        fields.append(result.field)
+        assert runtime.segmenter.backend.calls == int(refinement)
+        assert result.diagnostics["fixed_lambda"] == 1.25
+    audit = groups[1].diagnostics["contact_mask_refinement"]
+    assert audit["accepted"] and audit["source_timestamp_seconds"] == 1.3
+    assert groups[0].diagnostics["contact_proxy"]["value"] != groups[1].diagnostics["contact_proxy"]["value"]
+    assert groups[0].diagnostics["factor_scores"]["contact"]["score"] != groups[1].diagnostics["factor_scores"]["contact"]["score"]
+    for factor in ("kinetic","potential","thermal"):
+        assert groups[0].diagnostics["factor_scores"][factor] == groups[1].diagnostics["factor_scores"][factor]
+    assert groups[0].attributes.mass == groups[1].attributes.mass
+    assert groups[0].diagnostics["instance_mask_pixels"] == groups[1].diagnostics["instance_mask_pixels"] == 330
+    np.testing.assert_array_equal(fields[0].tracking_result.point_track_ids,fields[1].tracking_result.point_track_ids)
+
+
 def test_evaluation_coalesces_only_fresh_verified_members_and_retains_competitors():
     from robot.evaluation.image_object_runtime import coalesce_image_members_for_evaluation
     raw = [{"track_id": k, "diagnostics": {"accepted_instance": False}} for k in (1,2,3)]

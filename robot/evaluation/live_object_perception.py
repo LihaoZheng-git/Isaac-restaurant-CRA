@@ -278,7 +278,12 @@ class LiveObjectPerception:
         observed_motion_reference=False,
         capture_risk_masks=False,
         shape_contact_config=None,
+        contact_mask_refinement_config=None,
     ):
+        from robot.perception.contact_mask_refinement import ContactMaskRefinementConfig
+        if contact_mask_refinement_config is not None and not isinstance(contact_mask_refinement_config, ContactMaskRefinementConfig):
+            raise TypeError("invalid contact mask refinement configuration")
+        self.contact_mask_refinement_config = contact_mask_refinement_config
         if shape_contact_config is not None and not isinstance(shape_contact_config, SilhouetteContactConfig):
             raise TypeError("invalid shape contact configuration")
         self.shape_contact_config = shape_contact_config
@@ -905,6 +910,7 @@ class LiveObjectPerception:
         image_is_set=False,
         candidate_persistent=None,
         shared_contact_frame=None,
+        refine_contact_boundary=False,
         proposal_override=None,
         suppress_catalog_mass_for_human_identity=False,
     ):
@@ -919,6 +925,7 @@ class LiveObjectPerception:
         )
         selected = np.zeros(len(packet.obstacle_xyz), bool)
         fusion = association = proxy = None
+        contact_refinement = None
         reasons, sam_quality = [], None
         prompt_basis = "projected_track_median"
         sam_candidates = []
@@ -1304,8 +1311,18 @@ class LiveObjectPerception:
                 parts = build_track_visual_contact_proxies(
                     links, part_links.segmentations_by_object_detection_index
                 )
+            contact_shape_frame = frame
+            if refine_contact_boundary:
+                from robot.perception.contact_mask_refinement import refine_contact_mask
+                if self.contact_mask_refinement_config is None or proposal_override is None:
+                    raise ValueError("contact refinement requires a verified image-object proposal")
+                refined, contact_refinement = refine_contact_mask(packet.rgb, frame.detections[0],
+                    self.segmenter.backend, self.contact_mask_refinement_config)
+                contact_refinement.update(source_frame_id=frame.source_frame_id,
+                    source_timestamp_seconds=frame.source_timestamp_seconds)
+                contact_shape_frame = replace(frame, detections=(refined,))
             proxy = build_track_shape_contact_proxies(
-                frame, links, part_proxies=parts, config=self.shape_contact_config
+                contact_shape_frame, links, part_proxies=parts, config=self.shape_contact_config
             ).get(target.track_id)
             attributes = replace(attributes, geometry=geometry, mass=mass)
             if (human_body_contact_prior is not None and human_body_contact_prior.is_available
@@ -1440,6 +1457,7 @@ class LiveObjectPerception:
             "persistence": persistence_diagnostics,
             "contact_frame": shared_contact_frame,
             "contact_proxy": asdict(proxy) if proxy is not None else None,
+            "contact_mask_refinement": contact_refinement,
             "human_body_contact_prior": human_body_contact_prior,
             "human_part_contact": part_contact_diagnostic,
         }
