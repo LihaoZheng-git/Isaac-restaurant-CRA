@@ -1,5 +1,13 @@
 # CRA repository guidance
 
+- V3 presentation-only map layout requested by user: left original annotated
+  perception panel; upper-right v1 authored floor map/actual recorded route and
+  human marker; lower-right native follow camera. Separate outputs/final demo/
+  v3-map-layout preserves originalv3/v1 archives and all1537 navigation/stopping
+  frames plus60 credit frames. Map/actor poses are presentation-only; no new
+  physics/CRA/control/acceptance. Reproduce with scripts/evaluation/
+  compose_restaurant_v3_layout.py. All original v3 limitations/holds below stay.
+
 - V3 runtime72b89ed long-motion-v2 reaches8/8 guides/152.600simsec,
   clearance.473051m/stopdrift.002291m/1083fields1081translating. Original native
   report FAIL is preserved: legacy parallel actor check assumed y<=11 although

@@ -7,6 +7,19 @@ The shareable package is `outputs/final demo/v3/restaurant-service-v3.mp4`.
 It preserves all 1537 navigation/stopping frames and adds six seconds of asset
 credits. Playback is 1x simulation time; execution was paced at .025, not real time.
 
+The user-requested alternative presentation is
+`outputs/final demo/v3-map-layout/restaurant-service-v3-map.mp4`: annotated
+perception camera on the left, animated route map at upper right, and the native
+follow camera below it. The map reuses v1's authored floor raster, extended north
+to include the one-way human start, and displays the actual settled nominal route
+and recorded paths. The human marker is interpolated from independent evaluation
+poses, never fed to perception/control. The original overlays, source ages, all
+1537 navigation/stopping frames and60 credit frames remain; no new simulation or
+physical acceptance is implied. `scripts/evaluation/compose_restaurant_v3_layout.py`
+reproduces the1920x1080 presentation and verifies the original96 v3/12 v1 archive
+files, input hashes, per-frame time mapping, output decoding and frame count.
+The original v3 video/package is unchanged.
+
 The original automatic report is **FAIL**, preserved unchanged. Its only failing
 navigation gates came from the legacy parallel-actor region `y <= 11`, although
 this explicitly selected one-way protocol starts at `y=23.5`. The separate
