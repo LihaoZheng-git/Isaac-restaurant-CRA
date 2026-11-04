@@ -1,5 +1,23 @@
 # CRA repository guidance
 
+- Separated 7e932b7 passes six fresh gates/own60; bin48/crate58 stationary target
+  assessments. Full long-motion-v2 clears ID failure and acquires both props,
+  but is INTERRUPTED at source~109.8/world(24.997,4.216), yaw.644: sustained
+  crate/corner stall before human, no arrival/stopping acceptance. Preserve it.
+  Exact static-source audit PASS: bin130rows74.3--92.8s, crateONLY10rows92.5--
+  93.8s; do not claim continuous crate support. Original center56/130bin,
+  10/10crate; all selected points pass mesh-box allowance.
+  Original survey checked straight chords and missed actual guide-lookahead
+  turn: nominal-only kinematic rollout has79 samples below original2cm gate.
+  Separate --straight-contact variant moves BOTH props1.7m earlier/.2m lateral,
+  bin(20.3,4.85),crate(24,5.1), same3.708m separation; unchanged route/actor/CRA/
+  controller/margins/priors. Survey clearance.330545m, no below2cm samples,
+  NOT native acceptance. New recipe restaurant_service_demo_v3_straight.json;
+  outputs/service-demo-v3-straight/. Require all fresh gates/full mission.
+  3848units198.42s/7sceneCLI/Ruff PASS; initial2 numeric-argv test failures kept,
+  recipe corrected to strings. Native acceptance pending.
+  Keep original layouts/failures and all main/primary/PR117/draft holds.
+
 - Separated v3 ff98d5c prop benches PASS60 each (bin28/crate58 accepted target
   assessments), all four fresh prerequisites and own60 PASS. Full mission-v1
   FAILED before props: image group5000000001 collided with furniture5B+raw1;

@@ -19,9 +19,12 @@ if __name__=='__main__':
         help='separate bin/crate along the earlier aisle; remove unused pot/plume/clearing station')
     parser.add_argument('--props-only',action='store_true',
         help='separate stationary prop diagnostic layer, without the native server')
+    parser.add_argument('--straight-contact',action='store_true',
+        help='separate contact variant earlier on the straight aisle, with more route clearance')
     args=parser.parse_args()
     result=build_service_v3(args.output,ROOT/'scenes/generated/restaurant_service_demo_v2d.usda',
         ROOT/'scenes/generated/restaurant_rounded_trash_simple_trash_can_v1.usda',
         ROOT/'scenes/generated/restaurant_rounded_trash_broken_crate_v1.usda',
-        separated_contact=args.separated_contact,props_only=args.props_only)
+        separated_contact=args.separated_contact or args.straight_contact,
+        props_only=args.props_only,straight_contact=args.straight_contact)
     print(json.dumps({k:v for k,v in result.items() if k!='source_sha256'},indent=2))

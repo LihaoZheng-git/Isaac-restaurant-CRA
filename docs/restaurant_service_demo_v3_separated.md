@@ -51,3 +51,40 @@ required. Outputs: `outputs/service-demo-v3-separated/`.
 Old failures, final-demo archives, source assets and main/primary/PR117 holds
 remain. A revised recording should preserve the requested left perception
 panel and right map/follow-camera panels, with actual evidence provenance.
+
+## Corrected placement after the corner stall
+
+At 7e932b7 all six fresh gates and own60 passed. Bin/crate stationary target
+assessments: 48/58 of 60; median contact 0.099756/0.123964, phi
+0.588570/0.599638. Full `long-motion-v2` cleared the ID failure and both props
+acquired retained evidence, but stalled near world (24.997,4.216), yaw 0.644,
+before the human. The final recorded five-second command window had maximum
+forward command 0.001252m/s; 194/300 rows waited for a valid plan, 33 were
+stale-field stops. Preserve this interrupted run; no arrival/stop acceptance.
+The exact source/current-point audit passes: bin 130 retained rows over
+74.3--92.8s (phi 0.609335--0.639673), crate only 10 rows over 92.5--93.8s
+(phi 0.616032--0.770923). Crate support is therefore brief, not continuous
+perception through the failed turn. Original whole-center checks pass 56/130
+bin and 10/10 crate rows; all selected points pass the original mesh-box audit.
+
+The first placement survey missed the guide controller's lookahead curve: it
+checked straight waypoint chords only. An offline kinematic rollout of the
+actual unchanged nominal controller intersects the original crate placement
+(79 samples below the unchanged 2cm geometry gate). This explains a placement
+conflict; it is not a claim of general controller infeasibility.
+
+Separate `--straight-contact` scene variant uses bin(20.3,4.85) and
+crate(24.0,5.1): same 3.708m separation, both 1.7m earlier and 0.2m farther
+laterally. Original scene variants remain reproducible. The same nominal
+rollout clears the surveyed aisle by 0.330545m, with zero samples below 2cm;
+stationary setup clearances are 0.580545/0.530545m. This is an authored survey,
+not sensor evidence or native acceptance. Robot route, human, all estimation,
+retention, margins, lambda and control settings stay unchanged.
+
+Recipe: `configs/restaurant_service_demo_v3_straight.json`; scenes
+`restaurant_service_demo_v3_straight_contact.usda` and `_bench.usda` under
+`scenes/generated/`. New outputs: `outputs/service-demo-v3-straight/`.
+Require fresh prop/actor/component/startup/near/own60 and full mission gates.
+3848 unit tests (198.42s), seven explicit scene/CLI checks and Ruff pass for
+this variant. The initial two CLI-test failures (numeric JSON argv values)
+are preserved; the recipe now uses strings consistently with existing recipes.

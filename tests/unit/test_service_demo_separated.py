@@ -24,9 +24,10 @@ def test_removed_dressing_has_no_independent_obstacle_box():
         active_service_props(Usd.Stage.CreateInMemory())
 
 
-def test_separated_mission_changes_only_the_scene_reference():
+@pytest.mark.parametrize('variant',['separated','straight'])
+def test_separated_mission_changes_only_the_scene_reference(variant):
     old=json.loads(Path('configs/restaurant_service_demo_v3.json').read_text())['commands']
-    new=json.loads(Path('configs/restaurant_service_demo_v3_separated.json').read_text())['commands']
+    new=json.loads(Path(f'configs/restaurant_service_demo_v3_{variant}.json').read_text())['commands']
     for case, original in old.items():
         changed=new[case].copy()
         key='--scene' if '--scene' in changed else '--restaurant-scene'
@@ -36,9 +37,10 @@ def test_separated_mission_changes_only_the_scene_reference():
 
 
 @pytest.mark.parametrize('case',['bin-static','crate-static'])
-def test_explicit_prop_pose_is_zero_wheel_only(monkeypatch,case):
+@pytest.mark.parametrize('variant',['separated','straight'])
+def test_explicit_prop_pose_is_zero_wheel_only(monkeypatch,case,variant):
     path=Path('scripts/demos/cra_live_object_isaac_demo.py').resolve()
-    cmd=json.loads(Path('configs/restaurant_service_demo_v3_separated.json').read_text())['commands'][case]
+    cmd=json.loads(Path(f'configs/restaurant_service_demo_v3_{variant}.json').read_text())['commands'][case]
     cmd+=['--output','outputs/unused-separated-cli']
     monkeypatch.setattr('sys.argv',cmd)
     code=compile(path.read_text().split('args.output.mkdir',1)[0],str(path),'exec')
