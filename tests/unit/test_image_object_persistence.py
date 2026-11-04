@@ -85,6 +85,20 @@ def test_group_original_property_expiry_is_not_renewed_by_fresh_view():
     assert later.diagnostics["property_evidence"]["mass"]["mode"] == "fresh"
 
 
+def test_motion_prerequisite_requires_current_target_memory_not_background():
+    from robot.evaluation.image_object_runtime import current_target_group_memory_ready
+    runtime, obj = prepared()
+    memory = runtime.image_object_state.property_memory
+    center = np.asarray(obj.diagnostics['instance_centroid_world_xyz'])
+    source = obj.diagnostics['image_object_association']['current_source_time']
+    assert current_target_group_memory_ready([obj], memory, center, source)
+    assert not current_target_group_memory_ready([obj], memory, center+[1,0,0], source)
+    assert not current_target_group_memory_ready([obj], memory, center, source+.1)
+    assert not current_target_group_memory_ready([obj], None, center, source)
+    del memory.properties[(obj.attributes.track_id,'contact')]
+    assert not current_target_group_memory_ready([obj], memory, center, source)
+
+
 @pytest.mark.parametrize("change", [None, "legacy_motion", "no_memory", "short_gate", "human", "no_deskew"])
 def test_approach_cli_keeps_legacy_and_physical_prerequisites(monkeypatch, change):
     path = Path("scripts/demos/cra_live_object_isaac_demo.py").resolve()

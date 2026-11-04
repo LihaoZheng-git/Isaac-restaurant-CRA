@@ -296,6 +296,8 @@ parser.add_argument("--image-object-property-persistence", action="store_true",
                     help="reuse existing guarded physical evidence memory for currently verified image groups; default OFF")
 parser.add_argument("--image-object-approach", action="store_true",
                     help="separate static-prop 40cm nominal approach with original group gates, own60 and ordinary unknown fallback; default OFF")
+parser.add_argument("--moving-view-image-objects", action="store_true",
+                    help="separate calibrated static-prop partial correspondence; original source clocks/point bounds, inferred mask warp; default OFF")
 parser.add_argument("--object-height-evidence", action="store_true",
                     help="opt-in general LiDAR floor/elevation/support evidence; no carried-object relationship or hidden-base inference")
 parser.add_argument("--height-support-margin", type=float, default=.12,
@@ -369,6 +371,8 @@ if args.stationary_prop_rgb_width != 640 and (
     parser.error("higher RGB sampling requires a stationary restaurant prop test without humans/wheels")
 if args.image_object_property_persistence and not args.stationary_image_objects:
     parser.error("group property memory requires the explicit image-object experiment")
+if args.moving_view_image_objects and not args.image_object_approach:
+    parser.error("moving-view groups require the bounded static-prop approach and its stationary gates")
 if args.image_object_approach and (not args.image_object_property_persistence
     or not args.stationary_prop_camera or args.restaurant_view != "demo-container"
     or args.restaurant_route != "short" or args.restaurant_human or args.restaurant_server
@@ -1524,6 +1528,10 @@ def main():
         perception.image_object_config = ImageObjectConfig(maximum_extent_m=args.image_object_maximum_extent,
             hold_overlapping_hypotheses=args.image_object_overlap_hold)
         perception.image_object_property_persistence = args.image_object_property_persistence
+        if args.moving_view_image_objects:
+            from robot.perception.moving_view_association import MovingViewAssociationConfig
+            perception.moving_image_object_config = MovingViewAssociationConfig()
+            perception.image_object_archive_directory = args.output / 'image-object-sources'
     if args.stationary_furniture_memory:
         if not (args.restaurant_human == "parallel" and args.rolling_local_field and args.persistent_object_risk_map) or args.static_occupancy_memory_prior:
             raise ValueError("furniture memory requires the separate long-human rolling experiment, not global static memory")
@@ -1878,7 +1886,7 @@ def main():
                 if key not in keep:
                     del sensor_archive_payloads[key]
         if args.save_sensor_snapshots and (
-            len(captures) <= 24 or len(captures) % 20 == 0
+            args.moving_view_image_objects or len(captures) <= 24 or len(captures) % 20 == 0
         ):
             snapshot = args.output / "sensor-snapshots"
             snapshot.mkdir(exist_ok=True)
@@ -2132,12 +2140,13 @@ def main():
         gate['passed'] = stationary_ready = bool(stationary_ready and applied_mass_gate['passed'])
         save_json('stationary-human-mass-identity-retention-validation.json', mass_gate)
     if args.image_object_approach:
+        from robot.evaluation.image_object_runtime import current_target_group_memory_ready
         group_memory = getattr(getattr(perception, "image_object_state", None), "property_memory", None)
-        grouped_sources = {k[0] for k in group_memory.properties} if group_memory is not None else set()
-        memory_ready = any(all((key, name) in group_memory.properties for name in ("mass", "contact"))
-                           for key in grouped_sources)
+        fixture_center = next(f['center_world_xyz'] for f in fixtures if f['name'] == restaurant_target)
+        memory_ready = current_target_group_memory_ready(latest.objects, group_memory,
+            fixture_center, latest.field.sensor_timestamp_seconds) if latest is not None else False
         gate["image_object_memory_checks"] = {"sixty_current_fields": len(records) >= 60,
-            "current_group_has_mass_and_contact_sources": memory_ready}
+            "current_target_group_has_mass_and_contact_sources": memory_ready}
         gate["passed"] = stationary_ready = bool(stationary_ready and all(gate["image_object_memory_checks"].values()))
     save_json("stationary-gate.json", gate)
     print(json.dumps({key: value for key, value in gate.items() if key != "last_objects"}, default=json_default), flush=True)
@@ -3315,6 +3324,7 @@ def main():
         "stationary_image_objects": args.stationary_image_objects,
         "image_object_property_persistence": args.image_object_property_persistence,
         "image_object_approach": args.image_object_approach,
+        "moving_view_image_objects": args.moving_view_image_objects,
         "image_object_overlap_hold": args.image_object_overlap_hold,
         "image_object_maximum_extent_prior_m": args.image_object_maximum_extent,
         "server_component_gate": gate.get("server_component_checks"),

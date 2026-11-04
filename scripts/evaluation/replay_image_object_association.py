@@ -21,19 +21,24 @@ from robot.perception.image_object_association import ImageObjectConfig, Station
 from robot.perception.sam_instance_segmentation import SamInstanceConfig, SamInstanceSegmenter
 from robot.perception.sensor_epochs import gravity_aligned_robot_transform
 from robot.safety.obstacle_tracking import ObstacleTracker, ObstacleTrackerConfig
+from robot.perception.moving_view_association import ImageObjectView, MovingViewAssociationConfig
 
 
-def replay(folder, model):
+def replay(folder, model, *, moving_view=False, include_live=False):
     hashes = {}
     def checked(path):
         hashes[str(path.resolve())] = hashlib.sha256(path.read_bytes()).hexdigest()
         return path
     records = json.loads(checked(folder/'stationary-fields.json').read_text())
+    if include_live:
+        records += [json.loads(line) for line in checked(folder/'live-fields.jsonl').read_text().splitlines() if line.strip()]
     calibration = FThetaCameraCalibration(**json.loads(checked(folder/'camera-calibration.json').read_text()))
     tracker = ObstacleTracker(ObstacleTrackerConfig(cluster_radius=.12, minimum_cluster_points=4,
         maximum_association_distance=.5, clustering_backend='kdtree'))
     states = {name: StationaryImageObjects(ImageObjectConfig(hold_overlapping_hypotheses=enabled))
               for name, enabled in (('legacy', False), ('overlap_hold', True))}
+    if moving_view:
+        states['moving_view'] = StationaryImageObjects(ImageObjectConfig(hold_overlapping_hypotheses=True))
     rows = []
     for record in records:
         frame = record['sensor_frame_id']
@@ -47,6 +52,8 @@ def replay(folder, model):
         c, s = np.cos(yaw), np.sin(yaw)
         world[:, :2] = world[:, :2] @ np.array([[c, s], [-s, c]]) + transform[:2, 3]
         world[:, 2] += transform[2, 3]
+        camera_from_world = scan['camera_from_scan_robot'] @ np.linalg.inv(transform)
+        view = ImageObjectView(camera_from_world, calibration, MovingViewAssociationConfig())
         tracking = tracker.update(xyz[:, :2], robot_position_world_xy=transform[:2, 3],
             robot_yaw=yaw, timestamp_seconds=record['sensor_timestamp'], clustering_points_robot_xyz=xyz)
         projection = depth_visible_projection(project_fisheye_polynomial_points(xyz,
@@ -59,7 +66,7 @@ def replay(folder, model):
                'association_audit': audit}
         for name, state in states.items():
             staged = copy.deepcopy(candidates)
-            accepted = state.update(staged, world, record['sensor_timestamp'])
+            accepted = state.update(staged, world, record['sensor_timestamp'], view=view if name=='moving_view' else None)
             row[name] = {'hypothesis_count': len(state.records),
                 'candidate_audit': [a['diagnostic'] for a in staged],
                 'accepted': [{'id': a['object_id'], 'points': int(a['selected'].sum()),
@@ -83,6 +90,8 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--source', type=Path, nargs='+', required=True)
     parser.add_argument('--output', type=Path, required=True)
+    parser.add_argument('--moving-view', action='store_true', help='also audit bounded reprojected partial-surface correspondence')
+    parser.add_argument('--include-live', action='store_true', help='requires full source RGB/scan archives for every live field; never synthesize missing sources')
     args = parser.parse_args()
     if args.output.exists():
         parser.error('fresh output required; preserve old replays')
@@ -91,7 +100,7 @@ def main():
         observed_context_box_retry=True, foreground_depth_gap_m=.5))
     reports = {}
     for index, folder in enumerate(args.source):
-        result = replay(folder, model)
+        result = replay(folder, model, moving_view=args.moving_view, include_live=args.include_live)
         name = f'{index}-{folder.name}'
         (args.output/f'{name}.json').write_text(json.dumps(result, indent=2)+'\n')
         reports[str(folder)] = {k: result[k] for k in ('summary', 'legacy_accepted_ids_match_original')}

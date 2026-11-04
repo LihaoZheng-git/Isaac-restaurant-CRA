@@ -2,6 +2,8 @@
 
 import copy
 from dataclasses import replace
+import json
+from pathlib import Path
 
 import numpy as np
 
@@ -11,6 +13,22 @@ from robot.perception.image_object_association import StationaryImageObjects, as
 from robot.risk.object_risk_policy import evaluate_object_risk
 from robot.safety.obstacle_tracking import TrackedObstacle
 from robot.safety.semantic_obstacle import SemanticObstacle
+
+
+def current_target_group_memory_ready(objects, memory, center_world_xyz, source_timestamp):
+    """Independent stationary test gate only; fixture truth never enters CRA."""
+    if memory is None:
+        return False
+    for obj in objects:
+        d = obj.diagnostics
+        a = d.get('image_object_association', {})
+        center = d.get('instance_centroid_world_xyz')
+        if (d.get('accepted_instance') and d.get('policy_return_count', 0) > 0
+            and a.get('current_source_time') == source_timestamp and center is not None
+            and np.linalg.norm(np.asarray(center)-center_world_xyz) <= .20
+            and all((obj.attributes.track_id, name) in memory.properties for name in ('mass','contact'))):
+            return True
+    return False
 
 
 def coalesce_image_members_for_evaluation(records):
@@ -54,11 +72,41 @@ def augment_image_objects(worker, packet, tracking, projection, world, objects,
     proposals = worker.segmenter.image_proposals(tracking.point_track_ids, projection)
     candidates, audit = associate_image_objects(proposals, projection, tracking.point_track_ids,
                                                 packet.obstacle_xyz, config)
-    verified = state.update(candidates, world, packet.sensor_timestamp_seconds)
+    view = None
+    moving_config = getattr(worker, "moving_image_object_config", None)
+    if moving_config is not None:
+        from robot.perception.moving_view_association import image_object_view
+        view = image_object_view(packet, worker.calibration, moving_config)
+    archive_directory = getattr(worker, 'image_object_archive_directory', None)
+    archive_path = None
+    if archive_directory is not None:
+        # Evaluation-only copies of actual candidate inputs, including failures.
+        # Runtime never reads this directory; export is inside measured build time.
+        archive = Path(archive_directory)
+        archive.mkdir(parents=True, exist_ok=True)
+        archive_path = archive / f'{packet.sensor_frame_id:06d}.npz'
+        attempt = 1
+        while archive_path.exists():
+            archive_path = archive / f'{packet.sensor_frame_id:06d}-attempt{attempt}.npz'
+            attempt += 1
+        np.savez_compressed(archive_path,
+            world_xyz=world, robot_xyz=packet.obstacle_xyz,
+            selected=np.stack([c['selected'] for c in candidates]) if candidates else np.empty((0,len(world)),bool),
+            masks=np.stack([c['proposal'].detection.mask for c in candidates]) if candidates else np.empty((0,*packet.rgb.shape[:2]),bool),
+            camera_from_world=view.camera_from_world if view is not None else np.empty((0,0)),
+            sensor_timestamp=packet.sensor_timestamp_seconds,
+            source_frame_id=packet.sensor_frame_id,
+            candidates_json=json.dumps([c['diagnostic'] for c in candidates]))
+    verified = state.update(candidates, world, packet.sensor_timestamp_seconds, view=view)
     detail = {"scope": "stationary separated-prop image grouping hypothesis; no geometry creation or raw identity merge",
               "hold_overlapping_hypotheses": config.hold_overlapping_hypotheses,
               "source_frame": packet.sensor_frame_id, "source_time": packet.sensor_timestamp_seconds,
               "candidates": audit, "accepted_object_ids": []}
+    if view is not None:
+        detail.update(scope='bounded static-prop moving-view correspondence; inferred partial-surface identity, original raw geometry unchanged',
+            ego_reference_source=packet.pose_source, ego_reference_status=packet.pose_status.value)
+    if archive_path is not None:
+        detail['candidate_archive'] = str(archive_path)
     for candidate_index, candidate in enumerate(verified):
         key, selected = candidate["object_id"], candidate["selected"]
         center = packet.obstacle_xyz[selected, :2].mean(axis=0)

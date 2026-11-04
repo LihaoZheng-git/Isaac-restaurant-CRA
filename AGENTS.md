@@ -1,5 +1,19 @@
 # CRA repository guidance
 
+- User-approved moving-view implementation adds defaultOFF
+  --moving-view-image-objects for the existing static-prop approach only.
+  Original points/calibrated ego project a bounded affine outline PRIOR
+  (.5m/10deg/2px residual); current maskIoU>=.75 and EVERY current point<=.06m
+  from original support. New explicit partial proof:8 distinct matches,
+  >=25% original support/span in each significant axis. Never shrink/renew
+  original points/mask/camera/source, create hidden geometry or freeze phi.
+  Full legacy matcher/physical margins remain; original.20m whole-center audit
+  stays separate and may fail. Current geometry/raw kinetic stay live, guarded
+  property memory only on accepted groups. Archive all current candidate inputs
+  and rejection comparisons. Native validation pending; all prior failures/v2/
+  assets/defaultOFF/draft/main/primary/PR117 holds remain. See
+  docs/moving_view_association.md and outputs/moving-view-association/.
+
 - Crate live2ad2c2e: independent+own60 stationary PASS58target updates each;
   navigation PASS .303904m travel/1.8simsec/16fields15translating/.550631clearance/
   .694667CBF/.002686stopdrift. BUT continuous target persistence NOT validated:

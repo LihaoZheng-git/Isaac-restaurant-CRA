@@ -126,7 +126,7 @@ class StationaryImageObjects:
         self.next_id = 5_000_000_000
         self.last_time = -math.inf
 
-    def update(self, candidates, world_xyz, timestamp):
+    def update(self, candidates, world_xyz, timestamp, *, view=None):
         if not math.isfinite(timestamp) or timestamp <= self.last_time:
             raise ValueError("image object source epochs must increase")
         self.last_time = timestamp
@@ -142,22 +142,37 @@ class StationaryImageObjects:
             matches = []
             overlapping = []
             partial = False
+            comparisons = []
             for key, old in self.records.items():
+                if view is not None:
+                    from robot.perception.moving_view_association import compare_moving_view
+                    matched, overlap, comparison = compare_moving_view(old, mask, points, view, cfg)
+                    comparison['object_id'] = key
+                    comparisons.append(comparison)
+                    if matched:
+                        matches.append(key)
+                    elif overlap:
+                        overlapping.append(comparison)
+                    continue
                 intersection = np.sum(mask & old["mask"])
                 iou = intersection / max(1, np.sum(mask | old["mask"]))
-                near = cKDTree(old["points"]).query(points)[0].max() <= cfg.support_distance_m
+                current_to_old = cKDTree(old["points"]).query(points)[0]
+                old_to_current = cKDTree(points).query(old["points"])[0]
+                near = current_to_old.max() <= cfg.support_distance_m
+                comparisons.append({"object_id": key, "original_source_time": old['first'],
+                    "mask_iou": float(iou), "current_maximum_distance_m": float(current_to_old.max()),
+                    "original_maximum_distance_m": float(old_to_current.max())})
                 if near and intersection >= .98 * mask.sum() and mask.sum() < .8 * old["mask"].sum():
                     partial = True
                 if iou < cfg.minimum_mask_iou:
                     continue
-                old_to_current = cKDTree(points).query(old["points"])[0]
-                current_to_old = cKDTree(old["points"]).query(points)[0]
                 distance = max(old_to_current.max(), current_to_old.max())
                 if distance <= cfg.support_distance_m:
                     matches.append(key)
                 elif cfg.hold_overlapping_hypotheses and current_to_old.min() <= cfg.support_distance_m:
                     overlapping.append({"object_id": key, "original_source_time": old["first"],
                         "mask_iou": float(iou), "maximum_support_distance_m": float(distance)})
+            candidate['diagnostic']['reference_comparisons'] = comparisons
             if partial or len(matches) > 1 or any(k in seen for k in matches):
                 candidate["diagnostic"]["temporal_rejection"] = "partial or ambiguous current object"
                 continue
@@ -186,10 +201,18 @@ class StationaryImageObjects:
                 self.next_id += 1
                 old = {"first": timestamp, "proof_start": timestamp, "last": timestamp, "count": 1,
                        "mask": mask.copy(), "points": points.copy()}
+                if view is not None:
+                    old['camera_from_world'] = view.camera_from_world.copy()
                 self.records[key] = old
             seen.add(key)
             candidate["diagnostic"].update(object_id=key, observations=old["count"],
                 original_source_time=old["first"], current_source_time=timestamp)
+            if view is not None:
+                candidate['diagnostic'].update(
+                    association_basis='bounded_static_prop_reprojected_outline_and_partial_surface_prior',
+                    reference_surface_centroid_world_xyz=old['points'].mean(axis=0).tolist(),
+                    reference_point_count=len(old['points']),
+                    reference_geometry_scope='original observed surface retained for identity only; not complete physical center or current geometry')
             if old["count"] >= cfg.minimum_observations and timestamp - old["proof_start"] >= cfg.minimum_span_seconds - 1e-9:
                 accepted.append({**candidate, "object_id": key})
         return accepted
