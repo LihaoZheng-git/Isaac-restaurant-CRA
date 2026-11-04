@@ -214,7 +214,7 @@
       "--maximum-seconds",
       "90",
       "--restaurant-scene",
-      "scenes/generated/restaurant_image_objects_recycle_bin_v1.usda",
+      "scenes/generated/restaurant_contact_refinement_bin_v1.usda",
       "--restaurant-route",
       "short",
       "--static-occupancy-memory-prior",

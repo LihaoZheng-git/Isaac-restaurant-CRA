@@ -21,13 +21,20 @@ class ContactMaskRefinementConfig:
     minimum_quality: float = .85
     minimum_parent_iou: float = .85
     equivalent_candidate_iou: float = .85
+    maximum_boundary_excursion_fraction: float = .02
+    minimum_boundary_allowance_pixels: float = 2.
     maximum_objects_per_frame: int = 16
 
     def __post_init__(self):
-        for name in ("padding_fraction", "minimum_quality", "minimum_parent_iou", "equivalent_candidate_iou"):
+        for name in ("padding_fraction", "minimum_quality", "minimum_parent_iou", "equivalent_candidate_iou",
+                     "maximum_boundary_excursion_fraction"):
             value = getattr(self, name)
             if isinstance(value, bool) or not math.isfinite(value) or not 0 < value <= 1:
                 raise ValueError(f"{name} must be in (0, 1]")
+        if (isinstance(self.minimum_boundary_allowance_pixels, bool)
+                or not math.isfinite(self.minimum_boundary_allowance_pixels)
+                or self.minimum_boundary_allowance_pixels <= 0):
+            raise ValueError("boundary pixel allowance must be finite and positive")
         if (isinstance(self.maximum_objects_per_frame, bool)
                 or not isinstance(self.maximum_objects_per_frame, int)
                 or not 1 <= self.maximum_objects_per_frame <= 16):
@@ -64,6 +71,14 @@ def refine_contact_mask(rgb, parent, backend, config=None):
     x0,x1 = max(0,int(xx.min())-pad), min(w,int(xx.max())+pad+1)
     y0,y1 = max(0,int(yy.min())-pad), min(h,int(yy.max())+pad+1)
     old = parent.mask[y0:y1,x0:x1]
+    # IoU alone admits a long thin background filament with very little area.
+    # Require EVERY new boundary pixel to stay near the verified parent too.
+    # This rejects the candidate; it never trims a mask or invents a contour.
+    distance_from_parent = cv2.distanceTransform((~old).astype(np.uint8),
+        cv2.DIST_L2, cv2.DIST_MASK_PRECISE)
+    boundary_allowance = max(settings.minimum_boundary_allowance_pixels,
+        settings.maximum_boundary_excursion_fraction * max(np.ptp(xx)+1, np.ptp(yy)+1))
+    audit["boundary_allowance_pixels"] = float(boundary_allowance)
     distance = cv2.distanceTransform(old.astype(np.uint8), cv2.DIST_L2, 5)
     py,px = np.unravel_index(distance.argmax(), distance.shape)
     box = (int(xx.min())-x0,int(yy.min())-y0,int(xx.max())+1-x0,int(yy.max())+1-y0)
@@ -84,6 +99,11 @@ def refine_contact_mask(rgb, parent, backend, config=None):
         audit["candidates"].append(row)
         if not np.isfinite(quality) or not settings.minimum_quality <= quality <= 1 or iou < settings.minimum_parent_iou:
             row["rejection"] = "quality or parent agreement"
+            continue
+        excursion = float(distance_from_parent[mask].max())
+        row["maximum_outward_excursion_pixels"] = excursion
+        if excursion > boundary_allowance:
+            row["rejection"] = "new pixels extend beyond original boundary allowance"
             continue
         full = np.zeros((h,w),bool)
         full[y0:y1,x0:x1] = mask

@@ -31,6 +31,10 @@ class Backend:
             mask[y0:y0+30] = False
         elif self.mode == "border":
             mask[:y0,x0:x0+2] = True
+        elif self.mode == "filament":
+            # Only eight extra pixels, so IoU still exceeds .99. This connected
+            # background line must not create a new high-contact tip.
+            mask[y1:y1+8,x0+20] = True
         elif self.mode == "empty":
             return np.empty((0,*shape),bool), np.empty(0)
         elif self.mode == "shape":
@@ -59,7 +63,7 @@ def test_selection_uses_parent_agreement_not_score_or_highest_quality():
     assert len(backend.images) == 2
 
 
-@pytest.mark.parametrize("mode", ["hole","part","border","empty","quality","ambiguous"])
+@pytest.mark.parametrize("mode", ["hole","part","border","empty","quality","ambiguous","filament"])
 def test_rejected_refinement_keeps_original_mask_and_restores_image(mode):
     item = parent()
     rgb = np.zeros((100,120,3),np.uint8)
@@ -67,6 +71,9 @@ def test_rejected_refinement_keeps_original_mask_and_restores_image(mode):
     refined,audit = refine_contact_mask(rgb,item,backend)
     assert not audit["accepted"] and refined is item
     np.testing.assert_array_equal(backend.images[-1],rgb)
+    if mode == "filament":
+        assert audit["candidates"][0]["parent_iou"] > .99
+        assert "boundary allowance" in audit["candidates"][0]["rejection"]
 
 
 @pytest.mark.parametrize("mode,exception", [("error",RuntimeError),("shape",ValueError)])
@@ -79,7 +86,8 @@ def test_backend_failure_restores_original_image(mode,exception):
 
 
 @pytest.mark.parametrize("kwargs", [{"padding_fraction": float('nan')}, {"minimum_parent_iou": 0},
-    {"maximum_objects_per_frame": 17}, {"maximum_objects_per_frame": True}])
+    {"maximum_objects_per_frame": 17}, {"maximum_objects_per_frame": True},
+    {"minimum_boundary_allowance_pixels": float('nan')}, {"maximum_boundary_excursion_fraction": 0}])
 def test_invalid_config(kwargs):
     with pytest.raises(ValueError):
         ContactMaskRefinementConfig(**kwargs)

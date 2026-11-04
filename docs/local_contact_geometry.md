@@ -159,3 +159,22 @@ with `scripts/evaluation/audit_contact_geometry.py --refine-sam-checkpoint
 outputs/sam2_integration/sam2.1_t.pt` plus the original source folders. Original
 recorded factor/phi fields in that report remain historical, not recalculated
 runtime claims.
+
+At `c6455fd`, the four fresh vase component runs passed, but one intact1920
+frame156 acquired a thin floor-grout filament and saturated the cue at1.0.
+Median ordering alone concealed this failure: intact/broken cues were
+0.073104/0.158108 at1920 and0.234409/0.381829 at640. Preserve these captures.
+The extra line extended26pixels outside its original associated mask while
+overall overlap remained acceptable. All other selected high-resolution
+refinements extended at most1pixel. The corrected admission now requires EVERY
+new mask pixel to stay within max(2pixels, 2% of original mask maximum span)
+of the original mask. This configurable image-correspondence allowance rejects
+the entire candidate; no trimming, score clamp or synthetic contour is applied.
+It can reject a real thin feature missing from the original mask, a limitation
+of bounded same-object refinement. A synthetic connected-filament test with
+IoU>0.99 verifies that overlap alone cannot bypass this gate.
+
+The first bin launch at this revision failed its preflight before Isaac because
+the old generated scene indexed the earlier asset README hash. Only the README
+changed. Preserve the failure; regenerate a separate scene with the same base,
+mesh and placement instead of rewriting the original manifest or bypassing it.

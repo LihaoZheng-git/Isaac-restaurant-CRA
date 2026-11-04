@@ -1,5 +1,17 @@
 # CRA repository guidance
 
+- Contact refinement atc6455fd: four fresh vase components PASS16/18 each,
+  median broken>intact at640/1920, BUT intact1920 source156 follows a floor
+  grout filament and cue saturates1.0. Preserve failure, no generic acceptance.
+  Corrected candidate admission also bounds EVERY added pixel to max(2px,.02
+  original max span) from original mask; reject whole candidate, never trim.
+  Recorded replay removes the26px filament (1.0->.104311 fallback); all other
+  highres selected masks extended<=1px. Other640 rows unchanged. Bin control
+  remains unreliable under strict admission:8/16 contact available, median
+  cue.834608 in replay. Do not weaken guard to fix it. Old bin launch failed
+  preflight on asset README hash; new separate scene's asset layer is byte-
+  identical. Fresh corrected native gates still required. Keep all holds.
+
 - Contact correction first native atbf544c3: four18-source stationary gates
   PASS/16accepted each, but1920 intact/broken contact .105705/.103038 reverses
   desired ranking; preserve it. 640 pair .097883/.113385 orders as expected.
