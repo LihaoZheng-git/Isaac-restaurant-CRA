@@ -1,5 +1,23 @@
 # CRA repository guidance
 
+- Moving-view native18b7bce: crate+bin independent/own60 PASS; both short
+  approaches PASS .303904m/15fields14translating/.550631clearance/.002686stopdrift.
+  BUT continuous association FAIL: originalID0 crate8/15, bin7/15. Crate original
+  .20m center gate only1/15; bin7/15. Reprojected maskIoU stays>=.8465/.9030;
+  original support still rejects newly visible points(.08565 then.11574m crate,
+  .09079m bin), bin also competing masks. Original references never shrink/move;
+  exact75-source replays and7/5 paired property-source reuses PASS. These include
+  fresh reacquisition after memory loss, NOT continuous original evidence:
+  crate mass2.574->.718kg from partial extent; bin one contact.25 prior fallback.
+  Preserve all failures; no consistent sharpness/mass/fourfactor or v3 claim.
+  Crate candidate points inside independentbox; bin boxexcess.004181m retained.
+  Same-view stationary union does NOT repair all unsupported crate returns.
+  Next needs verified newly exposed surfaces/whole-part masks, not threshold
+  tuning. Failed groups still lose memory; changing that rule is separate work.
+  Final3805units185.06s/Ruff/compile/diff PASS;1697 new native files hashed.
+  All2190 prior files unchanged. Keep defaultOFF/draft/main/primary/PR117 holds.
+  See docs/moving_view_association.md and outputs/moving-view-association/.
+
 - User-approved moving-view implementation adds defaultOFF
   --moving-view-image-objects for the existing static-prop approach only.
   Original points/calibrated ego project a bounded affine outline PRIOR
@@ -10,7 +28,7 @@
   Full legacy matcher/physical margins remain; original.20m whole-center audit
   stays separate and may fail. Current geometry/raw kinetic stay live, guarded
   property memory only on accepted groups. Archive all current candidate inputs
-  and rejection comparisons. Native validation pending; all prior failures/v2/
+  and rejection comparisons. Native results above; all prior failures/v2/
   assets/defaultOFF/draft/main/primary/PR117 holds remain. See
   docs/moving_view_association.md and outputs/moving-view-association/.
 
