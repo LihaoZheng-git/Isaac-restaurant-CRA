@@ -40,6 +40,49 @@ in 55.01 s, and the expanded ten persistence/CLI tests pass in 36.95 s. Ruff
 across robot/scripts/tests, compilation and diff checks pass. The six new CLI
 cases were added after full-suite collection and are covered by the ten-test run.
 
-Native validation is pending. Artifacts belong under
-`outputs/crate-live-persistence/`; preserve every failure. No calibrated mass,
-physical sharpness, complete four-factor sensing or real-time claim is made.
+## Native result at 2ad2c2e
+
+The independent and own sixty-field stationary gates both PASS, each with 58
+target group assessments after two qualification sources. Runtime and scene
+hashes remain unchanged. Native navigation PASS: final travel .303904 m toward
+the .40 m nominal goal (original .10 m tolerance), 1.8 simulation seconds,
+16 live fields / 15 translating field intervals, .550631 m minimum independent
+clearance, .694667 minimum CBF margin and .002686 m stopping drift. The only
+reported control wait is the initial wait for a fresh valid plan. Original
+camera/LiDAR synchronization and pose-history rejection messages are preserved.
+This short approach is not an avoidance or long-route demonstration.
+
+**Continuous whole-crate assessment is NOT validated.** The original group
+5000000000 appears in the first four live updates (source8.2--8.5), reusing mass
+and contact from original camera time8.2 without clock renewal. Its phi changes
+slightly, .613870--.614036, while current relative speed changes .0064--.2010m/s.
+The observed surface centroid moves away from the whole-fixture center:
+.19432/.20435/.21147/.22565m. Only the first satisfies the unchanged .20m
+independent target gate. Those later records are not accepted whole-target data.
+
+The grouping then becomes intermittent: new group5000000003 has two updates,
+5000000004 has one; nine of sixteen fields have no accepted image group. The
+candidate return count drops from64 to21 during the approach. Later rejected
+support distances include .08130m versus the original .06m bound. The first
+identity change lacks a complete original-hypothesis comparison log, so we do
+not claim to have isolated its mask-versus-surface contribution. Image-space
+mask comparison and changing partial surfaces remain limitations; no thresholds
+were weakened. Raw obstacle occupancy and its ordinary policies continue.
+
+The original-source audit passes all ten reused mass/contact entries: four
+uses each on the original ID and one each on the newly acquired group3. New IDs
+do not inherit the original crate's properties. That verifies the memory path,
+not sustained object identity. `group-persistence-audit.json` reports the strict
+independent target match separately and does not declare a perception pass.
+
+All 1,732 preserved v2/asset/prior-native files are byte-identical. Artifacts:
+`outputs/crate-live-persistence/stationary-v1`, `motion-v1`,
+`approach-result.png` and `preservation-final.json`. The original videos retain
+the stationary acquisition and complete navigation/stopping sequence.
+
+The next bounded work is moving-view correspondence for the same physical prop,
+with explicit visibility and original-source provenance, plus validation of what
+the surface centroid represents. A constant ID label alone cannot establish it.
+Keep this branch draft/default-OFF; no full-restaurant, main/primary or PR117
+promotion. Potential/thermal use .25 priors, mass is uncalibrated and ego pose
+is an oracle. No physical-sharpness, complete-four-factor or real-time claim.

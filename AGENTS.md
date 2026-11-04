@@ -1,5 +1,19 @@
 # CRA repository guidance
 
+- Crate live2ad2c2e: independent+own60 stationary PASS58target updates each;
+  navigation PASS .303904m travel/1.8simsec/16fields15translating/.550631clearance/
+  .694667CBF/.002686stopdrift. BUT continuous target persistence NOT validated:
+  original ID0 retained mass/contact for4live rows, onlyfirst within unchanged
+  .20m whole-fixture gate (surface errors.194/.204/.211/.226). NewIDs3/4 later;
+  7group rows/9nogroup; candidate returns64->21. All10 original-source property
+  reuse entries PASS (4+1 each mass/contact), no cross-ID transfer. Later full
+  support .0813>.06 rejected; first ID-change cause not fully logged. Preserve
+  whole-target failures, don't claim navigation proves continuous perception.
+  3778units187.99s/46focused/10expanded memoryCLI/Ruff/compile/diff PASS;
+  1732 prior files unchanged. Next moving-view/partial-surface correspondence,
+  not threshold tuning or score freezing. Keep defaultOFF/draft/main/primary/
+  PR117 holds. See docs/crate_live_persistence.md, outputs/crate-live-persistence/.
+
 - User-requested bounded live crate test adds defaultOFF group property memory
   and a separate --image-object-approach. Existing full current association,
   original source clocks/expiry/confidence, support/competitor checks remain.
