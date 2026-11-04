@@ -147,7 +147,12 @@ overlapped the unit regression and is not a controlled performance benchmark.
 
 - Full unit suite: **3,767 passed in 169.79 s**. Focused asset/contact/image-object/
   runner regression: **68 passed in 29.26 s**. Ruff across `robot scripts tests`
-  and `git diff --check` pass.
+  and working-tree `git diff --check` pass. The complete branch diff passes
+  `git -c core.whitespace=blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol
+  diff --check b3f9400..HEAD`: the plain branch check flags CRLF in the new
+  generated asset manifest, whose bytes remain frozen as used by native tests.
+  This is a command-local Windows line-ending allowance, not a Git configuration
+  change or suppression of other trailing whitespace.
 - Final SHA audits preserve all **106** accepted-v2 manifest files, all **49**
   pre-existing tracked asset files, and all three new original source files.
   Runtime sources still match every native invocation. See
