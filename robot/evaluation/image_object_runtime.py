@@ -46,6 +46,7 @@ def augment_image_objects(worker, packet, tracking, projection, world, objects,
                                                 packet.obstacle_xyz, config)
     verified = state.update(candidates, world, packet.sensor_timestamp_seconds)
     detail = {"scope": "stationary separated-prop image grouping hypothesis; no geometry creation or raw identity merge",
+              "hold_overlapping_hypotheses": config.hold_overlapping_hypotheses,
               "source_frame": packet.sensor_frame_id, "source_time": packet.sensor_timestamp_seconds,
               "candidates": audit, "accepted_object_ids": []}
     for candidate_index, candidate in enumerate(verified):
@@ -82,6 +83,7 @@ def augment_image_objects(worker, packet, tracking, projection, world, objects,
         d = {"track_id": key, "accepted_instance": True, "camera_observable": True, "visual_attempted": True,
              "centroid_world_xy": tuple(world_center), "velocity_world_xy": tuple(world_velocity),
              "instance_centroid_world_xyz": world[selected].mean(axis=0).tolist(),
+             "instance_geometry_scope": "centroid and extent of current observed returns; complete object center/extent not established",
              "instance_mask_pixels": detection.mask_pixel_count,
              "instance_box_xyxy": tuple(getattr(detection.bounding_box, n) for n in ("x_min", "y_min", "x_max", "y_max")),
              "selected_return_count": int(assessment["selected"].sum()), "policy_return_count": int(assessment["selected"].sum()),

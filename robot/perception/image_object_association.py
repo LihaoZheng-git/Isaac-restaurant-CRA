@@ -26,8 +26,11 @@ class ImageObjectConfig:
     minimum_observations: int = 3
     minimum_mask_iou: float = .75
     maximum_reference_age_seconds: float = 10.
+    hold_overlapping_hypotheses: bool = False
 
     def __post_init__(self):
+        if not isinstance(self.hold_overlapping_hypotheses, bool):
+            raise TypeError("overlapping-hypothesis hold must be boolean")
         for name in ("maximum_extent_m", "foreground_depth_gap_m", "support_distance_m",
                      "maximum_gap_seconds", "minimum_span_seconds", "maximum_reference_age_seconds"):
             if not math.isfinite(getattr(self, name)) or getattr(self, name) <= 0:
@@ -137,6 +140,7 @@ class StationaryImageObjects:
             mask = candidate["proposal"].detection.mask
             points = np.asarray(world_xyz)[candidate["selected"]]
             matches = []
+            overlapping = []
             partial = False
             for key, old in self.records.items():
                 intersection = np.sum(mask & old["mask"])
@@ -146,10 +150,14 @@ class StationaryImageObjects:
                     partial = True
                 if iou < cfg.minimum_mask_iou:
                     continue
-                distance = max(cKDTree(points).query(old["points"])[0].max(),
-                               cKDTree(old["points"]).query(points)[0].max())
+                old_to_current = cKDTree(points).query(old["points"])[0]
+                current_to_old = cKDTree(old["points"]).query(points)[0]
+                distance = max(old_to_current.max(), current_to_old.max())
                 if distance <= cfg.support_distance_m:
                     matches.append(key)
+                elif cfg.hold_overlapping_hypotheses and current_to_old.min() <= cfg.support_distance_m:
+                    overlapping.append({"object_id": key, "original_source_time": old["first"],
+                        "mask_iou": float(iou), "maximum_support_distance_m": float(distance)})
             if partial or len(matches) > 1 or any(k in seen for k in matches):
                 candidate["diagnostic"]["temporal_rejection"] = "partial or ambiguous current object"
                 continue
@@ -163,6 +171,17 @@ class StationaryImageObjects:
                 old["last"] = timestamp
                 old["count"] += 1
             else:
+                # A partly overlapping observation is insufficient proof of a
+                # NEW object. Reject this source instead of creating competing
+                # histories that later veto an unchanged valid original. This
+                # supplies no geometry/identity/evidence and renews no clocks.
+                # A future source must still pass the complete original support
+                # test; expired references and spatially separate objects keep
+                # the existing three-source enrollment path.
+                if overlapping:
+                    candidate["diagnostic"]["temporal_rejection"] = "unmatched support overlaps an original image hypothesis"
+                    candidate["diagnostic"]["overlapping_original_hypotheses"] = overlapping
+                    continue
                 key = self.next_id
                 self.next_id += 1
                 old = {"first": timestamp, "proof_start": timestamp, "last": timestamp, "count": 1,

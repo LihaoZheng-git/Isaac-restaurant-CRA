@@ -260,6 +260,8 @@ parser.add_argument("--human-mass-prior", nargs=3, type=float, default=(70.,45.,
                     metavar=("KG", "LOWER", "UPPER"), help="configured adult demonstration mass interval; not measured weight")
 parser.add_argument("--stationary-image-objects", action="store_true",
                     help="Separate stationary image-first multi-fragment CRA experiment; no wheels/humans")
+parser.add_argument("--image-object-overlap-hold", action="store_true",
+                    help="stationary-only: reject incomplete support overlapping an original hypothesis without enrolling a competing identity")
 parser.add_argument("--local-contact-geometry", action="store_true",
                     help="Separate stationary local convex boundary proxy; no global elongation risk term")
 parser.add_argument("--contact-mask-refinement", action="store_true",
@@ -351,6 +353,8 @@ parser.add_argument('--unknown-verified-dynamic-evidence', action='store_true',
 parser.add_argument('--human-verified-part-recovery', action='store_true',
                     help='bounded recovery across a previously verified human parent/part ID swap; complete old region must fit current body')
 args = parser.parse_args()
+if args.image_object_overlap_hold and not args.stationary_image_objects:
+    parser.error("overlapping image hypotheses require the stationary image-object experiment")
 if args.local_contact_geometry and not args.stationary_image_objects:
     parser.error("local contact geometry requires stationary image-object validation before motion use")
 if args.contact_mask_refinement and not (args.stationary_image_objects and args.local_contact_geometry):
@@ -1498,7 +1502,8 @@ def main():
     )
     if args.stationary_image_objects:
         from robot.perception.image_object_association import ImageObjectConfig
-        perception.image_object_config = ImageObjectConfig(maximum_extent_m=args.image_object_maximum_extent)
+        perception.image_object_config = ImageObjectConfig(maximum_extent_m=args.image_object_maximum_extent,
+            hold_overlapping_hypotheses=args.image_object_overlap_hold)
     if args.stationary_furniture_memory:
         if not (args.restaurant_human == "parallel" and args.rolling_local_field and args.persistent_object_risk_map) or args.static_occupancy_memory_prior:
             raise ValueError("furniture memory requires the separate long-human rolling experiment, not global static memory")
@@ -3280,6 +3285,7 @@ def main():
         "sam_observed_context_box_retry": args.sam_observed_context_box,
         "sam_track_extent_retry": args.sam_track_extent_retry,
         "stationary_image_objects": args.stationary_image_objects,
+        "image_object_overlap_hold": args.image_object_overlap_hold,
         "image_object_maximum_extent_prior_m": args.image_object_maximum_extent,
         "server_component_gate": gate.get("server_component_checks"),
         "restaurant_component_gate": gate.get("restaurant_component_checks"),

@@ -100,6 +100,35 @@ def test_field_failure_does_not_commit_group_history(monkeypatch):
     assert runtime.image_object_state.last_time == 1.1
 
 
+def test_overlap_hold_keeps_bad_source_occupied_and_recovers_only_original_support():
+    runtime = setup()
+    runtime.image_object_config = ImageObjectConfig(hold_overlapping_hypotheses=True)
+    # A stable visual silhouette despite one changed LiDAR sample. The default
+    # test segmenter's point-tight synthetic box changes IoU with that sample.
+    mask = np.zeros((100, 100), bool)
+    mask[32:48, 32:68] = True
+    runtime.segmenter.image_proposals = lambda ids, projection: (proposal(mask),)
+    for i, t in enumerate((1., 1.1, 1.2), 1):
+        result = runtime(observed(i, t))
+    group = next(o for o in result.objects if o.diagnostics.get("image_object_association"))
+    original_id = group.diagnostics["track_id"]
+    bad = observed(4, 1.3)
+    xyz = bad.obstacle_xyz.copy()
+    xyz[-1, 2] += .08
+    result = runtime(replace(bad, obstacle_xyz=xyz, scene_xyz=xyz))
+    assert not any(o.diagnostics.get("image_object_association") for o in result.objects)
+    assert result.field.all_obstacle_point_count == len(xyz)
+    assert len(runtime.image_object_state.records) == 1
+    assert runtime.image_object_state.records[original_id]["last"] == 1.2
+    result = runtime(observed(5, 1.4))
+    group = next(o for o in result.objects if o.diagnostics.get("image_object_association"))
+    assert group.diagnostics["track_id"] == original_id
+    assert group.diagnostics["image_object_association"]["original_source_time"] == 1.
+    assert "complete object center/extent not established" in group.diagnostics["instance_geometry_scope"]
+    assert result.field.all_obstacle_point_count == len(xyz)
+    assert result.diagnostics["fixed_lambda"] == 1.25
+
+
 def test_refinement_changes_only_contact_after_group_qualification():
     import cv2
     from robot.perception.contact_mask_refinement import ContactMaskRefinementConfig

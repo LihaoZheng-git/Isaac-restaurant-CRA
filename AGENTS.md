@@ -1,5 +1,19 @@
 # CRA repository guidance
 
+- Bounded crate-surface association branch adds defaultOFF
+  --image-object-overlap-hold, stationary image-object props ONLY. When complete
+  original support fails but maskIoU>=.75 and any point is within.06m of an
+  original hypothesis, REJECT this source instead of enrolling a duplicate.
+  No partial acceptance, identity merge, geometry, prior or clock renewal;
+  original full support/gap/span/expiry and ambiguity gates stay. Archived RGB/
+  LiDAR replays reproduce all legacy IDs: bin1.85m1->15 accepted, both crates
+  remain16; broken1.6m11->7 (stricter support), centroid failure NOT repaired.
+  Point audit shows all20--26 sparse crate returns survive association; missing
+  slats were not measured. Center diagnostics now say observed surface, not full
+  object center. Fresh four native stationary runs pending at implementation.
+  See docs/crate_surface_association.md and outputs/crate-surface-association/.
+  Preserve all failures/defaultOFF/draft/main/primary/PR117 and zero-wheel holds.
+
 - Rounded-trash bench atf6d8f88/e0821eb/70d0bcb preserves original licensed
   Andrew.Mischenko Simple Trash Can mesh/material (668triangles, uniform50cm).
   Twelve fresh18-source ZERO-wheel runs, sixPASS/sixFAIL, all sourcefrozen.
