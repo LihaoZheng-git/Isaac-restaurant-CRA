@@ -69,4 +69,21 @@ the authored observation pose, not mesh size, LiDAR, quality/correspondence
 thresholds, model settings, clocks, priors or scores. Use the separate
 `configs/restaurant_rounded_trash_close_contact.json` recipe and fresh outputs
 under `outputs/rounded-trash-contact/close/`. It is a view-dependent diagnostic,
-not repair of the preserved 1.85 m association failures. Results pending.
+not repair of the preserved 1.85 m association failures.
+
+At `e0821eb`, the closer bin passes all 18-source component checks with 16
+accepted/contact-supported assessments and zero wheels. Median combined visual
+cue/contact/phi is 0.126832/0.088028/0.583211. Four of those updates also use the
+existing exposed-edge specialist, raising contact to about 0.204--0.210 with
+lower confidence; these updates remain included. Do not describe it as uniformly
+low risk or silently suppress specialist evidence. Both crate components fail
+unique target observation at this closer view. Therefore there is not yet a
+matched bin/crate comparison; successful different-distance captures are not
+substitutes. Preserve all three closer captures and their failures.
+
+A final bounded shared-view probe uses **1.6 m**, still 640-pixel RGB, the same
+three original assets and every unchanged estimator/association/CRA setting.
+Use `configs/restaurant_rounded_trash_mid_contact.json`, fresh outputs under
+`outputs/rounded-trash-contact/mid/`. This pose is chosen to test common
+observability between the two earlier distances, not by optimizing contact
+scores. Native results pending.
