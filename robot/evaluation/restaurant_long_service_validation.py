@@ -18,10 +18,12 @@ def distant_start_retention_audit(report):
 
 
 def verify_near_human_gates(folders, root, scene, *, require_background_walk=False,
-                           require_upper_departure=False):
+                           require_upper_departure=False, require_straight_walk=False):
     """Require current runtime/scene bytes and both independent human gates."""
     if require_upper_departure and not require_background_walk:
         raise ValueError('upper departure requires background walk')
+    if require_straight_walk and (require_background_walk or require_upper_departure):
+        raise ValueError('one-way gate is separate from the background circuit')
     root, scene = Path(root), Path(scene).resolve()
     runtime = {p.relative_to(root).as_posix(): hashlib.sha256(p.read_bytes()).hexdigest()
                for directory in ('robot', 'scripts') for p in (root/directory).rglob('*.py')
@@ -50,6 +52,8 @@ def verify_near_human_gates(folders, root, scene, *, require_background_walk=Fal
                     and all(report['human_body_envelope_checks'].values())):
                 raise ValueError('near-view human ownership and body envelope must pass')
         elif case == 'long-idle-component':
+            if ('--straight-service-walk' in meta['command']) != require_straight_walk:
+                raise ValueError('one-way actor mode must match the motion trial')
             required = {'hold_at_least_180_seconds', 'held_agent_disabled',
                 'idle_drift_below_1mm', 'released_native_walking', 'native_task_completed',
                 'native_travel_over_3m', 'unchanged_geometry_guard'}
@@ -66,6 +70,9 @@ def verify_near_human_gates(folders, root, scene, *, require_background_walk=Fal
                     raise ValueError('actor departure mode must match the motion trial')
                 if require_upper_departure:
                     required |= {'explicit_upper_departure', 'upper_aisle_reached'}
+            if require_straight_walk:
+                required |= {'explicit_one_way','native_one_way_completed','straight_aisle',
+                    'forward_only_actor','complete_aisle_travel','independent_geometry','grounded','measured_walking'}
             if set(report.get('checks', {})) != required or not all(
                 value is True for value in report['checks'].values()
             ):

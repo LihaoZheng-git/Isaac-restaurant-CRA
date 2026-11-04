@@ -52,7 +52,8 @@ def coalesce_image_members_for_evaluation(records):
 
 
 def augment_image_objects(worker, packet, tracking, projection, world, objects,
-                          frames, policies, point_ids, semantics, contact_frame, plume):
+                          frames, policies, point_ids, semantics, contact_frame, plume,
+                          *, image_is_set=False):
     """Stage state until the current field commits; original occupancy is untouched."""
     from robot.evaluation.multi_object_perception import ObjectAssessment
 
@@ -71,6 +72,24 @@ def augment_image_objects(worker, packet, tracking, projection, world, objects,
     static_config = getattr(worker, 'static_prop_evidence_config', None)
     static_memory = None
     static_matches, static_audit = {}, []
+    excluded = np.zeros(len(world), bool)
+    if getattr(worker, 'service_static_props', False):
+        # A current person cue excludes static-property use; it does not label
+        # unrelated background dynamic or erase any raw occupancy.
+        person_frame = worker.visual_person_frame(packet)
+        if person_frame is not None:
+            if (person_frame.source_frame_id != packet.camera_frame_id or
+                    person_frame.source_timestamp_seconds != packet.camera_timestamp_seconds):
+                raise ValueError('static props require current person exclusions')
+            for person in person_frame.detections:
+                if person.semantic_class == 'person' and person.confidence >= .5:
+                    hits = person.mask[projection.pixel_indices_xy[:,1],projection.pixel_indices_xy[:,0]]
+                    excluded[projection.source_indices[hits]] = True
+        identities = getattr(getattr(worker, 'human_body_envelope', None), 'identities', {})
+        excluded |= np.isin(tracking.point_track_ids, list(identities))
+        for obj in objects:
+            if obj.attributes.semantic_class == 'person':
+                excluded |= tracking.point_track_ids == obj.attributes.track_id
     if static_config is not None:
         from robot.perception.static_prop_evidence import StaticPropEvidence
         static_memory = getattr(state, 'static_properties', None)
@@ -79,11 +98,19 @@ def augment_image_objects(worker, packet, tracking, projection, world, objects,
         static_memory.expire(packet.camera_timestamp_seconds)
         if worker.persistent_properties.frozen:
             static_matches, static_audit = static_memory.match(world, tracking.point_track_ids,
-                packet.camera_timestamp_seconds)
-    worker.segmenter.set_image(packet.rgb)
+                packet.camera_timestamp_seconds, excluded=excluded)
+    if not image_is_set:
+        worker.segmenter.set_image(packet.rgb)
     proposals = worker.segmenter.image_proposals(tracking.point_track_ids, projection)
     candidates, audit = associate_image_objects(proposals, projection, tracking.point_track_ids,
                                                 packet.obstacle_xyz, config)
+    admitted = []
+    for candidate in candidates:
+        if np.any(candidate['selected'] & excluded):
+            candidate['diagnostic']['static_scope_rejection'] = 'current person support; retain original human/raw policy'
+        else:
+            admitted.append(candidate)
+    candidates = admitted
     view = None
     moving_config = getattr(worker, "moving_image_object_config", None)
     if moving_config is not None:

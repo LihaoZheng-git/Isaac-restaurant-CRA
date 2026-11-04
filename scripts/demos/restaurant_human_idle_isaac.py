@@ -15,9 +15,12 @@ parser.add_argument('--layout-survey', type=Path, required=True)
 parser.add_argument('--output', type=Path, required=True)
 parser.add_argument('--background-service-walk', action='store_true')
 parser.add_argument('--background-upper-departure', action='store_true')
+parser.add_argument('--straight-service-walk', action='store_true')
 args = parser.parse_args()
 if args.background_upper_departure and not args.background_service_walk:
     parser.error('upper departure requires background service walk')
+if args.straight_service_walk and args.background_service_walk:
+    parser.error('one-way walk is separate from the background circuit')
 if args.output.exists():
     parser.error('preserve existing outputs')
 args.output.mkdir(parents=True)
@@ -64,7 +67,8 @@ try:
     human = RestaurantHumanEpisode(stage, mode='parallel', output=args.output,
         trigger_robot_y=9., speed_mps=.5, long_service_parallel=True,
         background_service_walk=args.background_service_walk,
-        background_upper_departure=args.background_upper_departure)
+        background_upper_departure=args.background_upper_departure,
+        straight_service_walk=args.straight_service_walk)
     save('human-native-setup.json', human.setup)
     for _ in range(20):
         app.update()
@@ -91,7 +95,7 @@ try:
     held = list(human.records)
     release = float(timeline.get_current_time())
     human.start_video()
-    for step in range((210 if args.background_upper_departure else 180 if args.background_service_walk else 20)*60):
+    for step in range((60 if args.straight_service_walk else 210 if args.background_upper_departure else 180 if args.background_service_walk else 20)*60):
         # The supplied position triggers only the authored actor, no robot exists.
         elapsed = float(timeline.get_current_time())-release
         human.update(float(timeline.get_current_time()),
@@ -122,6 +126,11 @@ try:
         checks.update(circuit['checks'])
         save('background-walk-validation.json', circuit)
         save('background-walk-events.json', human.background_walk.events)
+    if args.straight_service_walk:
+        from robot.scene.restaurant_straight_walk import audit_straight_walk
+        straight = audit_straight_walk(walked)
+        checks.update(straight['checks'])
+        save('straight-walk-validation.json', straight)
     save('validation.json', dict(passed=all(checks.values()), checks=checks,
         hold_seconds=release-start, idle_drift_m=drift, native_travel_m=travel,
         minimum_layout_clearance_m=min(r['actor_layout_clearance_m'] for r in human.records),

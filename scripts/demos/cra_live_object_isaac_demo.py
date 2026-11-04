@@ -201,6 +201,10 @@ parser.add_argument("--background-service-walk", action="store_true",
                     help="v2 actor-only background walking circuit before/after the parallel encounter; separate native route gate required")
 parser.add_argument("--background-upper-departure", action="store_true",
                     help="separate actor-only upper-aisle departure after the unchanged encounter; requires fresh route gates")
+parser.add_argument('--straight-service-walk', action='store_true',
+                    help='v3 actor-only straight far-end walk, timed before the encounter; no looping')
+parser.add_argument('--service-static-props', action='store_true',
+                    help='v3 mixed scene: verified separated static props plus unchanged human perception')
 parser.add_argument("--stationary-furniture-memory", action="store_true",
                     help="separate bounded repeated-surface background PRIOR; current people/motion excluded, no source renewal")
 parser.add_argument("--stationary-furniture-fragment-proof", action="store_true",
@@ -373,9 +377,9 @@ if args.stationary_prop_rgb_width != 640 and (
     parser.error("higher RGB sampling requires a stationary restaurant prop test without humans/wheels")
 if args.image_object_property_persistence and not args.stationary_image_objects:
     parser.error("group property memory requires the explicit image-object experiment")
-if args.moving_view_image_objects and not args.image_object_approach:
+if args.moving_view_image_objects and not (args.image_object_approach or args.service_static_props):
     parser.error("moving-view groups require the bounded static-prop approach and its stationary gates")
-if args.static_prop_evidence and not (args.image_object_approach and args.moving_view_image_objects):
+if args.static_prop_evidence and not ((args.image_object_approach or args.service_static_props) and args.moving_view_image_objects):
     parser.error("static-prop evidence requires the bounded approach and independent/own stationary gates")
 if args.image_object_approach and (not args.image_object_property_persistence
     or not args.stationary_prop_camera or args.restaurant_view != "demo-container"
@@ -385,9 +389,16 @@ if args.image_object_approach and (not args.image_object_property_persistence
     or not args.image_object_overlap_hold or not args.local_contact_geometry
     or args.contact_mask_refinement or args.disable_lidar_deskew):
     parser.error("image-object approach requires original container view, own60, guarded group memory/hold/local contact, deskew and no humans/refinement/view changes")
-if args.stationary_image_objects and (not args.stationary_prop_camera or (args.motion and not args.image_object_approach)
+if args.stationary_image_objects and not args.service_static_props and (not args.stationary_prop_camera or (args.motion and not args.image_object_approach)
     or args.restaurant_human or not args.persistent_object_risk_map):
     parser.error("image-object experiment requires stationary prop camera, persistent mapping and no humans/wheels")
+if args.service_static_props and (not args.stationary_image_objects or not args.static_prop_evidence
+    or not args.moving_view_image_objects or not args.image_object_property_persistence
+    or not args.image_object_overlap_hold or not args.local_contact_geometry
+    or args.restaurant_human != 'parallel' or not args.restaurant_server
+    or not args.persistent_object_risk_map or args.human_camera_raise_metres != .6
+    or args.contact_mask_refinement or args.image_object_approach or args.disable_lidar_deskew):
+    parser.error('v3 static props require explicit mixed human scene, original property/ownership/deskew gates and raised camera')
 if not math.isfinite(args.image_object_maximum_extent) or not .1 <= args.image_object_maximum_extent <= 1.5:
     parser.error("image-object extent assumption must lie in [.1, 1.5] m")
 if (not math.isfinite(args.stationary_prop_view_yaw_degrees)
@@ -696,7 +707,8 @@ if args.long_service_parallel and args.motion:
         parser.error('long human motion requires component and near-view stationary evidence')
     verify_near_human_gates(args.long_service_human_gates, ROOT, args.restaurant_scene,
                            require_background_walk=args.background_service_walk,
-                           require_upper_departure=args.background_upper_departure)
+                           require_upper_departure=args.background_upper_departure,
+                           require_straight_walk=args.straight_service_walk)
 elif args.long_service_human_gates:
     parser.error('near-human gate references require explicit long-service human motion')
 if args.restaurant_human == 'parallel' and (args.human_walking_speed != .5
@@ -762,6 +774,8 @@ if args.background_service_walk and not args.long_service_parallel:
     parser.error("background service walk requires the separate long-service parallel experiment")
 if args.background_upper_departure and not args.background_service_walk:
     parser.error('upper departure requires background service walk')
+if args.straight_service_walk and (not args.long_service_parallel or args.background_service_walk):
+    parser.error('one-way service walk requires its separate long-service parallel episode')
 if args.service_demo_v2 and not args.restaurant_scene:
     parser.error("v2 presentation requires its separate restaurant scene")
 if args.service_wide_corner and not (args.service_demo_v2 and args.long_service_parallel):
@@ -1125,6 +1139,7 @@ def main():
                                        long_service_parallel=args.long_service_parallel,
                                        background_service_walk=args.background_service_walk,
                                        background_upper_departure=args.background_upper_departure,
+                                       straight_service_walk=args.straight_service_walk,
                                        crossing_extension_m=args.human_crossing_extension,
                                        crossing_y_m=args.human_crossing_line_y, crossing_layout=args.human_crossing_layout)
         ACTIVE_HUMAN = human
@@ -1528,6 +1543,7 @@ def main():
         plume_view_fov_degrees=args.plume_view_fov,
     )
     if args.stationary_image_objects:
+        perception.service_static_props = args.service_static_props
         from robot.perception.image_object_association import ImageObjectConfig
         perception.image_object_config = ImageObjectConfig(maximum_extent_m=args.image_object_maximum_extent,
             hold_overlapping_hypotheses=args.image_object_overlap_hold)
@@ -2932,6 +2948,11 @@ def main():
         save_json('encounter-guidance-validation.json', encounter_validation)
     if human is not None:
         from robot.evaluation.human_navigation_validation import summarize_human_navigation
+        if args.straight_service_walk:
+            from robot.scene.restaurant_straight_walk import audit_straight_walk
+            straight_validation = audit_straight_walk(human.records)
+            save_json('straight-walk-validation.json', straight_validation)
+            completed = completed and straight_validation['passed']
         if human.background_walk is not None:
             from robot.scene.restaurant_background_walk import audit_background_walk
             background_validation = audit_background_walk(human.records, human.background_walk.events,
@@ -3341,6 +3362,8 @@ def main():
         "image_object_approach": args.image_object_approach,
         "moving_view_image_objects": args.moving_view_image_objects,
         "static_prop_evidence": args.static_prop_evidence,
+        "service_static_props": args.service_static_props,
+        "straight_service_walk": args.straight_service_walk,
         "image_object_overlap_hold": args.image_object_overlap_hold,
         "image_object_maximum_extent_prior_m": args.image_object_maximum_extent,
         "server_component_gate": gate.get("server_component_checks"),

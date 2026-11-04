@@ -18,8 +18,8 @@ def test_distant_start_defers_exercise_count_but_never_provenance_failure():
         assert not distant_start_retention_audit(bad)['passed']
 
 
-@pytest.mark.parametrize('background,upper', [(False,False),(True,False),(True,True)])
-def test_remote_start_cannot_replace_current_source_near_human_gates(tmp_path, background, upper):
+@pytest.mark.parametrize('background,upper,straight', [(False,False,False),(True,False,False),(True,True,False),(False,False,True)])
+def test_remote_start_cannot_replace_current_source_near_human_gates(tmp_path, background, upper, straight):
     (tmp_path/'robot').mkdir()
     source = tmp_path/'robot/controller.py'
     source.write_text('control')
@@ -28,9 +28,9 @@ def test_remote_start_cannot_replace_current_source_near_human_gates(tmp_path, b
     def sha(p):
         return hashlib.sha256(p.read_bytes()).hexdigest()
     folders = []
-    options = dict(require_background_walk=background, require_upper_departure=upper)
+    options = dict(require_background_walk=background, require_upper_departure=upper,require_straight_walk=straight)
     command = (['--background-service-walk'] if background else []) + (
-        ['--background-upper-departure'] if upper else [])
+        ['--background-upper-departure'] if upper else []) + (['--straight-service-walk'] if straight else [])
     for case in ('long-parallel-component', 'long-parallel-near', 'long-idle-component'):
         folder = tmp_path/case
         folder.mkdir()
@@ -51,6 +51,9 @@ def test_remote_start_cannot_replace_current_source_near_human_gates(tmp_path, b
                     'measured_walking', 'independent_geometry', 'grounded', 'bounded_region')}
             if upper:
                 checks.update(explicit_upper_departure=True, upper_aisle_reached=True)
+            if straight:
+                checks.update({k:True for k in ('explicit_one_way','native_one_way_completed','straight_aisle',
+                    'forward_only_actor','complete_aisle_travel','independent_geometry','grounded','measured_walking')})
             (native/'validation.json').write_text(json.dumps(dict(passed=True, checks=checks)))
         elif case.endswith('component'):
             native = folder/'native'

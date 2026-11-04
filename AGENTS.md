@@ -1,5 +1,15 @@
 # CRA repository guidance
 
+- V3 integration in progress after short static-prop PASS: separate additive
+  bin(28.15,4.9)/brokencrate(28.15,6.1) originallicensedmeshes/scales/materials;
+  Owl+.60m. DefaultOFF --service-static-props retains original generic/human
+  vision and excludes currentperson/knownhumanpoints from staticcache. New
+  --straight-service-walk is actorONLY: (29.8,23.5)->(29.8,7), release at robot
+  x26; no loop/return, no actortruth incontrol. Same robotroute/lambda/margins.
+  Fresh scene/actor/component/near/start/own60 and fullmission gates pending.
+  Preserve acceptedv2/alloldfailures/assets and draft/main/primary/PR117 holds.
+  See docs/restaurant_service_demo_v3.md and outputs/service-demo-v3/.
+
 - Static-prop674c893 native PASS both bin/crate independent60+own60 and short
   approaches. Each16/16 live rows retain exact original mass/contact sources;
   kinetic live, no fabricated fresh masks. .303904m travel/16fields15moving/

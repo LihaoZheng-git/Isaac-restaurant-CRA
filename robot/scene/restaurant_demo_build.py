@@ -54,6 +54,9 @@ def demo_prop_records(stage):
     container = stage.GetPrimAtPath(f"{DEMO_ROOT}/ServiceContainer")
     if container and container.IsActive():
         names.append("ServiceContainer")
+    crate = stage.GetPrimAtPath(f"{DEMO_ROOT}/BrokenCrate")
+    if crate and crate.IsActive():
+        names.append("BrokenCrate")
     support = stage.GetPrimAtPath(f"{DEMO_ROOT}/AssetBenchSupport")
     if support and support.IsActive():
         names.append("AssetBenchSupport")

@@ -191,7 +191,7 @@ def assess_all_objects(worker, packet):
             (tracking.point_track_ids[projection.source_indices]==track_id))>=4}
         attempted-=person_tracks
     image_object_config = getattr(worker, "image_object_config", None)
-    if image_object_config is not None:
+    if image_object_config is not None and not getattr(worker, 'service_static_props', False):
         # Separate stationary experiment: assess each verified visual object once.
         # Original raw tracks remain occupied with their ordinary factor priors.
         attempted = set()
@@ -391,7 +391,8 @@ def assess_all_objects(worker, packet):
     if image_object_config is not None:
         from robot.evaluation.image_object_runtime import augment_image_objects
         image_state, image_detail = augment_image_objects(worker, packet, tracking, projection,
-            world, objects, frames, policies, point_ids, semantics, contact_frame, plume)
+            world, objects, frames, policies, point_ids, semantics, contact_frame, plume,
+            image_is_set=bool(attempted))
         selected_count = int(np.logical_or.reduce([f["selected"] for f in frames]).sum())
         for item in objects:
             item.diagnostics["policy_return_count"] = int(np.count_nonzero(point_ids == item.attributes.track_id))
