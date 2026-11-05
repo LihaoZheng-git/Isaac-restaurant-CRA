@@ -33,10 +33,13 @@ class ImageObjectConfig:
     minimum_mask_iou: float = .75
     maximum_reference_age_seconds: float = 10.
     hold_overlapping_hypotheses: bool = False
+    confirmed_evidence_refresh: bool = False
 
     def __post_init__(self):
         if not isinstance(self.hold_overlapping_hypotheses, bool):
             raise TypeError("overlapping-hypothesis hold must be boolean")
+        if not isinstance(self.confirmed_evidence_refresh, bool):
+            raise TypeError('confirmed evidence refresh must be boolean')
         for name in ("maximum_extent_m", "foreground_depth_gap_m", "support_distance_m",
                      "maximum_gap_seconds", "minimum_span_seconds", "maximum_reference_age_seconds"):
             if not math.isfinite(getattr(self, name)) or getattr(self, name) <= 0:
@@ -80,7 +83,8 @@ def associate_image_objects(proposals, projection, point_track_ids, xyz, config)
         if selected.any() and np.ptp(xyz[selected], axis=0).max() > config.maximum_extent_m:
             reasons.append("extent exceeds separated-prop assumption")
         row = {"proposal_index": index, "fragments": fragments, "selected_returns": int(selected.sum()),
-               "foreign_fraction": foreign, "rejections": reasons}
+               "foreign_fraction": foreign, "rejections": reasons,
+               "model_quality":getattr(proposal,'model_quality',None)}
         audit.append(row)
         if not reasons:
             candidates.append({"proposal": proposal, "selected": selected, "diagnostic": row})
@@ -131,6 +135,9 @@ class StationaryImageObjects:
         self.records = {}
         self.next_id = IMAGE_OBJECT_ID_START
         self.last_time = -math.inf
+        if config.confirmed_evidence_refresh:
+            from robot.perception.confirmed_view_refresh import ConfirmedViewRefresh
+            self.refresh = ConfirmedViewRefresh()
 
     def update(self, candidates, world_xyz, timestamp, *, view=None):
         if not math.isfinite(timestamp) or timestamp <= self.last_time:
@@ -141,6 +148,8 @@ class StationaryImageObjects:
         # after a source gap. It supplies NO assessment, geometry or fresh clock.
         self.records = {k: v for k, v in self.records.items()
                         if timestamp - v["first"] <= cfg.maximum_reference_age_seconds}
+        if cfg.confirmed_evidence_refresh:
+            self.refresh.prune(self.records, timestamp, cfg.maximum_gap_seconds)
         accepted, seen = [], set()
         for candidate in candidates:
             mask = candidate["proposal"].detection.mask
@@ -200,6 +209,18 @@ class StationaryImageObjects:
                 # test; expired references and spatially separate objects keep
                 # the existing three-source enrollment path.
                 if overlapping:
+                    if cfg.confirmed_evidence_refresh and len(overlapping) == 1:
+                        key = overlapping[0]['object_id']
+                        if key not in seen and self.refresh.consider(key, self.records[key],
+                                candidate, points, view, timestamp, cfg):
+                            candidate['diagnostic'].update(object_id=key,
+                                observations=candidate['diagnostic']['evidence_refresh']['observations'],
+                                original_source_time=self.records[key]['first'], current_source_time=timestamp,
+                                association_basis='confirmed_static_surface_growth',
+                                reference_surface_centroid_world_xyz=self.records[key]['points'].mean(axis=0).tolist())
+                            accepted.append({**candidate, 'object_id':key})
+                            seen.add(key)
+                            continue
                     candidate["diagnostic"]["temporal_rejection"] = "unmatched support overlaps an original image hypothesis"
                     candidate["diagnostic"]["overlapping_original_hypotheses"] = overlapping
                     continue
@@ -208,7 +229,8 @@ class StationaryImageObjects:
                 key = self.next_id
                 self.next_id += 1
                 old = {"first": timestamp, "proof_start": timestamp, "last": timestamp, "count": 1,
-                       "mask": mask.copy(), "points": points.copy()}
+                       "mask": mask.copy(), "points": points.copy(),
+                       "model_quality":getattr(candidate['proposal'],'model_quality',None)}
                 if view is not None:
                     old['camera_from_world'] = view.camera_from_world.copy()
                 self.records[key] = old
@@ -223,4 +245,18 @@ class StationaryImageObjects:
                     reference_geometry_scope='original observed surface retained for identity only; not complete physical center or current geometry')
             if old["count"] >= cfg.minimum_observations and timestamp - old["proof_start"] >= cfg.minimum_span_seconds - 1e-9:
                 accepted.append({**candidate, "object_id": key})
+        if cfg.confirmed_evidence_refresh:
+            # A missing/ambiguous/interrupted observation cannot count toward a
+            # later consecutive proof, even if its source gap would be short.
+            self.refresh.pending = {k:v for k,v in self.refresh.pending.items()
+                                    if v['last'] == timestamp}
         return accepted
+
+    def commit_refresh(self, candidate, world_xyz, view, timestamp):
+        from robot.perception.confirmed_view_refresh import refreshed_reference
+        key = candidate['object_id']
+        if not candidate['diagnostic'].get('evidence_refresh', {}).get('confirmed'):
+            raise ValueError('cannot commit unconfirmed reference refresh')
+        self.records[key] = refreshed_reference(self.records[key], candidate,
+            np.asarray(world_xyz)[candidate['selected']], view, timestamp)
+        self.refresh.pending.pop(key, None)

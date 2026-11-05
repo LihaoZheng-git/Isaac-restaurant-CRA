@@ -70,6 +70,8 @@ def augment_image_objects(worker, packet, tracking, projection, world, objects,
         property_memory.frozen = worker.persistent_properties.frozen
     memory_tracks = []
     static_config = getattr(worker, 'static_prop_evidence_config', None)
+    if config.confirmed_evidence_refresh and static_config is None:
+        raise ValueError('confirmed evidence refresh requires static property storage')
     static_memory = None
     static_matches, static_audit = {}, []
     excluded = np.zeros(len(world), bool)
@@ -146,11 +148,15 @@ def augment_image_objects(worker, packet, tracking, projection, world, objects,
     if view is not None:
         detail.update(scope='bounded static-prop moving-view correspondence; inferred partial-surface identity, original raw geometry unchanged',
             ego_reference_source=packet.pose_source, ego_reference_status=packet.pose_status.value)
+    if config.confirmed_evidence_refresh:
+        detail['confirmed_evidence_refresh'] = vars(state.refresh.config)
     if archive_path is not None:
         detail['candidate_archive'] = str(archive_path)
     for candidate_index, candidate in enumerate(verified):
         key, selected = candidate["object_id"], candidate["selected"]
-        if static_memory is not None and worker.persistent_properties.frozen and (
+        refresh_proof = candidate['diagnostic'].get('evidence_refresh')
+        refreshing = bool(refresh_proof and refresh_proof.get('confirmed'))
+        if not refreshing and static_memory is not None and worker.persistent_properties.frozen and (
                 key in static_memory.records or any(
                     np.any(selected & match[0]) for match in static_matches.values())):
             candidate['diagnostic']['static_property_acquisition'] = 'retained original static-location evidence'
@@ -171,6 +177,10 @@ def augment_image_objects(worker, packet, tracking, projection, world, objects,
                        if property_memory is not None else ())
         adapted_tracking = replace(tracking, point_track_ids=ids, tracked_obstacles=(track, *competitors))
         candidate_memory = copy.deepcopy(property_memory)
+        if refreshing and candidate_memory is not None:
+            # Actual fresh assessment only; never borrow old values as an upgrade.
+            for name in ('mass','contact'):
+                candidate_memory.properties.pop((key,name), None)
         assessment = worker._assess_track(packet, adapted_tracking, projection, track, True,
             plume, None, image_is_set=True, shared_contact_frame=contact_frame,
             candidate_persistent=candidate_memory,
@@ -182,8 +192,15 @@ def augment_image_objects(worker, packet, tracking, projection, world, objects,
             continue
         if static_memory is not None:
             from robot.evaluation.static_prop_runtime import enroll_static_group
-            enroll_static_group(static_memory, assessment, key, world[selected], packet,
-                                worker.persistent_properties.frozen)
+            stored = enroll_static_group(static_memory, assessment, key, world[selected], packet,
+                worker.persistent_properties.frozen, refresh_proof=refresh_proof if refreshing else None)
+            if refreshing:
+                candidate['diagnostic']['evidence_refresh']['property_storage_accepted'] = stored
+                if not stored:
+                    # Previous current-point policy and source remain available.
+                    continue
+                state.commit_refresh(candidate, world, view, packet.sensor_timestamp_seconds)
+                static_matches.pop(key, None)
         property_memory = candidate_memory
         memory_tracks.append(track)
         # Only the verified exact point set may acquire this object's policy.
@@ -228,6 +245,7 @@ def augment_image_objects(worker, packet, tracking, projection, world, objects,
         state.static_properties = static_memory
         detail['static_prop_evidence'] = dict(
             records=list(static_memory.records), current_matches=list(static_matches),
+            refresh_history={k:r['refresh_history'] for k,r in static_memory.records.items() if r.get('refresh_history')},
             comparisons=static_audit, configuration=vars(static_config),
             property_configuration=vars(static_memory.property_config),
             scope='user-approved stationary separated-prop prior; original mass/contact clocks; current LiDAR geometry and motion')

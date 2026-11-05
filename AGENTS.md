@@ -1,5 +1,21 @@
 # CRA repository guidance
 
+- User approves a separate CRATE-ONLY confirmed better-evidence refresh test.
+  --confirmed-prop-refresh is defaultOFF and requires original corrected-contact
+  static-prop approach/independent60/own60; no bin/human/full demo scope. Keep
+  stored values until unique current ownership, every historical6cm anchor and
+  projected mask support, nondecreasing SAM quality, >=8new3cmvoxels/25%gain/
+  6cmspan growth and3successive sources/.2s/.35gap validate a better view.
+  Fresh accepted mass/contact must keep confidence and interval quality; saved
+  values/sources/geometry commit transactionally, kinetic/interaction staylive.
+  No score-based selection, raw occupancy/priors/controller/margin changes.
+  Synthetic tests do not prove natural refresh/full-demo acquisition repair.
+  105focused/3899units222.38s/Ruff/diffPASS. Archived422source legacyparityPASS;
+  geometry-only assumed-equal-quality probe proposes41.9s growth/10targetrows
+  vs0legacy, NOT fresh-model/property/native validation. Native pending;
+  preserve all408 prior final-demo files, old failures and
+  defaultOFF/draft/main/primary/PR117 holds. See docs/crate_evidence_refresh.md.
+
 - Corrected-contact V3 at01bc981 PASSED six fresh prerequisites/own60/full native
   mission:8/8guides,155.10simsec,1128fields1123translating,.355711m minimum
   independent clearance,.002195m stopdrift. Minimum CBF -1.39e-17 is roundoff

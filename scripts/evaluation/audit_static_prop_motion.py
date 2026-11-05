@@ -71,11 +71,19 @@ def audit(folder):
             if not group or not d.get('accepted_instance'):
                 continue
             which = next(i for i, c in enumerate(candidates) if c['proposal_index'] == group['proposal_index'])
-            enrolled = memory.enroll(obj['track_id'], world[selected_sets[which]],
+            refresh = group.get('evidence_refresh', {})
+            replacing = refresh.get('confirmed') and obj['track_id'] in memory.records
+            store = memory.refresh if replacing else memory.enroll
+            extra = {'proof':refresh} if replacing else {'frozen':frozen}
+            enrolled = store(obj['track_id'], world[selected_sets[which]],
                 ScalarEstimate(**obj['attributes']['mass']['mass_kg']),
                 ScalarEstimate(**d['contact_proxy']) if d.get('contact_proxy') else None,
                 frame_id=d['property_evidence']['mass']['source_frame_id'], source_time=timestamp,
-                robot_xy=position, frozen=frozen)
+                robot_xy=position, **extra)
+            if refresh.get('confirmed'):
+                if not enrolled:
+                    errors.append([record['sensor_frame_id'], 'unreplayed accepted property refresh'])
+                matches.pop(obj['track_id'],None)
             if enrolled and np.linalg.norm(np.asarray(d['instance_centroid_world_xyz']) - target) <= .20:
                 target_ids.add(obj['track_id'])
         if not frozen:

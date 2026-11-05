@@ -14,13 +14,19 @@ from robot.safety.obstacle_tracking import TrackedObstacle
 from robot.safety.semantic_obstacle import SemanticObstacle
 
 
-def enroll_static_group(memory, assessment, key, world_points, packet, frozen):
+def enroll_static_group(memory, assessment, key, world_points, packet, frozen, *, refresh_proof=None):
     proxy = assessment.get('contact_proxy')
     if proxy is not None:
-        memory.enroll(key, world_points, assessment['attributes'].mass.mass_kg,
+        if refresh_proof is not None and key in memory.records:
+            return memory.refresh(key, world_points, assessment['attributes'].mass.mass_kg,
+                ScalarEstimate(**proxy), frame_id=packet.camera_frame_id,
+                source_time=packet.camera_timestamp_seconds,
+                robot_xy=packet.robot_position_world_xy, proof=refresh_proof)
+        return memory.enroll(key, world_points, assessment['attributes'].mass.mass_kg,
             ScalarEstimate(**proxy), frame_id=packet.camera_frame_id,
             source_time=packet.camera_timestamp_seconds,
             robot_xy=packet.robot_position_world_xy, frozen=frozen)
+    return False
 
 
 def append_static_props(worker, memory, matches, packet, tracking, projection,

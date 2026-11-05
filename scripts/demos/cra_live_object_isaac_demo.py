@@ -311,6 +311,8 @@ parser.add_argument("--moving-view-image-objects", action="store_true",
                     help="separate calibrated static-prop partial correspondence; original source clocks/point bounds, inferred mask warp; default OFF")
 parser.add_argument("--static-prop-evidence", action="store_true",
                     help="retain verified mass/contact at separated static locations with live LiDAR/kinetic; default OFF")
+parser.add_argument('--confirmed-prop-refresh', action='store_true',
+                    help='crate-only experiment: reassess repeatedly verified better surface coverage; default OFF')
 parser.add_argument("--object-height-evidence", action="store_true",
                     help="opt-in general LiDAR floor/elevation/support evidence; no carried-object relationship or hidden-base inference")
 parser.add_argument("--height-support-margin", type=float, default=.12,
@@ -392,6 +394,10 @@ if args.moving_view_image_objects and not (args.image_object_approach or args.se
     parser.error("moving-view groups require the bounded static-prop approach and its stationary gates")
 if args.static_prop_evidence and not ((args.image_object_approach or args.service_static_props) and args.moving_view_image_objects):
     parser.error("static-prop evidence requires the bounded approach and independent/own stationary gates")
+if args.confirmed_prop_refresh and (not args.static_prop_evidence or not args.image_object_approach
+        or not args.contact_pixel_denoise or args.service_static_props
+        or args.stationary_prop_target != 'BrokenCrate' or args.restaurant_human or args.restaurant_server):
+    parser.error('confirmed refresh requires the separate crate-only corrected-contact approach')
 if args.image_object_approach and (not args.image_object_property_persistence
     or not args.stationary_prop_camera or args.restaurant_view != "demo-container"
     or args.restaurant_route != "short" or args.restaurant_human or args.restaurant_server
@@ -1574,7 +1580,8 @@ def main():
         perception.service_static_props = args.service_static_props
         from robot.perception.image_object_association import ImageObjectConfig
         perception.image_object_config = ImageObjectConfig(maximum_extent_m=args.image_object_maximum_extent,
-            hold_overlapping_hypotheses=args.image_object_overlap_hold)
+            hold_overlapping_hypotheses=args.image_object_overlap_hold,
+            confirmed_evidence_refresh=args.confirmed_prop_refresh)
         perception.image_object_property_persistence = args.image_object_property_persistence
         if args.moving_view_image_objects:
             from robot.perception.moving_view_association import MovingViewAssociationConfig
@@ -3392,6 +3399,7 @@ def main():
         "image_object_approach": args.image_object_approach,
         "moving_view_image_objects": args.moving_view_image_objects,
         "static_prop_evidence": args.static_prop_evidence,
+        "confirmed_prop_refresh": args.confirmed_prop_refresh,
         "service_static_props": args.service_static_props,
         "straight_service_walk": args.straight_service_walk,
         "image_object_overlap_hold": args.image_object_overlap_hold,

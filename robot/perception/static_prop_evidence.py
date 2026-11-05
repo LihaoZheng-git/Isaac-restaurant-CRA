@@ -4,7 +4,7 @@ Only actual current returns receive a policy. Stored bounds are an association
 prior, never occupied geometry or a measured complete object extent.
 """
 
-from dataclasses import dataclass, replace
+from dataclasses import asdict, dataclass, replace
 import math
 
 import numpy as np
@@ -81,6 +81,45 @@ class StaticPropEvidence:
         self.records[key] = dict(points=points.copy(), lo=lo, hi=hi,
             mass=mass, contact=contact, frame_id=frame_id,
             location_source_time=source_time, location_source_frame=frame_id)
+        return True
+
+    def refresh(self, key, points, mass, contact, *, frame_id, source_time,
+                robot_xy, proof):
+        """Replace only from confirmed fresh evidence; failures preserve all state."""
+        old = self.records.get(key)
+        if old is None or not proof.get('confirmed') or proof.get('observations', 0) < 3:
+            return False
+        if proof.get('rejections'):
+            return False
+        for name, item in (('mass',mass), ('contact',contact)):
+            previous = old[name]
+            if (item is None or not item.is_available
+                    or item.unit != previous.unit
+                    or item.status not in (EstimateStatus.MEASURED, EstimateStatus.INFERRED)
+                    or PERSISTENT_PROPERTY_MARKER in item.evidence
+                    or abs(item.timestamp_seconds-source_time) > 1e-9
+                    or item.timestamp_seconds <= previous.timestamp_seconds
+                    or item.confidence < previous.confidence
+                    or item.upper_bound-item.lower_bound > previous.upper_bound-previous.lower_bound+1e-9):
+                return False
+        points = np.asarray(points, dtype=float)
+        if (points.ndim != 2 or points.shape[1] != 3 or not np.isfinite(points).all()
+                or len(points) < self.config.minimum_current_points
+                or np.linalg.norm(points[:,:2].mean(axis=0)-robot_xy) > self.config.maximum_acquisition_range_m
+                or cKDTree(points).query(old['points'])[0].max() > self.config.original_support_distance_m):
+            return False
+        lo, hi = points.min(axis=0), points.max(axis=0)
+        if any(k != key and np.all(lo <= r['hi']+2*self.config.position_allowance_m)
+                and np.all(hi >= r['lo']-2*self.config.position_allowance_m)
+                for k,r in self.records.items()):
+            return False
+        history = (*old.get('refresh_history', ()), dict(previous_frame_id=old['frame_id'],
+            previous_mass=asdict(old['mass']), previous_contact=asdict(old['contact']),
+            previous_location_source_time=old['location_source_time'],
+            new_frame_id=frame_id, new_source_time=source_time, proof=proof.copy()))
+        self.records[key] = dict(points=points.copy(), lo=lo, hi=hi, mass=mass,
+            contact=contact, frame_id=frame_id, location_source_time=source_time,
+            location_source_frame=frame_id, refresh_history=history)
         return True
 
     def expire(self, timestamp):
