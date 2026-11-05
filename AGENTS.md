@@ -1,5 +1,16 @@
 # CRA repository guidance
 
+- User authorizes focused crate progress diagnosis before another demo attempt.
+  Separate recipe changes ONLY full successful/failed planner recording and
+  8s diagnostic bound; source window11.5--15.5. Existing V3 controller/scene/
+  evidence/nominal/lambda/margins unchanged. Fresh independent60+own60 before
+  wheels; diagnostic duration limit is NOT arrival acceptance. Preserve exact
+  snapshot parity, then offline N6/N30 x guidance on/off with matched inputs,
+  rejection causes/feasible candidates and independent geometry audit. No oracle
+  runtime inputs or precomputed runtime path. All old failures/videos and
+  defaultOFF/draft/main/primary/PR117 holds stay. Native/findings pending; see
+  docs/crate_progress_diagnosis.md.
+
 - V3-controller crate repeat8e4faaa: fresh independent60/own60 PASS, exact recorded
   V3 MPC config and frozen sources. Navigation FAIL clearance_guard at19.10s,
   0/1goal,2.59m remaining; lateral.061224m toward crate. Clearance beforestop
