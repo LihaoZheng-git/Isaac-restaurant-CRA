@@ -12,7 +12,16 @@
   Synthetic tests do not prove natural refresh/full-demo acquisition repair.
   105focused/3899units222.38s/Ruff/diffPASS. Archived422source legacyparityPASS;
   geometry-only assumed-equal-quality probe proposes41.9s growth/10targetrows
-  vs0legacy, NOT fresh-model/property/native validation. Native pending;
+  vs0legacy, NOT fresh-model/property/native validation. Atfc49f31 independent60/
+  own60/shortmotionPASS, sourcesfrozen;1goal/1.816667simsec/.304336mtravel/
+  .529563clearance/.222635CBF/.003184stopdrift/12fields11translating. Target
+  originalsource/currentpoint retention12/12PASS, mass2.157806/cue.395161fixed,
+  all12originalwholecenterPASS. Five crategrowth views REJECTED; ZERO native
+  confirmations/replacements. Positive replacement only controlledtests, not
+  natural-live/full-demo acquisition acceptance. Exact60+72source quality/mask/
+  geometry refresh replayPASS. Two unavailable-speed rows still raise contact
+  .495161/phi.787021; no constantphi claim. Initial stationary latest-valid
+  acquisition stays; guarded updates apply during frozen/live use. DraftPR237;
   preserve all408 prior final-demo files, old failures and
   defaultOFF/draft/main/primary/PR117 holds. See docs/crate_evidence_refresh.md.
 
