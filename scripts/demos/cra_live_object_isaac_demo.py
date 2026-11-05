@@ -313,6 +313,8 @@ parser.add_argument("--static-prop-evidence", action="store_true",
                     help="retain verified mass/contact at separated static locations with live LiDAR/kinetic; default OFF")
 parser.add_argument('--confirmed-prop-refresh', action='store_true',
                     help='crate-only experiment: reassess repeatedly verified better surface coverage; default OFF')
+parser.add_argument('--crate-route-probe', action='store_true',
+                    help='separate closer-crate test: straight 4m nominal route with confirmed refresh and original own60/controller gates; default OFF')
 parser.add_argument("--object-height-evidence", action="store_true",
                     help="opt-in general LiDAR floor/elevation/support evidence; no carried-object relationship or hidden-base inference")
 parser.add_argument("--height-support-margin", type=float, default=.12,
@@ -398,6 +400,10 @@ if args.confirmed_prop_refresh and (not args.static_prop_evidence or not args.im
         or not args.contact_pixel_denoise or args.service_static_props
         or args.stationary_prop_target != 'BrokenCrate' or args.restaurant_human or args.restaurant_server):
     parser.error('confirmed refresh requires the separate crate-only corrected-contact approach')
+if args.crate_route_probe and (not args.confirmed_prop_refresh
+        or args.stationary_prop_world_pose != [15.65, 4.05, 0.]
+        or args.restaurant_scene.name != 'restaurant_crate_route_probe.usda'):
+    parser.error('crate route probe requires confirmed refresh and its separate fixed scene/start pose')
 if args.image_object_approach and (not args.image_object_property_persistence
     or not args.stationary_prop_camera or args.restaurant_view != "demo-container"
     or args.restaurant_route != "short" or args.restaurant_human or args.restaurant_server
@@ -999,7 +1005,7 @@ ROUTE = restaurant_route_local_xy(args.restaurant_route, human_start_view=args.h
 if args.image_object_approach:
     # Authored short measurement route, independent of obstacle/factor outputs.
     # Original waypoint arrival tolerance and all physical controller checks stay.
-    ROUTE = ((.40, 0.),)
+    ROUTE = ((4.0 if args.crate_route_probe else .40, 0.),)
     GOAL = ROUTE[-1]
 if open_crossing_layout:
     stationary.ROBOT_START_POSITION_WORLD = OPEN_ROBOT_START_WORLD
@@ -3400,6 +3406,7 @@ def main():
         "moving_view_image_objects": args.moving_view_image_objects,
         "static_prop_evidence": args.static_prop_evidence,
         "confirmed_prop_refresh": args.confirmed_prop_refresh,
+        "crate_route_probe": args.crate_route_probe,
         "service_static_props": args.service_static_props,
         "straight_service_walk": args.straight_service_walk,
         "image_object_overlap_hold": args.image_object_overlap_hold,

@@ -1,5 +1,16 @@
 # CRA repository guidance
 
+- User approves closer-crate navigation with the confirmed evidence-refresh rule.
+  Separate defaultOFF --crate-route-probe keeps start(15.65,4.05,0), extends ONLY
+  the authored straight approach from .4m to4m so it can pass the crate, and uses
+  a separate layer with crate center(17.5,3.45),45cm nearer the route; bin inactive.
+  Keep original refresh/ownership/source clocks/priors/live motion/lambda/MPC/CBF/
+  physical limits and every stationary/clearance/arrival/stopping gate. Require
+  fresh independent60 and own60 before wheels. No score overrides or authored
+  detour. Measure actual deviation and evidence availability; native pending.
+  Preserve all old V3/short-test outputs and defaultOFF/draft/main/primary/PR117
+  holds. See docs/crate_route_probe.md and outputs/crate-route-probe/.
+
 - User approves a separate CRATE-ONLY confirmed better-evidence refresh test.
   --confirmed-prop-refresh is defaultOFF and requires original corrected-contact
   static-prop approach/independent60/own60; no bin/human/full demo scope. Keep
