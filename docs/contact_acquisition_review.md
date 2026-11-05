@@ -92,8 +92,38 @@ python scripts/evaluation/run_restaurant_demo.py --config configs/restaurant_con
 python scripts/evaluation/run_restaurant_demo.py --config configs/restaurant_contact_boundary_resolution.json --case crate-static --stage stationary --output outputs/contact-acquisition-review/crate-static-v1
 ```
 
-Fresh native outcomes are pending at implementation. No new wheel trial or
-replacement demo is accepted. Preserve every prior failure, v3 archive and
-draft/main/primary/PR117 hold. A reliable contact-demo contrast still requires
-source-matched native evidence; the broken interior rim remains outside this
-outer-contour estimator's demonstrated coverage.
+## Fresh native outcome at 8fa4806
+
+Both 60-source zero-wheel component gates PASS with unchanged source hashes,
+no traceback and zero nonzero wheel commands. The independent unchanged 20cm
+target-matching diagnostic finds 54 current bin assessments and 58 crate
+assessments; all other sources, including one initial LiDAR-epoch rejection in
+each run, are retained. No wheel trial or replacement demo was run.
+
+| Native target | Median raw contour cue | Median contact factor | Median phi | Contact range |
+|---|---:|---:|---:|---:|
+| Rounded bin | 0.313871 | 0.109484 | 0.593017 | 0.087447--0.161775 |
+| Broken crate | 0.424374 | 0.121492 | 0.598509 | 0.103613--0.166286 |
+
+The median ordering is modest and the ranges overlap. Bin raw cue reaches
+0.782445 in one view: do not claim all spurious corners or all view dependence
+are removed. These fresh runs establish the contact dataflow and existing
+retention gate, not calibrated sharpness or a universally ordered pair. The
+broken interior rim remains outside this outer-contour estimator's demonstrated
+coverage. Mass remains rough/uncalibrated and potential/thermal use labeled
+priors; these are not complete fresh generic four-factor assessments.
+
+91 focused tests pass (61.25s), and 3,870 full unit tests pass (221.56s).
+Repository Ruff and diff checks pass. The first focused attempt's two fixture
+failures remain in `focused-v1.log`; fixtures were corrected, without changing
+runtime thresholds. `native-summary.json` preserves every target row and
+unmatched source. All 319 prior final-demo files and the four PI-sharing copies
+were rehashed unchanged. Draft PR234 is stacked on PR233's branch; no merges.
+All 112 fresh target-mask replays exactly reproduce the native corrected cues;
+`native-replay-check.json` records the result. Rejected/unmatched sources are
+not silently turned into target evidence.
+
+Use the preserved V3 for the PI update. This optional correction needs a new
+bounded live test before enabling it in another full recording; do not transfer
+the old navigation pass to a changed contact policy. Preserve every prior
+failure, v3 archive and default-off/draft/main/primary/PR117 hold.

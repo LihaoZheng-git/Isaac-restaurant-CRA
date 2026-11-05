@@ -11,10 +11,14 @@
   one-pixel-wide tips can be unresolved; no physical sharpness/safety guarantee.
   Saved first-live bin/crate cues become.309927/.568647;114stationary target
   ranges still overlap. No final contact/phi or navigation acceptance by replay.
-  91focused/Ruff PASS; full/native gates pending. CLI explicitly zero-wheel only.
+  At8fa4806 fresh60-source bin/crate gatesPASS54/58target assessments, zero wheels,
+  sourcefrozen. Median contact.109484/.121492, phi.593017/.598509; ranges overlap,
+  binrawcue max.782445. Both initial LiDARepoch rejections retained. Not reliable
+  sharpness ordering/full4factor/newnavigation.91focused/3870units221.56s/Ruff PASS.
+  CLI explicitly zero-wheel only; new bounded live validation remains necessary.
   Recipe configs/restaurant_contact_boundary_resolution.json; docs/contact_acquisition_review.md.
   Preserve all319 original final-demo files and byte-identical v3-pi-share copy,
-  old failures, defaultOFF/draft/main/primary/PR117 holds. Do not overwrite v3.
+  old failures, defaultOFF/draftPR234/main/primary/PR117 holds. Do not overwrite v3.
 
 - Open-aisle v3 at580b524 PASSED six fresh prerequisites, own60 and full native
   mission:8/8 guides,159.50simsec,1127fields1120translating, .345473m minimum
