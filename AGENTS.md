@@ -1,5 +1,30 @@
 # CRA repository guidance
 
+- Corrected-contact V3 at01bc981 PASSED six fresh prerequisites/own60/full native
+  mission:8/8guides,155.10simsec,1128fields1123translating,.355711m minimum
+  independent clearance,.002195m stopdrift. Minimum CBF -1.39e-17 is roundoff
+  within ORIGINAL1e-9 tolerance, not a strictly positive margin. Sources frozen.
+  Nearby human curve.380220m against actual nominal polyline, minimum human
+  center distance1.418761m;30supported moving-kinetic rows,265envelope rows,
+  maxcentererror.147907m. No measured nearby-walking hold below.02m/s; not a
+  pause-free mission or matched smoothing result. Preserve1sensor-epoch reject,
+  18uncertain-human rows,225bodyjoins/0partjoins/0native recovery events.
+  Bin20fresh visual rows/81retained current-point rows: retainedcue.304051,
+  phi.614051--.617660,50/81wholecenterdiagnosticPASS. Fresh bin cue spans
+  .009197--1.0: denoising does NOT solve generic contact saturation. Crate ONLY
+  2fresh surface assessments(ID407,45.0/52.7s,cues.493514/.568536,
+  phi.602145/.605926); ZERO retained group rows,1/2wholecenterdiagnosticPASS.
+  All selected prop returns pass original3cm mesh-box allowance. No continuous
+  crate acquisition/retention or dependable paired sharpness/phi ranking claim.
+  1314retainedrows15objects/37360geometryrefs750archives/1115ambiguous motion
+  proofs/3882fragmentproofs/camera1130masks63tracks auditsPASS.84focused/
+  3875units215.08s/Ruff/diffPASS; preserve first focused prerequisite rejection.
+  New outputs/final demo/v3-corrected-contact retains1562navigation/stopframes
+  plus60credits; all324previousfinaldemofiles byte-identical. Paced.025, rough
+  mass uncalibrated, potential/thermal priors and oracle ego remain explicit.
+  Keep defaultOFF/draftPR236/main/primary/PR117 holds. See
+  docs/restaurant_service_demo_v3_corrected_contact.md and its output audits.
+
 - User approves corrected-contact integration into a separately saved long V3.
   Recipe restaurant_service_demo_v3_corrected_contact.json adds ONLY existing
   --contact-pixel-denoise to original open-aisle prop/mixed-scene commands.
@@ -9,7 +34,8 @@
   arrival, stopping and source/geometry/camera audits precede new video acceptance.
   Preserve previous V3 byte-identically; new output v3-corrected-contact only.
   Short-test crate velocity fallback is not new sharpness and must stay visible.
-  Native acceptance pending; defaultOFF/draft/main/primary/PR117 holds stay.
+  Native navigation acceptance is recorded above; perception limits and all
+  defaultOFF/draft/main/primary/PR117 holds stay.
   See docs/restaurant_service_demo_v3_corrected_contact.md.
 
 - User-authorized corrected-contact short bin/crate tests: separate branch/recipe
