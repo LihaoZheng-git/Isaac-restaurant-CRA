@@ -54,8 +54,64 @@ contact timestamp, kinetic timestamp and point count; all four errors are caught
 The original source is untouched. The first focused test run exposed the old
 explicit-pose zero-wheel guard; its failure is preserved, and only the authorized
 corrected-contact approach receives an exception. Prior zero-wheel recipes still
-reject motion.49 focused tests pass; full regression and native outcomes are
-pending at implementation.
+reject motion.49 focused tests pass (29.95s), 3,872 full unit tests pass
+(222.18s), and repository Ruff/diff checks pass.
+
+## Native results at e1f2624
+
+All four runs PASS with frozen runtime and scene sources, no tracebacks and
+unchanged acceptance thresholds. Both independent and both own60 stationary
+gates pass; each retains its initial camera/LiDAR epoch rejection. Each moving
+run reaches its single waypoint and stops. This is approximately30cm measured
+travel toward the authored40cm goal under the original10cm arrival tolerance.
+
+| Measure | Bin | Broken crate |
+|---|---:|---:|
+| Navigation simulation seconds | 1.800000 | 1.816667 |
+| Final local forward displacement (m) | 0.304202 | 0.304336 |
+| Live fields / translating fields | 12 / 11 | 12 / 11 |
+| Minimum independent clearance (m) | 0.530769 | 0.529563 |
+| Minimum CBF margin | 0.286068 | 0.222315 |
+| Stopping drift (m) | 0.002724 | 0.003184 |
+| Exact retained target rows | 12 / 12 | 12 / 12 |
+| Retained rough mass (kg) | 0.695455 | 2.550128 |
+| Retained intrinsic outline cue | 0.095997 | 0.394840 |
+| Final contact-factor range | 0.140538 | 0.162113--0.494840 |
+| CRA phi range | 0.607244--0.607764 | 0.617110--0.786885 |
+
+The source/point auditor passes every retained row without errors. Original
+values, intervals, camera source frame, timestamps and confidence decay match
+exactly; current LiDAR membership is replayed, not assumed from an unchanged ID.
+The20cm whole-center diagnostic passes12/12 for each target in these views.
+Maximum independent mesh-box excess is0.002309m for the bin and0 for the crate,
+within the unchanged3cm diagnostic allowance. This does not repair or erase
+earlier whole-center failures in other views or full-mission tracking gaps.
+
+The crate's visual contact cue remains higher in this pair and never changes
+during motion. However, final contact risk and phi are deliberately not frozen.
+Bin relative speed is inferred in12/12 updates (0.00636--0.21338m/s). The crate
+has10/12 inferred speed updates (0.02045--0.50622m/s) and two unavailable updates
+at source9.4/9.5s: new raw fragments187/192 have only one observation. The
+composite motion record uses the least-established contributing fragment, so
+those two updates retain the configured0.25 kinetic prior and widen route
+interaction bounds to[0,1]. This raises final contact risk to0.494840 and phi
+to0.786885, despite an unchanged intrinsic cue of0.394840. Recovery at9.7s
+restores inferred speed with lower confidence and phi0.629725. Arrival still
+passes. Do not attribute the phi peak to new sharpness or hide these updates.
+
+There is also a crate velocity peak at8.6s coincident with a two-fragment to
+one-fragment transition. This remains a centroid/membership sensitivity, not
+validated physical movement of the static crate. The short test establishes
+retention and navigation with the existing explicit fallback policy; it does
+not establish uninterrupted, calibrated kinetic perception.
+
+`bin-motion-audit.json`, `crate-motion-audit.json`, `motion-evidence-diagnostic.json`
+and `summary.json` under `outputs/contact-short-live/` retain the exact sources
+and all rows. `short-live-evidence.png` displays the intrinsic cue, current
+contact/phi and speed, including both missing-speed updates. Native videos remain
+in each run folder. All324 previous final-demo files were rehashed unchanged.
+This branch is draft PR235 stacked on PR234; no merges. No full restaurant rerun
+or new V3 video is accepted by this short result.
 
 Keep all previous failures and default-off/draft/main/primary/PR117 holds. Do not
 overwrite V3 or promote a short retention/navigation pass into a reliable

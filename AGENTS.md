@@ -7,9 +7,19 @@
   --contact-pixel-denoise motion requires gated image-object approach/static
   evidence, no humans/server. Old explicit-pose recipes stay zero-wheel only.
   No contact algorithm/retention changes. New source/point auditor reproduces
-  prior bin16/16 and catches4 deliberately corrupted copied fields.49focusedPASS;
-  full/native acceptance pending. Preserve all324 prior final-demo files, old
-  failures, defaultOFF/draft/main/primary/PR117 holds. See docs/contact_short_live.md.
+  prior bin16/16 and catches4 deliberately corrupted copied fields. At e1f2624
+  both independent60/own60/shortmotionPASS, sourcesfrozen;12fields11translating
+  each,12/12exactsource/point retention each. Bin/crate travel.304202/.304336m,
+  clearance.530769/.529563m, CBF.286068/.222315, stopdrift.002724/.003184m.
+  Retainedcue.095997/.394840;phi.607244--.607764/.617110--.786885. Crate has
+  TWO unavailablevelocity updates9.4/9.5s from newraw187/192: kinetic.25prior,
+  interaction[0,1] causesphi peak; unchangedcue, no sharper-object claim. Velocity
+  peak.5062m/s at8.6s also coincides with fragment transition; not calibrated
+  static-object motion.12/12bin,10/12crate inferredspeed; clocksallcurrent.
+  Bothwholecenterdiagnostics12/12; not repair of old full-mission/view failures.
+  49focused/3872units222.18s/Ruff/diffPASS. All324 previousfinaldemofiles unchanged.
+  Preserve old failures/defaultOFF/draftPR235/main/primary/PR117 holds; no full
+  V3 rerun acceptance. See docs/contact_short_live.md,outputs/contact-short-live/.
 
 - Contact acquisition review: exact116 saved target cues reproduce; first-live
   bin1.0 comes from a thin mask spur, crate.600162 from a lower outer corner,
