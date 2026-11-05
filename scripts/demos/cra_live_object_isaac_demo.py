@@ -315,6 +315,8 @@ parser.add_argument('--confirmed-prop-refresh', action='store_true',
                     help='crate-only experiment: reassess repeatedly verified better surface coverage; default OFF')
 parser.add_argument('--crate-route-probe', action='store_true',
                     help='separate closer-crate test: straight 4m nominal route with confirmed refresh and original own60/controller gates; default OFF')
+parser.add_argument('--crate-v3-controller', action='store_true',
+                    help='separate closer-crate repeat with explicit validated V3 controller/no-human-selection settings; default OFF')
 parser.add_argument("--object-height-evidence", action="store_true",
                     help="opt-in general LiDAR floor/elevation/support evidence; no carried-object relationship or hidden-base inference")
 parser.add_argument("--height-support-margin", type=float, default=.12,
@@ -376,6 +378,13 @@ parser.add_argument('--unknown-verified-dynamic-evidence', action='store_true',
 parser.add_argument('--human-verified-part-recovery', action='store_true',
                     help='bounded recovery across a previously verified human parent/part ID swap; complete old region must fit current body')
 args = parser.parse_args()
+crate_v3_profile = None
+if args.crate_v3_controller:
+    from robot.evaluation.crate_v3_controller import validate_crate_v3_controller
+    try:
+        crate_v3_profile = validate_crate_v3_controller(args)
+    except ValueError as exc:
+        parser.error(str(exc))
 if args.image_object_overlap_hold and not args.stationary_image_objects:
     parser.error("overlapping image hypotheses require the stationary image-object experiment")
 if args.local_contact_geometry and not args.stationary_image_objects:
@@ -498,7 +507,7 @@ if (not math.isfinite(args.guidance_outward_reference_fraction)
     or args.guidance_outward_reference_fraction > 0 and (not args.parallel_guidance_ablation
         or args.waypoint_mode != 'guides' or args.guidance_tangent_blend != 'convex')):
     parser.error('outward reference requires fraction0..1 and separate convex parallel route-guide ablation')
-if args.guidance_tangent_blend == 'convex' and (not args.parallel_guidance_ablation
+if args.guidance_tangent_blend == 'convex' and (not (args.parallel_guidance_ablation or args.crate_v3_controller)
     or args.waypoint_mode != 'guides'):
     parser.error('convex tangent blend requires the separate parallel guidance ablation with route guides')
 if args.parallel_guidance_ablation and (args.restaurant_human != 'parallel'
@@ -513,7 +522,7 @@ if any(not math.isfinite(x) or x <= 0 for x in
     parser.error("route-guide lookahead/association distances must be finite and positive")
 if args.mpc_horizon_steps is not None and not 6 <= args.mpc_horizon_steps <= 30:
     parser.error("explicit MPC horizon ablation must use 6..30 unchanged .2 s intervals")
-if args.guidance_moving_arc_reference and (not args.parallel_guidance_ablation
+if args.guidance_moving_arc_reference and not args.crate_v3_controller and (not args.parallel_guidance_ablation
     or args.guidance_tracking_weight <= 0 or args.guidance_reference_mode != 'planar_forecast_velocity'
     or args.guidance_tangent_basis != 'selected_observed_obstacle' or args.guidance_tangent_blend != 'convex'
     or args.guidance_tangent_velocity_fraction <= 0 or not args.human_observed_passing_target
@@ -535,7 +544,7 @@ if (not math.isfinite(args.guidance_tangent_velocity_fraction)
     or args.guidance_tangent_velocity_fraction > 0 and (not args.motion_aware_passing
         or args.guidance_tracking_weight <= 0 or args.guidance_reference_mode != "planar_forecast_velocity")):
     parser.error("tangent reference requires fraction 0..1, positive explicit tracking, forecast mode and motion-aware passing")
-if args.guidance_tangent_basis == "selected_observed_obstacle" and (
+if args.guidance_tangent_basis == "selected_observed_obstacle" and not args.crate_v3_controller and (
     args.guidance_tangent_velocity_fraction <= 0 or not args.human_observed_passing_target
     or args.guidance_reference_search_width > 0):
     parser.error("selected observed tangent requires positive fraction, observed-person selection and zero legacy search width")
@@ -1731,6 +1740,10 @@ def main():
                 motion_forecast_maximum_outward_fraction=args.motion_forecast_outward_fraction if args.observed_motion_reference else 0.,
                 motion_forecast_growth_prior_mps=args.motion_forecast_growth_prior_mps))
     control = SafeSAGEControlRuntime(mpc=mpc, backup_filter=backup, crossing_strategy=args.crossing_strategy)
+    if crate_v3_profile is not None:
+        save_json('controller-profile-validation.json', dict(crate_v3_profile,
+            mpc_configuration=asdict(mpc.config), guidance_configuration=asdict(mpc.guidance_config),
+            motion_passing_enabled=args.motion_aware_passing))
     if args.checked_rear_pass_reference:
         from robot.evaluation.live_rear_pass import LiveRearPassControlRuntime
         from robot.safety.checked_rear_pass_reference import CheckedRearPassReferenceConfig
@@ -3407,6 +3420,7 @@ def main():
         "static_prop_evidence": args.static_prop_evidence,
         "confirmed_prop_refresh": args.confirmed_prop_refresh,
         "crate_route_probe": args.crate_route_probe,
+        "crate_v3_controller_profile": crate_v3_profile,
         "service_static_props": args.service_static_props,
         "straight_service_walk": args.straight_service_walk,
         "image_object_overlap_hold": args.image_object_overlap_hold,

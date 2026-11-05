@@ -1,5 +1,15 @@
 # CRA repository guidance
 
+- User approves same closer-crate probe with V3 controller settings. Separate
+  defaultOFF --crate-v3-controller requires original crate-route/confirmed-refresh
+  gates and exact profile: N6/.05grid/tapered rescue/temporal Jacobian/guidance100/
+  guides/.025pacing; unfinishedQP OFF. Human selection OFF, tangent0 is existing
+  V3 no-selection fallback (moving arc inert), never a fabricated crate side.
+  Same fixture/start/4m straight route/45s/evidence/limits/lambda/safety gates.
+  Fresh independent60+own60 before wheels; native pending. Preserve all prior
+  failures/videos/defaultOFF/draft/main/primary/PR117 holds. See
+  docs/crate_v3_controller.md; native F:/CRA-experiments/crate-v3-controller-20261105.
+
 - Closer-crate probe79e0c9e: independent60/own60 PASS58 target assessments each;
   wheels produce .345838m lateral correction but FAIL45s arrival (0/1goal,
   last local1.957624/.346059/.171103;2.071487m remaining). Center passes crate,
