@@ -1,5 +1,32 @@
 # CRA repository guidance
 
+- Open-aisle v3 at580b524 PASSED six fresh prerequisites, own60 and full native
+  mission:8/8 guides,159.50simsec,1127fields1120translating, .345473m minimum
+  independent clearance,.053314 minimum CBF,.002282m stopdrift. Sources frozen.
+  Crate first(17.5,3.0), bin(21.2,3.2),3.705mapart; unused stations/caddies/pot/
+  steam inactive. Original meshes/scales, long route, one-way human, estimator/
+  retention/controller/lambda/margins unchanged. Bin79 retained-evidence rows
+  (68.3--80.2s,phi.634475--.638061); crate133 INTERMITTENT rows(49.8--114.6s,
+  phi.624193--.873506), original source/current-point auditPASS1417rows15objects.
+  Whole-center20cm diagnostic passes ONLY59/79bin and49/133crate; all selected
+  points pass original3cm mesh-box allowance. Not continuous whole-object tracking.
+  Live retained outline cues bin1.0/crate.600162 do NOT establish desired sharpness
+  ordering. Crate phi peak accompanies unavailable speed/interaction fallback,
+  not sharpness. Mass uncalibrated; potential/thermal.25priors; zero complete
+  fresh generic4factor assessments. Do not tune or relabel scores for the demo.
+  Nearby human curve.397806m against actual nominal polyline; minimum center
+  separation1.417757m,27supported moving-kinetic rows. No measured nearby-walking
+  hold/slow interval below.02/.05m/s; earlier route pauses remain, not matched
+  smoothing or pause-free whole mission. Preserve1sensor-epoch rejection and16
+  late human-uncertainty rows;218bodyjoins/0partjoins/0recovery events. Geometry
+  35184refs751archives,1097ambiguous motion proofs,4607fragment proofs and camera
+  1150masks73tracks auditPASS.3851units201.61s/Ruff/diffPASS;17279protectedfiles
+  unchanged. New outputs/final demo/v3-separated retains all1606navigation/stop
+  frames plus60credits, left perception/right map+follow camera. Paced.025,
+  priors/oracle ego explicit, one bounded mission only. All old layouts/failures,
+  v1/v2/v3 and draftPR233/main/primary/PR117 holds remain. See
+  docs/restaurant_service_demo_v3_separated.md and outputs/service-demo-v3-open-aisle/.
+
 - Straight32cec10 bin bench FAIL60zero wheels despite58fresh target assessments:
   nearby barstoolraw89 center(20.2703,5.0818) lieswithin original.30m competitor
   gate of bin observedcenter(20.1889,4.8088); legacygroupmemory absent though

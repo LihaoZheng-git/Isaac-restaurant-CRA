@@ -1,5 +1,76 @@
 # Separated v3 contact encounters
 
+## Current validated demo
+
+The furniture-gap arrangement at `580b524` passed the six fresh prop/actor/sensor
+prerequisites, the mission's own 60 stationary fields and the full native run.
+The broken crate is first at (17.5,3.0), followed by the rounded bin at
+(21.2,3.2), 3.705m apart. Unused clearing station/caddies, pot and visual steam
+are inactive. Original asset meshes/materials/scales, long waypoint route,
+one-way human, estimator/retention rules, fixed lambda 1.25, margins and controller
+settings remain unchanged. The runtime change in this task is the bounded image
+ID namespace correction documented below.
+
+Use `configs/restaurant_service_demo_v3_open_aisle.json`. Native records are in
+`outputs/service-demo-v3-open-aisle/long-motion-v1`; the presentation is
+`outputs/final demo/v3-separated/restaurant-service-v3-map.mp4`.
+It places perception on the left, the route map at upper right and the follow
+camera at lower right. All 1,606 navigation/stopping frames plus 60 credit frames
+are retained at 10 fps, 1920x1080. The map and human root trace are presentation
+data only, never perception or controller inputs. An initial presentation with
+clipped map prop labels is retained separately as `v3-separated-layout-v1`;
+the final map margin correction changes no native frames, timestamps or scores.
+
+Native acceptance: 8/8 guides, 159.50 simulation seconds, 1,127 live fields with
+1,120 committed while translating, 0.345473 m minimum independent clearance,
+0.053314 minimum CBF margin and 0.002282 m stopping drift. The nearby human curve is 0.397806 m
+relative to the configured nominal polyline, with minimum human-center distance
+1.417757 m. There are 27 supported simultaneous moving-kinetic rows. The observed
+nearby-walking intervals contain no translation hold below 0.02 m/s or slow interval
+below 0.05 m/s. Earlier route pauses remain in the video; this is not a matched
+smoothing comparison or a claim that the entire mission is pause-free.
+
+The original-property/current-point audit passes 1,417 retained rows across 15
+objects. For the intended props:
+
+| Prop | Retained-evidence rows | Source time range | Applied phi range | Original 20 cm whole-center diagnostic |
+| --- | ---: | --- | --- | --- |
+| Rounded bin | 79 |68.3--80.2s|0.634475--0.638061|59/79|
+| Broken crate | 133 |49.8--114.6s|0.624193--0.873506|49/133|
+
+All selected current returns satisfy the original 3 cm mesh-box allowance. The
+crate updates are intermittent, and partial observed surfaces are not complete
+object centers. Original mass/contact sources, values, confidence and clocks are
+preserved; current LiDAR correspondence is required and kinetic is recomputed.
+Maximum property ages are 12.033 s for the bin and 64.967 s for the crate, within
+the existing 120 s static-property limit; confidence keeps its existing 60 s half-life.
+
+This is a successful assessed-object navigation demo, **not a validated sharpness
+ranking**. The live retained outline cues are bin 1.0 and crate 0.600162, opposite
+the desired physical sharpness contrast. The crate's peak phi 0.873506 accompanies
+unavailable relative speed and interaction fallback, not stronger sharpness
+evidence. Keep that peak and all other rows. Rough mass is uncalibrated;
+potential/thermal use labeled 0.25 priors. There are no complete fresh generic
+four-factor assessments. Oracle ego reference and labeled human/geometry priors
+remain explicit. The simulation is compute-paced at0.025, not real time.
+
+Preserve one sensor-epoch rejection, 16 late human-uncertainty rows and zero native
+recovery events. Post-run audits pass: 35,184 geometry references/751 archives,
+1,097 ambiguous motion proofs, 4,607 fragment provenance proofs, 218 current body
+joins/zero visual-part joins, and 1,150 camera masks across 73 tracks. The camera
+audit checks exact field/score/mask and video timing parity. Full 3,851 unit tests
+(201.61 s), repository Ruff and diff checks pass. All 17,279 files in the original
+demo/asset/native preservation snapshot match their SHA256 hashes. Two completed
+failed-run logs received lossless NTFS compression only; before/after content
+hashes match and the storage audit is retained.
+
+The final folder includes validation, source/configuration records, frame mapping,
+asset credits, checksums and a summary of limitations. This remains one bounded
+native run on a draft development branch/PR233. Main/primary/PR117 holds and all
+earlier failures remain; there is no merge or universal safety claim.
+
+## Original separated layout and preserved failures
+
 User-approved scene revision, separate from the recorded v3 and v3 map layout.
 The original licensed rounded trash can is at (22.0, 4.65), the broken crate at
 (25.7, 4.9): 3.708 m between centers. They sit beside the earlier straight aisle
