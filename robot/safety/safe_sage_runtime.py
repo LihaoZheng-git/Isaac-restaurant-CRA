@@ -1214,6 +1214,7 @@ class SafeSAGEControlRuntime:
         preferred_lateral_direction_grid_y: float | None = None,
         nominal_goal_grid_xy: Sequence[float] | np.ndarray | None = None,
         prediction_state_timestamp_seconds: float | None = None,
+        planning_applied_command: Sequence[float] | np.ndarray | None = None,
     ) -> SafeSAGEUnicycleMPCResult:
         """Run predictive filtering against one accepted field snapshot."""
 
@@ -1230,6 +1231,12 @@ class SafeSAGEControlRuntime:
             mpc = LaplaceGuidanceTrackingMPC(mpc.paper_filter, mpc.config,
                 guidance_config=replace(mpc.guidance_config, tangent_velocity_fraction=0.))
         extra = {}
+        if planning_applied_command is not None:
+            from robot.safety.delay_robust_bypass import DelayRobustBypassMPC
+            if not isinstance(mpc, DelayRobustBypassMPC):
+                raise ValueError('applied-command planning reserve requires its explicit static ablation')
+            extra['planning_applied_command'] = _finite_vector(planning_applied_command, size=2,
+                name='previous physically issued command')
         prediction = getattr(field, "predictive_human_geometry", None)
         advisory = getattr(field, 'observed_motion_forecast', None)
         advisory_enabled = (isinstance(mpc, LaplaceGuidanceTrackingMPC)

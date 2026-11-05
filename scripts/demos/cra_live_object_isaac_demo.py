@@ -2511,6 +2511,7 @@ def main():
             data[1],
             data[2],
             initial_command_guess=data[3],
+            **(data[5] if args.crate_delay_robust_bypass else {}),
             **({'prediction_state_timestamp_seconds': data[5]} if args.predictive_human_geometry_ablation or args.observed_motion_reference else {}),
             **({"nominal_goal_grid_xy": data[4]} if args.guidance_tracking_weight > 0 or args.checked_rear_pass_reference else {}),
             profile_path=args.output / "profiles" / f"planner-{data[2].sensor_frame_id}.pstats"
@@ -2540,6 +2541,7 @@ def main():
         maximum_result_age_seconds=args.planner_result_max_age,
     )
     start_sim = float(timeline.get_current_time())
+    previous_executed_command = np.zeros(2)
     navigation_active = True
     if human is not None:
         human.navigation_start_time = start_sim
@@ -2843,6 +2845,9 @@ def main():
                         if args.checked_rear_pass_reference or args.guidance_tracking_weight > 0 else None,
                         now) if args.predictive_human_geometry_ablation or args.observed_motion_reference else
                         (current.copy(), sequence, latest.field, warm,
+                        np.array([nominal.target_waypoint.x, nominal.target_waypoint.y], dtype=float),
+                        dict(planning_applied_command=tuple(map(float,previous_executed_command)))) if args.crate_delay_robust_bypass else
+                        (current.copy(), sequence, latest.field, warm,
                         np.array([nominal.target_waypoint.x, nominal.target_waypoint.y], dtype=float)
                         if args.checked_rear_pass_reference or args.guidance_tracking_weight > 0 else None),
                 )
@@ -2946,6 +2951,7 @@ def main():
                 }
             )
             step(command, paced=True)
+            previous_executed_command = command.copy()
     finally:
         controller.stop()
         if human is not None and not arrived:

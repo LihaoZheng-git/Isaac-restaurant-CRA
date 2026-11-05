@@ -40,6 +40,23 @@ def save_planner_replay(directory, control, request, result, *, source_window=No
         raise TypeError("planner replay requires the native runtime and five/six-part request")
     field = request[2]
     control._validate_field(field)
+    planning_options = {}
+    prediction_epoch = None
+    if len(request) == 6:
+        if isinstance(request[5], dict):
+            if set(request[5]) != {'planning_applied_command'}:
+                raise ValueError('replay planning options require only the applied command')
+            from robot.safety.delay_robust_bypass import DelayRobustBypassMPC
+            if not isinstance(control.mpc, DelayRobustBypassMPC):
+                raise ValueError('applied-command replay requires the explicit static ablation')
+            control.mpc._reserve(request[5]['planning_applied_command'])
+            if request[5]['planning_applied_command'] is None:
+                raise ValueError('replay applied command must be explicit')
+            planning_options['planning_applied_command'] = list(map(float, request[5]['planning_applied_command']))
+        else:
+            prediction_epoch = float(request[5])
+            if not math.isfinite(prediction_epoch):
+                raise ValueError('replay prediction epoch must be finite')
     if source_window is not None:
         start, end = map(float, source_window)
         if not (math.isfinite(start) and math.isfinite(end) and 0 <= start < end <= start + 5):
@@ -59,7 +76,8 @@ def save_planner_replay(directory, control, request, result, *, source_window=No
         sha256=hashlib.sha256(payload).hexdigest(),
         sensor_frame_id=field.sensor_frame_id,
         sensor_timestamp_seconds=field.sensor_timestamp_seconds,
-        prediction_state_timestamp_seconds=request[5] if len(request) == 6 else None,
+        prediction_state_timestamp_seconds=prediction_epoch,
+        **planning_options,
         initial_chassis_state_grid=np.asarray(request[0]).tolist(),
         nominal_first_command=(nominal[0] if nominal.ndim == 2 else nominal).tolist(),
         nominal_goal_grid_xy=None if request[4] is None else np.asarray(request[4]).tolist(),

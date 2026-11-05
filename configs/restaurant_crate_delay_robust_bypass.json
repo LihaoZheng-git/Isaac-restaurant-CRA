@@ -113,7 +113,7 @@
       "--crossing-strategy",
       "legacy",
       "--crate-v3-controller",
-      "--save-failed-planner-replay",
+      "--save-planner-replay",
       "--crate-delay-robust-bypass"
     ]
   }

@@ -1,5 +1,29 @@
 # CRA repository guidance
 
+- Delay-reserve runtime2f02bdf: independent60/own60 PASS, but motion-v1 stalled
+  at source26/local(1.188004,.107948,.554653), explicitly interrupted; NO final
+  arrival/stopping/video acceptance. Preserve native F:/CRA-experiments/
+  crate-delay-robust-bypass-20261105/motion-v1 and its interruption record.
+  Revised defaultOFF static ablation adds a symmetric finite moving-arc pool,
+  original full reserved geometry/DTCBF/immediate-CBF checks, and six held-input
+  receipt-pose probes. Keep fixed .05m planning reserve; heading delay uses pose
+  probes plus one physics-step yaw floor, not changing last-rate yaw padding.
+  This is finite planning robustness, NOT guaranteed reachability/real-time.
+  All37 original receipt replays PASS; exact source/nominal/old warm inputs stay.
+  Preserve intermediate command-dependent reserve failure (one receipt DTCBF)
+  and frozen-field v4/v5 stopping failures. Full successful planner inputs now
+  recorded. Cost-ordered receipt checking skips only worse candidates, retaining
+  full checks on the selected one. No phi/identity/nominal/oracle/margin change.
+  Profile found repeated cold recovery expensive even with a checked moving
+  shifted plan. Prefer that freshly optimized continuation only after all probes,
+  firstv>=.05 and existing minimum goal progress; otherwise full fallback stays.
+  All37 receipt commands match exhaustive cost-ordered selection; min independent
+  clearance.101931.3946units337.05s before continuation/68focused afterward,
+  Ruff/diffPASS. Frozen-field diagnostics are not native goal acceptance.
+  Fresh independent60/own60 and native arrival still required for this revision.
+  All old demo files/defaultOFF/draft/main/primary/PR117 holds stay; see
+  docs/crate_delay_robust_bypass.md.
+
 - User approves separate defaultOFF --crate-delay-robust-bypass after diagnosis.
   Same V3 static crate profile/scene/4m straight nominal/evidence/phi/lambda/
   physical limits. Planning-only reserve adds vmax*.2s=.05m/omax*.2s=.16rad;

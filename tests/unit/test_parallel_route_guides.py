@@ -111,8 +111,8 @@ def test_invalid_convex_config_is_rejected(changes):
         replace(planner().guidance_config, **changes)
 
 
-@pytest.mark.parametrize('predictive', [False, True])
-def test_live_planner_uses_actual_pose_only_guide_target_instead_of_passed_checkpoint(predictive):
+@pytest.mark.parametrize('mode', ['legacy', 'predictive', 'delay_static'])
+def test_live_planner_uses_actual_pose_only_guide_target_instead_of_passed_checkpoint(mode):
     # Exercise the actual submit expression without importing Isaac or the demo.
     # This catches a valid pose-only guide command paired with the old checkpoint
     # target in MPC, which would pull a detour back toward an already passed guide.
@@ -125,7 +125,11 @@ def test_live_planner_uses_actual_pose_only_guide_target_instead_of_passed_check
     packet = next(k.value for k in submit[0].keywords if k.arg == "packet")
     # The explicit prediction request adds its actual state epoch at index5;
     # both legacy and predictive requests must retain the pose-only goal at4.
-    packet = packet.body if predictive else packet.orelse
+    modes = SimpleNamespace(predictive_human_geometry_ablation=mode == 'predictive',
+        observed_motion_reference=False, crate_delay_robust_bypass=mode == 'delay_static')
+    while isinstance(packet, ast.IfExp):
+        condition = eval(compile(ast.Expression(packet.test), str(script), 'eval'), {'args': modes})
+        packet = packet.body if condition else packet.orelse
     expression = compile(ast.Expression(packet.elts[4]), str(script), "eval")
     for guides in (False, True):
         waypoint = WaypointController([Waypoint(1, 0), Waypoint(2, 0), Waypoint(3.5, 0)],
@@ -136,8 +140,9 @@ def test_live_planner_uses_actual_pose_only_guide_target_instead_of_passed_check
         result = eval(expression, {"np": np, "args": args, "nominal": nominal})
         np.testing.assert_array_equal(result, [nominal.target_waypoint.x, nominal.target_waypoint.y])
         assert result[0] == pytest.approx(1.8 if guides else 1.)
-        args.guidance_tracking_weight = 0.
-        assert eval(expression, {"np": np, "args": args, "nominal": nominal}) is None
+        if mode != 'delay_static':
+            args.guidance_tracking_weight = 0.
+            assert eval(expression, {"np": np, "args": args, "nominal": nominal}) is None
 
 
 @pytest.mark.parametrize("extra", [[], ["--parallel-guidance-ablation"]])

@@ -7,6 +7,7 @@ used. The caller supplies the same obstacle-unaware nominal at both horizons.
 """
 
 from dataclasses import dataclass, fields, replace
+import itertools
 
 import numpy as np
 
@@ -14,6 +15,11 @@ from robot.safety.laplace_guidance_tracking_mpc import (
     GuidanceTrackingMPCResult,
     LaplaceGuidanceTrackingMPC,
 )
+from robot.safety.safe_sage_unicycle_cbf_filter import (
+    SafeSAGEUnicycleCBFConfig,
+    SafeSAGEUnicycleCBFFilter,
+)
+from robot.safety.safe_sage_unicycle_mpc import _frozen_array
 
 
 @dataclass(frozen=True)
@@ -53,21 +59,55 @@ class DelayRobustBypassMPC(LaplaceGuidanceTrackingMPC):
     def nominal_horizon_steps(self):
         return self.bypass_config.fallback_steps
 
-    def _planner(self, steps, *, reserve):
-        extra_position = (
-            self.config.maximum_linear_velocity * self.bypass_config.reserve_seconds
-            if reserve
-            else 0.0
+    def _actuator_maximum(self):
+        return np.array(
+            [
+                self.config.maximum_linear_velocity,
+                max(
+                    abs(self.config.minimum_angular_velocity),
+                    abs(self.config.maximum_angular_velocity),
+                ),
+            ]
         )
-        extra_yaw = (
-            max(
-                abs(self.config.minimum_angular_velocity),
-                abs(self.config.maximum_angular_velocity),
+
+    def _physics_step_allowance(self):
+        return self._actuator_maximum() * (
+            self.config.time_step / self.config.integration_substeps_per_interval
+        )
+
+    def _reserve(self, applied_command):
+        maximum = self._actuator_maximum()
+        if applied_command is None:
+            return maximum * self.bypass_config.reserve_seconds
+        command = np.asarray(applied_command, dtype=float)
+        if (
+            command.shape != (2,)
+            or not np.isfinite(command).all()
+            or not self.config.minimum_linear_velocity
+            <= command[0]
+            <= self.config.maximum_linear_velocity
+            or not self.config.minimum_angular_velocity
+            <= command[1]
+            <= self.config.maximum_angular_velocity
+        ):
+            raise ValueError(
+                "planning applied command must be finite and within original actuator bounds"
             )
-            * self.bypass_config.reserve_seconds
-            if reserve
-            else 0.0
+        # Keep the spatial reserve fixed through turning and stopping. Heading
+        # delay is checked explicitly at held-input receipt poses; inflating all
+        # future headings by the last turn rate makes the feasible set oscillate.
+        # The one-step yaw floor covers scheduling drift, not arbitrary motion.
+        return np.array(
+            [
+                maximum[0] * self.bypass_config.reserve_seconds,
+                self._physics_step_allowance()[1],
+            ]
         )
+
+    def _planner(self, steps, *, reserve, applied_command=None):
+        allowances = self._reserve(applied_command) if reserve else np.zeros(2)
+        extra_position = allowances[0] if reserve else 0.0
+        extra_yaw = allowances[1] if reserve else 0.0
         return LaplaceGuidanceTrackingMPC(
             self.paper_filter,
             replace(
@@ -93,6 +133,150 @@ class DelayRobustBypassMPC(LaplaceGuidanceTrackingMPC):
             initial, commands, **kwargs
         )
 
+    def _selection_cost(self, planner, commands, states, nominal, goal):
+        # All candidate families use the same cost, including optimizer results
+        # whose internal objective may also contain a guidance tracking term.
+        return planner._objective_value(
+            commands, nominal
+        ) + self.config.position_tracking_weight * float(
+            np.sum((states[-1, :2] - goal) ** 2)
+        )
+
+    def _delay_poses(self, initial, applied_command):
+        """Small held-input receipt-pose probes, never replacement odometry."""
+        if applied_command is None:
+            return (initial,)
+        v, omega = map(float, applied_command)
+        duration = self.bypass_config.reserve_seconds
+        yaw = initial[2]
+        if abs(omega) < 1e-9:
+            shift = np.array(
+                [v * np.cos(yaw) * duration, v * np.sin(yaw) * duration, 0.0]
+            )
+        else:
+            shift = np.array(
+                [
+                    v / omega * (np.sin(yaw + omega * duration) - np.sin(yaw)),
+                    v / omega * (np.cos(yaw) - np.cos(yaw + omega * duration)),
+                    omega * duration,
+                ]
+            )
+        end = initial + shift
+        floor = self._physics_step_allowance()
+        drift = np.array([floor[0] * np.cos(end[2]), floor[0] * np.sin(end[2]), 0.0])
+        turn = np.array([0.0, 0.0, floor[1]])
+        return (initial, end, end + drift, end - drift, end + turn, end - turn)
+
+    def _delay_checked(self, poses, commands, field):
+        return all(self.revalidate_commands(pose, commands, **field) for pose in poses)
+
+    def _moving_candidates(
+        self, planner, initial, nominal, goal, field, template, *, delay_poses=None
+    ):
+        """Finite online arc proposals; safety checks, not a speed floor.
+
+        Both directions are searched without fixture/semantic identity. A moving
+        candidate has no authority unless its complete reserved horizon and its
+        immediate original analytical command pass. Stops remain available.
+        """
+        speed = min(self.config.maximum_linear_velocity, float(np.max(nominal[:6, 0])))
+        backup = SafeSAGEUnicycleCBFFilter(
+            self.paper_filter,
+            SafeSAGEUnicycleCBFConfig(
+                lookahead_distance=self.config.lookahead_distance,
+                minimum_linear_velocity=self.config.minimum_linear_velocity,
+                maximum_linear_velocity=self.config.maximum_linear_velocity,
+                minimum_angular_velocity=self.config.minimum_angular_velocity,
+                maximum_angular_velocity=self.config.maximum_angular_velocity,
+            ),
+        )
+        query = planner._safety_states(initial[None, :])[0]
+        best = None
+        seen = set()
+        eligible = []
+        for fraction, omega, turning_steps in itertools.product(
+            (0.5, 0.75, 1.0), (-0.8, -0.4, -0.2, 0.0, 0.2, 0.4, 0.8), (1, 3, 5, 8)
+        ):
+            if (
+                not self.config.minimum_angular_velocity
+                <= omega
+                <= self.config.maximum_angular_velocity
+            ):
+                continue
+            commands = np.tile(
+                (speed * fraction, 0.0), (planner.config.horizon_steps, 1)
+            )
+            commands[:turning_steps, 1] = omega
+            key = commands.tobytes()
+            if key in seen:
+                continue
+            seen.add(key)
+            trajectory = planner._evaluate_trajectory(
+                initial, commands, **field, require_feasible=True
+            )
+            if trajectory is None or not planner._trajectory_is_safe(trajectory):
+                continue
+            filtered = backup.filter_command(
+                *commands[0],
+                query_position_grid_xy=query[:2],
+                query_yaw_radians=float(query[2]),
+                **field,
+            )
+            if (
+                filtered.emergency_stop_active
+                or not filtered.constraint_satisfied
+                or not filtered.constraint_feasible
+                or not np.allclose(
+                    commands[0],
+                    (filtered.safe_linear_velocity, filtered.safe_angular_velocity),
+                    atol=1e-9,
+                    rtol=0,
+                )
+            ):
+                continue
+            score = self._selection_cost(
+                planner, commands, trajectory.chassis_states, nominal, goal
+            )
+            eligible.append((score, commands, trajectory))
+        # Exact cost order preserves the selected candidate while avoiding
+        # expensive receipt checks for candidates that cannot improve it.
+        receipt_checked = 0
+        for score, commands, trajectory in sorted(eligible, key=lambda row: row[0]):
+            receipt_checked += 1
+            if delay_poses is None or self._delay_checked(delay_poses, commands, field):
+                candidate = replace(
+                    template,
+                    guidance_tracking=replace(
+                        template.guidance_tracking,
+                        active=False,
+                        reason="separate_checked_static_arc_search",
+                    ),
+                    command_sequence=_frozen_array(commands),
+                    predicted_chassis_states=_frozen_array(trajectory.chassis_states),
+                    predicted_safety_states=_frozen_array(trajectory.safety_states),
+                    predicted_safety_values=_frozen_array(trajectory.safety_values),
+                    dtcbf_margins=_frozen_array(trajectory.margins),
+                    nominal_first_command=tuple(map(float, nominal[0])),
+                    objective_value=planner._objective_value(commands, nominal),
+                    success=True,
+                    intervention_active=True,
+                    fallback_active=False,
+                    restoration_used=True,
+                    sqp_iteration_count=0,
+                    solver_iteration_count=0,
+                    status="checked_static_moving_candidate_selected",
+                )
+                best = (score, "moving_arc", candidate, True)
+                break
+        return best, dict(
+            tested=len(seen),
+            reserved_geometry_and_cbf_passed=len(eligible),
+            receipt_checked=receipt_checked,
+            passed=int(best is not None),
+            best_first_command=None if best is None else best[2].first_command,
+            basis="Symmetric finite online arc pool; complete reserved geometry/DTCBF plus original first-command CBF; no mandatory minimum speed",
+        )
+
     def plan(
         self,
         initial_chassis_state_grid,
@@ -100,6 +284,7 @@ class DelayRobustBypassMPC(LaplaceGuidanceTrackingMPC):
         *,
         nominal_goal_grid_xy=None,
         initial_command_guess=None,
+        planning_applied_command=None,
         **kwargs,
     ):
         # Scope validation prevents implicit application to the human experiments.
@@ -137,7 +322,7 @@ class DelayRobustBypassMPC(LaplaceGuidanceTrackingMPC):
             raise ValueError(
                 "warm horizon must be finite and match a published horizon"
             )
-        short = self._planner(6, reserve=True)
+        short = self._planner(6, reserve=True, applied_command=planning_applied_command)
         common = dict(kwargs, nominal_goal_grid_xy=goal)
         result = short.plan(
             initial,
@@ -153,7 +338,11 @@ class DelayRobustBypassMPC(LaplaceGuidanceTrackingMPC):
             and result.linear_velocity < 0.02
         )
         continuing = warm is not None and len(warm) == self.nominal_horizon_steps
-        long = self._planner(self.nominal_horizon_steps, reserve=True)
+        long = self._planner(
+            self.nominal_horizon_steps,
+            reserve=True,
+            applied_command=planning_applied_command,
+        )
         field = {
             key: kwargs[key]
             for key in (
@@ -168,38 +357,64 @@ class DelayRobustBypassMPC(LaplaceGuidanceTrackingMPC):
             long.revalidate_commands(initial, nominal, **field) if continuing else None
         )
         use_long = trigger or continuing and not direct_safe
+        delay_poses = self._delay_poses(initial, planning_applied_command)
         attempts = []
+        moving_search = None
+        checked_continuation = False
         if use_long:
-            for label, guess in (
-                ("cold", None),
-                ("shifted", warm if continuing else None),
-            ):
-                if label == "shifted" and not continuing:
-                    continue
+            starts = (
+                (("shifted", warm), ("cold", None)) if continuing else (("cold", None),)
+            )
+            for label, guess in starts:
                 candidate = long.plan(
                     initial, nominal, initial_command_guess=guess, **common
                 )
                 valid = (
                     candidate.success
                     and not candidate.fallback_active
-                    and self.revalidate_commands(
-                        initial, candidate.command_sequence, **field
+                    and self._delay_checked(
+                        delay_poses, candidate.command_sequence, field
                     )
                 )
                 score = float("inf")
                 if valid:
                     # Explicit goal-progress selection between complete checked
                     # optimizer candidates, with the existing state-cost weight.
-                    score = (
-                        candidate.objective_value
-                        + self.config.position_tracking_weight
-                        * float(
-                            np.sum(
-                                (candidate.predicted_chassis_states[-1, :2] - goal) ** 2
-                            )
-                        )
+                    score = self._selection_cost(
+                        long,
+                        candidate.command_sequence,
+                        candidate.predicted_chassis_states,
+                        nominal,
+                        goal,
                     )
                 attempts.append((score, label, candidate, valid))
+                progress = float(
+                    np.linalg.norm(initial[:2] - goal)
+                    - np.linalg.norm(candidate.predicted_chassis_states[-1, :2] - goal)
+                )
+                if (
+                    label == "shifted"
+                    and valid
+                    and candidate.linear_velocity >= 0.05
+                    and progress >= self.guidance_config.minimum_reference_progress_m
+                ):
+                    # A fresh optimized, fully checked moving continuation does
+                    # not need another costly cold feasibility search. This is
+                    # a continuation preference, not a reduced safety check.
+                    checked_continuation = True
+                    break
+            if not checked_continuation:
+                moving, moving_search = self._moving_candidates(
+                    long,
+                    initial,
+                    nominal,
+                    goal,
+                    field,
+                    attempts[0][2],
+                    delay_poses=delay_poses,
+                )
+                if moving is not None:
+                    attempts.append(moving)
             passing = [row for row in attempts if row[3]]
             if passing:
                 result = min(passing, key=lambda row: row[0])[2]
@@ -214,14 +429,19 @@ class DelayRobustBypassMPC(LaplaceGuidanceTrackingMPC):
             continuing_long_horizon=continuing,
             direct_long_nominal_safe=direct_safe,
             selected_steps=len(result.command_sequence),
+            moving_search=moving_search,
+            checked_moving_continuation=checked_continuation,
             reserve_seconds=self.bypass_config.reserve_seconds,
-            additional_position_reserve_m=self.config.maximum_linear_velocity
-            * self.bypass_config.reserve_seconds,
-            additional_yaw_reserve_radians=max(
-                abs(self.config.minimum_angular_velocity),
-                abs(self.config.maximum_angular_velocity),
-            )
-            * self.bypass_config.reserve_seconds,
+            receipt_pose_probe_count=len(delay_poses),
+            applied_command=None
+            if planning_applied_command is None
+            else list(map(float, planning_applied_command)),
+            additional_position_reserve_m=float(
+                self._reserve(planning_applied_command)[0]
+            ),
+            additional_yaw_reserve_radians=float(
+                self._reserve(planning_applied_command)[1]
+            ),
             attempts=[
                 dict(
                     start=label,
