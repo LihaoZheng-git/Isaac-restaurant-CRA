@@ -1,5 +1,26 @@
 # CRA repository guidance
 
+- Crate progress diagnosis at baf2b9f: fresh independent60/own60 PASS; bounded8s
+  capture ends duration_limit, NOT arrival acceptance.78fields69translating,
+  clearance.171570/CBF.064551/stopdrift.003519.67converged plans,35checked refs/
+  32no_exact_safe_progress;137/480zero commands.37 exact request/receipt replays
+  on IDENTICAL fields reproduce17 invalidations from .059--.898mm pose drift:
+  optimized tail crosses padded x1.275 boundary; unpadded endpoints/DTCBF/
+  immediate analytical commands pass. No phi jump/track loss needed. All4static
+  references collapse to near-straight and fail dense geometry; weight alone
+  cannot help. Native command parity at9.9/13.2/13.4/15.3. Matched COLD 2x2 at
+  13.4: N6 .18m straight, N30 1.139643m turn/.082890 independent clearance;
+  both guidance states identical after ref rejection. Native warm result differs,
+  so do not confound warm-start with horizon. Finite pool291/295N6,174/425N30
+  field-pass, BUT21N30 below original.02 independent disk monitor (min-.090055).
+  Disk conservatism vs unobserved geometry not separated; no full collision claim
+  or N30-only fix. Preserve old clearance failure. Offline tool/tests/plot only,
+  no new runtime policy. Next delay-robust plan selection plus checked static
+  turning alternatives/geometry audit, original checks and fresh native gates.
+  171focused regressions20.78s/Ruff/compile/diff PASS;40snapshot hashes verified,
+  408oldfinal-demo files unchanged. See docs/crate_progress_diagnosis.md and
+  outputs/crate-progress-diagnosis; defaultOFF/draft/main/primary/PR117 holds.
+
 - User authorizes focused crate progress diagnosis before another demo attempt.
   Separate recipe changes ONLY full successful/failed planner recording and
   8s diagnostic bound; source window11.5--15.5. Existing V3 controller/scene/
