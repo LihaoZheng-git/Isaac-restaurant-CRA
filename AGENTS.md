@@ -1,5 +1,24 @@
 # CRA repository guidance
 
+- V3-controller crate repeat8e4faaa: fresh independent60/own60 PASS, exact recorded
+  V3 MPC config and frozen sources. Navigation FAIL clearance_guard at19.10s,
+  0/1goal,2.59m remaining; lateral.061224m toward crate. Clearance beforestop
+  .019707/during.018789 below unchanged.02; CBF+.069408 is sensor-field only,
+  stopdrift.000963m.187fields143translating.147accepted plans:86converged/
+  49progress/12feasibility;35checked guidance references/112no_exact_safe_progress.
+  358/1146zeroforward,188withoutstopreason; no dynamic uncertainty regions.
+  Source replay0errors BUT crate retention33/187 at8.2--11.8s; mass2.999399/
+  cue.506347 fixed,phi.620930--.622548;17/33wholecenterPASS,pointsinsidebox.
+  Last source has0current crate-region returns, not proof of free space.
+  Refresh replay60+247PASS;all21crateattempts reject,0crate replacements.
+  ONE NON-TARGET property replacement ID8000000003 at13.4s, never crate success.
+  150focused/3919units249.72s/Ruff/compile/diffPASS;408oldfinal-demo files unchanged.
+  Three completed logs NTFScompressed with identical SHA256. Preserve failed
+  native F:/CRA-experiments/crate-v3-controller-20261105 and old videos. Next
+  diagnose static unicycle reference feasibility and observed/full-fixture
+  geometry; no score/margin tuning or full-demo promotion. See
+  docs/crate_v3_controller.md; defaultOFF/draft/main/primary/PR117 holds remain.
+
 - User approves same closer-crate probe with V3 controller settings. Separate
   defaultOFF --crate-v3-controller requires original crate-route/confirmed-refresh
   gates and exact profile: N6/.05grid/tapered rescue/temporal Jacobian/guidance100/
