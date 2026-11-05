@@ -1,5 +1,26 @@
 # CRA repository guidance
 
+- Closer-crate probe79e0c9e: independent60/own60 PASS58 target assessments each;
+  wheels produce .345838m lateral correction but FAIL45s arrival (0/1goal,
+  last local1.957624/.346059/.171103;2.071487m remaining). Center passes crate,
+  rear has not passed far edge. Clearance.094290m/CBF.185449/stopdrift.000927m;
+  310fields238translating. Record/source replay zero errors, BUT target reuse
+  only84/310 at8.2--20.3s,36/84wholecenterPASS; mass3.028027/cue.459253fixed,
+  phi.619316--.814060 with live interaction/speed fallbacks. All12 crate refresh
+  attempts reject; ZERO crate confirmations/property replacements. Exact refresh
+  replay60+370PASS;3non-target geometric confirmations also no property commit.
+  332 returned plans accepted;178safe-seed recoveries/95converged/59progressseeds.
+  1025/2701 zero-forward samples,594 with no stop reason;40--44s allv0 and
+  +/-0.1yaw seeds alternate. Do not call this only slow or successful bypass.
+  This inherits SHORT-BENCH N30/6s/no guidance tracking/.05 pacing, NOT V3's
+  N6/1.2s/guidance objective/.025. Next matched V3-setting isolated comparison
+  before new controller/score changes.80focused/3902units233.57s/Ruff/diffPASS.
+  First C:stationary failed disk-full after46 zero-wheel fields; preserved.
+  Retry native archive F:/CRA-experiments/crate-route-probe-20261105; summary/
+  plot/audits/pointers outputs/crate-route-probe/.13oldJSONL logs losslessly NTFS
+  compressed, all SHA256 unchanged;408 old final-demo files unchanged. Draft238,
+  no main/primary/PR117 promotion. See docs/crate_route_probe.md.
+
 - User approves closer-crate navigation with the confirmed evidence-refresh rule.
   Separate defaultOFF --crate-route-probe keeps start(15.65,4.05,0), extends ONLY
   the authored straight approach from .4m to4m so it can pass the crate, and uses
