@@ -1,5 +1,21 @@
 # CRA repository guidance
 
+- Contact acquisition review: exact116 saved target cues reproduce; first-live
+  bin1.0 comes from a thin mask spur, crate.600162 from a lower outer corner,
+  not its interior broken rim. Existing retention already freezes that first cue.
+  Same-SAM crop refinement rejects both live views; dyadic smoothing still
+  reverses ranking. Preserve these failures. New defaultOFF --contact-pixel-denoise
+  applies a3x3-cross one-pixel opening ONLY to the contact contour copy; reject
+  entire correction on >2% removal, split/hole/disappearance/expansion. Original
+  masks/ownership/geometry/mass/clocks/confidence/part maximum unchanged. Real
+  one-pixel-wide tips can be unresolved; no physical sharpness/safety guarantee.
+  Saved first-live bin/crate cues become.309927/.568647;114stationary target
+  ranges still overlap. No final contact/phi or navigation acceptance by replay.
+  91focused/Ruff PASS; full/native gates pending. CLI explicitly zero-wheel only.
+  Recipe configs/restaurant_contact_boundary_resolution.json; docs/contact_acquisition_review.md.
+  Preserve all319 original final-demo files and byte-identical v3-pi-share copy,
+  old failures, defaultOFF/draft/main/primary/PR117 holds. Do not overwrite v3.
+
 - Open-aisle v3 at580b524 PASSED six fresh prerequisites, own60 and full native
   mission:8/8 guides,159.50simsec,1127fields1120translating, .345473m minimum
   independent clearance,.053314 minimum CBF,.002282m stopdrift. Sources frozen.

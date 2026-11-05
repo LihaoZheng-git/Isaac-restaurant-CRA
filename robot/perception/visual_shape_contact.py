@@ -38,10 +38,15 @@ class SilhouetteContactConfig:
     confidence_cap: float = 0.8
     uncertainty_floor: float = 0.05
     local_geometry: LocalContactGeometryConfig | None = None
+    pixel_denoise: bool = False
 
     def __post_init__(self):
         if self.local_geometry is not None and not isinstance(self.local_geometry, LocalContactGeometryConfig):
             raise TypeError("local_geometry must be LocalContactGeometryConfig")
+        if not isinstance(self.pixel_denoise, bool):
+            raise TypeError("pixel_denoise must be boolean")
+        if self.pixel_denoise and self.local_geometry is None:
+            raise ValueError("pixel denoising requires the explicit local contact proxy")
         for name in ("minimum_pixels", "border_margin_pixels"):
             value = getattr(self, name)
             if isinstance(value, bool) or not isinstance(value, int) or value < 1:
@@ -149,6 +154,10 @@ def estimate_silhouette_contact_proxy(
         "score=max(circularity deficit, elongation, concavity, large-corner cue)",
     )
     if settings.local_geometry is not None:
+        resolution_evidence = ()
+        if settings.pixel_denoise:
+            from robot.perception.contact_boundary_resolution import resolved_contact_boundary
+            contour, resolution_evidence = resolved_contact_boundary(component, contour)
         try:
             local = local_convex_contact_features(contour, settings.local_geometry)
         except ValueError as error:
@@ -160,6 +169,7 @@ def estimate_silhouette_contact_proxy(
             f"peak_pixel_xy={local.peak_pixel_xy}; signed_turns_degrees={local.signed_turns_degrees}",
             f"support_pixels={local.support_pixels}; smoothing_pixels={local.smoothing_pixels:.6g}",
             "score=localized convex turn strength * multiscale persistence; inward turns do not score",
+            *resolution_evidence,
         )
     confidence = min(detection.confidence * fraction, settings.confidence_cap)
     uncertainty = settings.uncertainty_floor + 0.2 * (1 - confidence) + (1 - fraction)

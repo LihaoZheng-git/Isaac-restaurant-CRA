@@ -275,6 +275,8 @@ parser.add_argument("--local-contact-geometry", action="store_true",
                     help="Separate stationary local convex boundary proxy; no global elongation risk term")
 parser.add_argument("--contact-mask-refinement", action="store_true",
                     help="Contact-only SAM boundary refinement on verified stationary RGB object crops")
+parser.add_argument("--contact-pixel-denoise", action="store_true",
+                    help="Opt-in one-pixel contact-contour resolution assumption; original masks/occupancy unchanged")
 parser.add_argument("--image-object-maximum-extent", type=float, default=.9,
                     help="Labeled separated-prop grouping extent assumption in metres")
 parser.add_argument("--sam-track-extent-retry", action="store_true",
@@ -376,6 +378,9 @@ if args.local_contact_geometry and not args.stationary_image_objects:
     parser.error("local contact geometry requires stationary image-object validation before motion use")
 if args.contact_mask_refinement and not (args.stationary_image_objects and args.local_contact_geometry):
     parser.error("contact mask refinement requires stationary image objects and local contact geometry")
+if args.contact_pixel_denoise and (not args.local_contact_geometry or not args.stationary_image_objects
+        or args.motion or args.restaurant_human):
+    parser.error("contact pixel denoising requires a separate zero-wheel local-contact prop validation")
 if args.stationary_prop_rgb_width != 640 and (
     not args.stationary_prop_camera or not args.restaurant_scene or args.motion or args.restaurant_human
 ):
@@ -1452,7 +1457,8 @@ def main():
     from robot.perception.visual_shape_contact import SilhouetteContactConfig
     perception = LiveObjectPerception(
         contact_mask_refinement_config=ContactMaskRefinementConfig() if args.contact_mask_refinement else None,
-        shape_contact_config=(SilhouetteContactConfig(local_geometry=LocalContactGeometryConfig())
+        shape_contact_config=(SilhouetteContactConfig(local_geometry=LocalContactGeometryConfig(),
+                                                     pixel_denoise=args.contact_pixel_denoise)
                               if args.local_contact_geometry else None),
         capture_risk_masks=args.presentation_risk_camera,
         human_mass_body_identity_retention=args.human_mass_body_identity_retention,
