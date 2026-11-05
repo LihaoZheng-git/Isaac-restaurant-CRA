@@ -1,5 +1,17 @@
 # CRA repository guidance
 
+- User approves corrected-contact integration into a separately saved long V3.
+  Recipe restaurant_service_demo_v3_corrected_contact.json adds ONLY existing
+  --contact-pixel-denoise to original open-aisle prop/mixed-scene commands.
+  CLI admits the already-gated --service-static-props mode; original person
+  exclusions/property clocks/current-point proof/route/actor/priors/lambda/
+  MPC/CBF/limits and all gates remain. Fresh six prerequisites/own60/full native
+  arrival, stopping and source/geometry/camera audits precede new video acceptance.
+  Preserve previous V3 byte-identically; new output v3-corrected-contact only.
+  Short-test crate velocity fallback is not new sharpness and must stay visible.
+  Native acceptance pending; defaultOFF/draft/main/primary/PR117 holds stay.
+  See docs/restaurant_service_demo_v3_corrected_contact.md.
+
 - User-authorized corrected-contact short bin/crate tests: separate branch/recipe
   restaurant_contact_short_live.json keeps original V3 open-aisle bench/poses,
   .40m obstacle-unaware nominal segment, own60 plus matching independent60,

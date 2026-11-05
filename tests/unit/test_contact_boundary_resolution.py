@@ -145,3 +145,50 @@ def test_corrected_short_motion_keeps_all_original_prop_guards(monkeypatch):
                       ['--stationary-frames', '18'], ['--restaurant-route', 'long-service']):
             with pytest.raises(SystemExit):
                 _parse_mount([*args, *extra], monkeypatch)
+
+
+@pytest.mark.parametrize('case', ['long-parallel', 'long-parallel-near'])
+def test_corrected_service_motion_keeps_mixed_scene_guards(monkeypatch, case):
+    import json
+    from pathlib import Path
+    from test_restaurant_container_bench import _parse_mount
+    recipes = json.loads(Path('configs/restaurant_service_demo_v3_corrected_contact.json').read_text())['commands']
+    args = recipes[case][1:] + ['--motion']
+    verified = []
+    if case == 'long-parallel':
+        with pytest.raises(SystemExit):
+            _parse_mount(args, monkeypatch)
+        from robot.evaluation import restaurant_long_service_validation
+        monkeypatch.setattr(restaurant_long_service_validation, 'verify_near_human_gates',
+                            lambda *a, **kw: verified.append((a, kw)))
+        args += ['--long-service-human-gates', 'component', 'near', 'actor']
+    parsed = _parse_mount(args, monkeypatch)
+    assert parsed.contact_pixel_denoise and parsed.service_static_props
+    assert parsed.restaurant_human == 'parallel' and parsed.static_prop_evidence
+    if case == 'long-parallel':
+        assert len(verified) == 1
+        assert verified[0][0][0] == [Path('component'), Path('near'), Path('actor')]
+        assert verified[0][1]['require_straight_walk']
+    for missing in ('--service-static-props', '--static-prop-evidence',
+                    '--moving-view-image-objects', '--image-object-property-persistence',
+                    '--image-object-overlap-hold', '--local-contact-geometry',
+                    '--stationary-image-objects', '--restaurant-server'):
+        bad = args.copy()
+        bad.remove(missing)
+        with pytest.raises(SystemExit):
+            _parse_mount(bad, monkeypatch)
+    for extra in (['--restaurant-human', 'standing'], ['--human-camera-raise-metres', '0'],
+                  ['--disable-lidar-deskew'], ['--contact-mask-refinement'], ['--image-object-approach']):
+        with pytest.raises(SystemExit):
+            _parse_mount([*args, *extra], monkeypatch)
+
+
+def test_corrected_service_recipe_only_enables_the_validated_contact_option():
+    import json
+    from pathlib import Path
+    old = json.loads(Path('configs/restaurant_service_demo_v3_open_aisle.json').read_text())['commands']
+    new = json.loads(Path('configs/restaurant_service_demo_v3_corrected_contact.json').read_text())['commands']
+    assert old.keys() == new.keys()
+    changed = {'long-parallel', 'long-parallel-near', 'bin-static', 'crate-static'}
+    for case, command in old.items():
+        assert new[case] == command + (['--contact-pixel-denoise'] if case in changed else [])

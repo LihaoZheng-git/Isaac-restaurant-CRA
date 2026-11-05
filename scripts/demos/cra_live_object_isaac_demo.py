@@ -379,8 +379,9 @@ if args.local_contact_geometry and not args.stationary_image_objects:
 if args.contact_mask_refinement and not (args.stationary_image_objects and args.local_contact_geometry):
     parser.error("contact mask refinement requires stationary image objects and local contact geometry")
 if args.contact_pixel_denoise and (not args.local_contact_geometry or not args.stationary_image_objects
-        or args.restaurant_human or (args.motion and not (args.image_object_approach and args.static_prop_evidence))):
-    parser.error("contact pixel denoising requires stationary validation or the gated short static-prop approach")
+        or (args.restaurant_human and not args.service_static_props)
+        or (args.motion and not ((args.image_object_approach or args.service_static_props) and args.static_prop_evidence))):
+    parser.error("contact pixel denoising requires stationary validation, the gated short approach or the gated mixed service scene")
 if args.stationary_prop_rgb_width != 640 and (
     not args.stationary_prop_camera or not args.restaurant_scene or args.motion or args.restaurant_human
 ):
