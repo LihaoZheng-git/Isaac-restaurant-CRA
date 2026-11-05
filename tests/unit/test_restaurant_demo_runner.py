@@ -4,6 +4,20 @@ import json
 from scripts.evaluation import run_restaurant_demo as runner
 
 
+def test_only_explicit_contact_pair_extends_motion_case_admission():
+    flags = ['--image-object-approach', '--static-prop-evidence',
+             '--moving-view-image-objects', '--contact-pixel-denoise']
+    for case in ('static', 'parallel', 'crossing', 'rolling-service', 'long-service', 'long-parallel'):
+        assert runner.eligible_motion_case(case, [])
+    for case in ('bin-static', 'crate-static'):
+        assert runner.eligible_motion_case(case, flags)
+        for missing in flags:
+            assert not runner.eligible_motion_case(case, [f for f in flags if f != missing])
+        for extra in ('--restaurant-human', '--restaurant-server', '--service-static-props'):
+            assert not runner.eligible_motion_case(case, [*flags, extra])
+    assert not runner.eligible_motion_case('other', flags)
+
+
 def test_launcher_only_change_retains_exact_runtime_scene_config_binding():
     hashes = {"robot/controller.py": "control", runner.LAUNCHER: "new"}
     scenes = {"scene.usda": "scene"}

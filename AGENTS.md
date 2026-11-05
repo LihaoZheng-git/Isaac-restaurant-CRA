@@ -1,5 +1,16 @@
 # CRA repository guidance
 
+- User-authorized corrected-contact short bin/crate tests: separate branch/recipe
+  restaurant_contact_short_live.json keeps original V3 open-aisle bench/poses,
+  .40m obstacle-unaware nominal segment, own60 plus matching independent60,
+  original camera/ownership/clocks/priors/lambda/MPC/CBF/limits/margins/stopping.
+  --contact-pixel-denoise motion requires gated image-object approach/static
+  evidence, no humans/server. Old explicit-pose recipes stay zero-wheel only.
+  No contact algorithm/retention changes. New source/point auditor reproduces
+  prior bin16/16 and catches4 deliberately corrupted copied fields.49focusedPASS;
+  full/native acceptance pending. Preserve all324 prior final-demo files, old
+  failures, defaultOFF/draft/main/primary/PR117 holds. See docs/contact_short_live.md.
+
 - Contact acquisition review: exact116 saved target cues reproduce; first-live
   bin1.0 comes from a thin mask spur, crate.600162 from a lower outer corner,
   not its interior broken rim. Existing retention already freezes that first cue.

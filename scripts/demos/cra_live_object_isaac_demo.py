@@ -379,8 +379,8 @@ if args.local_contact_geometry and not args.stationary_image_objects:
 if args.contact_mask_refinement and not (args.stationary_image_objects and args.local_contact_geometry):
     parser.error("contact mask refinement requires stationary image objects and local contact geometry")
 if args.contact_pixel_denoise and (not args.local_contact_geometry or not args.stationary_image_objects
-        or args.motion or args.restaurant_human):
-    parser.error("contact pixel denoising requires a separate zero-wheel local-contact prop validation")
+        or args.restaurant_human or (args.motion and not (args.image_object_approach and args.static_prop_evidence))):
+    parser.error("contact pixel denoising requires stationary validation or the gated short static-prop approach")
 if args.stationary_prop_rgb_width != 640 and (
     not args.stationary_prop_camera or not args.restaurant_scene or args.motion or args.restaurant_human
 ):
@@ -421,13 +421,14 @@ if args.stationary_prop_standoff_metres is not None and (
     or not .8 <= args.stationary_prop_standoff_metres <= 3.):
     parser.error('prop standoff requires stationary demo-container survey and finite .8..3m')
 if args.stationary_prop_world_pose is not None:
-    if (args.motion or args.restaurant_human or args.restaurant_server
+    bounded_contact_pose = args.contact_pixel_denoise and args.image_object_approach and args.static_prop_evidence
+    if ((args.motion and not bounded_contact_pose) or args.restaurant_human or args.restaurant_server
         or not args.stationary_prop_camera or args.restaurant_view != 'demo-container'
         or not args.restaurant_scene or args.stationary_prop_target is None
         or args.stationary_prop_standoff_metres is not None
         or args.stationary_prop_view_yaw_degrees != 0
         or not all(math.isfinite(v) for v in args.stationary_prop_world_pose)):
-        parser.error('explicit prop pose requires a zero-wheel stationary prop test and evaluation target')
+        parser.error('explicit prop pose requires a stationary test or the gated corrected-contact approach, with an evaluation target')
 elif args.stationary_prop_target is not None:
     parser.error('independent prop target requires an explicit stationary pose')
 if args.sam_track_extent_retry and not args.sam_observed_context_box:

@@ -14,6 +14,16 @@ ROOT = Path(__file__).resolve().parents[2]
 LAUNCHER = "scripts/evaluation/run_restaurant_demo.py"
 
 
+def eligible_motion_case(case, command):
+    """Retain legacy cases; admit only the explicitly bounded contact pair."""
+    if case in {"static", "parallel", "crossing", "rolling-service", "long-service", "long-parallel"}:
+        return True
+    required = {'--image-object-approach', '--static-prop-evidence',
+                '--moving-view-image-objects', '--contact-pixel-denoise'}
+    return (case in {'bin-static', 'crate-static'} and required <= set(command)
+            and not {'--restaurant-human', '--restaurant-server', '--service-static-props'} & set(command))
+
+
 def digest(path):
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
@@ -91,7 +101,7 @@ def main():
     if any(scene_hashes[p] != h for p, h in manifest["source_sha256"].items()):
         parser.error("base scene changed since demo construction")
     if args.stage == "motion":
-        if args.case not in {"static", "parallel", "crossing", "rolling-service", "long-service", "long-parallel"} or args.stationary_source is None:
+        if not eligible_motion_case(args.case, command) or args.stationary_source is None:
             parser.error("motion needs an eligible case and a same-source stationary gate")
         required = [(args.stationary_source, "stationary-gate.json", args.case)]
         if args.case in {"parallel", "crossing", "long-parallel"}:

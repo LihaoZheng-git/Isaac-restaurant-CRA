@@ -56,7 +56,9 @@ This explicitly assumes one-pixel-wide protrusions are unresolved visual detail.
 A real very thin tip can also be removed: this is a visible contour proxy, not
 physical sharpness, material hardness or proof of safety. No class-name override,
 model training, new weights or environment change is involved. The default is
-off, and the native CLI currently permits only separate zero-wheel prop tests.
+off. At the initial correction revision the native CLI permitted only separate
+zero-wheel prop tests. The subsequently user-approved bounded moving validation
+is documented in `docs/contact_short_live.md`; no full-demo promotion is implied.
 
 On the exact two saved first live images, raw cue bin/crate changes from
 1.000000/0.600162 to 0.309927/0.568647. It removes 6/803 and 4/2004 pixels,

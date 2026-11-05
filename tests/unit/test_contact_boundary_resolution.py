@@ -116,7 +116,7 @@ def test_retention_keeps_corrected_intrinsic_cue_but_motion_stays_live():
                                   results[1][2].field.tracking_result.point_track_ids)
 
 
-def test_native_opt_in_requires_zero_wheel_component_gate(monkeypatch):
+def test_native_opt_in_requires_stationary_or_explicit_bounded_approach(monkeypatch):
     from test_restaurant_container_bench import _parse_mount, BASE_ARGS
     assert not _parse_mount(BASE_ARGS, monkeypatch).contact_pixel_denoise
     args = [*BASE_ARGS, '--stationary-image-objects', '--local-contact-geometry', '--contact-pixel-denoise']
@@ -124,3 +124,24 @@ def test_native_opt_in_requires_zero_wheel_component_gate(monkeypatch):
     for bad in ([*BASE_ARGS, '--contact-pixel-denoise'], [*args, '--motion']):
         with pytest.raises(SystemExit):
             _parse_mount(bad, monkeypatch)
+
+
+def test_corrected_short_motion_keeps_all_original_prop_guards(monkeypatch):
+    import json
+    from pathlib import Path
+    from test_restaurant_container_bench import _parse_mount
+    recipes = json.loads(Path('configs/restaurant_contact_short_live.json').read_text())['commands']
+    for command in recipes.values():
+        args = command[1:] + ['--motion']
+        parsed = _parse_mount(args, monkeypatch)
+        assert parsed.contact_pixel_denoise and parsed.image_object_approach
+        assert parsed.static_prop_evidence and parsed.stationary_frames == 60
+        for missing in ('--image-object-approach', '--static-prop-evidence', '--moving-view-image-objects', '--contact-pixel-denoise'):
+            bad = args.copy()
+            bad.remove(missing)
+            with pytest.raises(SystemExit):
+                _parse_mount(bad, monkeypatch)
+        for extra in (['--restaurant-human', 'standing'], ['--restaurant-server'],
+                      ['--stationary-frames', '18'], ['--restaurant-route', 'long-service']):
+            with pytest.raises(SystemExit):
+                _parse_mount([*args, *extra], monkeypatch)
