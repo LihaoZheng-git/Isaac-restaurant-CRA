@@ -1,5 +1,22 @@
 # CRA repository guidance
 
+- User approves separate defaultOFF --crate-delay-robust-bypass after diagnosis.
+  Same V3 static crate profile/scene/4m straight nominal/evidence/phi/lambda/
+  physical limits. Planning-only reserve adds vmax*.2s=.05m/omax*.2s=.16rad;
+  original execution/CBF/freshness/clearance/stopping gates unchanged. Short
+  reference failure/low progress invokes checked N30 cold+shifted optimizer
+  candidates; explicit terminal goal-distance selection uses existing position
+  weight. Keep long mode until direct long nominal passes; revalidate ENTIRE
+  returned6/30step horizon at actual receipt pose, never truncate. No humans/
+  oracle runtime input. All37 archived receiptsPASS,17old invalidations->0,
+  min independent predicted clearance.107327; offline maxwall3.692489s, not
+  real-time proof. Original21disk-failing pool paths allAABB-minus-margin>=
+  .047873m: disk conservatism for this set, not complete geometry proof.
+  Keep original disk gate.3939units260.37s/36focused/Ruff/diffPASS.
+  Fresh independent60/own60 and full native arrival
+  pending at implementation. Preserve all old outputs/defaultOFF/draft/main/
+  primary/PR117 holds. See docs/crate_delay_robust_bypass.md.
+
 - Crate progress diagnosis at baf2b9f: fresh independent60/own60 PASS; bounded8s
   capture ends duration_limit, NOT arrival acceptance.78fields69translating,
   clearance.171570/CBF.064551/stopdrift.003519.67converged plans,35checked refs/

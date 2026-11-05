@@ -32,6 +32,8 @@ def planner_result_diagnostic(result):
            if result is not None and getattr(result, 'unfinished_qp_proposals', ()) else {}),
         **({'tapered_rescue_seed': result.tapered_rescue_seed}
            if result is not None and getattr(result, 'tapered_rescue_seed', None) is not None else {}),
+        **({'delay_robust_bypass_ablation': result.delay_robust_bypass}
+           if result is not None and hasattr(result, 'delay_robust_bypass') else {}),
         **({"predictive_human_geometry_ablation": result.predictive_geometry}
            if result is not None and getattr(result, "predictive_geometry", None) is not None else {}),
         **({"guidance_tracking_ablation": asdict(result.guidance_tracking)}

@@ -315,6 +315,8 @@ parser.add_argument('--confirmed-prop-refresh', action='store_true',
                     help='crate-only experiment: reassess repeatedly verified better surface coverage; default OFF')
 parser.add_argument('--crate-route-probe', action='store_true',
                     help='separate closer-crate test: straight 4m nominal route with confirmed refresh and original own60/controller gates; default OFF')
+parser.add_argument('--crate-delay-robust-bypass', action='store_true',
+    help='Separate static crate controller: planning reserve and checked longer-horizon fallback')
 parser.add_argument('--crate-v3-controller', action='store_true',
                     help='separate closer-crate repeat with explicit validated V3 controller/no-human-selection settings; default OFF')
 parser.add_argument("--object-height-evidence", action="store_true",
@@ -379,6 +381,8 @@ parser.add_argument('--human-verified-part-recovery', action='store_true',
                     help='bounded recovery across a previously verified human parent/part ID swap; complete old region must fit current body')
 args = parser.parse_args()
 crate_v3_profile = None
+if args.crate_delay_robust_bypass and not args.crate_v3_controller:
+    parser.error('delay-robust crate bypass requires the gated V3 static crate controller')
 if args.crate_v3_controller:
     from robot.evaluation.crate_v3_controller import validate_crate_v3_controller
     try:
@@ -1739,11 +1743,15 @@ def main():
                 moving_arc_reference=args.guidance_moving_arc_reference,
                 motion_forecast_maximum_outward_fraction=args.motion_forecast_outward_fraction if args.observed_motion_reference else 0.,
                 motion_forecast_growth_prior_mps=args.motion_forecast_growth_prior_mps))
+    if args.crate_delay_robust_bypass:
+        from robot.safety.delay_robust_bypass import DelayRobustBypassMPC
+        mpc = DelayRobustBypassMPC(mpc.paper_filter, mpc.config, guidance_config=mpc.guidance_config)
     control = SafeSAGEControlRuntime(mpc=mpc, backup_filter=backup, crossing_strategy=args.crossing_strategy)
     if crate_v3_profile is not None:
         save_json('controller-profile-validation.json', dict(crate_v3_profile,
             mpc_configuration=asdict(mpc.config), guidance_configuration=asdict(mpc.guidance_config),
-            motion_passing_enabled=args.motion_aware_passing))
+            motion_passing_enabled=args.motion_aware_passing,
+            delay_robust_bypass=asdict(mpc.bypass_config) if args.crate_delay_robust_bypass else None))
     if args.checked_rear_pass_reference:
         from robot.evaluation.live_rear_pass import LiveRearPassControlRuntime
         from robot.safety.checked_rear_pass_reference import CheckedRearPassReferenceConfig
@@ -2821,7 +2829,7 @@ def main():
             if fresh and reuse is not None:
                 horizon = waypoint.predict_commands(
                     RobotPose2D(*current),
-                    horizon_steps=mpc.config.horizon_steps,
+                    horizon_steps=mpc.nominal_horizon_steps if args.crate_delay_robust_bypass else mpc.config.horizon_steps,
                     time_step=mpc.config.time_step,
                 )
                 sequence = np.array(
@@ -3368,6 +3376,7 @@ def main():
         "immediate_replan_after_invalidations": args.immediate_replan,
         "verified_command_interval_seconds": mpc.config.time_step,
         "mpc_prediction_horizon_steps": mpc.config.horizon_steps,
+        "delay_robust_bypass": asdict(mpc.bypass_config) if args.crate_delay_robust_bypass else None,
         "mpc_prediction_horizon_seconds": mpc.config.horizon_steps * mpc.config.time_step,
         "mpc_prediction_horizon_basis": "explicit separate horizon ablation" if args.mpc_horizon_steps is not None else "legacy controller default",
         "wall_seconds": time.perf_counter() - start_wall,
