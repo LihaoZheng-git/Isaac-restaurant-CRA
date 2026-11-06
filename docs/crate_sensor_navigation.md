@@ -32,3 +32,22 @@ full chassis passage, recorded contact events, and the original 2 cm benchmark
 individually. The crate's mesh-derived bounding box is a geometric cross-check.
 The PhysX contact observer requires an identifiable contact in each reported
 phase as a positive control for interpreting zero crate events.
+
+The six-step native run on revision 17c5ef8 reached its 45 s time limit at
+local (1.44055, -0.05901). All 415 live fields were committed with the external
+clearance veto disabled. PhysX recorded 10,804 robot/floor contact headers
+during navigation and zero robot/crate contacts. Minimum clearance to the
+crate alone was 0.007607 m against the circle and 0.038248 m against its
+bounding box. The original combined disk/layout score reached -0.004259 m.
+The recalled crate cells were still in the safety field.
+At source 29.9 s the planner converged to zero. Forward probes intersected
+the remembered crate group's padded occupied cells. At 14.9 s both turn
+directions had still been available. On that frozen approach field, ideal
+closed-loop replays reproduced the stall with six steps and reached goal
+tolerance with twelve. The twelve-step case had 0.0500 m minimum padded
+chassis-to-crate-box clearance over 1,008 ideal control samples.
+
+The native follow-up uses `configs/restaurant_crate_sensor_navigation_horizon12.json`.
+Relative to the six-step sensor protocol the only command difference is MPC's
+prediction horizon (12 instead of 6 intervals at 0.2 s). It runs forward from
+the original parked start using current sensor fields.

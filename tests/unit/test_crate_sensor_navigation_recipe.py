@@ -22,3 +22,12 @@ def test_sensor_navigation_uses_primary_mpc_on_the_original_encounter(monkeypatc
     assert not current["restaurant_human"] and not current["checked_rear_pass_reference"]
     assert current["static_occupancy_memory_prior"] and current["persistent_object_risk_map"]
     assert current["mpc_horizon_steps"] == 6
+
+
+def test_longer_primary_prediction_changes_only_horizon(monkeypatch):
+    def settings(name):
+        return vars(parse(monkeypatch, command(name) + ["--motion"])["args"])
+
+    original = settings("restaurant_crate_sensor_navigation")
+    extended = settings("restaurant_crate_sensor_navigation_horizon12")
+    assert extended == {**original, "mpc_horizon_steps": 12}
