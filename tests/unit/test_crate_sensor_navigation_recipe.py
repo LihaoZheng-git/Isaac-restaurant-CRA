@@ -31,3 +31,17 @@ def test_longer_primary_prediction_changes_only_horizon(monkeypatch):
     original = settings("restaurant_crate_sensor_navigation")
     extended = settings("restaurant_crate_sensor_navigation_horizon12")
     assert extended == {**original, "mpc_horizon_steps": 12}
+
+
+@pytest.mark.parametrize("motion", [False, True])
+def test_crate_setback_changes_only_scene_and_requires_passive_scoring(monkeypatch, motion):
+    extra = ["--motion"] if motion else []
+    original = vars(parse(monkeypatch, command("restaurant_crate_sensor_navigation_horizon12") + extra)["args"])
+    argv = command("restaurant_crate_setback15") + extra
+    shifted = vars(parse(monkeypatch, argv)["args"])
+    assert shifted == {
+        **original, "restaurant_scene": original["restaurant_scene"].with_name("restaurant_crate_route_setback15.usda")
+    }
+    argv.remove("--observe-crate-clearance")
+    with pytest.raises(SystemExit):
+        parse(monkeypatch, argv)
