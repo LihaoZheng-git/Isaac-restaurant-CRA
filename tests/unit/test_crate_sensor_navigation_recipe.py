@@ -34,13 +34,15 @@ def test_longer_primary_prediction_changes_only_horizon(monkeypatch):
 
 
 @pytest.mark.parametrize("motion", [False, True])
-def test_crate_setback_changes_only_scene_and_requires_passive_scoring(monkeypatch, motion):
+@pytest.mark.parametrize("setback_cm", [10, 15])
+def test_crate_setback_changes_only_scene_and_requires_passive_scoring(monkeypatch, motion, setback_cm):
     extra = ["--motion"] if motion else []
     original = vars(parse(monkeypatch, command("restaurant_crate_sensor_navigation_horizon12") + extra)["args"])
-    argv = command("restaurant_crate_setback15") + extra
+    argv = command(f"restaurant_crate_setback{setback_cm}") + extra
     shifted = vars(parse(monkeypatch, argv)["args"])
     assert shifted == {
-        **original, "restaurant_scene": original["restaurant_scene"].with_name("restaurant_crate_route_setback15.usda")
+        **original,
+        "restaurant_scene": original["restaurant_scene"].with_name(f"restaurant_crate_route_setback{setback_cm}.usda")
     }
     argv.remove("--observe-crate-clearance")
     with pytest.raises(SystemExit):

@@ -415,11 +415,12 @@ if args.confirmed_prop_refresh and (not args.static_prop_evidence or not args.im
         or not args.contact_pixel_denoise or args.service_static_props
         or args.stationary_prop_target != 'BrokenCrate' or args.restaurant_human or args.restaurant_server):
     parser.error('confirmed refresh requires the separate crate-only corrected-contact approach')
+crate_setback_scenes = {'restaurant_crate_route_setback10.usda', 'restaurant_crate_route_setback15.usda'}
 if args.crate_route_probe and (not args.confirmed_prop_refresh
         or args.stationary_prop_world_pose != [15.65, 4.05, 0.]
-        or args.restaurant_scene.name not in {'restaurant_crate_route_probe.usda', 'restaurant_crate_route_setback15.usda'}):
+        or args.restaurant_scene.name not in {'restaurant_crate_route_probe.usda', *crate_setback_scenes}):
     parser.error('crate route probe requires confirmed refresh and its separate fixed scene/start pose')
-if args.restaurant_scene and args.restaurant_scene.name == 'restaurant_crate_route_setback15.usda' and not args.observe_crate_clearance:
+if args.restaurant_scene and args.restaurant_scene.name in crate_setback_scenes and not args.observe_crate_clearance:
     parser.error('crate setback placement requires the sensor-controlled observation protocol')
 if args.observe_crate_clearance and (
     not args.crate_route_probe or args.experiment_baseline != 'continuous_cra_safe_sage'
