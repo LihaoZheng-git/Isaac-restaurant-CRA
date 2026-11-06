@@ -199,3 +199,56 @@ videos are in `F:/CRA-experiments/crate-aisle-placement/setback15-motion`;
 the comparison map and post-run audits are in `outputs/crate-aisle-placement/`.
 The final placement code passed 3,968 unit tests and Ruff. The previous 408
 archive hashes matched.
+
+## Balancing curve size and waypoint arrival
+
+Two more isolated placements move the crate 10 cm and 5 cm out from its
+original center. Both use the same x coordinate, the same robot start, the
+same 4 m waypoint and the same controller as the 15 cm run. The only
+difference in native motion arguments before the output path is the scene
+file. Build with `--setback-cm 10` or `--setback-cm 5` and use the matching
+`configs/restaurant_crate_setback10.json` or
+`configs/restaurant_crate_setback5.json` for both launcher stages.
+
+| Setback from original | Center to route | Peak absolute offset beside crate | Goal error | Navigation time | Arrival |
+| --- | ---: | ---: | ---: | ---: | --- |
+| Original | 60 cm | 31.72 cm | 54.02 cm | 45.00 s | Missed |
+| 15 cm | 75 cm | 3.22 cm | 9.69 cm | 26.65 s | Reached |
+| 10 cm | 70 cm | 2.00 cm | 9.71 cm | 31.97 s | Reached |
+| 5 cm | 65 cm | 8.02 cm | 9.65 cm | 32.00 s | Reached |
+
+The 5 cm placement at world (17.50, 3.40) gave the largest offset among
+these goal-reaching runs. Carter bent away from the crate, cleared it with
+the full padded chassis at 25.97 s and returned to within 2.4 mm laterally
+of the waypoint line. Minimum recorded analytical CBF margin was +0.11961,
+with 2.61 mm braking drift. At 10 cm, the 2 cm peak absolute offset
+beside the crate was toward its side of the aisle. The earlier portion of
+that path also shows a smaller bend away. All four peak offsets are measured
+over the crate's longitudinal span.
+
+The 10 cm independent parked run at `5de90da` passed (50 accepted crate
+assessments). The first motion launch kept the wheels parked: three
+unmatched sources led to a 0.40 s proof gap, and the final source had only
+one observation toward the three required to qualify the group again.
+The original record still existed. Preserve `setback10-motion` as that
+failed launch. An identical repeat passed its own stationary check (47
+accepted assessments) and reached the goal. At `8f19084`, the 5 cm
+independent and in-run stationary checks passed on the first attempt,
+with 46 and 37 accepted assessments respectively.
+
+For the 5 cm and 10 cm driven runs, the padded chassis had minimum sampled
+clearance to the crate box of 3.29 and 1.34 cm respectively. The enclosing
+circle overlapped the padded footprint by up to 4.64 and 6.26 cm, failing
+the historical 2 cm circle score. PhysX recorded floor contacts throughout
+and zero crate contacts during driving and braking in both runs. Retained
+crate mass/contact evidence qualified on 79/307 fields at 5 cm and 73/309
+at 10 cm; reuse checks found zero point or source errors. These are single
+driven trials with paced simulation, simulated ego localization and labeled
+factor priors. They establish an isolated demo candidate; full-restaurant
+integration, repeatability and a matched fixed-risk comparison are separate.
+
+Native runs and videos are in `F:/CRA-experiments/crate-aisle-balance/`
+under `setback5-motion` and `setback10-motion-repeat1`. The equal-scale
+aisle map, separate lateral zoom and post-run audits are in
+`outputs/crate-aisle-balance/`. All 3,972 unit tests and repository Ruff
+checks passed. All 408 files in the older archive manifest verified.

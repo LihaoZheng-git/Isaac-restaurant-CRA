@@ -1,5 +1,15 @@
 # CRA repository guidance
 
+- For a more visible isolated crate pass, use the 5 cm setback recipe
+  (world y 3.40). Its native N12 trial reached the 4 m waypoint in 32.00 s
+  with an 8.02 cm bend away beside the crate, 9.65 cm goal error, 2.61 mm
+  stop drift and zero PhysX crate contacts. Padded crate-box clearance
+  3.29 cm; evaluation circle overlaps 4.64 cm (historical score fails).
+  Retained mass/contact qualified 79/307 fields. The 10 cm placement reached
+  with only 2.00 cm absolute offset on repeat after the first parked proof
+  failed. Preserve every placement, earlier stress case and V3 demo. One
+  driven trial per placement. See docs/crate_sensor_navigation.md.
+
 - The separate 15 cm crate setback (world y 3.45 to 3.30) passed its two
   parked checks and native motion at 7b4d07e. Keep the N12 sensor controller,
   padded rear-footprint check and obstacle-unaware waypoint. Carter reached
