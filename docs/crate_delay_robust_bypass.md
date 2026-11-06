@@ -165,10 +165,65 @@ padded footprint gives 0.080439 m minimum. This explains a geometric discrepancy
 the box is diagnostic only. Keep the independent disk guard in the fresh native
 test. Frozen fields, ideal integration, and simulated wheels are distinct results.
 
+## Third native trial: turned, then failed the independent clearance guard
+
+Frozen runtime `d4a2185`, `stationary-v3` and `motion-v3` in the experiment
+archive. Both independent and own parked gates passed 60 sources with zero wheel
+commands; setup, perception and controller source hashes remained unchanged.
+All **3950 unit tests** passed in 257.01 s; 71 focused tests, Ruff and diff
+checks passed. All 37 original request/receipt command sequences matched the
+earlier passing repair, versus 17 receipt invalidations in the original baseline.
+The 408 archived demo/experiment files in the before-manifest remained unchanged.
+
+**Navigation failed; this is not a replacement V3 demo.** On the same straight
+4 m nominal, the robot physically turned up to 0.166765 m off the line, passed
+both old stall positions, and stopped before the crate center. A checked moving
+repair was accepted at 7.4833 simulated seconds (0.147886 m/s, -0.2 rad/s).
+The robot crossed local x=1.188 and 1.364 m at 7.8667 and 9.0667 s. All 65
+completed plan receipts were accepted (43 short, 22 long). 95 live fields were
+committed, 93 during translation. The longest issued speed below 0.02 m/s
+while nominal exceeded 0.05 m/s was 0.1333 s before braking; this is commanded
+speed, not measured translational speed or a claim of pause-free operation.
+
+The separate independent monitor terminated the run at 9.9667 simulated seconds
+with `clearance_guard`: 0.019714 m before braking (required **strictly above
+0.02 m**), 0.017628 m minimum during braking. Translation drift during the
+stop was 0.005577 m. Final pose (1.543137, 0.147142, -0.084234);
+0/1 final waypoint, 2.461266 m from goal. Minimum analytical CBF margin was
++0.070814 for its **sensor-based field**; it does not imply the independent
+disk guard passes. The launcher recorded the deliberate failed-gate exception
+after writing the final report/video, not an interrupted run.
+
+Crate-only audit of 598 commanded navigation poses and 61 braking poses:
+the **same padded robot** has minimum 0.075734 m separation from the
+mesh-derived world bounding box, versus 0.017628 m to the enclosing disk.
+The last pre-command guard pose is included in the braking record. The
+box is a diagnostic, not a changed pass criterion. None of the authored
+crate geometry entered the controller. These figures do not establish goal
+reachability after the guard or justify lowering the threshold.
+
+Exact source/point replay found the original crate property record on **38/95**
+live fields, zero source/point errors, last confirmed source 12.1. Whole-center
+diagnostic passed on 17 of those rows. The initial target's retained rough mass
+and shape cue stayed fixed; contact risk 0.17049–0.18120 and phi 0.62094–0.62681
+varied with live inputs. The separate refresh replay reproduced 155 field
+decisions, five geometric confirmations and one property commit (another ID);
+do not count that as continuous original-target evidence. The final stop was
+the independent geometry measurement, not an explicit missing-phi guard.
+
+For a follow-up retaining the original disk benchmark, test whether **sensor
+evidence alone** supports a conservative full horizontal extent for partly
+observed static objects, and validate its coverage on held-out views before
+using it in MPC. Changing to a shape-matched box guard instead would define
+a different evaluation; report it separately. No further wheel run, primary
+promotion, or change to the original demo is implied.
+
 ## Artifacts
 
 Compact evidence is in `outputs/crate-delay-robust-bypass/`: `geometry-audit.json`,
-`four-source-v1.json`, `all-receipts-v1.json`, and test logs. New native runs use
+`all-receipts-v10.json`, `summary-v3.json`, `native-v3-dual-geometry.json`,
+`native-v3-decisions.json`, `motion-v3-source-audit.json`, `motion-v3-refresh-audit.json`,
+`native-v3-clearance-and-route.png` and test logs. New native runs use
 `F:/CRA-experiments/crate-delay-robust-bypass-20261105/`. The separate recipe is
 `configs/restaurant_crate_delay_robust_bypass.json`; run through the unchanged
 `scripts/evaluation/run_restaurant_demo.py` launcher, case `crate-static`, with

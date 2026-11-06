@@ -1,5 +1,21 @@
 # CRA repository guidance
 
+- Static closer-crate d4a2185 motion-v3 is a finalized FAIL, not an interruption
+  or replacement restaurant demo. Both 60-source parked gates passed; passed old
+  stalls at x1.188/1.364, bent .166765m, then stopped before crate center at local
+  (1.543137,.147142). Reason clearance_guard, .019714m before/.017628m during
+  braking vs required >.02m; stop drift .005577m, positive CBF .070814, 0/1 goal.
+  Same padded robot vs mesh-derived box min .075734m is diagnostic only.
+  All65 completed plan receipts accepted, 95 live fields/93 translating; one
+  checked stopping-tail repair accepted. Original target retained 38/95 fields
+  with no source/point errors; separate 155-source refresh audit passed, one
+  property commit on another ID. Do not claim continuous crate CRA or arrival.
+  All3950 units/71focused/Ruff/diff and 37 archived receipt checks passed;
+  408 pre-existing archive files unchanged. Keep all three trials, existing
+  V3/demo, original disk gate, draft PR241 and main/primary holds. For a
+  conservative extent prior validate sensor-only coverage before wheels;
+  changing independent geometry would be a separate benchmark.
+
 - Static closer-crate ablation f4d7ce5: independent60/own60 passed; motion-v2
   passed the earlier stall, then stalled at local (1.364,.095). Interrupted,
   no final arrival/stopping acceptance. Source20.9 exactly reproduces a 30-step
