@@ -1,5 +1,19 @@
 # CRA repository guidance
 
+- For the isolated crate rerun, the user wants surrounding-obstacle information
+  from camera and LiDAR, with simulator geometry used for evaluation. Use
+  configs/restaurant_crate_sensor_navigation.json for the primary comparison.
+  The straight waypoint uses simulated chassis localization. During navigation
+  the primary unicycle MPC and analytical CBF use the sensor-derived field.
+  Score the original 2 cm disk/layout benchmark from recorded poses. Collect
+  robot/crate PhysX contact events passively and report missing coverage as
+  unknown. The earlier independent veto remains documented in the historical
+  trials below. Keep the separate guidance objective and 30-step arc search
+  labeled as controller variants. This task is scoped to the isolated crate.
+  The scene's static occupancy prior already keeps previously observed cells
+  by track ID, separately from the recent scan queue and mass/contact evidence.
+  See docs/crate_sensor_navigation.md for prerequisites and results.
+
 - Static closer-crate d4a2185 motion-v3 is a finalized FAIL, not an interruption
   or replacement restaurant demo. Both 60-source parked gates passed; passed old
   stalls at x1.188/1.364, bent .166765m, then stopped before crate center at local

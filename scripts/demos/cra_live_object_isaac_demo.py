@@ -315,6 +315,8 @@ parser.add_argument('--confirmed-prop-refresh', action='store_true',
                     help='crate-only experiment: reassess repeatedly verified better surface coverage; default OFF')
 parser.add_argument('--crate-route-probe', action='store_true',
                     help='separate closer-crate test: straight 4m nominal route with confirmed refresh and original own60/controller gates; default OFF')
+parser.add_argument('--observe-crate-clearance', action='store_true',
+                    help='score independent clearance after the isolated crate run; CRA + Safe-SAGE drives the encounter')
 parser.add_argument('--crate-delay-robust-bypass', action='store_true',
     help='Separate static crate controller: planning reserve and checked longer-horizon fallback')
 parser.add_argument('--crate-v3-controller', action='store_true',
@@ -417,6 +419,12 @@ if args.crate_route_probe and (not args.confirmed_prop_refresh
         or args.stationary_prop_world_pose != [15.65, 4.05, 0.]
         or args.restaurant_scene.name != 'restaurant_crate_route_probe.usda'):
     parser.error('crate route probe requires confirmed refresh and its separate fixed scene/start pose')
+if args.observe_crate_clearance and (
+    not args.crate_route_probe or args.experiment_baseline != 'continuous_cra_safe_sage'
+    or args.moving_actor or args.restaurant_human or args.restaurant_server
+    or args.progress_timeout_seconds or args.post_goal_observation_seconds
+):
+    parser.error('clearance observation requires the isolated continuous-CRA static crate route')
 if args.image_object_approach and (not args.image_object_property_persistence
     or not args.stationary_prop_camera or args.restaurant_view != "demo-container"
     or args.restaurant_route != "short" or args.restaurant_human or args.restaurant_server
@@ -931,6 +939,7 @@ from robot.evaluation.restaurant_service_validation import (
     authored_raster_clearance, load_authored_layout_monitor, restaurant_asset_checks, restaurant_plume_checks,
 )
 from robot.evaluation.simple_object_test import disk_footprint_clearance, sample_stopping_sweep
+from robot.evaluation.crate_clearance_observation import summarize_clearance_samples, world_pose_from_local
 from robot.navigation.waypoint_controller import (
     RobotPose2D,
     Waypoint,
@@ -1326,7 +1335,8 @@ def main():
                 "plume":False,"drop_m":None,"matching_scope":"independent planar match; full authored height is not observed geometry"})
         layout_monitor = load_authored_layout_monitor(args.restaurant_layout_survey, restaurant_props)
         save_json("restaurant-placement-monitor.json", {"props":restaurant_props,
-            "basis":"authored actual-mesh bounds for independent evaluation/abort only; no factor inputs",
+            "basis":("authored bounds for setup and post-navigation evaluation" if args.observe_crate_clearance
+                else "authored actual-mesh bounds for independent evaluation/abort only; no factor inputs"),
             "humans_added":int(has_server),"actor_motion_enabled":args.restaurant_human in {"crossing", "continuous-crossing", "parallel"},
             "payload_added":serving_payload["present"],"serving_payload":serving_payload,
             "human_carried_bowl_added":args.human_carry_bowl})
@@ -1347,6 +1357,11 @@ def main():
         dt=stationary.PHYSICS_DT, device=stationary.PHYSICS_DEVICE
     )
     timeline = omni.timeline.get_timeline_interface()
+    crate_contacts = None
+    if args.observe_crate_clearance:
+        from robot.evaluation.crate_contact_observer import install
+        crate_prim = next(item["prim_path"] for item in restaurant_props if item["name"] == "BrokenCrate")
+        crate_contacts = install(stage, stationary.ROBOT_PRIM_PATH, crate_prim)
     if args.human_carry_bowl:
         carb.settings.get_settings().set("/app/player/useFixedTimeStepping", True)
         timeline.set_play_every_frame(True)
@@ -2241,6 +2256,8 @@ def main():
             gate['image_object_memory_checks']['current_target_has_static_property_record'] = bool(
                 static_memory is not None and any(key in static_memory.records for key in target_keys))
         gate["passed"] = stationary_ready = bool(stationary_ready and all(gate["image_object_memory_checks"].values()))
+    if crate_contacts is not None:
+        save_json("parked-contact-observer.json", crate_contacts.report())
     save_json("stationary-gate.json", gate)
     print(json.dumps({key: value for key, value in gate.items() if key != "last_objects"}, default=json_default), flush=True)
     if not stationary_ready:
@@ -2391,6 +2408,8 @@ def main():
         return
     if not args.motion:
         controller.stop()
+        if crate_contacts is not None:
+            crate_contacts.close()
         timeline.stop()
         return
 
@@ -2541,6 +2560,8 @@ def main():
         maximum_result_age_seconds=args.planner_result_max_age,
     )
     start_sim = float(timeline.get_current_time())
+    if crate_contacts is not None:
+        crate_contacts.set_phase("navigation")
     previous_executed_command = np.zeros(2)
     navigation_active = True
     if human is not None:
@@ -2557,12 +2578,13 @@ def main():
     warm = None
     command = np.zeros(2)
     trajectory, commands, stops, live_fields, plan_events = [], [], [], [], []
+    recorded_crate_poses = []
     minimum_clearance = math.inf
     minimum_cbf_margin = math.inf
     arrived = False
     reason = "duration_limit"
     consecutive_failures = 0
-    def independent_clearance(current):
+    def independent_clearance(current, *, recorded_world_pose=None):
         clearances = []
         if human is not None:
             xy = human.position()[:2] - [anchor.x, anchor.y]
@@ -2587,9 +2609,11 @@ def main():
                 radius_m=fixture["monitor_radius_m"], footprint=footprint))
         clearance = min(clearances)
         if layout_monitor is not None:
-            pose = stationary.read_robot_pose(stage)
+            if recorded_world_pose is None:
+                pose = stationary.read_robot_pose(stage)
+                recorded_world_pose = (pose.x, pose.y, pose.yaw)
             clearance = min(clearance, authored_raster_clearance(
-                layout_monitor[0], (pose.x,pose.y,pose.yaw), footprint, layout_monitor[1]))
+                layout_monitor[0], recorded_world_pose, footprint, layout_monitor[1]))
         return clearance
 
     best_goal_distance = math.inf
@@ -2604,11 +2628,14 @@ def main():
             elif args.progress_timeout_seconds and now - last_goal_progress > args.progress_timeout_seconds:
                 reason = "progress_timeout"
                 break
-            clearance = independent_clearance(current)
-            minimum_clearance = min(minimum_clearance, clearance)
-            if clearance <= 0.02:
-                reason = "clearance_guard"
-                break
+            if args.observe_crate_clearance:
+                recorded_crate_poses.append((now - start_sim, current.tolist()))
+            else:
+                clearance = independent_clearance(current)
+                minimum_clearance = min(minimum_clearance, clearance)
+                if clearance <= 0.02:
+                    reason = "clearance_guard"
+                    break
             nominal = waypoint.compute_command(RobotPose2D(*current))
             if nominal.route_complete:
                 arrived, reason = True, "goal_reached"
@@ -2953,17 +2980,35 @@ def main():
             step(command, paced=True)
             previous_executed_command = command.copy()
     finally:
+        if crate_contacts is not None:
+            crate_contacts.set_phase("braking")
         controller.stop()
         if human is not None and not arrived:
             human.abort()
         inference.close()
         planner.close()
-    minimum_clearance_before_stop = minimum_clearance
+    braking_start = float(timeline.get_current_time()) - start_sim
     stopping_sweep = sample_stopping_sweep(state_reader=state, step=step,
         clearance_reader=independent_clearance, frame_count=60)
     save_json("stopping-sweep.json", stopping_sweep)
     final_state = np.array(stopping_sweep["final_state"])
     stop_drift = stopping_sweep["translation_drift_m"]
+    clearance_observation = None
+    if args.observe_crate_clearance:
+        # The last physics step can end at the time limit without another command tick.
+        if not recorded_crate_poses or recorded_crate_poses[-1][0] < braking_start:
+            recorded_crate_poses.append((braking_start, stopping_sweep['initial_state']))
+        anchor_xy_yaw = (anchor.x, anchor.y, anchor.yaw)
+        samples = [dict(phase='navigation', time_seconds=t, local_state=pose,
+            clearance_m=independent_clearance(pose, recorded_world_pose=world_pose_from_local(pose, anchor_xy_yaw)))
+            for t, pose in recorded_crate_poses]
+        minimum_clearance = min(row['clearance_m'] for row in samples)
+        # Braking frame zero is the navigation endpoint already included above.
+        samples.extend(dict(phase='braking', time_seconds=braking_start + row['frame'] * stationary.PHYSICS_DT,
+            local_state=row['state'], clearance_m=row['clearance_m']) for row in stopping_sweep['records'][1:])
+        clearance_observation = summarize_clearance_samples(samples)
+        save_json('independent-clearance-observation.json', dict(clearance_observation, records=samples))
+    minimum_clearance_before_stop = minimum_clearance
     minimum_clearance = min(minimum_clearance, stopping_sweep["minimum_clearance_m"])
     post_goal_observation = None
     if arrived and args.post_goal_observation_seconds:
@@ -2996,7 +3041,7 @@ def main():
     )
     completed = (
         arrived
-        and minimum_clearance > 0.02
+        and (args.observe_crate_clearance or minimum_clearance > 0.02)
         and stop_drift < 0.05
         and len(live_fields) >= 10
         and moving_field_count >= 10
@@ -3201,7 +3246,9 @@ def main():
     save_json("waypoint-events.json", waypoint_events)
     save_json("nearby-track-coverage-events.json", coverage_events)
     report = {
-        "acceptance_scope": "bounded_navigation_with_explicit_factor_and_property_priors; all-track numeric scores are separate from physical perception readiness"
+        "acceptance_scope": "sensor-controlled crate navigation, arrival, live fields and stopping; clearance scored separately"
+        if args.observe_crate_clearance
+        else "bounded_navigation_with_explicit_factor_and_property_priors; all-track numeric scores are separate from physical perception readiness"
         if args.persistent_object_risk_map
         else "bounded_conservative_navigation; four-factor availability reported separately",
         "passed": completed and scene_unchanged and root_unchanged_by_fixture,
@@ -3255,6 +3302,7 @@ def main():
         "fixture_root_layer_unchanged": root_unchanged_by_fixture,
         "completed": arrived,
         "reason": reason,
+        **({"independent_clearance_observation": clearance_observation} if args.observe_crate_clearance else {}),
         "minimum_clearance_m": minimum_clearance,
         "minimum_clearance_before_stop_m": minimum_clearance_before_stop,
         "minimum_clearance_during_stop_m": stopping_sweep["minimum_clearance_m"],
@@ -3499,6 +3547,11 @@ def main():
               "fixed lambda 1.25, unchanged nominal/exact MPC/DTCBF/analytical CBF; paced development, not real-time or causal CRA superiority")),
             "renderer transform-history warning remains unresolved; separate carried-bowl physical assessment, calibrated load and moving-view plume remain unvalidated",
         ]
+    if crate_contacts is not None:
+        contact_observation = crate_contacts.report()
+        crate_contacts.close()
+        report["crate_physx_contacts"] = contact_observation
+        save_json("crate-physx-contacts.json", contact_observation)
     save_json("report.json", report)
     print(
         json.dumps(
