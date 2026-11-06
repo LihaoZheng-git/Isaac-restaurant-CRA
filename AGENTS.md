@@ -1,5 +1,16 @@
 # CRA repository guidance
 
+- The isolated sensor-only obstacle-navigation runs are finalized. The legacy
+  2 cm authored-world guard only scores recorded poses in these two recipes.
+  N6 stalled before the crate. N12 passed the entire padded chassis beyond it
+  at 22.383 sim s, with 0.07105 m crate-box clearance and zero PhysX crate
+  contacts. N12 still FAILED the original 4 m waypoint, finishing 0.54018 m
+  away after 45 s. Three measured barstools constrained the clockwise return.
+  Stored original crate mass/contact evidence qualified on 233/401 fields.
+  Geometry persistence and property reuse are different claims. Do not count
+  this as full-route acceptance, continuous fresh CRA or a new V3 presentation.
+  Keep the previous demos and main/primary holds. See docs/crate_sensor_navigation.md.
+
 - For the isolated crate rerun, the user wants surrounding-obstacle information
   from camera and LiDAR, with simulator geometry used for evaluation. Use
   configs/restaurant_crate_sensor_navigation.json for the primary comparison.
