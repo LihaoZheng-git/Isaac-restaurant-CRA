@@ -37,7 +37,7 @@ avoids repeating expensive cold recovery while a checked moving plan exists;
 it does not impose a minimum speed or skip feasibility checks. The
 selection cost adds terminal goal-distance cost with the existing position
 weight to the common command objective. A finite symmetric online arc pool also
-proposes moving candidates. All proposals require the complete reserved dense
+proposes moving candidates. Arc proposals require the complete reserved dense
 geometry/DTCBF checks, receipt-pose probes, and an unchanged feasible immediate
 analytical command. Neither a moving-speed floor nor a precomputed route is
 imposed. The arc proposals are a separate geometric planning ablation, not a
@@ -114,6 +114,56 @@ checked-continuation rule addresses that separately. The full unit suite passed
 3946 tests in 337.05 s before this final continuation optimization; all 68
 focused controller/runtime/recorder/route tests then passed in 9.79 s, with
 repository Ruff and diff checks passing. These are not real-time guarantees.
+
+## Second native trial and checked stopping tails
+
+At `f4d7ce5`, the fresh independent 60-source stationary gate and the navigation
+run's own 60-source gate passed. `motion-v2` passed the earlier stall and turned,
+then stopped progressing near local (1.364, 0.095). Repeated live planner calls
+took 24–25 s wall. The run was deliberately interrupted and preserved, sources
+unchanged; no arrival/stopping/video acceptance. The exact source-20.9 checkpoint
+reproduces the selected 30-step plan: rotate for three intervals, then remain
+stationary. It has zero translation over the entire horizon. In the matched
+replay the short solve took 0.087 s, shifted long solve 1.727 s and cold recovery
+13.087 s (15.216 s total). The short plan actually moved first at 0.047248 m/s,
+passed every receipt probe and had 0.072576 m independent predicted clearance.
+
+All 75 continuously moving arc proposals failed dense geometry. Removing the
+temporal derivative for diagnosis did not change that count; it stays unchanged
+in runtime. Additional turn-return (288) and hold-return (450) geometry/CBF
+probes also produced no accepted candidates. Sampled cross sections include
+free poses; this is not evidence that the physical corridor is globally blocked.
+A separate short-plan-first frozen-field experiment repeatedly stopped at the
+same state and was preserved without claiming a fix.
+
+The revised finite search also tests each arc with a predicted stopping tail at
+6, 12, 18 or 24 intervals: taper the last two moving commands, then predict zero
+for the remaining intervals. **Check all 30 steps**, including the stopped
+portion, with the same original constraints and receipt probes. Never publish
+an unchecked prefix. Recompute online from the current field/pose/nominal;
+neither the oracle fixture nor the offline candidate sequence enters control.
+Keep a progressing continuation. Try the extra stopping tails when the shifted
+horizon makes no goal progress, or when both the previously issued and proposed
+forward speed are below 0.02 m/s despite forward demand above 0.05 m/s. They can
+also be tried when no long candidate advances. Prefer a checked moving repair;
+retain the checked moving short alternative when the long choices cannot advance.
+At source 20.9 the recorded-input replay now
+selects (0.099814 m/s, 0.2 rad/s) instead of (0, -0.8), in 3.520 s offline.
+This is evidence at the original failure, not a third native run or proof of
+arrival. The full-duration simulation still decides navigation acceptance.
+
+The unconditional search changed earlier good decisions and failed the original
+independent clearance replay (0.009695 m); it was not sent to wheels. The narrow
+repair preserves all 37 earlier command sequences. A separate frozen-field
+reproduction from the native stall advanced 0.174662 m over 12 ideal replans.
+The final 72-replan sequence from the older bottleneck passed the crate,
+advancing 1.804905 m in 10.8 modeled seconds; it did **not** reach the 4 m goal.
+Its actual ideal commands missed the original 0.02 m disk gate: minimum 0.017449 m,
+304/720 samples below threshold, with some unexecuted prediction tails as low
+as -0.013582 m. Against the crate's mesh-derived world bounding box, the **same**
+padded footprint gives 0.080439 m minimum. This explains a geometric discrepancy;
+the box is diagnostic only. Keep the independent disk guard in the fresh native
+test. Frozen fields, ideal integration, and simulated wheels are distinct results.
 
 ## Artifacts
 

@@ -1,5 +1,17 @@
 # CRA repository guidance
 
+- Static closer-crate ablation f4d7ce5: independent60/own60 passed; motion-v2
+  passed the earlier stall, then stalled at local (1.364,.095). Interrupted,
+  no final arrival/stopping acceptance. Source20.9 exactly reproduces a 30-step
+  rotation then hold (zero translation). Separate narrow repair checks complete
+  30-step tapered stopping tails on no progress or repeated issued/proposed low
+  speed; fresh short moving alternative remains subject to all receipt checks.
+  Never replay a path into runtime. All 37 earlier receipt replays pass. Frozen
+  72-replan sequence passed the crate but FAILED the existing .02m circular
+  guard (.017449m minimum); same padded robot vs mesh-derived box .080439m
+  is diagnostic ONLY. Keep the disk guard, original phi/nominal/CBF/checks,
+  V3 files and all main/primary holds. See docs/crate_delay_robust_bypass.md.
+
 - Delay-reserve runtime2f02bdf: independent60/own60 PASS, but motion-v1 stalled
   at source26/local(1.188004,.107948,.554653), explicitly interrupted; NO final
   arrival/stopping/video acceptance. Preserve native F:/CRA-experiments/

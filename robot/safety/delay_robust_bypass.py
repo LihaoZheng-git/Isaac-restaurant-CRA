@@ -171,7 +171,16 @@ class DelayRobustBypassMPC(LaplaceGuidanceTrackingMPC):
         return all(self.revalidate_commands(pose, commands, **field) for pose in poses)
 
     def _moving_candidates(
-        self, planner, initial, nominal, goal, field, template, *, delay_poses=None
+        self,
+        planner,
+        initial,
+        nominal,
+        goal,
+        field,
+        template,
+        *,
+        delay_poses=None,
+        stopping_tails=False,
     ):
         """Finite online arc proposals; safety checks, not a speed floor.
 
@@ -194,8 +203,11 @@ class DelayRobustBypassMPC(LaplaceGuidanceTrackingMPC):
         best = None
         seen = set()
         eligible = []
-        for fraction, omega, turning_steps in itertools.product(
-            (0.5, 0.75, 1.0), (-0.8, -0.4, -0.2, 0.0, 0.2, 0.4, 0.8), (1, 3, 5, 8)
+        for fraction, omega, turning_steps, cutoff in itertools.product(
+            (0.5, 0.75, 1.0),
+            (-0.8, -0.4, -0.2, 0.0, 0.2, 0.4, 0.8),
+            (1, 3, 5, 8),
+            (6, 12, 18, 24) if stopping_tails else (30,),
         ):
             if (
                 not self.config.minimum_angular_velocity
@@ -207,6 +219,12 @@ class DelayRobustBypassMPC(LaplaceGuidanceTrackingMPC):
                 (speed * fraction, 0.0), (planner.config.horizon_steps, 1)
             )
             commands[:turning_steps, 1] = omega
+            if cutoff < planner.config.horizon_steps:
+                # Taper the last two moving inputs and predict a stop for the
+                # entire remaining horizon. Never truncate the geometry/CBF test.
+                commands[cutoff - 2] *= 2.0 / 3.0
+                commands[cutoff - 1] *= 1.0 / 3.0
+                commands[cutoff:] = 0.0
             key = commands.tobytes()
             if key in seen:
                 continue
@@ -270,11 +288,12 @@ class DelayRobustBypassMPC(LaplaceGuidanceTrackingMPC):
                 break
         return best, dict(
             tested=len(seen),
+            stopping_tails=stopping_tails,
             reserved_geometry_and_cbf_passed=len(eligible),
             receipt_checked=receipt_checked,
             passed=int(best is not None),
             best_first_command=None if best is None else best[2].first_command,
-            basis="Symmetric finite online arc pool; complete reserved geometry/DTCBF plus original first-command CBF; no mandatory minimum speed",
+            basis="Symmetric continuous and tapered-to-stop arcs; complete 30-step reserved geometry/DTCBF and receipt probes plus original first-command CBF; no mandatory minimum speed",
         )
 
     def plan(
@@ -331,12 +350,6 @@ class DelayRobustBypassMPC(LaplaceGuidanceTrackingMPC):
             **common,
         )
         original_short_reason = result.guidance_tracking.reason
-        trigger = (
-            not result.success
-            or not result.guidance_tracking.active
-            or nominal[0, 0] > 0.05
-            and result.linear_velocity < 0.02
-        )
         continuing = warm is not None and len(warm) == self.nominal_horizon_steps
         long = self._planner(
             self.nominal_horizon_steps,
@@ -356,16 +369,37 @@ class DelayRobustBypassMPC(LaplaceGuidanceTrackingMPC):
         direct_safe = (
             long.revalidate_commands(initial, nominal, **field) if continuing else None
         )
-        use_long = trigger or continuing and not direct_safe
         delay_poses = self._delay_poses(initial, planning_applied_command)
+        short_progress = float(
+            np.linalg.norm(initial[:2] - goal)
+            - np.linalg.norm(result.predicted_chassis_states[-1, :2] - goal)
+        )
+        short_moves = (
+            result.success
+            and not result.fallback_active
+            and result.linear_velocity >= 0.02
+            and short_progress >= self.guidance_config.minimum_reference_progress_m
+            and self._delay_checked(delay_poses, result.command_sequence, field)
+        )
+        # An absent preferred reference triggers a longer search, but a checked
+        # moving short result remains available if the search can only stop.
+        trigger = (
+            not result.success
+            or not result.guidance_tracking.active
+            or nominal[0, 0] > 0.05
+            and result.linear_velocity < 0.02
+        )
+        use_long = trigger or continuing and not direct_safe
         attempts = []
         moving_search = None
         checked_continuation = False
+        short_progress_preferred = False
+        stopping_search = None
+        repaired_stall = False
+        stopping_search_reason = None
         if use_long:
-            starts = (
-                (("shifted", warm), ("cold", None)) if continuing else (("cold", None),)
-            )
-            for label, guess in starts:
+
+            def optimized(label, guess):
                 candidate = long.plan(
                     initial, nominal, initial_command_guess=guess, **common
                 )
@@ -376,47 +410,103 @@ class DelayRobustBypassMPC(LaplaceGuidanceTrackingMPC):
                         delay_poses, candidate.command_sequence, field
                     )
                 )
-                score = float("inf")
-                if valid:
-                    # Explicit goal-progress selection between complete checked
-                    # optimizer candidates, with the existing state-cost weight.
-                    score = self._selection_cost(
+                score = (
+                    self._selection_cost(
                         long,
                         candidate.command_sequence,
                         candidate.predicted_chassis_states,
                         nominal,
                         goal,
                     )
+                    if valid
+                    else float("inf")
+                )
                 attempts.append((score, label, candidate, valid))
-                progress = float(
+                return candidate, valid
+
+            def advances(candidate):
+                return (
                     np.linalg.norm(initial[:2] - goal)
                     - np.linalg.norm(candidate.predicted_chassis_states[-1, :2] - goal)
+                    >= self.guidance_config.minimum_reference_progress_m
                 )
-                if (
-                    label == "shifted"
-                    and valid
-                    and candidate.linear_velocity >= 0.05
-                    and progress >= self.guidance_config.minimum_reference_progress_m
-                ):
-                    # A fresh optimized, fully checked moving continuation does
-                    # not need another costly cold feasibility search. This is
-                    # a continuation preference, not a reduced safety check.
-                    checked_continuation = True
-                    break
-            if not checked_continuation:
+
+            if continuing:
+                candidate, valid = optimized("shifted", warm)
+                checked_continuation = bool(
+                    valid and candidate.linear_velocity >= 0.05 and advances(candidate)
+                )
+                repeated_low_progress = bool(
+                    planning_applied_command is not None
+                    and nominal[0, 0] > 0.05
+                    and abs(planning_applied_command[0]) < 0.02
+                    and candidate.linear_velocity < 0.02
+                )
+                if valid and (not advances(candidate) or repeated_low_progress):
+                    stopping_search_reason = (
+                        "no_horizon_goal_progress"
+                        if not advances(candidate)
+                        else "repeated_low_forward_speed"
+                    )
+                    moving, stopping_search = self._moving_candidates(
+                        long,
+                        initial,
+                        nominal,
+                        goal,
+                        field,
+                        result,
+                        delay_poses=delay_poses,
+                        stopping_tails=True,
+                    )
+                    if moving is not None and advances(moving[2]):
+                        attempts.append(moving)
+                        repaired_stall = True
+                    elif short_moves:
+                        short_progress_preferred = True
+            if not (checked_continuation or repaired_stall or short_progress_preferred):
+                optimized("cold", None)
                 moving, moving_search = self._moving_candidates(
-                    long,
-                    initial,
-                    nominal,
-                    goal,
-                    field,
-                    attempts[0][2],
-                    delay_poses=delay_poses,
+                    long, initial, nominal, goal, field, result, delay_poses=delay_poses
                 )
                 if moving is not None:
                     attempts.append(moving)
+                if stopping_search is None and not any(
+                    row[3] and advances(row[2]) for row in attempts
+                ):
+                    stopping_search_reason = "no_advancing_long_candidate"
+                    moving, stopping_search = self._moving_candidates(
+                        long,
+                        initial,
+                        nominal,
+                        goal,
+                        field,
+                        result,
+                        delay_poses=delay_poses,
+                        stopping_tails=True,
+                    )
+                    if moving is not None and advances(moving[2]):
+                        attempts.append(moving)
+                        repaired_stall = True
             passing = [row for row in attempts if row[3]]
-            if passing:
+            progressing = [
+                row
+                for row in passing
+                if np.linalg.norm(initial[:2] - goal)
+                - np.linalg.norm(row[2].predicted_chassis_states[-1, :2] - goal)
+                >= self.guidance_config.minimum_reference_progress_m
+            ]
+            if repaired_stall:
+                # The current and proposed commands were stalled, or the
+                # original horizon had no goal progress. Prefer the checked
+                # moving repair even if progress deferred to its tail would
+                # have a slightly lower nominal tracking cost.
+                result = moving[2]
+            elif short_moves and not progressing:
+                short_progress_preferred = True
+                use_long = False
+            elif passing:
+                if progressing:
+                    passing = progressing
                 result = min(passing, key=lambda row: row[0])[2]
             elif result.success and not result.fallback_active:
                 # Retain a checked short result; no invalid long trajectory gets
@@ -430,7 +520,12 @@ class DelayRobustBypassMPC(LaplaceGuidanceTrackingMPC):
             direct_long_nominal_safe=direct_safe,
             selected_steps=len(result.command_sequence),
             moving_search=moving_search,
+            stopping_tail_search=stopping_search,
+            stopping_tail_repaired_stall=repaired_stall,
+            stopping_tail_search_reason=stopping_search_reason,
             checked_moving_continuation=checked_continuation,
+            checked_short_progress=short_moves,
+            short_progress_preferred=short_progress_preferred,
             reserve_seconds=self.bypass_config.reserve_seconds,
             receipt_pose_probe_count=len(delay_poses),
             applied_command=None

@@ -153,7 +153,7 @@ def test_moving_pool_requires_full_geometry_and_unchanged_analytical_command(blo
     best, diagnostic = wrapper._moving_candidates(
         planner, initial, nominal, goal, field, saved["expected_result"]
     )
-    assert diagnostic["tested"] == 75
+    assert diagnostic["tested"] == 75 and not diagnostic["stopping_tails"]
     if blocked != "none":
         assert best is None and diagnostic["passed"] == 0
     else:
@@ -245,9 +245,9 @@ def test_checked_moving_continuation_avoids_redundant_cold_recovery(monkeypatch)
             (self.config.horizon_steps, kwargs.get("initial_command_guess") is not None)
         )
         result = original(self, *args, **kwargs)
-        # Exercise the long continuation branch even on this free-space field.
-        return replace(
-            result, guidance_tracking=replace(result.guidance_tracking, active=False)
+        # Exercise long continuation after an unusable short proposal.
+        return (
+            replace(result, success=False) if self.config.horizon_steps == 6 else result
         )
 
     monkeypatch.setattr(LaplaceGuidanceTrackingMPC, "plan", record)
@@ -262,3 +262,130 @@ def test_checked_moving_continuation_avoids_redundant_cold_recovery(monkeypatch)
     assert result.success and result.delay_robust_bypass["checked_moving_continuation"]
     assert calls == [(6, True), (30, True)]
     assert result.delay_robust_bypass["receipt_pose_probe_count"] == 6
+
+
+def test_missing_preferred_reference_does_not_discard_checked_short_progress(
+    monkeypatch,
+):
+    from robot.safety.laplace_guidance_tracking_mpc import LaplaceGuidanceTrackingMPC
+
+    saved = repaired()
+    c = saved["control"]
+    state, _, field, _, _ = saved["request"]
+    nominal, goal = nominal_for(state, 30, 0.2)
+    original = LaplaceGuidanceTrackingMPC.plan
+    calls = []
+
+    def no_reference(self, *args, **kwargs):
+        calls.append(self.config.horizon_steps)
+        r = original(self, *args, **kwargs)
+        if self.config.horizon_steps == 30:
+            return replace(r, success=False)
+        return replace(r, guidance_tracking=replace(r.guidance_tracking, active=False))
+
+    monkeypatch.setattr(LaplaceGuidanceTrackingMPC, "plan", no_reference)
+    monkeypatch.setattr(
+        c.mpc, "_moving_candidates", lambda *args, **kwargs: (None, {"passed": 0})
+    )
+    r = c.plan(
+        state,
+        nominal,
+        field,
+        nominal_goal_grid_xy=goal,
+        planning_applied_command=(0.1, 0.0),
+    )
+    assert (
+        r.success
+        and r.linear_velocity > 0.02
+        and r.delay_robust_bypass["checked_short_progress"]
+    )
+    assert calls == [6, 30] and r.delay_robust_bypass["short_progress_preferred"]
+
+
+def test_checked_stopping_tail_can_progress_where_continuous_arcs_cannot():
+    saved = repaired()
+    wrapper = saved["control"].mpc
+    wrapper.config = replace(
+        wrapper.config, minimum_angular_velocity=-0.01, maximum_angular_velocity=0.01
+    )
+    planner = wrapper._planner(30, reserve=True, applied_command=(0.0, 0.0))
+    cs, h, g = make_fields(unsafe_yaw_indices=(2,), guidance=(1.0, 0.0))
+    field = dict(
+        configuration_space=cs,
+        h_full=h,
+        guidance_fields=g,
+        temporal_safety_derivative=0.0,
+    )
+    initial = np.array([-1.0, 0.0, 0.0])
+    nominal = np.tile((0.2, 0.0), (30, 1))
+    assert not any(
+        wrapper.revalidate_commands(initial, nominal * f, **field)
+        for f in (0.5, 0.75, 1.0)
+    )
+    best, _ = wrapper._moving_candidates(
+        planner,
+        initial,
+        nominal,
+        np.array([1.0, 0.0]),
+        field,
+        saved["expected_result"],
+        delay_poses=wrapper._delay_poses(initial, (0.0, 0.0)),
+        stopping_tails=True,
+    )
+    assert best is not None
+    r = best[2]
+    assert len(r.command_sequence) == 30 and r.linear_velocity > 0.0
+    np.testing.assert_array_equal(r.command_sequence[-1], (0.0, 0.0))
+    assert wrapper.revalidate_commands(initial, r.command_sequence, **field)
+
+
+def test_stalled_issued_and_shifted_commands_can_select_checked_moving_repair(
+    monkeypatch,
+):
+    from robot.safety.laplace_guidance_tracking_mpc import LaplaceGuidanceTrackingMPC
+
+    saved = repaired()
+    c = saved["control"]
+    state, _, field, _, _ = saved["request"]
+    nominal, goal = nominal_for(state, 30, 0.2)
+    original = LaplaceGuidanceTrackingMPC.plan
+
+    def stalled(self, initial, commands, **kw):
+        r = original(self, initial, commands, **kw)
+        if self.config.horizon_steps == 6:
+            return replace(r, success=False)
+        slow = np.tile((0.00625, 0.0), (30, 1))
+        keys = (
+            "configuration_space",
+            "h_full",
+            "guidance_fields",
+            "temporal_safety_derivative",
+        )
+        t = self._evaluate_trajectory(
+            initial, slow, **{k: kw[k] for k in keys}, require_feasible=True
+        )
+        assert t is not None and self._trajectory_is_safe(t)
+        return replace(
+            r,
+            command_sequence=slow,
+            predicted_chassis_states=t.chassis_states,
+            predicted_safety_states=t.safety_states,
+            predicted_safety_values=t.safety_values,
+            dtcbf_margins=t.margins,
+        )
+
+    monkeypatch.setattr(LaplaceGuidanceTrackingMPC, "plan", stalled)
+    r = c.plan(
+        state,
+        nominal,
+        field,
+        nominal_goal_grid_xy=goal,
+        initial_command_guess=nominal.copy(),
+        planning_applied_command=(0.00625, 0.0),
+    )
+    assert r.delay_robust_bypass["stopping_tail_repaired_stall"]
+    assert (
+        r.delay_robust_bypass["stopping_tail_search_reason"]
+        == "repeated_low_forward_speed"
+    )
+    assert r.linear_velocity > 0.02 and len(r.command_sequence) == 30
