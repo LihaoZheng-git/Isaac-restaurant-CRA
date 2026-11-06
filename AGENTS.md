@@ -1,5 +1,16 @@
 # CRA repository guidance
 
+- The separate 15 cm crate setback (world y 3.45 to 3.30) passed its two
+  parked checks and native motion at 7b4d07e. Keep the N12 sensor controller,
+  padded rear-footprint check and obstacle-unaware waypoint. Carter reached
+  the goal in 26.65 sim s, 9.69 cm final error/10 cm tolerance, 3.22 cm peak
+  lateral offset, 2.74 mm braking drift. PhysX recorded zero crate contacts;
+  padded-box clearance 8.99 cm, original benchmark-circle clearance 1.04 cm
+  (legacy 2 cm metric failed). Retained crate mass/contact qualified 82/256
+  live fields. One isolated run; preserve the previous closer-case failure
+  and saved V3 demo. See docs/crate_sensor_navigation.md and
+  configs/restaurant_crate_setback15.json.
+
 - The isolated sensor-only obstacle-navigation runs are finalized. The legacy
   2 cm authored-world guard only scores recorded poses in these two recipes.
   N6 stalled before the crate. N12 passed the entire padded chassis beyond it

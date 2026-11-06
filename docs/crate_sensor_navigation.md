@@ -153,3 +153,49 @@ Validation on the final code revision ran all 3,966 unit tests and the
 repository Ruff checks. SHA-256 verification matched all 408 files in the
 previous demo and experiment preservation manifest. These checks are
 independent of the two native waypoint failures.
+
+## Moving the crate 15 cm farther from the waypoint line
+
+In a separate native trial, the crate center moved from world (17.50, 3.45)
+to (17.50, 3.30). The aisle, stools, crate mesh, pose of the freely moving
+robot, waypoint and arrival tolerance match the original twelve-step case.
+The new USD layer overrides only the crate translation. The two native
+motion invocations differ only in scene path before the output argument.
+The online controller retains its forward-only MPC, padded rear-footprint
+check, analytical CBF, original speed limits and factor priors. Authored
+geometry and contacts provide independent scoring after navigation.
+
+To reproduce the placement, run
+`scripts/scene_creation/build_crate_route_probe.py --setback-cm 15` on a
+checkout with the original local scene and licensed assets. Run the
+stationary and then motion stages of `scripts/evaluation/run_restaurant_demo.py`
+with `--case crate-static --config configs/restaurant_crate_setback15.json`
+and a fresh directory for each stage.
+
+Native revision `7b4d07e` passed both 60-source parked checks. The
+independent parked check produced 58 accepted visual assessments. The full
+padded chassis cleared the crate at 20.617 s. Carter reached its original
+goal in 26.650 simulated seconds, stopping 0.09693 m from the waypoint
+(tolerance 0.10 m). Braking drift was 0.00274 m. It deviated at most
+0.03223 m beside the crate versus 0.31716 m at the earlier placement.
+Between 2.1 m and 2.5 m along the route its measured average forward
+progress was 0.0605 m/s versus a median nominal command of 0.1999 m/s.
+It resumed about 0.20 m/s over the 2.8–3.5 m segment.
+
+The minimum sampled padded-chassis clearance to the crate's bounding box
+was 0.08990 m. The larger benchmark circle had 0.01037 m minimum clearance,
+below the historical 0.02 m target on 227 of 1,660 recorded poses. PhysX
+reported only floor contacts on the robot in driving and braking. Of 256
+live fields, 253 were committed during translation. Minimum recorded
+analytical CBF margin was +0.04056. Two sensor synchronization attempts
+were rejected. The audit of retained crate mass/contact evidence qualified
+82/256 fields, with zero source or point errors on reuse; all-field
+retention failed. Associated CRA scores ranged from 0.628 to 0.916.
+
+This establishes goal arrival for one paced simulation with the new placement.
+The closer crate remains a separate stress case. The effect of variable CRA
+relative to fixed risk would require a matched baseline. Native reports and
+videos are in `F:/CRA-experiments/crate-aisle-placement/setback15-motion`;
+the comparison map and post-run audits are in `outputs/crate-aisle-placement/`.
+The final placement code passed 3,968 unit tests and Ruff. The previous 408
+archive hashes matched.
