@@ -20,7 +20,7 @@ from robot.scene.restaurant_demo_build import DEMO_ROOT, demo_prop_records
 def build(*, setback_cm=0):
     base = ROOT / 'scenes/generated/restaurant_service_demo_v3_open_aisle_bench.usda'
     output = base.with_name('restaurant_crate_route_probe.usda')
-    if setback_cm in (10, 15):
+    if setback_cm in (5, 10, 15):
         base = output
         output = base.with_name(f'restaurant_crate_route_setback{setback_cm}.usda')
     elif setback_cm != 0:
@@ -70,6 +70,6 @@ def build(*, setback_cm=0):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--setback-cm', type=int, choices=(0, 10, 15), default=0,
+    parser.add_argument('--setback-cm', type=int, choices=(0, 5, 10, 15), default=0,
                         help='Distance away from the route, measured from the original closer-crate fixture.')
     build(setback_cm=parser.parse_args().setback_cm)

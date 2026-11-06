@@ -34,7 +34,7 @@ def test_longer_primary_prediction_changes_only_horizon(monkeypatch):
 
 
 @pytest.mark.parametrize("motion", [False, True])
-@pytest.mark.parametrize("setback_cm", [10, 15])
+@pytest.mark.parametrize("setback_cm", [5, 10, 15])
 def test_crate_setback_changes_only_scene_and_requires_passive_scoring(monkeypatch, motion, setback_cm):
     extra = ["--motion"] if motion else []
     original = vars(parse(monkeypatch, command("restaurant_crate_sensor_navigation_horizon12") + extra)["args"])
