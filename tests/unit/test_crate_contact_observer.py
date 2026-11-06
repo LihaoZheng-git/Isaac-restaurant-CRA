@@ -78,3 +78,19 @@ def test_callback_fault_marks_outcome_unmeasured_without_interrupting(observer):
     result = observer.report()
     assert "invalid PhysX contact point span" in result["error"]
     assert result["phases"]["parked"]["crate_contact_reported"] is None
+
+
+def test_bin_and_crate_subscriptions_score_their_own_subtrees(observer):
+    bin_obs = CrateContactObserver("/World/Carter", "/World/Props/Bin", target_label="bin")
+    bin_obs._stage_id = observer._stage_id
+    bin_obs._path = str
+    bin_obs._metres_per_unit = observer._metres_per_unit
+    assert bin_obs.report()["phases"]["parked"]["bin_contact_reported"] is None
+    bin_obs.installed = True
+    headers = [header("/World/Carter/wheel", "/World/Props/Bin/Mesh")]
+    for channel in (observer, bin_obs):
+        channel._on_contacts(headers, [])
+    assert observer.report()["phases"]["parked"]["crate_contact_reported"] is False
+    assert bin_obs.report()["phases"]["parked"]["bin_contact_reported"] is True
+    assert "crate_headers" not in bin_obs.report()["phases"]["parked"]
+    assert bin_obs.report()["target_prim_path"] == "/World/Props/Bin"

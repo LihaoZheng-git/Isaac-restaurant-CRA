@@ -47,3 +47,20 @@ def test_crate_setback_changes_only_scene_and_requires_passive_scoring(monkeypat
     argv.remove("--observe-crate-clearance")
     with pytest.raises(SystemExit):
         parse(monkeypatch, argv)
+
+
+@pytest.mark.parametrize("motion", [False, True])
+def test_matched_bin_changes_only_fixture_and_evaluation_target(monkeypatch, motion):
+    extra = ["--motion"] if motion else []
+    original = vars(parse(monkeypatch, command("restaurant_crate_setback5") + extra)["args"])
+    argv = command("restaurant_bin_matched_pass", "bin-static") + extra
+    actual = vars(parse(monkeypatch, argv)["args"])
+    assert actual == {
+        **original,
+        "restaurant_scene": original["restaurant_scene"].with_name("restaurant_bin_matched_pass.usda"),
+        "stationary_prop_target": "ServiceContainer",
+    }
+    assert actual["confirmed_prop_refresh"] and actual["observe_crate_clearance"]
+    argv[argv.index("ServiceContainer")] = "BrokenCrate"
+    with pytest.raises(SystemExit):
+        parse(monkeypatch, argv)

@@ -6,13 +6,14 @@ import pytest
 from scripts.evaluation.audit_crate_clearance import audit
 
 
-def test_turn_and_braking_are_included_in_whole_chassis_passage(tmp_path):
+@pytest.mark.parametrize(("label", "name"), [("crate", "BrokenCrate"), ("bin", "ServiceContainer")])
+def test_turn_and_braking_are_included_in_whole_chassis_passage(tmp_path, label, name):
     # A northbound world route and a crate along its right. At local x=2.6 the
     # center has passed the far edge; the rear of the padded chassis still overlaps
     # its longitudinal range. The entire body clears it during the braking sample.
     files = {
         "invocation.json": {
-            "case": "crate-static",
+            "case": f"{label}-static",
             "stage": "motion",
             "source_revision": "test",
         },
@@ -20,7 +21,7 @@ def test_turn_and_braking_are_included_in_whole_chassis_passage(tmp_path):
             "anchor_world_xy_yaw": [10, 4, pi / 2],
             "fixtures": [
                 {
-                    "name": "BrokenCrate",
+                    "name": name,
                     "center_world_xy": [10.6, 6],
                     "monitor_radius_m": 0.5,
                 }
@@ -29,7 +30,7 @@ def test_turn_and_braking_are_included_in_whole_chassis_passage(tmp_path):
         "restaurant-placement-monitor.json": {
             "props": [
                 {
-                    "name": "BrokenCrate",
+                    "name": name,
                     "bounds_minimum": [10.3, 5.6, 0],
                     "bounds_maximum": [10.9, 6.4, 0.22],
                 }
@@ -56,7 +57,11 @@ def test_turn_and_braking_are_included_in_whole_chassis_passage(tmp_path):
         (tmp_path / name).write_text(json.dumps(value))
     result = audit(tmp_path)
     assert result["all_recorded"]["poses"] == 4
-    assert result["first_entire_robot_past_crate"]["phase"] == "braking"
-    assert result["reached_goal_with_entire_robot_past_crate"]
-    assert result["max_abs_lateral_beside_crate_m"] == pytest.approx(0.12)
+    assert result[f"first_entire_robot_past_{label}"]["phase"] == "braking"
+    assert result[f"reached_goal_with_entire_robot_past_{label}"]
+    assert result[f"max_abs_lateral_beside_{label}_m"] == pytest.approx(0.12)
     assert result["last_issued"]["v"] == 0.2
+    files["fixture-monitor.json"]["fixtures"][0]["name"] = "AnotherProp"
+    (tmp_path / "fixture-monitor.json").write_text(json.dumps(files["fixture-monitor.json"]))
+    with pytest.raises(ValueError, match="fixture monitor"):
+        audit(tmp_path)

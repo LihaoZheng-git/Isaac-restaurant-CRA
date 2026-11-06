@@ -15,6 +15,7 @@ from robot.scene.restaurant_demo_build import DEMO_ROOT, demo_prop_records
 SEPARATED_CONTACT_CENTERS = ((22.0, 4.65), (25.7, 4.9))
 STRAIGHT_CONTACT_CENTERS = ((20.3, 4.85), (24.0, 5.1))
 OPEN_AISLE_CONTACT_CENTERS = ((21.2, 3.2), (17.5, 3.0))
+BALANCED_CONTACT_CENTERS = ((21.2, 3.4), (17.5, 3.4))
 REMOVED_CONTACT_DEMO_PATHS = (
     DEMO_ROOT+'/ClearingStation', DEMO_ROOT+'/ClosedCaddy',
     DEMO_ROOT+'/UtensilCaddy', '/World/CRAServiceDressing/SecondPot',
@@ -23,9 +24,10 @@ REMOVED_CONTACT_DEMO_PATHS = (
 
 
 def build_service_v3(output, base_scene, bin_scene, crate_scene, *, separated_contact=False,
-                     props_only=False, straight_contact=False, open_aisle_contact=False):
-    if ((straight_contact or open_aisle_contact) and not separated_contact
-            or straight_contact and open_aisle_contact):
+                     props_only=False, straight_contact=False, open_aisle_contact=False,
+                     balanced_contact=False):
+    placement_variants = sum((straight_contact, open_aisle_contact, balanced_contact))
+    if placement_variants > 1 or (placement_variants and not separated_contact):
         raise ValueError('choose one separated contact placement variant')
     output = Path(output).resolve()
     additions = output.with_name(output.stem + '_props.usda')
@@ -57,6 +59,8 @@ def build_service_v3(output, base_scene, bin_scene, crate_scene, *, separated_co
             centers = STRAIGHT_CONTACT_CENTERS
         if open_aisle_contact:
             centers = OPEN_AISLE_CONTACT_CENTERS
+        if balanced_contact:
+            centers = BALANCED_CONTACT_CENTERS
         if separated_contact:
             for path in REMOVED_CONTACT_DEMO_PATHS:
                 prim = stage.GetPrimAtPath(path)
@@ -89,6 +93,7 @@ def build_service_v3(output, base_scene, bin_scene, crate_scene, *, separated_co
         separated_contact_layout=separated_contact,
         straight_contact_layout=straight_contact,
         open_aisle_contact_layout=open_aisle_contact,
+        balanced_contact_layout=balanced_contact,
         stationary_props_only=props_only,
         removed_paths=list(REMOVED_CONTACT_DEMO_PATHS) if separated_contact else [],
         contact_prop_centers_world_xy=centers,

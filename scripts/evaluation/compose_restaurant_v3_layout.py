@@ -64,19 +64,48 @@ def dashed(draw, points, fill, width=2):
             draw.line([tuple(a), tuple(b)], fill=fill, width=width)
 
 
-def main(source, archive, output, map_folder, preview_only):
+def contact_mission_layout(source, epochs):
+    report = read(source/'report.json')
+    execution = read(source/'execution.json')
+    if not (report.get('passed') and execution.get('passed') and execution.get('source_unchanged')):
+        raise ValueError('passing, source-frozen native mission required')
+    if not report.get('service_static_props'):
+        raise ValueError('expected a recorded mixed static-prop service mission')
+    for name in ('static-prop-audit', 'contact-coverage', 'camera-presentation-audit'):
+        if not read(source/f'{name}.json').get('passed'):
+            raise ValueError(f'passing recorded audit required: {name}')
+    start = read(source/'stationary-fields.json')[-1]['commit_simulation_time']
+    first_navigation = next((i for i, row in enumerate(epochs) if row['time'] >= start), None)
+    if first_navigation is None:
+        raise ValueError('missing recorded navigation epochs')
+    first = max(0, first_navigation - 1)
+    layout = dict(removed_navigation_frames=0, first_source_frame=first,
+                  last_source_frame=len(epochs)-1, native_navigation_frames=len(epochs)-first,
+                  navigation_start_simulation_time=start)
+    coverage = read(source/'contact-coverage.json')['summary']
+    counts = [f"{label} {coverage[key]['fresh_visual_rows']} visual / {coverage[key]['retained_rows']} retained"
+              for key, label in (('ServiceContainer', 'Bin'), ('BrokenCrate', 'Crate'))]
+    return layout, report, 'Mission totals  |  ' + '  |  '.join(counts)
+
+
+def main(source, archive, output, map_folder, preview_only, contact_mission=False):
     if output.exists():
         raise ValueError('use a fresh presentation output; preserve existing videos')
     protected = verify_archive(archive)
     protected_v1 = verify_archive(ROOT/'outputs/final demo/v1')
-    old_layout = read(archive/'restaurant-service-v3.json')
+    credits_layout = read(archive/'restaurant-service-v3.json')
+    epochs = read(source/'service-video-epochs.json')['frames']
+    if contact_mission:
+        old_layout, report, status = contact_mission_layout(source, epochs)
+    else:
+        old_layout = credits_layout
+        report = read(archive/'validation/evaluation-correction/report.json')
+        correction = read(archive/'validation/evaluation-correction/correction.json')
+        if not report['passed'] or not correction['passed']:
+            raise ValueError('documented v3 post-run evaluation required')
+        status = 'Bin: retained CRA evidence  |  Crate: ordinary obstacle prior in this mission'
     if old_layout['removed_navigation_frames'] != 0:
         raise ValueError('untrimmed navigation source required')
-    report = read(archive/'validation/evaluation-correction/report.json')
-    correction = read(archive/'validation/evaluation-correction/correction.json')
-    if not report['passed'] or not correction['passed']:
-        raise ValueError('documented v3 post-run evaluation required')
-    epochs = read(source/'service-video-epochs.json')['frames']
     risk_epochs = read(source/'risk-camera-epochs.json')['frames']
     if [r['time'] for r in epochs] != [r['time'] for r in risk_epochs]:
         raise ValueError('camera source epochs differ')
@@ -99,6 +128,10 @@ def main(source, archive, output, map_folder, preview_only):
         source/'fixture-monitor.json', archive/'restaurant-service-v3.mp4',
         archive/'restaurant-service-v3.json', archive/'manifest.json', mask_path,
         map_folder/'geometry-survey.json']
+    if contact_mission:
+        sources.extend(source/f'{name}.json' for name in (
+            'stationary-fields', 'report', 'execution', 'static-prop-audit', 'contact-coverage',
+            'camera-presentation-audit', 'restaurant-placement-monitor'))
     hashes = {str(p.resolve()): digest(p) for p in sources}
     # The same authored raster as v1, expanded north to include the one-way start.
     bounds = (5., 34.5, 2., 25.)
@@ -124,6 +157,14 @@ def main(source, archive, output, map_folder, preview_only):
     start = pixel(route[0])
     map_draw.ellipse((start[0]-4, start[1]-4, start[0]+4, start[1]+4), outline='#146b45', width=2)
     star(map_draw, pixel(route[-1]), 7, '#168259')
+    if contact_mission:
+        for prop in read(source/'restaurant-placement-monitor.json')['props']:
+            label = {'ServiceContainer': 'Bin', 'BrokenCrate': 'Crate'}.get(prop['name'])
+            if label:
+                center = (np.array(prop['bounds_minimum']) + np.array(prop['bounds_maximum'])) / 2
+                x, y = pixel(center)
+                map_draw.rectangle((x-3, y-3, x+3, y+3), fill='#8b6878')
+                map_draw.text((x-8, y+4), label, fill='#58424c')
     fonts = {size: ImageFont.truetype('C:/Windows/Fonts/segoeui.ttf', size) for size in (18, 20, 22, 30)}
     cap = cv2.VideoCapture(str(source/'service-risk-camera.mp4'))
     if (int(cap.get(cv2.CAP_PROP_FRAME_COUNT)) != len(epochs)
@@ -171,11 +212,20 @@ def main(source, archive, output, map_folder, preview_only):
             draw.text((legend_x, 295+j*26), label, font=fonts[18], fill='#aebfce')
         draw.text((1040, 412), 'FOLLOW CAMERA | presentation view', font=fonts[20], fill='#cbd9e3')
         canvas.paste(Image.fromarray(rgb[:, :800]).resize((832, 624), Image.Resampling.LANCZOS), (1040, 440))
-        draw.text((24, 1004), 'Bin: retained CRA evidence  |  Crate: ordinary obstacle prior in this mission', font=fonts[20], fill='#e5c697')
+        draw.text((24, 1004), status, font=fonts[20], fill='#e5c697')
         draw.text((24, 1038), 'Thermal response unvalidated. Paced simulation; original recording and scores retained.', font=fonts[18], fill='#aebfce')
         return cv2.cvtColor(np.asarray(canvas), cv2.COLOR_RGB2BGR)
 
     previews = {first, 1030, 1270, last}
+    if contact_mission:
+        cover = read(source/'contact-coverage.json')['summary']
+        for item in cover.values():
+            ids = set(item['fresh_ids'] + item['retained_ids'])
+            seen = [(sum(mask['pixels'] for mask in risk_epochs[i]['masks'] if mask['track_id'] in ids), i)
+                    for i in range(first, last+1)]
+            pixels, i = max(seen)
+            if pixels:
+                previews.add(i)
     writer = None if preview_only else cv2.VideoWriter(str(output/'restaurant-service-v3-map.mp4'),
         cv2.VideoWriter_fourcc(*'mp4v'), 10, (1920, 1080))
     if writer is not None and not writer.isOpened():
@@ -207,8 +257,8 @@ def main(source, archive, output, map_folder, preview_only):
     if writer is not None:
         # Preserve the original six-second attribution card in the new layout.
         credits = cv2.VideoCapture(str(archive/'restaurant-service-v3.mp4'))
-        credits.set(cv2.CAP_PROP_POS_FRAMES, old_layout['native_navigation_frames'])
-        for _ in range(old_layout['credit_frames']):
+        credits.set(cv2.CAP_PROP_POS_FRAMES, credits_layout['native_navigation_frames'])
+        for _ in range(credits_layout['credit_frames']):
             ok, frame = credits.read()
             if not ok:
                 raise RuntimeError('original credit card missing')
@@ -242,16 +292,26 @@ def main(source, archive, output, map_folder, preview_only):
         layout='left: original annotated perception panel; upper right: authored map with actual recorded paths; lower right: native follow camera',
         map_world_bounds_xmin_xmax_ymin_ymax=bounds,
         scope='Same v3 source recording, scores, held-frame ages and pauses. Authored map and interpolated human root are presentation only, never CRA/control input. Original native FAIL and separate corrected post-run audit remain unchanged.')
+    if contact_mission:
+        summary['scope'] = ('New native bin/crate service mission. The map uses recorded robot and human poses '
+                            'for presentation. Contact counts report accepted visual or retained updates.')
+        summary['mission_source'] = str(source.resolve())
     (output/'presentation.json').write_text(json.dumps(summary, indent=2)+'\n')
     (output/'frame-mapping.json').write_text(json.dumps(ledger, indent=2)+'\n')
     shutil.copy2(archive/'ASSET_CREDITS.txt', output/'ASSET_CREDITS.txt')
-    (output/'README.txt').write_text('V3 presentation with route map\n\nOpen restaurant-service-v3-map.mp4.\n'
+    if contact_mission:
+        readme = ('Restaurant service with a broken crate and rounded bin. Open restaurant-service-v3-map.mp4.\n'
+                  'Left panel shows the recorded perception masks. The right panels show the recorded route and follow camera.\n'
+                  + status + '\nSource and frame hashes are in presentation.json and manifest.json.\n')
+    else:
+        readme = ('V3 presentation with route map\n\nOpen restaurant-service-v3-map.mp4.\n'
         'Left: perception camera with original CRA overlays. Right top: route map; right bottom: follow camera.\n'
         'Same original navigation/stopping frames at 1x simulation playback, with original asset credits.\n'
         'This is a presentation-only re-layout. The original v3 archive and all validation limitations remain unchanged.\n'
         'Bin evidence is retained; crate uses ordinary obstacle policy in the full mission. Thermal response remains unvalidated.\n'
         'Original native report failed a legacy actor-region check; separate exact-data post-run correction passed.\n'
-        'Original archive: '+str(archive.resolve())+'\n', encoding='utf-8')
+        'Original archive: '+str(archive.resolve())+'\n')
+    (output/'README.txt').write_text(readme, encoding='utf-8')
     (output/'manifest.json').write_text(json.dumps(dict(files={str(p.relative_to(output)):
         dict(bytes=p.stat().st_size, sha256=digest(p)) for p in sorted(output.rglob('*')) if p.is_file()}), indent=2)+'\n')
     print(json.dumps({k: v for k, v in summary.items() if k != 'input_sha256'}, indent=2))
@@ -264,5 +324,7 @@ if __name__ == '__main__':
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--map-folder', type=Path, default=ROOT/'outputs/restaurant_service/layout-monitor-v1')
     parser.add_argument('--preview-only', action='store_true')
+    parser.add_argument('--contact-mission', action='store_true',
+                        help='use passing native mission, current evidence audits and source-specific frame range')
     args = parser.parse_args()
-    main(args.source, args.archive, args.output, args.map_folder, args.preview_only)
+    main(args.source, args.archive, args.output, args.map_folder, args.preview_only, args.contact_mission)

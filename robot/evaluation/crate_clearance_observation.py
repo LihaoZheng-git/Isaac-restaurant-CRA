@@ -1,6 +1,21 @@
-"""Measure the static crate benchmark after navigation from recorded robot poses."""
+"""Measure prop and service benchmarks after navigation from recorded poses."""
 
 import math
+from bisect import bisect_left
+
+
+def recorded_actor_centers(records, times):
+    """Join independent actor truth only to the same physics tick after navigation."""
+    stamps = [row['time'] for row in records]
+    if not stamps or any(a > b for a, b in zip(stamps, stamps[1:])):
+        raise ValueError('expected time-ordered actor observations')
+    result = {}
+    for t in times:
+        i = bisect_left(stamps, t - 1e-7)
+        if i == len(stamps) or abs(stamps[i] - t) > 1e-7:
+            raise ValueError(f'no synchronous actor observation at {t}')
+        result[t] = records[i]['actor_xyz'][:2]
+    return result
 
 
 def world_pose_from_local(pose, anchor):

@@ -88,7 +88,8 @@ def audit(folder):
                 target_ids.add(obj['track_id'])
         if not frozen:
             continue
-        row = dict(source=record['sensor_timestamp'], camera_timestamp=timestamp, targets=[])
+        row = dict(source=record['sensor_timestamp'], camera_timestamp=timestamp,
+                   state_at_commit=record.get('state_at_commit'), targets=[])
         for obj in record['objects']:
             d, key = obj['diagnostics'], obj['track_id']
             if not d.get('static_prop_policy'):

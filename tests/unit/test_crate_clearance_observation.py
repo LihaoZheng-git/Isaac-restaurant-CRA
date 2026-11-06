@@ -10,6 +10,7 @@ import numpy as np
 import pytest
 
 from robot.evaluation.crate_clearance_observation import (
+    recorded_actor_centers,
     summarize_clearance_samples,
     world_pose_from_local,
 )
@@ -42,8 +43,10 @@ def test_passive_measurement_rejects_other_experiments(monkeypatch, addition):
         parse_recipe(monkeypatch, 'restaurant_crate_route_probe', ['--observe-crate-clearance', *addition])
 
 
-@pytest.mark.parametrize(('observed', 'expected'), [(False, 'clearance_guard'), (True, 'goal_reached')])
-def test_actual_navigation_tick_only_legacy_guard_can_preempt_waypoint(observed, expected):
+@pytest.mark.parametrize(('crate', 'service', 'expected'), [
+    (False, False, 'clearance_guard'), (True, False, 'goal_reached'), (False, True, 'goal_reached')])
+def test_actual_navigation_tick_only_legacy_guard_can_preempt_waypoint(crate, service, expected):
+    observed = crate or service
     tree = ast.parse(DEMO.read_text())
     loop, = [n for n in ast.walk(tree) if isinstance(n, ast.While) and 'args.maximum_seconds' in ast.unparse(n.test)]
     clearance_calls = []
@@ -55,7 +58,8 @@ def test_actual_navigation_tick_only_legacy_guard_can_preempt_waypoint(observed,
         return 0.01
 
     ns = dict(
-        args=SimpleNamespace(maximum_seconds=45, progress_timeout_seconds=0, observe_crate_clearance=observed),
+        args=SimpleNamespace(maximum_seconds=45, progress_timeout_seconds=0, observe_crate_clearance=crate,
+                             observe_service_clearance=service),
         best_goal_distance=math.inf, minimum_clearance=math.inf, np=np,
         start_sim=0, timeline=SimpleNamespace(get_current_time=lambda: 1.0),
         state=lambda: np.array([4., 0., 0.]), GOAL=[4., 0.], recorded_crate_poses=[],
@@ -85,3 +89,11 @@ def test_rotated_anchor_reconstructs_world_pose_for_static_layout():
     np.testing.assert_allclose(
         world_pose_from_local((4., 1., -.3), (12., 40., math.pi/2)),
         (11., 44., math.pi/2-.3))
+
+
+def test_human_clearance_replay_uses_same_physics_tick():
+    rows = [dict(time=i/60, actor_xyz=[i*.01, 8., 1.]) for i in range(4)]
+    times = [1/60+1e-13, 3/60]
+    assert list(recorded_actor_centers(rows, times).values()) == [[.01, 8.], [.03, 8.]]
+    with pytest.raises(ValueError, match='synchronous'):
+        recorded_actor_centers(rows, [1.5/60])

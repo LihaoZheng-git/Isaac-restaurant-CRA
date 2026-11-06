@@ -205,6 +205,8 @@ parser.add_argument('--straight-service-walk', action='store_true',
                     help='v3 actor-only straight far-end walk, timed before the encounter; no looping')
 parser.add_argument('--service-static-props', action='store_true',
                     help='v3 mixed scene: verified separated static props plus unchanged human perception')
+parser.add_argument('--observe-service-clearance', action='store_true',
+                    help='balanced V3 mission: score independent geometry after navigation')
 parser.add_argument("--stationary-furniture-memory", action="store_true",
                     help="separate bounded repeated-surface background PRIOR; current people/motion excluded, no source renewal")
 parser.add_argument("--stationary-furniture-fragment-proof", action="store_true",
@@ -312,11 +314,11 @@ parser.add_argument("--moving-view-image-objects", action="store_true",
 parser.add_argument("--static-prop-evidence", action="store_true",
                     help="retain verified mass/contact at separated static locations with live LiDAR/kinetic; default OFF")
 parser.add_argument('--confirmed-prop-refresh', action='store_true',
-                    help='crate-only experiment: reassess repeatedly verified better surface coverage; default OFF')
-parser.add_argument('--crate-route-probe', action='store_true',
-                    help='separate closer-crate test: straight 4m nominal route with confirmed refresh and original own60/controller gates; default OFF')
-parser.add_argument('--observe-crate-clearance', action='store_true',
-                    help='score independent clearance after the isolated crate run; CRA + Safe-SAGE drives the encounter')
+                    help='reassess repeatedly verified better coverage in the bounded isolated prop experiments; default OFF')
+parser.add_argument('--crate-route-probe', '--prop-route-probe', action='store_true',
+                    help='straight 4m nominal route with confirmed refresh and original own60/controller gates; default OFF')
+parser.add_argument('--observe-crate-clearance', '--observe-prop-clearance', action='store_true',
+                    help='score independent clearance after the isolated prop run; CRA + Safe-SAGE drives the encounter')
 parser.add_argument('--crate-delay-robust-bypass', action='store_true',
     help='Separate static crate controller: planning reserve and checked longer-horizon fallback')
 parser.add_argument('--crate-v3-controller', action='store_true',
@@ -411,17 +413,20 @@ if args.moving_view_image_objects and not (args.image_object_approach or args.se
     parser.error("moving-view groups require the bounded static-prop approach and its stationary gates")
 if args.static_prop_evidence and not ((args.image_object_approach or args.service_static_props) and args.moving_view_image_objects):
     parser.error("static-prop evidence requires the bounded approach and independent/own stationary gates")
+matched_bin_scene = bool(args.restaurant_scene and args.restaurant_scene.name == 'restaurant_bin_matched_pass.usda')
+short_prop_name = 'ServiceContainer' if matched_bin_scene else 'BrokenCrate'
 if args.confirmed_prop_refresh and (not args.static_prop_evidence or not args.image_object_approach
         or not args.contact_pixel_denoise or args.service_static_props
-        or args.stationary_prop_target != 'BrokenCrate' or args.restaurant_human or args.restaurant_server):
-    parser.error('confirmed refresh requires the separate crate-only corrected-contact approach')
+        or args.stationary_prop_target != short_prop_name or args.restaurant_human or args.restaurant_server):
+    parser.error('confirmed refresh requires the matching isolated corrected-contact prop')
 crate_setback_scenes = {f'restaurant_crate_route_setback{cm}.usda' for cm in (5, 10, 15)}
 if args.crate_route_probe and (not args.confirmed_prop_refresh
         or args.stationary_prop_world_pose != [15.65, 4.05, 0.]
-        or args.restaurant_scene.name not in {'restaurant_crate_route_probe.usda', *crate_setback_scenes}):
-    parser.error('crate route probe requires confirmed refresh and its separate fixed scene/start pose')
-if args.restaurant_scene and args.restaurant_scene.name in crate_setback_scenes and not args.observe_crate_clearance:
-    parser.error('crate setback placement requires the sensor-controlled observation protocol')
+        or not args.restaurant_scene
+        or not (matched_bin_scene or args.restaurant_scene.name in {'restaurant_crate_route_probe.usda', *crate_setback_scenes})):
+    parser.error('prop route probe requires confirmed refresh and its separate fixed scene/start pose')
+if args.restaurant_scene and (matched_bin_scene or args.restaurant_scene.name in crate_setback_scenes) and not args.observe_crate_clearance:
+    parser.error('matched prop placement requires the sensor-controlled observation protocol')
 if args.observe_crate_clearance and (
     not args.crate_route_probe or args.experiment_baseline != 'continuous_cra_safe_sage'
     or args.moving_actor or args.restaurant_human or args.restaurant_server
@@ -446,6 +451,16 @@ if args.service_static_props and (not args.stationary_image_objects or not args.
     or not args.persistent_object_risk_map or args.human_camera_raise_metres != .6
     or args.contact_mask_refinement or args.image_object_approach or args.disable_lidar_deskew):
     parser.error('v3 static props require explicit mixed human scene, original property/ownership/deskew gates and raised camera')
+balanced_service = bool(args.restaurant_scene and args.restaurant_scene.name == 'restaurant_service_demo_v3_balanced_contact.usda')
+if args.service_static_props and balanced_service != args.observe_service_clearance:
+    parser.error('the balanced service placement requires its passive evaluation protocol')
+if args.observe_service_clearance and (
+    not balanced_service or not args.service_static_props or args.moving_actor or args.human_carry_bowl
+    or args.experiment_baseline != 'continuous_cra_safe_sage' or args.post_goal_observation_seconds
+    or (args.motion and (args.restaurant_route != 'long-service' or not args.straight_service_walk
+                        or not args.long_service_parallel or args.progress_timeout_seconds))
+):
+    parser.error('service clearance observation requires the balanced mixed service setup and its unchanged long motion protocol')
 if not math.isfinite(args.image_object_maximum_extent) or not .1 <= args.image_object_maximum_extent <= 1.5:
     parser.error("image-object extent assumption must lie in [.1, 1.5] m")
 if (not math.isfinite(args.stationary_prop_view_yaw_degrees)
@@ -942,7 +957,7 @@ from robot.evaluation.restaurant_service_validation import (
     authored_raster_clearance, load_authored_layout_monitor, restaurant_asset_checks, restaurant_plume_checks,
 )
 from robot.evaluation.simple_object_test import disk_footprint_clearance, sample_stopping_sweep
-from robot.evaluation.crate_clearance_observation import summarize_clearance_samples, world_pose_from_local
+from robot.evaluation.crate_clearance_observation import recorded_actor_centers, summarize_clearance_samples, world_pose_from_local
 from robot.navigation.waypoint_controller import (
     RobotPose2D,
     Waypoint,
@@ -1338,7 +1353,7 @@ def main():
                 "plume":False,"drop_m":None,"matching_scope":"independent planar match; full authored height is not observed geometry"})
         layout_monitor = load_authored_layout_monitor(args.restaurant_layout_survey, restaurant_props)
         save_json("restaurant-placement-monitor.json", {"props":restaurant_props,
-            "basis":("authored bounds for setup and post-navigation evaluation" if args.observe_crate_clearance
+            "basis":("authored bounds for setup and post-navigation evaluation" if args.observe_crate_clearance or args.observe_service_clearance
                 else "authored actual-mesh bounds for independent evaluation/abort only; no factor inputs"),
             "humans_added":int(has_server),"actor_motion_enabled":args.restaurant_human in {"crossing", "continuous-crossing", "parallel"},
             "payload_added":serving_payload["present"],"serving_payload":serving_payload,
@@ -1360,11 +1375,13 @@ def main():
         dt=stationary.PHYSICS_DT, device=stationary.PHYSICS_DEVICE
     )
     timeline = omni.timeline.get_timeline_interface()
-    crate_contacts = None
-    if args.observe_crate_clearance:
+    contact_observers = {}
+    if args.observe_crate_clearance or args.observe_service_clearance:
         from robot.evaluation.crate_contact_observer import install
-        crate_prim = next(item["prim_path"] for item in restaurant_props if item["name"] == "BrokenCrate")
-        crate_contacts = install(stage, stationary.ROBOT_PRIM_PATH, crate_prim)
+        for prop, label in (("ServiceContainer", "bin"), ("BrokenCrate", "crate")):
+            if args.observe_service_clearance or prop == restaurant_target:
+                target_prim, = (item["prim_path"] for item in restaurant_props if item["name"] == prop)
+                contact_observers[label] = install(stage, stationary.ROBOT_PRIM_PATH, target_prim, target_label=label)
     if args.human_carry_bowl:
         carb.settings.get_settings().set("/app/player/useFixedTimeStepping", True)
         timeline.set_play_every_frame(True)
@@ -2259,8 +2276,9 @@ def main():
             gate['image_object_memory_checks']['current_target_has_static_property_record'] = bool(
                 static_memory is not None and any(key in static_memory.records for key in target_keys))
         gate["passed"] = stationary_ready = bool(stationary_ready and all(gate["image_object_memory_checks"].values()))
-    if crate_contacts is not None:
-        save_json("parked-contact-observer.json", crate_contacts.report())
+    for label, observer in contact_observers.items():
+        name = f"parked-{label}-contact-observer.json" if args.observe_service_clearance else "parked-contact-observer.json"
+        save_json(name, observer.report())
     save_json("stationary-gate.json", gate)
     print(json.dumps({key: value for key, value in gate.items() if key != "last_objects"}, default=json_default), flush=True)
     if not stationary_ready:
@@ -2411,8 +2429,8 @@ def main():
         return
     if not args.motion:
         controller.stop()
-        if crate_contacts is not None:
-            crate_contacts.close()
+        for observer in contact_observers.values():
+            observer.close()
         timeline.stop()
         return
 
@@ -2563,8 +2581,8 @@ def main():
         maximum_result_age_seconds=args.planner_result_max_age,
     )
     start_sim = float(timeline.get_current_time())
-    if crate_contacts is not None:
-        crate_contacts.set_phase("navigation")
+    for observer in contact_observers.values():
+        observer.set_phase("navigation")
     previous_executed_command = np.zeros(2)
     navigation_active = True
     if human is not None:
@@ -2587,10 +2605,13 @@ def main():
     arrived = False
     reason = "duration_limit"
     consecutive_failures = 0
-    def independent_clearance(current, *, recorded_world_pose=None):
+    def independent_clearance(current, *, recorded_world_pose=None, recorded_human_xy=None):
         clearances = []
         if human is not None:
-            xy = human.position()[:2] - [anchor.x, anchor.y]
+            if recorded_world_pose is not None and recorded_human_xy is None:
+                raise ValueError('historical clearance requires the actor position at the same time')
+            human_xy = human.position()[:2] if recorded_human_xy is None else recorded_human_xy
+            xy = np.asarray(human_xy) - [anchor.x, anchor.y]
             c, s = math.cos(anchor.yaw), math.sin(anchor.yaw)
             local = (c * xy[0] + s * xy[1], -s * xy[0] + c * xy[1])
             clearances.append(disk_footprint_clearance(current, center_xy=local,
@@ -2631,7 +2652,7 @@ def main():
             elif args.progress_timeout_seconds and now - last_goal_progress > args.progress_timeout_seconds:
                 reason = "progress_timeout"
                 break
-            if args.observe_crate_clearance:
+            if args.observe_crate_clearance or args.observe_service_clearance:
                 recorded_crate_poses.append((now - start_sim, current.tolist()))
             else:
                 clearance = independent_clearance(current)
@@ -2983,8 +3004,8 @@ def main():
             step(command, paced=True)
             previous_executed_command = command.copy()
     finally:
-        if crate_contacts is not None:
-            crate_contacts.set_phase("braking")
+        for observer in contact_observers.values():
+            observer.set_phase("braking")
         controller.stop()
         if human is not None and not arrived:
             human.abort()
@@ -2997,14 +3018,22 @@ def main():
     final_state = np.array(stopping_sweep["final_state"])
     stop_drift = stopping_sweep["translation_drift_m"]
     clearance_observation = None
-    if args.observe_crate_clearance:
+    if args.observe_crate_clearance or args.observe_service_clearance:
         # The last physics step can end at the time limit without another command tick.
         if not recorded_crate_poses or recorded_crate_poses[-1][0] < braking_start:
             recorded_crate_poses.append((braking_start, stopping_sweep['initial_state']))
         anchor_xy_yaw = (anchor.x, anchor.y, anchor.yaw)
-        samples = [dict(phase='navigation', time_seconds=t, local_state=pose,
-            clearance_m=independent_clearance(pose, recorded_world_pose=world_pose_from_local(pose, anchor_xy_yaw)))
-            for t, pose in recorded_crate_poses]
+        actor_centers = (recorded_actor_centers(human.records, (start_sim+t for t, _ in recorded_crate_poses))
+                         if args.observe_service_clearance else {})
+        samples = []
+        for t, pose in recorded_crate_poses:
+            actor_xy = actor_centers.get(start_sim+t)
+            sample = dict(phase='navigation', time_seconds=t, local_state=pose,
+                clearance_m=independent_clearance(pose, recorded_world_pose=world_pose_from_local(pose, anchor_xy_yaw),
+                                                  recorded_human_xy=actor_xy))
+            if actor_xy is not None:
+                sample['human_world_xy'] = actor_xy
+            samples.append(sample)
         minimum_clearance = min(row['clearance_m'] for row in samples)
         # Braking frame zero is the navigation endpoint already included above.
         samples.extend(dict(phase='braking', time_seconds=braking_start + row['frame'] * stationary.PHYSICS_DT,
@@ -3044,7 +3073,7 @@ def main():
     )
     completed = (
         arrived
-        and (args.observe_crate_clearance or minimum_clearance > 0.02)
+        and (args.observe_crate_clearance or args.observe_service_clearance or minimum_clearance > 0.02)
         and stop_drift < 0.05
         and len(live_fields) >= 10
         and moving_field_count >= 10
@@ -3249,7 +3278,9 @@ def main():
     save_json("waypoint-events.json", waypoint_events)
     save_json("nearby-track-coverage-events.json", coverage_events)
     report = {
-        "acceptance_scope": "sensor-controlled crate navigation, arrival, live fields and stopping; clearance scored separately"
+        "acceptance_scope": "V3 service navigation including human validation; independent geometry scored separately"
+        if args.observe_service_clearance else
+        "sensor-controlled prop navigation, arrival, live fields and stopping; clearance scored separately"
         if args.observe_crate_clearance
         else "bounded_navigation_with_explicit_factor_and_property_priors; all-track numeric scores are separate from physical perception readiness"
         if args.persistent_object_risk_map
@@ -3305,7 +3336,8 @@ def main():
         "fixture_root_layer_unchanged": root_unchanged_by_fixture,
         "completed": arrived,
         "reason": reason,
-        **({"independent_clearance_observation": clearance_observation} if args.observe_crate_clearance else {}),
+        **({"independent_clearance_observation": clearance_observation}
+           if args.observe_crate_clearance or args.observe_service_clearance else {}),
         "minimum_clearance_m": minimum_clearance,
         "minimum_clearance_before_stop_m": minimum_clearance_before_stop,
         "minimum_clearance_during_stop_m": stopping_sweep["minimum_clearance_m"],
@@ -3550,11 +3582,11 @@ def main():
               "fixed lambda 1.25, unchanged nominal/exact MPC/DTCBF/analytical CBF; paced development, not real-time or causal CRA superiority")),
             "renderer transform-history warning remains unresolved; separate carried-bowl physical assessment, calibrated load and moving-view plume remain unvalidated",
         ]
-    if crate_contacts is not None:
-        contact_observation = crate_contacts.report()
-        crate_contacts.close()
-        report["crate_physx_contacts"] = contact_observation
-        save_json("crate-physx-contacts.json", contact_observation)
+    for label, observer in contact_observers.items():
+        contact_observation = observer.report()
+        observer.close()
+        report[f"{label}_physx_contacts"] = contact_observation
+        save_json(f"{label}-physx-contacts.json", contact_observation)
     save_json("report.json", report)
     print(
         json.dumps(

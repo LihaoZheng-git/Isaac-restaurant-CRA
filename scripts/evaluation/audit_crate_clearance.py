@@ -1,4 +1,4 @@
-"""Measure crate clearance at recorded navigation and braking poses after an Isaac run."""
+"""Measure isolated bin or crate clearance at recorded navigation and braking poses."""
 
 import argparse
 from dataclasses import asdict
@@ -34,12 +34,12 @@ def audit(source):
 
     invocation = read("invocation.json")
     monitor = read("fixture-monitor.json")
-    if (
-        invocation["case"] != "crate-static"
-        or invocation["stage"] != "motion"
-        or [f["name"] for f in monitor["fixtures"]] != ["BrokenCrate"]
-    ):
-        raise ValueError("expected an isolated broken-crate motion trial")
+    cases = {"crate-static": ("BrokenCrate", "crate"), "bin-static": ("ServiceContainer", "bin")}
+    if invocation["case"] not in cases or invocation["stage"] != "motion":
+        raise ValueError("expected an isolated bin or crate motion trial")
+    name, label = cases[invocation["case"]]
+    if [f["name"] for f in monitor["fixtures"]] != [name]:
+        raise ValueError(f"expected only {name} in the fixture monitor")
     fixture = monitor["fixtures"][0]
     (prop,) = (
         p
@@ -95,6 +95,8 @@ def audit(source):
     )
 
     rows = []
+    beside_key = f"beside_{label}"
+    past_key = f"entire_robot_past_{label}"
     for phase, poses in (
         ("navigation", trajectory),
         ("braking", [r["state"] for r in braking]),
@@ -117,11 +119,10 @@ def audit(source):
                         (*xy, yaw), footprint=padded, obstacle_bounds=bounds
                     ),
                     lateral=float((xy - anchor[:2]) @ lateral),
-                    beside_crate=bool(along_box.min() <= along <= along_box.max()),
-                    entire_robot_past_crate=bool(
-                        np.min(body @ rotation(yaw).T @ direction + along)
-                        > along_box.max()
-                    ),
+                    **{
+                        beside_key: bool(along_box.min() <= along <= along_box.max()),
+                        past_key: bool(np.min(body @ rotation(yaw).T @ direction + along) > along_box.max()),
+                    },
                 )
             )
 
@@ -134,7 +135,7 @@ def audit(source):
             box_at_or_below_2cm=sum(row["box"] <= 0.02 for row in samples),
         )
 
-    first_past = next((r for r in rows if r["entire_robot_past_crate"]), None)
+    first_past = next((r for r in rows if r[past_key]), None)
     brake_start = len(trajectory)
     return dict(
         revision=invocation["source_revision"],
@@ -142,19 +143,19 @@ def audit(source):
         reached_goal=report["completed"],
         final_goal_error_m=math.dist(braking[-1]["state"][:2], goal),
         padded_chassis_m=asdict(padded),
-        crate_bounds_world_m=asdict(bounds),
         disk_radius_m=fixture["monitor_radius_m"],
         navigation=minima(rows[:brake_start]),
         braking=minima(rows[brake_start:]),
         all_recorded=minima(rows),
-        first_entire_robot_past_crate=first_past,
-        reached_goal_with_entire_robot_past_crate=bool(
-            report["completed"] and rows[-1]["entire_robot_past_crate"]
-        ),
+        **{
+            f"{label}_bounds_world_m": asdict(bounds),
+            f"first_{past_key}": first_past,
+            f"reached_goal_with_{past_key}": bool(report["completed"] and rows[-1][past_key]),
+            f"max_abs_lateral_{beside_key}_m": max(
+                (abs(r["lateral"]) for r in rows if r[beside_key]), default=None
+            ),
+        },
         max_abs_lateral_m=max(abs(r["lateral"]) for r in rows),
-        max_abs_lateral_beside_crate_m=max(
-            (abs(r["lateral"]) for r in rows if r["beside_crate"]), default=None
-        ),
         last_issued=commands[-1],
         original_all_obstacle_minimum_before_braking_m=report[
             "minimum_clearance_before_stop_m"
@@ -162,7 +163,7 @@ def audit(source):
         original_all_obstacle_minimum_during_braking_m=report[
             "minimum_clearance_during_stop_m"
         ],
-        scope="Crate-only planar geometry at recorded poses. Braking includes the final control-tick pose. "
+        scope=f"{label.capitalize()}-only planar geometry at recorded poses. Braking includes the final control-tick pose. "
         "Measurements between poses and PhysX contact events are outside this audit.",
     )
 

@@ -1,4 +1,4 @@
-"""Passive robot/crate PhysX contact reporting for the isolated Isaac trial."""
+"""Passive robot/prop PhysX contact reporting for the Isaac trials."""
 
 from collections import Counter
 import math
@@ -9,7 +9,10 @@ def _under(path, root):
 
 
 class CrateContactObserver:
-    def __init__(self, robot_root, crate_root):
+    def __init__(self, robot_root, crate_root, *, target_label="crate"):
+        if target_label not in ("crate", "bin"):
+            raise ValueError("unknown contact target label")
+        self.target_label = target_label
         self.robot_root = str(robot_root).rstrip("/")
         self.crate_root = str(crate_root).rstrip("/")
         self.phase = "parked"
@@ -23,15 +26,15 @@ class CrateContactObserver:
 
     def set_phase(self, phase):
         if phase not in ("parked", "navigation", "braking"):
-            raise ValueError("unknown crate contact reporting phase")
+            raise ValueError("unknown contact reporting phase")
         self.phase = phase
         self.rows.setdefault(
             phase,
             {
                 "robot_environment_headers": Counter(),
-                "crate_headers": Counter(),
-                "crate_contact_points": 0,
-                "minimum_reported_crate_separation_m": None,
+                "target_headers": Counter(),
+                "target_contact_points": 0,
+                "minimum_separation_m": None,
             },
         )
 
@@ -66,7 +69,7 @@ class CrateContactObserver:
                     if event != "CONTACT_LOST":
                         row["robot_environment_headers"][collider or actor] += 1
                     continue
-                row["crate_headers"][event] += 1
+                row["target_headers"][event] += 1
                 if event == "CONTACT_LOST":
                     continue
                 begin, count = header.contact_data_offset, header.num_contact_data
@@ -76,9 +79,9 @@ class CrateContactObserver:
                     value = float(data[index].separation) * self._metres_per_unit
                     if not math.isfinite(value):
                         raise ValueError("nonfinite PhysX contact separation")
-                    row["crate_contact_points"] += 1
-                    prior = row["minimum_reported_crate_separation_m"]
-                    row["minimum_reported_crate_separation_m"] = (
+                    row["target_contact_points"] += 1
+                    prior = row["minimum_separation_m"]
+                    row["minimum_separation_m"] = (
                         value if prior is None else min(prior, value)
                     )
         except Exception as exc:
@@ -86,10 +89,11 @@ class CrateContactObserver:
 
     def report(self):
         phases = {}
+        target = self.target_label
         for phase, row in self.rows.items():
             found = (
-                row["crate_headers"]["CONTACT_FOUND"]
-                + row["crate_headers"]["CONTACT_PERSIST"]
+                row["target_headers"]["CONTACT_FOUND"]
+                + row["target_headers"]["CONTACT_PERSIST"]
             )
             healthy = self.installed and self.error is None
             # Wheel/floor or another identifiable external contact in this same
@@ -100,19 +104,21 @@ class CrateContactObserver:
                 else None
             )
             phases[phase] = {
-                **row,
                 "robot_environment_headers": dict(row["robot_environment_headers"]),
-                "crate_headers": dict(row["crate_headers"]),
-                "crate_contact_reported": observed,
+                f"{target}_headers": dict(row["target_headers"]),
+                f"{target}_contact_points": row["target_contact_points"],
+                f"minimum_reported_{target}_separation_m": row["minimum_separation_m"],
+                f"{target}_contact_reported": observed,
             }
         return {
             "source": "Isaac PhysX contact report events, session-layer instrumentation",
             "installed": self.installed,
             "error": self.error,
             "robot_reporter_bodies": self.robot_bodies,
-            "crate_colliders": self.crate_colliders,
+            "target_prim_path": self.crate_root,
+            f"{target}_colliders": self.crate_colliders,
             "phases": phases,
-            "scope": "Found/persist PhysX headers for this robot and crate. "
+            "scope": f"Found/persist PhysX headers for this robot and {target}. "
             "Null denotes unmeasured. Contact separation uses the engine contact offset convention.",
         }
 
@@ -120,9 +126,9 @@ class CrateContactObserver:
         self._subscription = None
 
 
-def install(stage, robot_root, crate_root):
+def install(stage, robot_root, crate_root, *, target_label="crate"):
     """Attach zero-force-threshold reporters to robot bodies in the session layer."""
-    observer = CrateContactObserver(robot_root, crate_root)
+    observer = CrateContactObserver(robot_root, crate_root, target_label=target_label)
     try:
         from omni.physx import get_physx_simulation_interface
         from pxr import (
@@ -142,7 +148,7 @@ def install(stage, robot_root, crate_root):
         robot = stage.GetPrimAtPath(robot_root)
         crate = stage.GetPrimAtPath(crate_root)
         if not robot or not crate:
-            raise ValueError("robot or crate root is unavailable")
+            raise ValueError("robot or target root is unavailable")
         observer.crate_colliders = [
             str(p.GetPath())
             for p in Usd.PrimRange(crate, Usd.TraverseInstanceProxies())
@@ -156,7 +162,7 @@ def install(stage, robot_root, crate_root):
             and UsdPhysics.RigidBodyAPI(p).GetRigidBodyEnabledAttr().Get()
         ]
         if not bodies or not observer.crate_colliders:
-            raise ValueError("enabled robot bodies and crate colliders required")
+            raise ValueError("enabled robot bodies and target colliders required")
         with Usd.EditContext(stage, stage.GetSessionLayer()):
             for body in bodies:
                 reporter = PhysxSchema.PhysxContactReportAPI.Apply(body)

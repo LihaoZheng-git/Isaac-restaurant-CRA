@@ -17,10 +17,14 @@ from pxr import Gf, Sdf, Usd, UsdGeom
 from robot.scene.restaurant_demo_build import DEMO_ROOT, demo_prop_records
 
 
-def build(*, setback_cm=0):
+def build(*, setback_cm=0, matched_bin=False):
     base = ROOT / 'scenes/generated/restaurant_service_demo_v3_open_aisle_bench.usda'
     output = base.with_name('restaurant_crate_route_probe.usda')
-    if setback_cm in (5, 10, 15):
+    if matched_bin:
+        if setback_cm != 5:
+            raise ValueError('the matched bin uses the 5 cm crate placement')
+        output = base.with_name('restaurant_bin_matched_pass.usda')
+    elif setback_cm in (5, 10, 15):
         base = output
         output = base.with_name(f'restaurant_crate_route_setback{setback_cm}.usda')
     elif setback_cm != 0:
@@ -43,27 +47,39 @@ def build(*, setback_cm=0):
     stage.SetStartTimeCode(base_stage.GetStartTimeCode())
     stage.SetEndTimeCode(base_stage.GetEndTimeCode())
     stage.SetTimeCodesPerSecond(base_stage.GetTimeCodesPerSecond())
+    target = 'ServiceContainer' if matched_bin else 'BrokenCrate'
     with Usd.EditContext(stage, layer):
-        if not setback_cm:
+        if matched_bin:
+            stage.GetPrimAtPath(DEMO_ROOT + '/BrokenCrate').SetActive(False)
+        elif not setback_cm:
             stage.GetPrimAtPath(DEMO_ROOT + '/ServiceContainer').SetActive(False)
-        prim = stage.GetPrimAtPath(DEMO_ROOT + '/BrokenCrate')
+        prim = stage.GetPrimAtPath(DEMO_ROOT + '/' + target)
         attr = prim.GetAttribute('xformOp:translate')
         position = attr.Get()
-        shift_y = -setback_cm / 100 if setback_cm else .45
-        attr.Set(Gf.Vec3d(position[0], position[1] + shift_y, position[2]))
+        # The authored translation is an asset pivot. Register the XY center
+        # of the composed mesh bounds while preserving scale and ground contact.
+        dest_y = 3.45 - setback_cm / 100
+        if matched_bin:
+            original, = (prop for prop in manifest['props'] if prop['name'] == target)
+            x, y = [(lo + hi) / 2 for lo, hi in zip(original['bounds_minimum'][:2], original['bounds_maximum'][:2])]
+            attr.Set(Gf.Vec3d(position[0] + (17.5 - x), position[1] + (dest_y - y), position[2]))
+        else:
+            shift_y = -setback_cm / 100 if setback_cm else .45
+            attr.Set(Gf.Vec3d(position[0], position[1] + shift_y, position[2]))
         props = demo_prop_records(stage)
-    crate, = (prop for prop in props if prop['name'] == 'BrokenCrate')
-    center = [(lo + hi) / 2 for lo, hi in zip(crate['bounds_minimum'][:2], crate['bounds_maximum'][:2])]
-    if max(abs(center[0] - 17.5), abs(center[1] - (3.45 - setback_cm / 100))) > 1e-5:
-        raise ValueError('composed crate bounds differ from the intended placement')
+    placed, = (prop for prop in props if prop['name'] == target)
+    center = [(lo + hi) / 2 for lo, hi in zip(placed['bounds_minimum'][:2], placed['bounds_maximum'][:2])]
+    if max(abs(center[0] - 17.5), abs(center[1] - dest_y)) > 1e-5:
+        raise ValueError('composed prop bounds differ from the intended placement')
     layer.Save()
     stage.GetRootLayer().Save()
     assert all(hashlib.sha256(Path(p).read_bytes()).hexdigest() == h for p, h in sources.items())
     result = dict(scene=str(output), additions=str(additions), source_sha256=sources,
                   props=props, source_files_unchanged=True,
-                  crate_center_world_xy=center, robot_start_world_xy=[15.65, 4.05],
+                  robot_start_world_xy=[15.65, 4.05],
                   nominal_goal_local_xy=[4., 0.],
-                  scope='Crate-only placement and straight route. Authored geometry for scene/evaluation only.')
+                  scope=f'Isolated {target} and straight route. Authored geometry for scene/evaluation only.')
+    result['bin_center_world_xy' if matched_bin else 'crate_center_world_xy'] = center
     output.with_suffix('.json').write_text(json.dumps(result, indent=2) + '\n')
     print(json.dumps({k: v for k, v in result.items() if k != 'source_sha256'}, indent=2))
 
@@ -72,4 +88,5 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--setback-cm', type=int, choices=(0, 5, 10, 15), default=0,
                         help='Distance away from the route, measured from the original closer-crate fixture.')
-    build(setback_cm=parser.parse_args().setback_cm)
+    parser.add_argument('--matched-bin', action='store_true', help='Substitute the original rounded bin at the 5 cm crate site.')
+    build(**vars(parser.parse_args()))
