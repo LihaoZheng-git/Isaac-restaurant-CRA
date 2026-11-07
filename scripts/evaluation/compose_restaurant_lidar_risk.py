@@ -70,11 +70,19 @@ def load_verified_geometry(folder, name, expected_sha256):
     return arrays, path, actual
 
 
-def main(source, archive, risk_manifest, output, preview_only=False, preserve=()):
+def main(source, archive, risk_manifest, output, preview_only=False, preserve=(), calibration_replay=None):
     if output.exists():
         raise ValueError("use a fresh presentation folder; existing demos are preserved")
     protected = {folder.resolve(): verify_archive(folder) for folder in (archive, *preserve)}
     manifest = read(risk_manifest)
+    replay = None
+    if calibration_replay is not None:
+        from robot.evaluation.calibration_replay import CalibrationReplay, candidate_geometry
+        from robot.evaluation.risk_camera_overlay import render_risk_panel
+        from robot.evaluation.risk_palette import palette_description
+        replay = CalibrationReplay(calibration_replay, source)
+        if Path(replay.manifest["original_manifest"]).resolve() != risk_manifest.resolve():
+            raise ValueError("candidate scoring is bound to a different geometry export")
     if Path(manifest["source_directory"]).resolve() != source.resolve():
         raise ValueError("risk export belongs to a different native mission")
     if manifest.get("source_hashes_verified_after_export") is not True:
@@ -130,12 +138,12 @@ def main(source, archive, risk_manifest, output, preview_only=False, preserve=()
             break
     output.mkdir(parents=True)
     fonts = {size: ImageFont.truetype("C:/Windows/Fonts/segoeui.ttf", size) for size in (18, 20, 22, 30)}
-    video_path = output / "restaurant-service-v4-lidar-risk.mp4"
+    video_path = output / ("restaurant-risk-calibration-replay.mp4" if replay else "restaurant-service-v4-lidar-risk.mp4")
     writer = None if preview_only else cv2.VideoWriter(str(video_path), cv2.VideoWriter_fourcc(*"mp4v"), 10, (1920, 1080))
     if writer is not None and not writer.isOpened():
         raise RuntimeError("cannot open presentation output")
     ledger, travelled = [], []
-    last_file, geometry = None, None
+    last_file, geometry, replay_row, camera_frame = None, None, None, None
     native_count = credit_count = 0
     try:
         for index, epoch in enumerate(epochs):
@@ -148,9 +156,14 @@ def main(source, archive, risk_manifest, output, preview_only=False, preserve=()
             if preview_only and index not in previews:
                 continue
             field = fields[index]
+            if replay and camera_frame is not None and field["geometry_file"] == last_file:
+                for key in ("sensor_frame_id", "sensor_timestamp_seconds", "camera_frame_id", "camera_timestamp_seconds"):
+                    if getattr(camera_frame, key) != risk_epochs[index][key]:
+                        raise ValueError("held camera epoch changed without a new field")
             name = field["geometry_file"]
             if name is None:
                 geometry, last_file = None, None
+                replay_row, camera_frame = None, None
             elif name != last_file:
                 geometry, path, verified = load_verified_geometry(
                     risk_manifest.parent, name, manifest["geometry_sha256"][name])
@@ -158,21 +171,30 @@ def main(source, archive, risk_manifest, output, preview_only=False, preserve=()
                     raise ValueError("native presentation requires original active-field membership and boundary")
                 hashes[str(path)] = verified
                 last_file = name
+                if replay:
+                    replay_row = replay.field(field)
+                    geometry = candidate_geometry(geometry, replay_row)
+                    camera_frame = replay.camera(risk_epochs[index], replay_row)
             sensor_map, map_audit = render_lidar_risk_map(
-                geometry, field, route, travelled, robot_footprint_local_xy=footprint)
+                geometry, field, route, travelled, robot_footprint_local_xy=footprint,
+                **(dict(palette="restaurant_v1", score_title="CANDIDATE phi | REPLAY", replay_scores=True)
+                   if replay else {}))
             rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
             canvas = Image.new("RGB", (1920, 1080), "#101b26")
             draw = ImageDraw.Draw(canvas)
             elapsed = max(0.0, epoch["time"] - layout["navigation_start_simulation_time"])
-            draw.text((24, 14), "Restaurant service | v4", font=fonts[30], fill="white")
+            draw.text((24, 14), "V3 | restaurant risk calibration replay" if replay else "Restaurant service | v4", font=fonts[30], fill="white")
             draw.text((1016, 20), f"Simulation time {elapsed:5.1f} s  |  1x playback", font=fonts[22], fill="#cbd9e3")
-            canvas.paste(Image.fromarray(rgb[:, 800:1440]).resize((960, 900), Image.Resampling.LANCZOS), (24, 84))
-            draw.text((1016, 51), "LIDAR OBSTACLE RISK | applied phi", font=fonts[20], fill="#cbd9e3")
+            camera_panel = rgb[:, 800:1440]
+            if replay:
+                camera_panel, _ = render_risk_panel(camera_frame, epoch["time"], palette="restaurant_v1")
+            canvas.paste(Image.fromarray(camera_panel).resize((960, 900), Image.Resampling.LANCZOS), (24, 84))
+            draw.text((1016, 51), "LIDAR RISK | candidate current scores" if replay else "LIDAR OBSTACLE RISK | applied phi", font=fonts[20], fill="#cbd9e3")
             canvas.paste(sensor_map, (1016, 80))
             draw.text((1096, 522), "FOLLOW CAMERA | presentation view", font=fonts[20], fill="#cbd9e3")
             canvas.paste(Image.fromarray(rgb[:, :800]).resize((672, 504), Image.Resampling.LANCZOS), (1096, 552))
-            draw.text((24, 1004), status, font=fonts[20], fill="#e5c697")
-            draw.text((24, 1038), "Same native run and all pauses. Thermal/potential priors remain explicit.", font=fonts[18], fill="#aebfce")
+            draw.text((24, 1004), "SCORE REPLAY ONLY | Original V3 trajectory and prior geometry; no new navigation validation." if replay else status, font=fonts[20], fill="#e5c697")
+            draw.text((24, 1038), "Fixed color scale. Human protection prior 0.80; thermal/potential priors retained. Lambda unchanged." if replay else "Same native run and all pauses. Thermal/potential priors remain explicit.", font=fonts[18], fill="#aebfce")
             result = cv2.cvtColor(np.asarray(canvas), cv2.COLOR_RGB2BGR)
             if index in previews:
                 if not cv2.imwrite(str(output / f"preview-{index:04d}.png"), result):
@@ -219,6 +241,9 @@ def main(source, archive, risk_manifest, output, preview_only=False, preserve=()
             raise ValueError("output frame count or duration differs")
     if any(digest(Path(path)) != value for path, value in hashes.items()):
         raise ValueError("presentation inputs changed")
+    if replay:
+        replay.verify()
+        hashes.update(replay.hashes)
     if any(verify_archive(path) != count for path, count in protected.items()):
         raise ValueError("a protected demo archive changed")
     summary = dict(presentation_only=True, preview_only=preview_only, resolution=[1920, 1080], fps=10,
@@ -230,6 +255,12 @@ def main(source, archive, risk_manifest, output, preview_only=False, preserve=()
                    protected_archives={str(k): v for k, v in protected.items()},
                    layout="left original perception; upper-right local sensor risk; lower-right native follow",
                    scope="Same native recording and controller values. Map colors use observation/geometry applied phi, not numerical h. Original camera uses individual phi. Latest scan age is explicit. Prior/retained geometry is hollow. No new inference, control, physics or acceptance.")
+    if replay:
+        summary.update(calibration_replay=str(calibration_replay.resolve()),
+            palette=palette_description("restaurant_v1"), new_closed_loop_validation=False,
+            calibration_config=replay.manifest["config"],
+            layout="left original pixels/masks with candidate individual scores; right candidate current-point scores + original prior geometry/follow camera",
+            scope="Candidate scoring on archived source-bound evidence. Original V3 path, timing, ownership and prior geometry are preserved; ordinary-object policy and external risk floors are unchanged. Not a counterfactual controller rollout or a new navigation pass.")
     (output / "presentation.json").write_text(json.dumps(summary, indent=2) + "\n", encoding="utf-8")
     (output / "frame-mapping.json").write_text(json.dumps(ledger, indent=2) + "\n", encoding="utf-8")
     shutil.copy2(archive / "ASSET_CREDITS.txt", output / "ASSET_CREDITS.txt")
@@ -244,6 +275,15 @@ def main(source, archive, risk_manifest, output, preview_only=False, preserve=()
         "The map uses recorded simulator localization and fixed north; no authored obstacle or human ground truth is added.\n"
         "This presentation does not improve perception or repair unavailable object association. All original validation limitations remain.\n"
         + status + "\n", encoding="utf-8")
+    if replay:
+        (output / "README.txt").write_text(
+            "Restaurant CRA calibration - archived V3 score replay\n\n"
+            "Open restaurant-risk-calibration-replay.mp4. Every original navigation/stopping frame and credit card is retained.\n"
+            "New candidate scores were computed from archived evidence, not used to drive this trajectory. Fresh closed-loop validation remains required.\n"
+            "Current returns use candidate applied scores; original external floors and hollow prior-geometry scores remain. Camera masks show candidate individual scores.\n"
+            "Fixed restaurant_v1 palette; no per-frame or per-object color normalization. Human protection floor0.80 is a prior, not sharpness or measured injury probability.\n"
+            "Potential/thermal priors, unavailable-speed priors, original ownership, evidence clocks and all failed views remain explicit.\n"
+            "Original V3 and V4 archives are unchanged. This replay does not reconstruct the counterfactual memory/geometry lifecycle.\n", encoding="utf-8")
     (output / "manifest.json").write_text(json.dumps(dict(files={str(path.relative_to(output)):
         dict(bytes=path.stat().st_size, sha256=digest(path)) for path in sorted(output.rglob("*")) if path.is_file()}), indent=2) + "\n", encoding="utf-8")
     print(json.dumps({k: v for k, v in summary.items() if k != "input_sha256"}, indent=2))
@@ -255,5 +295,7 @@ if __name__ == "__main__":
         parser.add_argument(f"--{name}", type=Path, required=True)
     parser.add_argument("--preserve", type=Path, action="append", default=[])
     parser.add_argument("--preview-only", action="store_true")
+    parser.add_argument("--calibration-replay", type=Path)
     args = parser.parse_args()
-    main(args.source, args.archive, args.risk_manifest, args.output, args.preview_only, args.preserve)
+    main(args.source, args.archive, args.risk_manifest, args.output, args.preview_only, args.preserve,
+         args.calibration_replay)

@@ -277,6 +277,7 @@ class LiveObjectPerception:
         human_mass_body_identity_retention=False,
         observed_motion_reference=False,
         capture_risk_masks=False,
+        restaurant_calibration_config=None,
         shape_contact_config=None,
         contact_mask_refinement_config=None,
     ):
@@ -288,6 +289,12 @@ class LiveObjectPerception:
             raise TypeError("invalid shape contact configuration")
         self.shape_contact_config = shape_contact_config
         self.capture_risk_masks = capture_risk_masks
+        from robot.risk.restaurant_calibration import RestaurantCalibrationConfig
+        if restaurant_calibration_config is not None and not isinstance(restaurant_calibration_config, RestaurantCalibrationConfig):
+            raise TypeError("invalid restaurant calibration configuration")
+        if restaurant_calibration_config is not None and object_factor_prior_config is None:
+            raise ValueError("restaurant calibration requires the all-object risk map")
+        self.restaurant_calibration_config = restaurant_calibration_config
         self.segmenter, self.mass_estimator, self.contact_detector = (
             segmenter,
             mass_estimator,

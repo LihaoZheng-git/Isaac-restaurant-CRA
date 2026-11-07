@@ -6,7 +6,7 @@ from functools import lru_cache
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 
-from robot.evaluation.risk_camera_overlay import risk_color_rgb
+from robot.evaluation.risk_palette import risk_color_rgb
 
 
 @lru_cache(maxsize=16)
@@ -77,7 +77,9 @@ def points_in_field(points, boundary):
 
 
 def render_lidar_risk_map(geometry, frame, nominal_route_world, travelled_world,
-                          size=(856, 420), half_span_m=4.0, robot_footprint_local_xy=None):
+                          size=(856, 420), half_span_m=4.0, robot_footprint_local_xy=None,
+                          palette="legacy", score_title="CONTROLLER-APPLIED phi",
+                          replay_scores=False):
     """Return image and viewport audit from an already source-aligned field.
 
     Solid points are the field's latest source returns, not a fictitious scan at
@@ -117,7 +119,9 @@ def render_lidar_risk_map(geometry, frame, nominal_route_world, travelled_world,
     image.paste(path_image, (left, top), path_image)
     diagnostic = dict(viewport_world_center=center.tolist(), viewport_half_height_m=half_span_m,
                       viewport_half_width_m=width / (2 * scale), north_up=True,
-                      map_score="controller_applied_phi", current_points=0, retained_points=0)
+                      map_score=("candidate_current_phi_original_prior_geometry" if replay_scores
+                                 else "controller_applied_phi"),
+                      palette=palette, current_points=0, retained_points=0)
     info_x = 552
     if geometry is None:
         draw.text((info_x, 13), "No committed field", font=_font(21), fill="#f0cb88")
@@ -139,7 +143,7 @@ def render_lidar_risk_map(geometry, frame, nominal_route_world, travelled_world,
             pixels, visible = map_pixels(arrays[key], center, viewport, half_span_m)
             phi = arrays[f"{prefix}_phi"]
             in_field = retained_active if hollow else active
-            colors = {float(value): risk_color_rgb(float(value)) for value in np.unique(phi)}
+            colors = {float(value): risk_color_rgb(float(value), palette=palette) for value in np.unique(phi)}
             # Display-only max per pixel avoids drawing thousands of duplicate
             # vertical returns. The full point array/export is unchanged.
             order = np.flatnonzero(visible)
@@ -174,7 +178,7 @@ def render_lidar_risk_map(geometry, frame, nominal_route_world, travelled_world,
         counts = [int(((basis == k) & active).sum()) for k in range(3)]
         diagnostic.update(current_points=len(basis), retained_points=len(arrays["retained_phi"]),
                           point_basis_counts=dict(ordinary_policy=counts[0], fresh=counts[1], retained=counts[2]))
-        draw.text((info_x, 10), "CONTROLLER-APPLIED phi", font=_font(20), fill="white")
+        draw.text((info_x, 10), score_title, font=_font(20), fill="white")
         draw.text((info_x, 39), f"Latest scan age: {current_time-source_time:.2f} s", font=_font(18), fill="#d1dce4")
         draw.text((info_x, 67), f"{int(active.sum()):,} field / {len(basis):,} returns", font=_font(18), fill="#d1dce4")
         for row, text in enumerate((f"Fresh visual CRA*: {counts[1]:,}",
@@ -191,11 +195,12 @@ def render_lidar_risk_map(geometry, frame, nominal_route_world, travelled_world,
             draw.text((info_x + 16, y), text, font=_font(17), fill="#d1dce4")
         draw.text((info_x, 174), "*Includes configured factor priors", font=_font(16), fill="#b7c5d0")
     for x in range(272):
-        draw.line((info_x + x, 208, info_x + x, 224), fill=risk_color_rgb(x / 271))
+        draw.line((info_x + x, 208, info_x + x, 224), fill=risk_color_rgb(x / 271, palette=palette))
     draw.text((info_x, 229), "0  lower risk", font=_font(16), fill="#d1dce4")
     draw.text((info_x + 175, 229), "higher risk  1", font=_font(16), fill="#d1dce4")
     for row, text in enumerate(("Solid: latest source returns", "Hollow: prior / retained geometry",
-                                "Blue: travelled; grey: nominal", "Camera: original individual phi",
+                                "Blue: travelled; grey: nominal",
+                                "Camera: candidate individual phi" if replay_scores else "Camera: original individual phi",
                                 "Grey: outside active field")):
         draw.text((info_x, 263 + 26 * row), text, font=_font(16), fill="#b7c5d0")
     if robot_footprint_local_xy is not None:
@@ -217,5 +222,7 @@ def render_lidar_risk_map(geometry, frame, nominal_route_world, travelled_world,
     draw.text((left + width - 58, top + height - 27), "+X >", font=_font(15), fill="#445662")
     draw.line((left + 12, top + height - 18, left + 12 + scale, top + height - 18), fill="#445662", width=2)
     draw.text((left + 12, top + height - 41), "1 m", font=_font(14), fill="#445662")
-    draw.text((12, 395), "Robot-centred view | recorded simulator localization | original scores", font=_font(15), fill="#b7c5d0")
+    footer = ("Recorded V3 path | candidate current scores | original prior geometry"
+              if replay_scores else "Robot-centred view | recorded simulator localization | original scores")
+    draw.text((12, 395), footer, font=_font(15), fill="#b7c5d0")
     return image, diagnostic

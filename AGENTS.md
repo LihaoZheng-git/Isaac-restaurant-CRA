@@ -1,5 +1,25 @@
 # CRA repository guidance
 
+- Restaurant risk calibration is a separate defaultOFF experiment. User approved
+  stronger qualified-object score separation, unequal factor weights and a fixed
+  color map; ordinary unknown policies remain unchanged. Candidate uses original
+  upper evidence, contact power2, context floor.75, proportional reserve.25,
+  Ekin50J/Epotential100J, positive noisy-OR exponents kinetic1.5/others1. Missing
+  factor priors share their maximum baseline (explicit correlated-uncertainty
+  assumption); allunsupported keeps original aggregate. Verified human floor.8
+  is a protection PRIOR, not contact sharpness. Original source age/ownership,
+  geometry, fixedlambda1.25, nominal/MPC/CBF/margins remain. Runtime phi and
+  serialization agree; original CRA retained as legacy_cra. Raw contact can
+  survive missing motion using labeled upper-context prior; kinetic staysprior.
+  Archived1182field replay preserves original V3 path and prior geometry risks;
+  it is NOT new closed-loop acceptance. Retained V3 bin/crate medians change
+  .61567/.63136 to.35744/.49635; fresh bin outliers remain. Zero-current-owner
+  masks withheld only in new presentation; no fabricated wholeobjectmask.
+  4083units/100finalfocused/Ruff PASS; fresh native validation pending at source
+  freeze. Recipe configs/restaurant_service_risk_calibration.json requires all
+  six prerequisites/own60 before wheels. Keep all prior demos and main/primary/
+  PR117 holds. See docs/restaurant_risk_calibration.md.
+
 - V4 LiDAR risk presentation reads the original0047241 validated V3 mission;
   no new wheels, estimation or controller changes. Exact archived ownership and
   final applied_field_risk supply each current return; ordinary policies may

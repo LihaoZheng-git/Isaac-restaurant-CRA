@@ -11,10 +11,12 @@ from pxr import Gf, Usd, UsdGeom
 class ServiceDemoVideo:
     """Rendering only. Frames/epochs never feed perception or control."""
 
-    def __init__(self, stage, output, *, follow_pose=None, risk_camera=False):
+    def __init__(self, stage, output, *, follow_pose=None, risk_camera=False, risk_palette="legacy"):
         from isaacsim.sensors.experimental.rtx import CameraSensor, RtxCamera
 
         self.output, self.rows, self.last = output, [], -math.inf
+        from robot.evaluation.risk_palette import palette_description
+        self.risk_palette = palette_description(risk_palette)["name"]
         self.stage, self.follow_pose, self.pose_time = stage, follow_pose, None
         self.camera_pose_record = None
         self.risk_frame, self.risk_rows, self.risk_writer = None, [], None
@@ -69,7 +71,8 @@ class ServiceDemoVideo:
         self.writer.write(np.ascontiguousarray(rgb[:, :, :3][:, :, ::-1]))
         if getattr(self, "risk_writer", None) is not None:
             from robot.evaluation.risk_camera_overlay import render_risk_panel
-            panel, metadata = render_risk_panel(self.risk_frame, now)
+            panel, metadata = render_risk_panel(self.risk_frame, now,
+                palette=getattr(self, "risk_palette", "legacy"))
             combined = np.concatenate((rgb[:, :, :3], panel), axis=1)
             self.risk_writer.write(np.ascontiguousarray(combined[:, :, ::-1]))
             self.risk_rows.append(dict(time=float(now), **metadata))
@@ -99,7 +102,8 @@ class ServiceDemoVideo:
                 masks=np.stack([m.mask for m in frame.masks]))
             stem.with_suffix(".json").write_text(json.dumps(frame.diagnostic(), indent=2)+"\n",
                                                 encoding="utf-8")
-            panel, _ = render_risk_panel(frame, frame.camera_timestamp_seconds)
+            panel, _ = render_risk_panel(frame, frame.camera_timestamp_seconds,
+                palette=getattr(self, "risk_palette", "legacy"))
             cv2.imwrite(str(self.output/"risk-camera-latest.png"), panel[:, :, ::-1])
 
     def close(self):

@@ -22,6 +22,8 @@ sys.path.insert(0, str(ROOT))
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument("--output", type=Path, required=True)
 parser.add_argument("--motion", action="store_true")
+parser.add_argument("--restaurant-calibration", choices=("off", "equal", "kinetic"), default="off",
+                    help="separate verified-object factor calibration; ordinary unknown policy unchanged")
 parser.add_argument('--grid-resolution', type=float, choices=(.05, .1), default=.1,
                     help='explicit numerical field-grid comparison in metres; .1 preserves legacy; physical margins and all observed occupancy stay unchanged')
 parser.add_argument('--mpc-unfinished-qp-proposal', action='store_true',
@@ -894,6 +896,9 @@ if args.fixture_layout != "single" and not args.persistent_object_risk_map:
     parser.error("multi-object fixture requires the all-track risk map")
 if not 0 < args.object_factor_prior_risk < 1:
     parser.error("object factor prior must be strictly between zero and one")
+if args.restaurant_calibration != "off" and (not args.persistent_object_risk_map
+        or args.experiment_baseline != "continuous_cra_safe_sage"):
+    parser.error("restaurant calibration requires the continuous all-object CRA baseline")
 if args.persistent_object_risk_map and args.evidence_gap_diagnostic:
     parser.error(
         "use cra_object_risk_map_replay.py for the new map's stationary gap diagnostic"
@@ -927,6 +932,7 @@ from robot.perception.sam_instance_segmentation import (
 from robot.perception.temporal_object_evidence import TemporalObjectEvidenceConfig
 from robot.perception.persistent_object_evidence import PersistentObjectEvidenceConfig
 from robot.risk.object_risk_policy import ObjectRiskPriorConfig
+from robot.evaluation.restaurant_calibration_runtime import restaurant_calibration_preset
 from robot.risk.cra import PhysicalRiskVector
 from robot.perception.yolo_detector import (
     YoloSegmentationConfig,
@@ -1523,6 +1529,7 @@ def main():
                                                      pixel_denoise=args.contact_pixel_denoise)
                               if args.local_contact_geometry else None),
         capture_risk_masks=args.presentation_risk_camera,
+        restaurant_calibration_config=restaurant_calibration_preset(args.restaurant_calibration),
         human_mass_body_identity_retention=args.human_mass_body_identity_retention,
         predictive_human_geometry_config=HumanGeometryForecastConfig(
             horizon_seconds=round(args.mpc_horizon_steps * .2, 10),
@@ -1676,6 +1683,7 @@ def main():
         from robot.scene.service_demo_video import ServiceDemoVideo
         ACTIVE_SERVICE_VIDEO = ServiceDemoVideo(stage, args.output,
             risk_camera=args.presentation_risk_camera,
+            risk_palette="restaurant_v1" if args.restaurant_calibration != "off" else "legacy",
             follow_pose=(anchor.x, anchor.y, anchor.yaw) if args.presentation_follow_camera else None)
 
     def state():

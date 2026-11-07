@@ -54,19 +54,29 @@ class RiskCameraFrame:
                     rejected=list(self.rejected))
 
 
-def capture_risk_camera_frame(packet, objects, assessments, policies):
+def capture_risk_camera_frame(packet, objects, assessments, policies, *, current_ownership_only=False):
     """Copy only current accepted masks, paired to their original RGB and policy.
 
     Rejected presentation records never change perception acceptance or control.
     Policy-only, retained bounds, raw person cues and unseen tracks cannot create
     a colored mask. The individual CRA score and applied/group score stay separate.
+    The optional calibrated presentation also withholds accepted views that own
+    no current policy returns; it never borrows another owner's mask or score.
     """
+    if not isinstance(current_ownership_only, bool):
+        raise TypeError("current_ownership_only must be bool")
     masks, rejected = [], []
     if len(objects) != len(assessments):
         rejected.append(dict(reason="object_assessment_count_mismatch"))
         objects, assessments = (), ()
     for obj, raw in zip(objects, assessments):
         detail = obj.diagnostics
+        mask_candidate = (detail.get("accepted_instance") and raw.get("accepted") or
+                          detail.get("static_prop_policy") and raw.get("static_prop_policy"))
+        if current_ownership_only and mask_candidate and detail.get("policy_return_count", 0) <= 0:
+            rejected.append(dict(track_id=obj.attributes.track_id,
+                reason="no_current_policy_return_ownership", policy_return_count=detail.get("policy_return_count", 0)))
+            continue
         if detail.get('static_prop_policy') and raw.get('static_prop_policy'):
             # Explicit point overlay, not a fabricated current image mask.
             pixels = np.asarray(raw.get('static_prop_display_pixels', []))
@@ -133,14 +143,11 @@ def capture_risk_camera_frame(packet, objects, assessments, policies):
 
 def risk_color_rgb(phi):
     """Fixed piecewise-linear 0..1 scale: green, yellow, orange, red."""
-    if not math.isfinite(phi) or not 0 <= phi <= 1:
-        raise ValueError("phi must be finite and within [0, 1]")
-    stops = np.array([0., .5, .75, 1.])
-    colors = np.array([[35, 195, 85], [245, 220, 45], [245, 135, 35], [225, 45, 45]])
-    return tuple(int(round(np.interp(phi, stops, colors[:, i]))) for i in range(3))
+    from robot.evaluation.risk_palette import risk_color_rgb as fixed_color
+    return fixed_color(phi)
 
 
-def overlay_rgb(frame):
+def overlay_rgb(frame, *, palette="legacy"):
     """Maximum CRA score wins in overlapping accepted masks, independent of order."""
     image = frame.rgb.copy()
     risk = np.full(image.shape[:2], -1., dtype=float)
@@ -149,11 +156,11 @@ def overlay_rgb(frame):
     for phi in np.unique(risk[risk >= 0]):
         selected = risk == phi
         image[selected] = np.rint(.62 * image[selected] +
-                                  .38 * np.array(risk_color_rgb(float(phi)))).astype(np.uint8)
+                                  .38 * np.array(_color(float(phi), palette))).astype(np.uint8)
     for item in sorted(frame.masks, key=lambda m: (m.phi, m.track_id)):
         contours, _ = cv2.findContours(item.mask.astype(np.uint8), cv2.RETR_EXTERNAL,
                                        cv2.CHAIN_APPROX_SIMPLE)
-        color = risk_color_rgb(item.phi)
+        color = _color(item.phi, palette)
         cv2.drawContours(image, contours, -1, color, 1)
         yy, xx = np.nonzero(item.mask)
         label = f"ID {item.track_id}  phi {item.phi:.2f}"
@@ -163,7 +170,12 @@ def overlay_rgb(frame):
     return image
 
 
-def render_risk_panel(frame, now):
+def _color(phi, palette):
+    from robot.evaluation.risk_palette import risk_color_rgb as fixed_color
+    return fixed_color(phi, palette=palette)
+
+
+def render_risk_panel(frame, now, *, palette="legacy"):
     """640x600 RGB panel. Hold assessed pixels, never paste masks on a new view."""
     canvas = np.full((600, 640, 3), (22, 27, 34), dtype=np.uint8)
 
@@ -185,7 +197,7 @@ def render_risk_panel(frame, now):
         metadata = dict(status="latest_assessed_frame", source_age_seconds=age,
                         **frame.diagnostic())
         line(f"Assessed frame {frame.camera_frame_id} | source {frame.camera_timestamp_seconds:.2f}s | age {age:.2f}s", 47)
-        picture = overlay_rgb(frame)
+        picture = overlay_rgb(frame, palette=palette)
         height, width = picture.shape[:2]
         scale = min(640/width, 400/height)
         size = (max(1, round(width*scale)), max(1, round(height*scale)))
@@ -197,7 +209,7 @@ def render_risk_panel(frame, now):
                 text = f"ID {item.track_id}: phi {item.phi:.3f} | {item.basis}"
                 if not math.isclose(item.phi, item.applied_phi, abs_tol=1e-9):
                     text += f" | field {item.applied_phi:.3f}"
-                line(text, 478+18*index, risk_color_rgb(item.phi), .42)
+                line(text, 478+18*index, _color(item.phi, palette), .42)
             if len(frame.masks) > 2:
                 line(f"+ {len(frame.masks)-2} masks; full provenance in frame ledger", 512, scale=.4)
         else:
@@ -205,7 +217,7 @@ def render_risk_panel(frame, now):
         if frame.rejected:
             line(f"{len(frame.rejected)} presentation record(s) withheld; see ledger", 512, scale=.4)
     for x in range(24, 616):
-        canvas[531:543, x] = risk_color_rgb((x-24)/591)
+        canvas[531:543, x] = _color((x-24)/591, palette)
     line("0  Lower assessed risk", 561, scale=.43)
     cv2.putText(canvas, "Higher assessed risk  1", (438, 561), cv2.FONT_HERSHEY_SIMPLEX,
                 .43, (225, 231, 238), 1, cv2.LINE_AA)

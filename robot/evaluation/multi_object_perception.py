@@ -544,6 +544,25 @@ def assess_all_objects(worker, packet):
             track = next(t for t in tracks if t.track_id == original)
             semantics.append(SemanticObstacle(replace(track, track_id=key,
                 point_count=int(np.count_nonzero(extra_ids == key))), "unknown", 0., HUMAN_ENVELOPE_SOURCE))
+    calibration_audit = None
+    calibration_config = getattr(worker, "restaurant_calibration_config", None)
+    if calibration_config is not None:
+        from robot.evaluation.restaurant_calibration_runtime import apply_restaurant_calibration
+        objects, policies, calibration_audit = apply_restaurant_calibration(
+            objects, policies, calibration_config, envelope_audit,
+            packet.sensor_timestamp_seconds, carried_groups=carried_detail)
+        if calibration_audit is not None and carried_detail is not None:
+            carried_detail = dict(carried_detail,
+                confirmed_groups=calibration_audit["confirmed_groups"],
+                legacy_confirmed_groups=calibration_audit["legacy_confirmed_groups"])
+        for body in envelope_audit:
+            if not body.get("applied_to_occupancy"):
+                continue
+            key, original = body["envelope_track_id"], body["track_id"]
+            # The original unknown geometry floor remains; eligible physical
+            # evidence and the explicit human protection prior may raise it.
+            policies[key] = max((policies[key], policies[original]), key=lambda p: p.risk)
+            body["applied_cra_phi"] = policies[key].risk
     prediction, prediction_audit = None, None
     if prediction_memory is not None:
         prediction, prediction_audit = prediction_memory.update(tracking, envelope_audit,
@@ -1027,6 +1046,7 @@ def assess_all_objects(worker, packet):
         "mode": "persistent_multi_object_factor_priors",
         "experiment_baseline": worker.experiment_baseline.value,
         "applied_field_policies": baseline_audit,
+        **({"restaurant_calibration": calibration_audit} if calibration_audit is not None else {}),
         "motion_aware_passing": passing_audit,
         "encounter_motion_classification": encounter_audit,
         "rear_encounter_motion_estimate": motion_estimate_audit,
@@ -1112,7 +1132,8 @@ def assess_all_objects(worker, packet):
     risk_camera_frame = None
     if getattr(worker, "capture_risk_masks", False):
         from robot.evaluation.risk_camera_overlay import capture_risk_camera_frame
-        risk_camera_frame = capture_risk_camera_frame(packet, objects, frames, policies)
+        risk_camera_frame = capture_risk_camera_frame(packet, objects, frames, policies,
+            current_ownership_only=bool(calibration_config is not None and calibration_config.enabled))
     return LiveObjectResult(
         field,
         primary.attributes,

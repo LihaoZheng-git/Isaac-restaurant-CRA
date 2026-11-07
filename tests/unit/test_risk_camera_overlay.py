@@ -62,6 +62,23 @@ def test_human_contact_prior_does_not_masquerade_as_factor_evidence():
     assert item.basis == "factor priors"
 
 
+def test_calibrated_presentation_withholds_zero_owner_mask_without_borrowing_another_score():
+    source, obj, raw, policies = fixture()
+    obj.diagnostics["policy_return_count"] = 0
+    before = dict(obj.diagnostics)
+    legacy = capture(source, obj, raw, policies)
+    assert len(legacy.masks) == 1  # Historical presentation remains unchanged.
+    filtered = capture_risk_camera_frame(source, [obj], [raw], policies, current_ownership_only=True)
+    assert not filtered.masks
+    assert filtered.rejected == (dict(track_id=7,
+        reason="no_current_policy_return_ownership", policy_return_count=0),)
+    np.testing.assert_array_equal(filtered.rgb, legacy.rgb)
+    assert obj.diagnostics == before and obj.policy.risk == .2 and policies[7].risk == .8
+    obj.diagnostics["policy_return_count"] = 4
+    owned = capture_risk_camera_frame(source, [obj], [raw], policies, current_ownership_only=True)
+    assert len(owned.masks) == 1 and owned.masks[0].phi == .2
+
+
 @pytest.mark.parametrize("fault", ["id", "frame", "time", "support", "count", "shape", "phi", "applied"])
 def test_inconsistent_presentation_records_are_withheld_without_changing_policy(fault):
     source, obj, raw, policies = fixture()
