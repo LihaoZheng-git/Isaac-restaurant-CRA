@@ -1,5 +1,32 @@
 # CRA repository guidance
 
+- Bin/crate paired work at0047241 is finalized. Matched isolated N12 runs both
+  reach4m, bin26.9167s/crate32s, alongside bends2.31/8.02cm away. Live retained
+  contact medians.15189/.17267 and phi.61462/.62338. Five shared25cm intervals
+  favor crate, distributions overlap, one run each. Bin is21.4cm narrower on
+  near side. Retention120/250bin,79/307crate. Preserve crate circle-score failure.
+  Two full N6 closer layouts (crate y3.40 then3.20,bin3.40) FAIL300s/1of8guides.
+  First selected zero with fresh fields. Second's seven replay fields reject
+  tested candidates at a four-point retained .30m-allowance region in padded
+  configuration space. Keep both failures and all geometry/risk/controller rules.
+  New native repeat at original V3 positions crate(17.5,3.0),bin(21.2,3.2)
+  PASSES six fresh prerequisites/own60/8of8guides in159.0333simsec,clearance
+  .352070m/CBF.076007/stopdrift.002164m,zero PhysX contacts with either prop.
+  Human nearby curve.384478m at mincenter1.421733m. All navigation pauses retained.
+  Bin7fresh+83retained/crate5fresh+311retained, retained phi medians.61567/.63136.
+  IMPORTANT crate0/27qualified fields directly alongside,25/34approach.
+  Both prop-local paths nearly straight (<.6cm alongside). Curved closer-prop
+  response belongs to separate N12 short trials. Full uses N6/guidance100,
+  shortN12/guidanceOFF, lambda1.25 both. Do not claim continuous crate evidence
+  or causal risk-only trajectory comparison. Video outputs/final demo/
+  v3-bin-crate-validated has left perception/right map+follow view,1601native+
+  60credits166.1s,master/H264 fully decoded. 3993units/Ruff/diffPASS.
+  All408 prior archive files and20 new package files verified. See
+  docs/bin_crate_service_demo.md and outputs/service-demo-v3-balanced-contact/.
+  Builder scripts/scene_creation/build_service_pair_layout.py reproduces
+  original-v3/relief20 additive layouts. Keep older demos and draftPR245/
+  main/primary/PR117 holds. Native archives F:/CRA-experiments/service-v3-balanced-pair/.
+
 - For a more visible isolated crate pass, use the 5 cm setback recipe
   (world y 3.40). Its native N12 trial reached the 4 m waypoint in 32.00 s
   with an 8.02 cm bend away beside the crate, 9.65 cm goal error, 2.61 mm

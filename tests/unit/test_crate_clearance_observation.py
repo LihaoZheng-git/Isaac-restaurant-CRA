@@ -19,8 +19,8 @@ from robot.evaluation.crate_clearance_observation import (
 DEMO = Path('scripts/demos/cra_live_object_isaac_demo.py').resolve()
 
 
-def parse_recipe(monkeypatch, recipe, extra_args):
-    command = json.loads(Path(f'configs/{recipe}.json').read_text())['commands']['crate-static']
+def parse_recipe(monkeypatch, recipe, extra_args, case='crate-static'):
+    command = json.loads(Path(f'configs/{recipe}.json').read_text())['commands'][case]
     monkeypatch.setattr('sys.argv', command + extra_args + ['--output', 'outputs/unused-crate-observation'])
     ns = {'__file__': str(DEMO)}
     exec(compile(DEMO.read_text().split('args.output.mkdir', 1)[0], str(DEMO), 'exec'), ns)
@@ -41,6 +41,31 @@ def test_passive_measurement_admits_both_primary_and_existing_ablation(monkeypat
 def test_passive_measurement_rejects_other_experiments(monkeypatch, addition):
     with pytest.raises(SystemExit):
         parse_recipe(monkeypatch, 'restaurant_crate_route_probe', ['--observe-crate-clearance', *addition])
+
+
+@pytest.mark.parametrize('case', ['long-parallel', 'long-parallel-near'])
+def test_service_protocol_admits_each_stationary_prerequisite(monkeypatch, case):
+    args = parse_recipe(monkeypatch, 'restaurant_service_demo_v3_balanced_contact', [], case)
+    assert args.observe_service_clearance
+    assert not args.motion and not args.human_carry_bowl and not args.moving_actor
+
+
+@pytest.mark.parametrize('addition', [
+    ['--human-carry-bowl'],
+    ['--moving-actor'],
+    ['--experiment-baseline', 'geometric_velocity_cbf'],
+])
+def test_service_protocol_rejects_unvalidated_control_modes(monkeypatch, addition):
+    with pytest.raises(SystemExit):
+        parse_recipe(monkeypatch, 'restaurant_service_demo_v3_balanced_contact', addition, 'long-parallel')
+
+
+def test_original_service_retains_its_original_protocol(monkeypatch):
+    assert not parse_recipe(
+        monkeypatch, 'restaurant_service_demo_v3_corrected_contact', [], 'long-parallel').observe_service_clearance
+    with pytest.raises(SystemExit):
+        parse_recipe(monkeypatch, 'restaurant_service_demo_v3_corrected_contact',
+                     ['--observe-service-clearance'], 'long-parallel')
 
 
 @pytest.mark.parametrize(('crate', 'service', 'expected'), [
