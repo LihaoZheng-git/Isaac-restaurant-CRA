@@ -14,7 +14,8 @@
   units/52finalfocused/RuffPASS. Preserve both rejected partial exports and all
   older demos, source clocks, native limitations and main/primary/PR117 holds.
   Master in outputs/final demo/v4-lidar-risk retains1601navigation/stop+60credit
-  frames,166.1s,1920x1080/10fps,fulldecodePASS;428oldarchivefilesunchanged.
+  frames,166.1s,1920x1080/10fps;masterandH264sharefulldecodePASS;
+  428oldarchivefilesunchanged. Share restaurant-service-v4-share.mp4.
   See docs/lidar_risk_demo.md; export outputs/lidar-risk-map/export-final/.
 
 - Bin/crate paired work at0047241 is finalized. Matched isolated N12 runs both

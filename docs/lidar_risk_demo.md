@@ -111,3 +111,6 @@ navigation/stopping frames plus 60 original attribution frames: 1,661 frames,
 166.1 s, 1920 x 1080 at 10 fps. Full master decoding passed. The package
 includes preview images, source/frame mapping, asset credits and file hashes.
 The previous 428 demo/archive files passed checksum verification unchanged.
+The H.264 share copy, `restaurant-service-v4-share.mp4`, also passed a complete
+FFmpeg decode and frame-count, duration and resolution checks. It is ready to
+share; `video-validation.json` records those checks.
