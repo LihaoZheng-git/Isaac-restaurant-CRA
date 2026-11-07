@@ -29,6 +29,7 @@ def summarize_unknown_obstacles(records):
     point_motion_proofs = 0
     confirmed_motion_proofs = ambiguous_motion_proofs = 0
     errors = []
+    injective_proofs = 0
     modes = {}
     for record in records:
         d = record.get('diagnostics', record)
@@ -98,6 +99,26 @@ def summarize_unknown_obstacles(records):
                 recovery = region.get('verified_recovery')
                 if not _valid_verified_part_recovery(recovery, region, d, now):
                     errors.append('verified part recovery provenance mismatch')
+            witness = region.get('injective_support')
+            if witness is not None:
+                injective_proofs += 1
+                if (not isinstance(proof, dict)
+                        or not memory['config'].get('distinct_surface_witness_matching')
+                        or mode != 'current_whole_surface_geometry_replacement'
+                        or not validate_injective_support(witness)
+                        or witness.get('original_track_id') != region['track_id']
+                        or witness.get('current_track_id') != region['replacement_track_id']
+                        or witness.get('original_source_time') != region['original_source_time']
+                        or witness.get('original_source_frame') != region['original_source_frame']
+                        or witness.get('original_point_count') != region['original_point_count']
+                        or witness.get('original_risk') != region['applied_risk']
+                        or witness.get('current_source_time') != now
+                        or witness.get('current_source_frame') != record.get('sensor_frame_id')
+                        or witness.get('maximum_source_gap_seconds') != memory['config']['maximum_source_gap_seconds']
+                        or not 0 < now-region['original_source_time'] <= memory['config']['maximum_source_gap_seconds']+1e-9
+                        or witness.get('maximum_nearest_distance_m') != region['support_distance_m']
+                        or region['radius_m'] != .10 or proof.get('injective_support') != witness):
+                    errors.append('injective positive-surface witness mismatch')
             if evidence is not None and not _valid_dynamic_evidence(evidence, now,
                     verified_only=memory['config'].get('require_verified_dynamic_evidence', False)):
                 errors.append('retained dynamic evidence mismatch')
@@ -136,7 +157,87 @@ def summarize_unknown_obstacles(records):
         geometry_replacements=replacements, point_motion_proofs=point_motion_proofs,
         confirmed_motion_proofs=confirmed_motion_proofs, ambiguous_motion_proofs=ambiguous_motion_proofs,
         modes=modes, errors=errors[:20],
+        **({'injective_surface_proofs': injective_proofs} if injective_proofs else {}),
         scope='source/policy/current-grid provenance and available static-human exclusion only; not general uncertainty calibration or navigation acceptance')
+
+
+def validate_injective_support(proof, *, original_points=None, current_points=None, current_ids=None):
+    """Independently check a certificate; optional exact archive arrays bind it.
+
+    No matching solver, human truth, identity inference or risk calculation runs.
+    Runtime summaries check the recorded certificate and original source clocks;
+    a read-only archive audit additionally supplies the actual saved point arrays.
+    """
+    from scipy.spatial import cKDTree
+    try:
+        if not isinstance(proof, dict) or proof.get('basis') != 'full_injective_positive_surface_support':
+            return False
+        def integer(value):
+            return isinstance(value, int) and not isinstance(value, bool)
+        n = proof['original_distinct_point_count']
+        count = proof['original_point_count']
+        owner = proof['current_track_id']
+        edges = proof['candidate_edge_count']
+        if (not all(integer(v) for v in (n, count, owner, edges,
+                proof['current_owner_point_count'], proof['current_owner_distinct_point_count'],
+                proof['nearest_distinct_current_point_count']))
+                or not 3 <= n <= 256 or count < n or owner < 0
+                or not n <= proof['current_owner_distinct_point_count'] <= proof['current_owner_point_count'] <= 65536
+                or proof['nearest_distinct_current_point_count'] not in (1, 2)
+                or not 0 <= proof['maximum_nearest_distance_m'] <= .10
+                or not n <= edges <= 65536 or proof['maximum_distance_m'] != .10
+                or proof['resource_limits'] != dict(maximum_distinct_original_points=256,
+                    maximum_current_points=65536, maximum_candidate_edges=65536)):
+            return False
+        old = np.asarray(proof['original_unique_xy'], float)
+        new = np.asarray(proof['current_witness_xy'], float)
+        oi, ni = np.asarray(proof['original_unique_indices']), np.asarray(proof['current_witness_indices'])
+        if (old.shape != (n, 2) or new.shape != (n, 2) or not np.isfinite([old, new]).all()
+                or len(np.unique(old, axis=0)) != n or len(np.unique(new, axis=0)) != n
+                or oi.shape != (n,) or ni.shape != (n,)
+                or not np.issubdtype(oi.dtype, np.integer) or not np.issubdtype(ni.dtype, np.integer)
+                or len(np.unique(oi)) != n or len(np.unique(ni)) != n
+                or np.any(oi < 0) or np.any(oi >= count) or np.any(ni < 0)):
+            return False
+        distances = np.linalg.norm(old-new, axis=1)
+        if (np.any(distances > .10) or not math.isfinite(proof['maximum_witness_distance_m'])
+                or abs(float(distances.max())-proof['maximum_witness_distance_m']) > 1e-12):
+            return False
+        supplied = (original_points is not None, current_points is not None, current_ids is not None)
+        if not any(supplied):
+            return True
+        if not all(supplied):
+            return False
+        original, current, ids = np.asarray(original_points), np.asarray(current_points), np.asarray(current_ids)
+        if (original.shape != (count, 2) or current.ndim != 2 or current.shape[1] != 2
+                or len(current) > 65536 or ids.shape != (len(current),)
+                or not np.issubdtype(ids.dtype, np.integer)
+                or not np.isfinite(original).all() or not np.isfinite(current).all()
+                or np.any(ni >= len(current)) or not np.array_equal(current[ni], new)
+                or not np.all(ids[ni] == owner)):
+            return False
+        distinct_old, original_indices = np.unique(original, axis=0, return_index=True)
+        owner_points = current[ids == owner]
+        distinct_current = np.unique(owner_points, axis=0)
+        if (not np.array_equal(distinct_old, old) or not np.array_equal(original_indices, oi)
+                or len(owner_points) != proof['current_owner_point_count']
+                or len(distinct_current) != proof['current_owner_distinct_point_count']):
+            return False
+        tree = cKDTree(current)
+        nearest_distances, nearest = tree.query(original)
+        if (np.any(nearest_distances > .10)
+                or abs(float(nearest_distances.max())-proof['maximum_nearest_distance_m']) > 1e-12
+                or len(np.unique(current[nearest], axis=0)) != proof['nearest_distinct_current_point_count']
+                or int(cKDTree(distinct_current).query_ball_point(old, .10, return_length=True).sum()) != edges):
+            return False
+        # Recheck the unique-owner and original unowned-return ambiguity gates.
+        neighbors = tree.query_ball_point(old, .10)
+        indices = np.unique(np.concatenate(neighbors)).astype(int)
+        owners = [int(k) for k in np.unique(ids[indices]) if k >= 0
+            and np.all(cKDTree(current[ids == k]).query(original)[0] <= .10)]
+        return owners == [owner] and np.count_nonzero(ids[indices] < 0) < 3
+    except (KeyError, TypeError, ValueError, IndexError, OverflowError):
+        return False
 
 
 def _valid_dynamic_evidence(evidence, now, *, verified_only=False):

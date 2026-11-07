@@ -175,6 +175,43 @@ def _color(phi, palette):
     return fixed_color(phi, palette=palette)
 
 
+def camera_metadata_note(mask_count, rejected_count):
+    """One compact footer; extra masks and withheld records never overlap."""
+    if any(not isinstance(n, int) or isinstance(n, bool) or n < 0
+           for n in (mask_count, rejected_count)):
+        raise ValueError("camera metadata counts must be nonnegative integers")
+    notes = []
+    if mask_count > 2:
+        notes.append(f"+ {mask_count-2} masks")
+    if rejected_count:
+        notes.append(f"{rejected_count} records withheld")
+    return "; ".join([*notes, "see ledger"]) if notes else None
+
+
+def repair_camera_metadata_notes(panel, epoch):
+    """Fix only the baked metadata strip, using the exact native epoch counts.
+
+    The original camera-image region, masks, score labels, color bar and timing
+    text remain byte-identical. This does not redraw or estimate any object.
+    """
+    panel = np.asarray(panel)
+    if panel.dtype != np.uint8 or panel.shape != (600, 640, 3):
+        raise ValueError("native camera panel must be 640x600 RGB uint8")
+    if epoch["status"] not in {"awaiting_assessment", "latest_assessed_frame"}:
+        raise ValueError("unsupported native camera epoch for metadata repair")
+    count, rejected = len(epoch["masks"]), len(epoch.get("rejected", []))
+    note = camera_metadata_note(count, rejected)
+    result = panel.copy()
+    strip = np.full((23, 640, 3), (22, 27, 34), np.uint8)
+    if note:
+        cv2.putText(strip, note, (12, 10), cv2.FONT_HERSHEY_SIMPLEX, .4,
+                    (225, 231, 238), 1, cv2.LINE_AA)
+    result[502:525] = strip
+    return result, dict(basis="native_epoch_counts_metadata_layout_only",
+        changed_row_range=[502,525], mask_count=count, rejected_count=rejected, note=note,
+        sensor_frame_id=epoch.get("sensor_frame_id"), camera_frame_id=epoch.get("camera_frame_id"))
+
+
 def render_risk_panel(frame, now, *, palette="legacy"):
     """640x600 RGB panel. Hold assessed pixels, never paste masks on a new view."""
     canvas = np.full((600, 640, 3), (22, 27, 34), dtype=np.uint8)

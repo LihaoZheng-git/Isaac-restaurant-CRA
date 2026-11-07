@@ -12,6 +12,7 @@ import numpy as np
 from scipy.spatial import cKDTree
 
 from robot.perception.background_motion_evidence import confirm_background_motion
+from robot.perception.surface_support import whole_surface_replacement
 
 from robot.safety.class_safety_policy import ClassSafetyParameters
 from robot.safety.safe_sage_guidance_policy import SafeSAGEGuidanceParameters
@@ -40,19 +41,21 @@ class UnknownObstacleConfig:
     background_maximum_radius_m: float = .30
     unclassified_static_prior: bool = False
     require_verified_dynamic_evidence: bool = False
+    distinct_surface_witness_matching: bool = False
 
     def __post_init__(self):
         if (not isinstance(self.supported_background_prior, bool)
                 or not isinstance(self.persistent_background_prior, bool)
                 or not isinstance(self.unclassified_static_prior, bool)
                 or not isinstance(self.require_verified_dynamic_evidence, bool)
+                or not isinstance(self.distinct_surface_witness_matching, bool)
                 or self.require_verified_dynamic_evidence and not self.unclassified_static_prior
                 or self.unclassified_static_prior and not self.persistent_background_prior
                 or self.persistent_background_prior and not self.supported_background_prior):
             raise ValueError("background prior requires explicit boolean opt-in")
         for name, value in vars(self).items():
             if name in ('supported_background_prior', 'persistent_background_prior', 'unclassified_static_prior',
-                        'require_verified_dynamic_evidence'):
+                        'require_verified_dynamic_evidence', 'distinct_surface_witness_matching'):
                 continue
             if isinstance(value, bool) or not math.isfinite(value) or value <= 0:
                 raise ValueError("finite positive unknown-obstacle configuration required")
@@ -120,6 +123,7 @@ class UncertainSurface:
     support_distance_m: float | None = None
     replacement_track_id: int | None = None
     verified_recovery: dict | None = None
+    injective_support: dict | None = None
     _cell_cache: dict = field(default_factory=dict, repr=False, compare=False)
 
     def __post_init__(self):
@@ -192,6 +196,7 @@ class UnknownObstacleSnapshot:
             applied_risk=old.guidance.risk, checked_cell_count=len(rows),
             replacement_track_id=r.replacement_track_id,
             verified_recovery=r.verified_recovery,
+            **({"injective_support": r.injective_support} if r.injective_support is not None else {}),
             region_clipped_to_local_field=clipped, local_region_current_field_covered=True,
             scope="positive geometry prior in current local field; no free-space, identity or factor renewal")
 
@@ -212,6 +217,7 @@ class UnknownObstacleSnapshot:
                 radius_m=r.radius_m, mode=r.mode, support_distance_m=r.support_distance_m,
                 replacement_track_id=r.replacement_track_id,
                 verified_recovery=r.verified_recovery,
+                **({"injective_support": r.injective_support} if r.injective_support is not None else {}),
                 fixed_unknown_phi=self.config.unknown_phi, applied_risk=r.original.guidance.risk)
                 for r in self.regions])
 
@@ -470,33 +476,35 @@ class UnknownObstacleMemory:
                 dist, ix = stable_tree.query(old.points)
                 stable_match = bool(np.all(dist <= .10) and len(np.unique(stable[ix], axis=0)) >= 3)
             if raw_tree is not None and (age <= cfg.maximum_source_gap_seconds+1e-9 or stable_match):
-                distances, nearest = raw_tree.query(old.points)
-                if np.all(distances <= .10) and len(np.unique(points[nearest], axis=0)) >= 3:
-                    neighbors = raw_tree.query_ball_point(old.points, .10)
-                    indices = np.unique(np.concatenate(neighbors)).astype(int)
-                    owners = [int(k) for k in np.unique(ids[indices]) if k >= 0
-                        and np.all(cKDTree(points[ids == k]).query(old.points)[0] <= .10)]
-                    unowned = np.count_nonzero(ids[indices] < 0) >= 3
-                    if len(owners) == 1 and not unowned:
-                        replacement = owners[0]
-                        regions.append(UncertainSurface(old, .10, "current_whole_surface_geometry_replacement",
-                            float(distances.max()), replacement))
-                        records.pop(key)
-                        if replacement in records:
-                            target = records[replacement]
-                            records[replacement] = replace(target, guidance=cfg.guidance(target.guidance, old.guidance))
-                            if cfg.unclassified_static_prior and old.dynamic_evidence is not None:
-                                # Whole current geometry can replace occupancy,
-                                # but cannot erase the observed dynamic hazard.
-                                # This carries an exclusion PRIOR, not visual
-                                # identity or any physical factor measurement.
-                                evidence = dict(old.dynamic_evidence, geometry_replacement=dict(
-                                    source_time=source_time, previous_track_id=key,
-                                    current_track_id=replacement, maximum_distance_m=float(distances.max())))
-                                records[replacement] = replace(records[replacement],
-                                    dynamic_evidence=target.dynamic_evidence or evidence,
-                                    stationary_support_time=None, background_support=None)
-                        continue
+                matched = whole_surface_replacement(old.points, points, ids, raw_tree=raw_tree,
+                    allow_injective=bool(cfg.distinct_surface_witness_matching
+                        and age <= cfg.maximum_source_gap_seconds+1e-9))
+                if matched is not None:
+                    replacement, distance, witness = matched
+                    if witness is not None:
+                        witness = dict(witness, original_track_id=key,
+                            original_source_time=old.source_time, original_source_frame=old.source_frame,
+                            current_source_time=source_time, current_source_frame=source_frame,
+                            original_risk=old.guidance.risk,
+                            maximum_source_gap_seconds=cfg.maximum_source_gap_seconds)
+                    regions.append(UncertainSurface(old, .10, "current_whole_surface_geometry_replacement",
+                        distance, replacement, injective_support=witness))
+                    records.pop(key)
+                    if replacement in records:
+                        target = records[replacement]
+                        records[replacement] = replace(target, guidance=cfg.guidance(target.guidance, old.guidance))
+                        if cfg.unclassified_static_prior and old.dynamic_evidence is not None:
+                            # Whole current geometry can replace occupancy,
+                            # but cannot erase the observed dynamic hazard.
+                            # This carries an exclusion PRIOR, not visual
+                            # identity or any physical factor measurement.
+                            evidence = dict(old.dynamic_evidence, geometry_replacement=dict(
+                                source_time=source_time, previous_track_id=key,
+                                current_track_id=replacement, maximum_distance_m=distance))
+                            records[replacement] = replace(records[replacement],
+                                dynamic_evidence=target.dynamic_evidence or evidence,
+                                stationary_support_time=None, background_support=None)
+                    continue
             human_near = excluded_surface(old.points, qualified=old)
             if cfg.unclassified_static_prior:
                 if human_near and old.dynamic_evidence is None:

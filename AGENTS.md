@@ -1,5 +1,41 @@
 # CRA repository guidance
 
+- Calibrated native V3 at7567c0b reached8/8guides in156.0667simsec, clearance
+  .348148m/CBF.078256/stopdrift.002194m, nearby-human curve.384546m and zero
+  bin/crate PhysX contacts, BUT overall native acceptance FAILED. Six static-
+  human exclusion errors at132.7--133.4s concern the same5-point raw2987 surface
+  retained from132.5 as an unclassified static prior. Source unchanged; preserve
+  F:/CRA-experiments/restaurant-risk-calibration-20261107/long-motion-v1 exactly.
+  The raw track inherited1.236m/s from earlier cluster/ID mixing; its5points are
+  outside RGB, so existing human/speed gates correctly reject association.
+  Current whole-surface replacement has5 distinct witnesses within unchanged
+  .10m, but greedy nearest witnesses collapse to1/2points. A bounded defaultOFF
+  full injective matching fallback is implemented; do not relax human
+  classification, speed, expiry, distance, ownership or risk checks. Replay and
+  fresh native gates remain required. Same-native scoring/source audit passes:
+  bin16fresh/83retained rows, retainedmedianphi .61187->.30948; crateONLY2fresh/
+  zero retained, median .60763->.56367. Human242verified/213current-owned/
+  38supportedkinetic, phi.8--.98315; fresh bin outlier.87836 remains. No continuous
+  crate evidence or accepted new native video claim. See
+  docs/restaurant_risk_calibration.md; all main/primary/PR117 holds stay.
+
+- Corrected calibration validation uses the separate
+  configs/restaurant_service_risk_calibration_witnesses.json recipe and explicit
+  --unknown-distinct-surface-witnesses. Original scoring-only recipe remains.
+  New proof requires every distinct oldXY (>=3) to match distinct currentXY of
+  the unique eligible owner within unchanged.10m/.35s; legacy accepts unchanged.
+  Caps256old/65536current/65536edges reject only the additional proof. Exact
+  witnesses/indices/owner/source/risk and current-field coverage are recorded
+  and independently audited; no human label or factor transfer. This adds a
+  geometric proof correction, so the next native trial is not a strict risk-only
+  trajectory comparison.4171fullunits239.09s/15CLI/Ruff/diffPASS; final archived
+  replay1147fields preserves548legacy accepts, validates50new complete proofs,
+  retains491rejects. Exact2987 memory replay passes.2/.3s and rejects.5s; no native
+  acceptance follows from replay. Fresh six prerequisites/own60/full acceptance
+  remain required. Preserve the six original human-overlap failures.
+  Seven additional archive-certificate tests PASS; original failed-v1 audit
+  passes with zero certificates while retaining native_overall_passed:false.
+
 - Restaurant risk calibration is a separate defaultOFF experiment. User approved
   stronger qualified-object score separation, unequal factor weights and a fixed
   color map; ordinary unknown policies remain unchanged. Candidate uses original
@@ -15,8 +51,8 @@
   it is NOT new closed-loop acceptance. Retained V3 bin/crate medians change
   .61567/.63136 to.35744/.49635; fresh bin outliers remain. Zero-current-owner
   masks withheld only in new presentation; no fabricated wholeobjectmask.
-  4083units/100finalfocused/Ruff PASS; fresh native validation pending at source
-  freeze. Recipe configs/restaurant_service_risk_calibration.json requires all
+  4083units/100finalfocused/Ruff PASS before native; first native failure recorded
+  above. Recipe configs/restaurant_service_risk_calibration.json requires all
   six prerequisites/own60 before wheels. Keep all prior demos and main/primary/
   PR117 holds. See docs/restaurant_risk_calibration.md.
 

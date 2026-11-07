@@ -64,12 +64,14 @@ Waypoint nominal, MPC/CBF objectives, geometry margins, wheel limits and source
 admission remain as in the original comparison. The candidate does change the
 field through phi, so a score replay is not a new navigation validation.
 
-## Archived calibration and held-out response
+## Calibration and separate archived V3 response
 
-The short bin/crate runs supply the calibration comparison. The separate
-original V3 mission is used as a response check. Correlated frames are not
-independent trials, and the prop geometries/clearances differ, so this is not a
-causal controller or statistical generalization claim.
+The short bin/crate runs supply the initial calibration comparison. Archived
+V3 human responses also informed selection of the 50 J kinetic reference. The
+original V3 mission is therefore a separate archived response check, not a blind
+holdout. Correlated frames are not independent trials, and the prop geometries
+and clearances differ; these results do not establish causal controller effects
+or statistical generalization.
 
 | Qualified retained records | Original median phi | Candidate median phi |
 |---|---:|---:|
@@ -80,9 +82,11 @@ causal controller or statistical generalization claim.
 
 Candidate settings were compared with equal exponents and kinetic references
 20/50/100 J. The 20 J factor-only human diagnostic compressed many scores near
-one; 100 J left that diagnostic below the human floor. 50 J retains a broader
-response. Final ownership admission matters: only 29 human rows have both
-supported kinetic evidence and current owned returns. The 258 verified human
+one; 100 J left that diagnostic below the human floor. We selected 50 J for a
+broader response in these inspected records, not as an independently validated
+optimum or a measured injury threshold. Final ownership admission matters: only
+29 human rows have both supported kinetic evidence and current owned returns.
+The 258 verified human
 records have median 0.80 and maximum 0.95660; two reach at least 0.95.
 
 Fresh views still have outline outliers: the eligible fresh-bin maximum is
@@ -121,11 +125,101 @@ The full unit suite passed **4,083 tests in 235.36 seconds**. After final
 presentation/ownership refinements, **100 focused regressions passed**.
 Repository Ruff and `git diff --check` passed. These include scoring,
 source-clock, ownership, field-integration, carried-group, unknown-policy parity
-and visualization checks. Native outcomes will be recorded after completion;
-no fresh navigation pass is asserted by this document yet.
+and visualization checks. After the post-native archive/presentation changes,
+50 focused tests and repository Ruff passed. The first native outcome below is
+not full acceptance.
+
+The combined presentation and opt-in witness correction then passed **4,171
+unit tests in 239.09 seconds**, with 15 CLI/recipe tests also run separately.
+Repository Ruff and diff checks passed. Fresh corrected native validation is
+still required; these tests do not override the first trial's failed audit.
+The independent archived-certificate auditor adds seven passing integration
+tests (4.38 seconds), run after that full-suite collection. Its read-only audit
+of the first trial passes with zero recorded injective certificates and retains
+`native_overall_passed: false`; it cannot grant navigation acceptance.
 
 `configs/restaurant_service_risk_calibration.json` reproduces the exact original
 V3 invocations with only the scoring opt-in added to perception recipes. Its
 six fresh prerequisites and own 60-source parked gate must pass before new
 wheels. Any native failure is retained; original acceptance thresholds and
 physically meaningful MPC/CBF stops are not weakened to improve presentation.
+
+## First fresh native trial: arrival with a failed memory audit
+
+At frozen revision `7567c0b`, all six fresh prerequisites and the mission's own
+60-source parked gate passed. The first motion run reached all eight route
+guides in 156.0667 simulation seconds. Minimum independent clearance was
+0.348148 m, minimum CBF margin 0.078256, stopping drift 0.002194 m, and both prop
+PhysX contact counts were zero. The nearby-human excursion was 0.384546 m from
+the unchanged nominal polyline. These are one-run observations in paced
+simulation, not a causal smoothing comparison or real-time performance claim.
+
+**The original native report is nevertheless failed.** Six static-human
+exclusion checks at sources 132.7--133.4 s concern one five-point raw surface,
+track 2987, last observed at 132.5 s. It was retained as an unclassified static
+prior even though its points were near the human. This did not stop navigation;
+it failed the final memory audit. Preserve the report, launcher rejection and
+all original records under
+`F:/CRA-experiments/restaurant-risk-calibration-20261107/long-motion-v1`.
+
+The same-record scoring and source audit passed across 60 parked and 1,087 live
+fields, with 115,863 object rows. This isolates scoring response from differences
+between separate perception runs:
+
+| Current-owned native evidence | Rows | Legacy median phi | Calibrated median phi |
+|---|---:|---:|---:|
+| Bin, fresh contact | 16 | 0.59836 | 0.36045 |
+| Bin, retained contact | 83 | 0.61187 | 0.30948 |
+| Crate, fresh contact only | 2 | 0.60763 | 0.56367 |
+
+The crate has **no retained-contact rows in this run**. Its two qualified scores
+span 0.51323--0.61410, and cannot establish reliable continuous acquisition or a
+general ranking. A fresh bin outline outlier reaches 0.87836. High silhouette
+cues also occur on furniture. Recalibration does not fix those perception
+limitations. Among 242 verified human rows, 213 own current returns and 38 have
+supported kinetic evidence; final phi spans 0.80--0.98315. Human mass remains a
+configured adult prior, and its 0.80 protection floor remains separate from the
+physical estimate. Zero-owner human rows do not become fresh calibrated data.
+
+### Narrow geometry-proof repair under validation
+
+Track 2987 had followed furniture before two centroid jumps, inheriting a
+1.23631 m/s speed into the five-point near-human fragment. All five returns are
+outside the current RGB projection, so existing visual association and the
+1 m/s fragment-motion limit correctly reject human association. Those rules
+must not be weakened to make this trial pass.
+
+The existing whole-surface replacement does have a unique current owner and
+five distinct supporting points within its unchanged 0.10 m distance bound.
+Its greedy nearest-neighbor choices collapse to only one or two distinct
+witnesses, causing a false negative in the distinct-support proof. The bounded
+repair preserves legacy acceptance and adds a fallback requiring a complete
+injective match of every distinct old XY point (at least three) to distinct
+current XY points belonging to the same uniquely qualifying owner. It retains
+the original full geometry, risk, timestamps, expiry and ambiguity checks; it
+does not infer a human label or transfer factors. Exact replay, regressions and
+a fresh native run are required before claiming this repair succeeds. The
+first failed trial remains failed.
+
+The implementation is explicitly default-off through
+`--unknown-distinct-surface-witnesses`. The separate
+`configs/restaurant_service_risk_calibration_witnesses.json` adds this flag only
+to existing unknown-memory modes, including the parked human-sensor component;
+the original scoring-only recipe stays unchanged. Sparse matching is bounded
+to 256 distinct old points, 65,536 current points and 65,536 candidate edges.
+Exhausting those budgets rejects only the additional proof. Exact witness
+coordinates/indices, ownership, original/current source clocks and original risk
+are recorded and checked independently. No human identity or factor evidence is
+transferred by a geometric replacement.
+
+The archived branch replay preserves all 548 original whole-surface accepts.
+Among 541 previously rejected eligible regions, the fallback establishes 50
+complete certificates and leaves 491 rejected. This replay is a check of the
+geometric proof on frozen inputs, not a reconstructed controller trajectory or
+new native acceptance. The final replay covers 1,147 parked/live fields. An exact
+one-step memory replay of fragment 2987 accepts at ages 0.2/0.3 s and still
+rejects after expiry at 0.5 s; its original geometry, risk and source clocks are
+preserved. The follow-up native recipe changes both scoring and
+the opt-in proof method relative to the older V3, so it must not be described as
+a strict risk-only trajectory comparison. Same-record legacy/calibrated score
+comparisons remain valid for studying the scoring function itself.

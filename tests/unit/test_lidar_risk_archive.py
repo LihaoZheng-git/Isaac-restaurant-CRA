@@ -65,6 +65,40 @@ def test_expanded_mask_rejected_even_with_correct_count():
             np.array([1, 1, 2]), lambda _: np.array([True, False, True]))
 
 
+@pytest.mark.parametrize("overridden", [2, 4])
+def test_zero_owner_generic_mask_is_unneeded_after_exact_later_override(overridden):
+    generic = obj(accepted=True, count=0)
+    generic["diagnostics"]["selected_return_count"] = 2
+    image = obj(8_000_000_000, accepted=True, count=overridden)
+    image["diagnostics"]["image_object_association"] = {"proposal_index": 0}
+    def selected(item):
+        assert item is image  # The withheld generic mask is never requested.
+        return np.arange(4) < overridden
+    ids, phi, basis = assign_current_points(record([generic, image]),
+        np.zeros((4,3)), np.ones(4,dtype=int), selected)
+    assert ids.tolist() == [8_000_000_000]*overridden + [1_000_000_001]*(4-overridden)
+    assert phi.tolist() == pytest.approx([.4]*overridden + [.2]*(4-overridden))
+    assert basis.tolist() == [1]*overridden + [0]*(4-overridden)
+
+
+def test_zero_owner_generic_rejects_insufficient_recorded_override_coverage():
+    generic = obj(accepted=True, count=0)
+    generic["diagnostics"]["selected_return_count"] = 2
+    image = obj(8_000_000_000, accepted=True, count=1)
+    image["diagnostics"]["image_object_association"] = {"proposal_index": 0}
+    with pytest.raises(ValueError, match="overriding coverage"):
+        assign_current_points(record([generic,image]),np.zeros((3,3)),np.ones(3,dtype=int),
+            lambda _:np.array([True,False,False]))
+
+
+def test_positive_owner_generic_still_requires_its_original_mask():
+    def absent(_):
+        raise ValueError("original generic mask unavailable")
+    with pytest.raises(ValueError, match="generic mask unavailable"):
+        assign_current_points(record([obj(accepted=True)]), np.zeros((3,3)),
+            np.ones(3,dtype=int), absent)
+
+
 def test_static_proof_selects_only_original_region_and_fragment_members():
     diagnostic = dict(selected_return_count=2, static_prop_association=dict(
         rejections=[], position_allowance_m=.1, observed_bounds_minimum=[0, 0, 0],

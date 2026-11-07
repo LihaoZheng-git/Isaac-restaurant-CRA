@@ -14,6 +14,8 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 
 from robot.evaluation.lidar_risk_map import render_lidar_risk_map
+from robot.evaluation.risk_camera_overlay import repair_camera_metadata_notes
+from robot.evaluation.risk_palette import palette_description
 from scripts.evaluation.compose_restaurant_v3_layout import (
     contact_mission_layout, digest, read, verify_archive,
 )
@@ -70,16 +72,41 @@ def load_verified_geometry(folder, name, expected_sha256):
     return arrays, path, actual
 
 
-def main(source, archive, risk_manifest, output, preview_only=False, preserve=(), calibration_replay=None):
+def presentation_options(*, replay=False, palette="legacy", title=None, video_name=None,
+                         repair_camera_notes=False):
+    """Presentation-only controls, with original legacy defaults unchanged."""
+    palette_description(palette)
+    if replay:
+        if repair_camera_notes:
+            raise ValueError("baked native camera-note repair is separate from score replay")
+        palette = "restaurant_v1"
+    title = title if title is not None else (
+        "V3 | restaurant risk calibration replay" if replay else "Restaurant service | v4")
+    if not isinstance(title, str) or not title.strip() or "\n" in title:
+        raise ValueError("presentation title must be one nonempty line")
+    filename = video_name if video_name is not None else (
+        "restaurant-risk-calibration-replay.mp4" if replay else "restaurant-service-v4-lidar-risk.mp4")
+    if (not isinstance(filename, str) or Path(filename).name != filename
+            or "/" in filename or "\\" in filename or Path(filename).suffix != ".mp4"):
+        raise ValueError("video name must be an MP4 basename inside the new output")
+    if not isinstance(repair_camera_notes, bool):
+        raise TypeError("repair_camera_notes must be bool")
+    return dict(palette=palette, title=title, video_name=filename,
+                repair_camera_notes=repair_camera_notes)
+
+
+def main(source, archive, risk_manifest, output, preview_only=False, preserve=(), calibration_replay=None,
+         *, palette="legacy", title=None, video_name=None, repair_camera_notes=False):
     if output.exists():
         raise ValueError("use a fresh presentation folder; existing demos are preserved")
     protected = {folder.resolve(): verify_archive(folder) for folder in (archive, *preserve)}
     manifest = read(risk_manifest)
+    options = presentation_options(replay=calibration_replay is not None, palette=palette,
+        title=title, video_name=video_name, repair_camera_notes=repair_camera_notes)
     replay = None
     if calibration_replay is not None:
         from robot.evaluation.calibration_replay import CalibrationReplay, candidate_geometry
         from robot.evaluation.risk_camera_overlay import render_risk_panel
-        from robot.evaluation.risk_palette import palette_description
         replay = CalibrationReplay(calibration_replay, source)
         if Path(replay.manifest["original_manifest"]).resolve() != risk_manifest.resolve():
             raise ValueError("candidate scoring is bound to a different geometry export")
@@ -87,6 +114,12 @@ def main(source, archive, risk_manifest, output, preview_only=False, preserve=()
         raise ValueError("risk export belongs to a different native mission")
     if manifest.get("source_hashes_verified_after_export") is not True:
         raise ValueError("completed source-preserving risk export required")
+    if not replay:
+        command = read(source / "invocation.json")["command"]
+        native_palette = ("restaurant_v1" if "--restaurant-calibration" in command
+            and command[command.index("--restaurant-calibration")+1] != "off" else "legacy")
+        if options["palette"] != native_palette:
+            raise ValueError("LiDAR palette must match the recorded native camera palette")
     epochs = read(source / "service-video-epochs.json")["frames"]
     risk_epochs = read(source / "risk-camera-epochs.json")["frames"]
     if [r["time"] for r in epochs] != [r["time"] for r in risk_epochs]:
@@ -97,7 +130,7 @@ def main(source, archive, risk_manifest, output, preview_only=False, preserve=()
     credits_layout = read(archive / "restaurant-service-v3.json")
     route = np.asarray(manifest["nominal_route_world"], dtype=float)
     footprint = manifest.get("robot_footprint_local_xy")
-    inputs = [risk_manifest, source / "service-risk-camera.mp4",
+    inputs = [risk_manifest, source / "service-risk-camera.mp4", source / "invocation.json",
               source / "service-video-epochs.json", source / "risk-camera-epochs.json",
               archive / "restaurant-service-v3.mp4", archive / "restaurant-service-v3.json",
               archive / "ASSET_CREDITS.txt"]
@@ -138,7 +171,7 @@ def main(source, archive, risk_manifest, output, preview_only=False, preserve=()
             break
     output.mkdir(parents=True)
     fonts = {size: ImageFont.truetype("C:/Windows/Fonts/segoeui.ttf", size) for size in (18, 20, 22, 30)}
-    video_path = output / ("restaurant-risk-calibration-replay.mp4" if replay else "restaurant-service-v4-lidar-risk.mp4")
+    video_path = output / options["video_name"]
     writer = None if preview_only else cv2.VideoWriter(str(video_path), cv2.VideoWriter_fourcc(*"mp4v"), 10, (1920, 1080))
     if writer is not None and not writer.isOpened():
         raise RuntimeError("cannot open presentation output")
@@ -177,17 +210,20 @@ def main(source, archive, risk_manifest, output, preview_only=False, preserve=()
                     camera_frame = replay.camera(risk_epochs[index], replay_row)
             sensor_map, map_audit = render_lidar_risk_map(
                 geometry, field, route, travelled, robot_footprint_local_xy=footprint,
-                **(dict(palette="restaurant_v1", score_title="CANDIDATE phi | REPLAY", replay_scores=True)
-                   if replay else {}))
+                **(dict(palette=options["palette"], score_title="CANDIDATE phi | REPLAY", replay_scores=True)
+                   if replay else dict(palette=options["palette"])))
             rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
             canvas = Image.new("RGB", (1920, 1080), "#101b26")
             draw = ImageDraw.Draw(canvas)
             elapsed = max(0.0, epoch["time"] - layout["navigation_start_simulation_time"])
-            draw.text((24, 14), "V3 | restaurant risk calibration replay" if replay else "Restaurant service | v4", font=fonts[30], fill="white")
+            draw.text((24, 14), options["title"], font=fonts[30], fill="white")
             draw.text((1016, 20), f"Simulation time {elapsed:5.1f} s  |  1x playback", font=fonts[22], fill="#cbd9e3")
             camera_panel = rgb[:, 800:1440]
             if replay:
                 camera_panel, _ = render_risk_panel(camera_frame, epoch["time"], palette="restaurant_v1")
+            note_audit = None
+            if options["repair_camera_notes"]:
+                camera_panel, note_audit = repair_camera_metadata_notes(camera_panel, risk_epochs[index])
             canvas.paste(Image.fromarray(camera_panel).resize((960, 900), Image.Resampling.LANCZOS), (24, 84))
             draw.text((1016, 51), "LIDAR RISK | candidate current scores" if replay else "LIDAR OBSTACLE RISK | applied phi", font=fonts[20], fill="#cbd9e3")
             canvas.paste(sensor_map, (1016, 80))
@@ -202,7 +238,8 @@ def main(source, archive, risk_manifest, output, preview_only=False, preserve=()
             ledger.append(dict(output_frame=None if preview_only else native_count, original_source_frame=index,
                                source_time=epoch["time"], field_id=field["field_id"],
                                field_source_time=field.get("source_time"), field_commit_time=field.get("commit_time"),
-                               geometry_file=name, robot_world_xy_yaw=field["robot_world_xy_yaw"], map=map_audit))
+                               geometry_file=name, robot_world_xy_yaw=field["robot_world_xy_yaw"], map=map_audit,
+                               **({"camera_note_repair":note_audit} if note_audit is not None else {})))
             if writer is not None:
                 writer.write(result)
                 native_count += 1
@@ -247,6 +284,7 @@ def main(source, archive, risk_manifest, output, preview_only=False, preserve=()
     if any(verify_archive(path) != count for path, count in protected.items()):
         raise ValueError("a protected demo archive changed")
     summary = dict(presentation_only=True, preview_only=preview_only, resolution=[1920, 1080], fps=10,
+                   presentation_options=options, palette=palette_description(options["palette"]),
                    native_navigation_frames=native_count, credit_frames=credit_count,
                    fully_decoded_frames=decoded, removed_navigation_frames=0,
                    first_source_frame=first, last_source_frame=last, input_sha256=hashes,
@@ -265,8 +303,8 @@ def main(source, archive, risk_manifest, output, preview_only=False, preserve=()
     (output / "frame-mapping.json").write_text(json.dumps(ledger, indent=2) + "\n", encoding="utf-8")
     shutil.copy2(archive / "ASSET_CREDITS.txt", output / "ASSET_CREDITS.txt")
     (output / "README.txt").write_text(
-        "Restaurant service v4 - LiDAR risk presentation\n\n"
-        "Open restaurant-service-v4-lidar-risk.mp4. Same native run, every navigation/stopping frame and original attribution card.\n"
+        f"{options['title']} - LiDAR risk presentation\n\n"
+        f"Open {options['video_name']}. Same native run, every navigation/stopping frame and original attribution card.\n"
         "Solid points are latest committed source returns; hollow points are prior/retained geometry. Colors use controller-applied phi, not numerical h.\n"
         "Grey points are outside the active controller field; its boundary is outlined. The fixed view clips distant observations.\n"
         "Retained CRA means current returns reuse retained properties; it is distinct from old occupancy. No current RGB mask is required.\n"
@@ -296,6 +334,11 @@ if __name__ == "__main__":
     parser.add_argument("--preserve", type=Path, action="append", default=[])
     parser.add_argument("--preview-only", action="store_true")
     parser.add_argument("--calibration-replay", type=Path)
+    parser.add_argument("--palette", choices=("legacy", "restaurant_v1"), default="legacy")
+    parser.add_argument("--title")
+    parser.add_argument("--video-name")
+    parser.add_argument("--repair-camera-notes", action="store_true")
     args = parser.parse_args()
     main(args.source, args.archive, args.risk_manifest, args.output, args.preview_only, args.preserve,
-         args.calibration_replay)
+         args.calibration_replay, palette=args.palette, title=args.title, video_name=args.video_name,
+         repair_camera_notes=args.repair_camera_notes)

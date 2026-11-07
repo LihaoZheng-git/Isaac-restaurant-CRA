@@ -79,12 +79,22 @@ def assign_current_points(record, world, raw_ids, selection):
     basis = np.zeros(len(ids), dtype=np.uint8)
     policies = applied_policy_table(record)
     objects = record["objects"]
+    zero_owner_generic = []
     for obj in objects:
         key, d = obj["track_id"], obj["diagnostics"]
         if d.get("image_object_association") or d.get("static_prop_policy"):
             continue
         own = raw_ids == key
         if d["accepted_instance"]:
+            if d["policy_return_count"] == 0:
+                # A later image/static override consumed every surviving
+                # generic-mask return. Its hidden selection cannot affect the
+                # final IDs: overridden points get their exact saved owner,
+                # and every remainder is the existing auxiliary obstacle.
+                # The calibrated presentation deliberately omits this mask.
+                ids[own], basis[own] = key + 1_000_000_000, 0
+                zero_owner_generic.append(obj)
+                continue
             selected = selection(obj)
             if selected.shape != own.shape or np.any(selected & ~own):
                 raise ValueError("generic mask ownership expanded beyond original raw track")
@@ -104,6 +114,13 @@ def assign_current_points(record, world, raw_ids, selection):
             selected = static_selection(world, raw_ids, d)
             ids[selected], basis[selected] = key, 2
     ids[ids < 0] = 2_000_000_000
+    for obj in zero_owner_generic:
+        key, d = obj["track_id"], obj["diagnostics"]
+        selected_count = d["selected_return_count"]
+        covered = np.count_nonzero((raw_ids == key) & (ids != key + 1_000_000_000))
+        if (not isinstance(selected_count, int) or isinstance(selected_count, bool)
+                or selected_count < 0 or covered < selected_count):
+            raise ValueError("zero-owner generic selection lacks recorded overriding coverage")
     for obj in objects:
         key, d = obj["track_id"], obj["diagnostics"]
         if d["accepted_instance"] or d.get("static_prop_policy") or d.get("image_object_association"):

@@ -112,6 +112,7 @@ class RestaurantHumanSensorDiagnostic:
         unknown_persistent_background_prior=False,
         unknown_unclassified_static_prior=False,
         unknown_verified_dynamic_evidence=False,
+        unknown_distinct_surface_witnesses=False,
         human_short_fragment_coverage=False,
         lidar_range_m=7.5,
     ):
@@ -359,6 +360,8 @@ class RestaurantHumanSensorDiagnostic:
         self.unknown_geometry_archive = None
         if unknown_verified_dynamic_evidence and not unknown_unclassified_static_prior:
             raise ValueError('verified dynamic evidence requires explicit unclassified static prior')
+        if unknown_distinct_surface_witnesses and not unknown_obstacle_planning:
+            raise ValueError('distinct surface witnesses require explicit unknown obstacle planning')
         if unknown_unclassified_static_prior and not unknown_persistent_background_prior:
             raise ValueError('unclassified static prior requires explicit persistent background prior')
         if unknown_persistent_background_prior and not unknown_supported_background_prior:
@@ -373,7 +376,8 @@ class RestaurantHumanSensorDiagnostic:
                 unknown_phi=unknown_obstacle_phi, supported_background_prior=unknown_supported_background_prior,
                 persistent_background_prior=unknown_persistent_background_prior,
                 unclassified_static_prior=unknown_unclassified_static_prior,
-                require_verified_dynamic_evidence=unknown_verified_dynamic_evidence))
+                require_verified_dynamic_evidence=unknown_verified_dynamic_evidence,
+                distinct_surface_witness_matching=unknown_distinct_surface_witnesses))
             from robot.evaluation.unknown_obstacle_validation import UnknownObstacleGeometryArchive
             self.unknown_geometry_archive = UnknownObstacleGeometryArchive(self.output)
         self.history = EgoPoseHistory(maximum_samples=2048)

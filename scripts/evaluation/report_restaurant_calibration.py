@@ -130,8 +130,8 @@ def extract_native_rows(paired_manifest, mission_manifest):
     names = {"ServiceContainer": "bin", "BrokenCrate": "crate"}
     for label in ("bin", "crate"):
         for phase in ("fresh", "retained"):
-            data[f"heldout_{label}_{phase}"] = []
-    data["heldout_verified_human"] = []
+            data[f"archived_v3_{label}_{phase}"] = []
+    data["archived_v3_verified_human"] = []
     source = folder / "live-fields.jsonl"
     for record in records(source):
         humans = {
@@ -141,27 +141,27 @@ def extract_native_rows(paired_manifest, mission_manifest):
             row = saved(record, obj)
             key = record["sensor_timestamp"], obj["track_id"]
             if key in fresh:
-                data[f"heldout_{names[fresh[key]]}_fresh"].append(row)
+                data[f"archived_v3_{names[fresh[key]]}_fresh"].append(row)
             for prop, label in names.items():
                 if obj["track_id"] in coverage["summary"][prop]["retained_ids"] and obj[
                     "diagnostics"
                 ].get("static_prop_policy"):
-                    data[f"heldout_{label}_retained"].append(row)
+                    data[f"archived_v3_{label}_retained"].append(row)
             if obj["track_id"] in humans:
-                data["heldout_verified_human"].append(row)
+                data["archived_v3_verified_human"].append(row)
     if hashes[str(source)] != mission["source_hashes"][str(source)]:
-        raise ValueError("held-out source differs from original mission export")
+        raise ValueError("archived V3 source differs from original mission export")
     for prop, label in names.items():
         for phase, count in (
             ("fresh", "fresh_visual_rows"),
             ("retained", "retained_rows"),
         ):
             if (
-                len(data[f"heldout_{label}_{phase}"])
+                len(data[f"archived_v3_{label}_{phase}"])
                 != coverage["summary"][prop][count]
             ):
                 raise ValueError(
-                    "held-out evaluation selection differs from original audit"
+                    "archived V3 evaluation selection differs from original audit"
                 )
     return dict(datasets=data, source_sha256=hashes)
 
@@ -174,7 +174,9 @@ def main():
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
     OUT = args.output
-    OUT.mkdir(parents=True, exist_ok=True)
+    if OUT.exists():
+        parser.error("use a fresh report folder; preserve earlier response studies")
+    OUT.mkdir(parents=True)
     payload = extract_native_rows(args.paired_manifest, args.mission_manifest)
     data = payload["datasets"]
     results = {}
@@ -263,7 +265,7 @@ def main():
         )
     summary = dict(
         scope="Offline candidate-policy replay of recorded original V3 observations. No new wheels, controller acceptance or causal trajectory comparison.",
-        selection="Small interpretable engineering grid on the isolated short trials and mathematical responses. Full V3 is held out; no object label enters the formula.",
+        selection="Small interpretable engineering grid on the isolated short trials and mathematical responses, with archived V3 human response informing the 50 J kinetic reference. Original V3 is a separate archived response check, not a blind holdout; no object label enters the scoring formula.",
         source_sha256=payload["source_sha256"],
         config=asdict(CONFIG),
         datasets=results,
@@ -283,7 +285,7 @@ def main():
             "contact_power": "Square preserves 0 and 1 and attenuates weak silhouette cues continuously; it is not learned sharpness calibration.",
             "context_floor": "A .75 floor keeps intrinsic consequences visible for nearby off-chord objects, with .25 continuous route modulation.",
             "uncertainty_gain": "Proportional reserve at most25 percent replaces a flat quarter-floor for supported cues; missing factors retain priors.",
-            "kinetic_scale": "50 J is a disclosed engineering reference, not an injury threshold; short static-object upper energies mostly remain below1J.",
+            "kinetic_scale": "50 J is a disclosed engineering reference selected with archived V3 human response, not an injury threshold or independently validated optimum; short static-object upper energies mostly remain below1J.",
             "kinetic_weight": "1.5 positive noisy-OR exponent emphasizes motion without using percentage weights that dilute a strong single factor.",
             "potential": "100 J unchanged because the calibration pair provides no supported fall-energy evidence.",
         },
@@ -331,14 +333,30 @@ def digest(path):
     return value.hexdigest()
 
 
+def archived_response_keys(data):
+    """Read historical report keys without changing archived JSON or its values."""
+    result = {}
+    for key, value in data.items():
+        renamed = (
+            "archived_v3_" + key.removeprefix("heldout_")
+            if key.startswith("heldout_")
+            else key
+        )
+        if renamed in result:
+            raise ValueError("ambiguous legacy/current archived response dataset key")
+        result[renamed] = value
+    return result
+
+
 def plot(results, rows):
+    results, rows = archived_response_keys(results), archived_response_keys(rows)
     fig, axes = plt.subplots(2, 2, figsize=(13, 8.4), constrained_layout=True)
     groups = [
         ("calibration_bin_live", "Short bin"),
         ("calibration_crate_live", "Short crate"),
-        ("heldout_bin_retained", "V3 bin"),
-        ("heldout_crate_retained", "V3 crate"),
-        ("heldout_verified_human", "V3 human"),
+        ("archived_v3_bin_retained", "V3 bin"),
+        ("archived_v3_crate_retained", "V3 crate"),
+        ("archived_v3_verified_human", "V3 human"),
     ]
     ax = axes[0, 0]
     for offset, field, color, label in (
@@ -367,8 +385,8 @@ def plot(results, rows):
     ax.legend(fontsize=8)
     ax = axes[0, 1]
     for key, color, label in (
-        ("heldout_bin_retained", "#298c55", "Bin"),
-        ("heldout_crate_retained", "#aa5d20", "Crate"),
+        ("archived_v3_bin_retained", "#298c55", "Bin"),
+        ("archived_v3_crate_retained", "#aa5d20", "Crate"),
     ):
         v = rows[key]
         ax.plot(
@@ -382,7 +400,7 @@ def plot(results, rows):
     ax.set_ylim(0, 1.03)
     ax.set_xlabel("Original LiDAR source time (s)")
     ax.set_ylabel("Candidate replay phi")
-    ax.set_title("Held-out retained evidence; gaps remain gaps")
+    ax.set_title("Separate V3 retained-evidence response; gaps remain gaps")
     ax.legend()
     ax = axes[1, 0]
     cue = np.linspace(0, 1, 201)
