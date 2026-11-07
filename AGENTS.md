@@ -1,5 +1,22 @@
 # CRA repository guidance
 
+- V4 LiDAR risk presentation reads the original0047241 validated V3 mission;
+  no new wheels, estimation or controller changes. Exact archived ownership and
+  final applied_field_risk supply each current return; ordinary policies may
+  include live inferred motion/priors. Stored mass/contact only follows recorded
+  accepted association. All1182fields/32,721,816current points and23,853,998prior/
+  retained placements pass the independent export audit;3980sourcehashes verified.
+  Video field selection follows original camera receipt IDs (105same-time later
+  commits withheld), never timestamp-only selection. Fixed0..1palette; solid
+  current returns, hollow prior/retained geometry, grey outside activefield.
+  Original camera individual CRA can differ from final map policy. Preview1354
+  has no RGBmask but1203retained-property current returns insidefield. Full4022
+  units/52finalfocused/RuffPASS. Preserve both rejected partial exports and all
+  older demos, source clocks, native limitations and main/primary/PR117 holds.
+  Master in outputs/final demo/v4-lidar-risk retains1601navigation/stop+60credit
+  frames,166.1s,1920x1080/10fps,fulldecodePASS;428oldarchivefilesunchanged.
+  See docs/lidar_risk_demo.md; export outputs/lidar-risk-map/export-final/.
+
 - Bin/crate paired work at0047241 is finalized. Matched isolated N12 runs both
   reach4m, bin26.9167s/crate32s, alongside bends2.31/8.02cm away. Live retained
   contact medians.15189/.17267 and phi.61462/.62338. Five shared25cm intervals
