@@ -43,3 +43,39 @@ fresh observations differ, so it is not a causal CRA-versus-fixed-risk result.
 Native validation is pending at this protocol snapshot. Preserve every old
 placement, failure and V3/V4/V5 demo. No full-demo replacement or main/primary/
 PR117 promotion follows from a larger curve without arrival and audits.
+
+## First placement result and bounded follow-up
+
+At frozen revision `2ab49e4`, the 2 cm closer placement passed independent60,
+own60 and native arrival/stopping: 1/1 goal in 27.50 simulated seconds,
+9.5883 cm goal error, 2.6480 mm braking drift and .132738 minimum CBF margin.
+The bend was 8.1085 cm, slightly smaller than the baseline's 8.6657 cm. Padded
+crate-box clearance fell to 1.1414 cm (330 recorded poses below the historical
+2 cm diagnostic); the enclosing-circle minimum was -6.5474 cm. PhysX recorded
+zero crate contacts and no nonfloor headers, with floor positive controls.
+These separate geometry results are preserved, not relabeled by native arrival.
+
+Source/point and boundary/admission audits pass, but continuous crate retention
+does not: 79/270 fields qualify, with median phi .490817 versus .519938 in the
+baseline. The independent parked run retains one sensor-epoch rejection. All
+native sources remained frozen. The first 48 focused tests and Ruff passed;
+two initial CLI allowlist test failures were corrected before the native run.
+Detailed results and the full-path figure are in
+`outputs/crate-closer-calibrated/native-audit-v1/`.
+
+This small shift reduces clearance without establishing a more visible curve.
+The next bounded placement uses the existing original scene at (17.50,3.45),
+5 cm closer than the calibrated baseline, via
+`configs/restaurant_crate_original_calibrated.json`. It changes only the scene
+path, with the same calibrated B=1.7 control configuration and fresh independent60
+and own60 before one driven trial. The prior y=3.45 uncalibrated return-stall
+remains a failure; this is a separate calibrated comparison, not a repeat
+relabeled as success. Native validation of this follow-up is pending.
+
+The read-only layout review found that stools repeat along the whole short
+route. Moving the crate along x does not clearly remove the return constraint.
+An opposite-side placement would be only 4.28 cm from the stool boxes and adds
+association and field-side uncertainty, so it is deferred. The original y=3.45
+position has no surveyed furniture-box overlap and plausible initial camera
+projection, but neither proves sensor acceptance or native feasibility. See
+`outputs/crate-closer-calibrated/roomier-placement-review-v3.json`.

@@ -1,5 +1,20 @@
 # CRA repository guidance
 
+- Calibrated y3.42 trial at2ab49e4 passed independent60/own60/native arrival:
+  1/1 goal27.50simsec, goalerror9.5883cm, stopdrift2.6480mm, CBF.132738,
+  but bend8.1085cm vs baseline8.6657cm is NOT an improvement. Padded crate-box
+  clearance1.1414cm; historical circle-6.5474cm FAIL. Zero recorded crate or
+  nonfloor PhysX contacts with floor-positive reporting. Source/point/boundary
+  audits PASS; continuous retention FAIL79/270, medianphi.490817. Preserve the
+  one parked epoch rejection, native sources and all old trials/videos. Next
+  bounded recipe restaurant_crate_original_calibrated.json uses existingy3.45,
+  5cm nearer than baseliney3.40, with same calibratedB1.7/N12/lambda1.25 and
+  all other control/evidence/limit settings. Fresh independent60+own60 before
+  ONE calibrated driven trial at this placement; preserve old UNCALIBRATED
+  y3.45 return-stall. No controller/phi overrides or full-demo/main promotion.
+  Opposite-side placement deferred for stool association/field-side uncertainty.
+  See docs/crate_closer_calibrated.md; draftPR249 and all existing holds stay.
+
 - User approves one modestly closer calibrated crate test: center (17.50,3.42),
   2 cm nearer the route than y3.40, retaining 3 cm setback from the old y3.45
   failed stress case. Recipe restaurant_crate_closer_calibrated.json changes

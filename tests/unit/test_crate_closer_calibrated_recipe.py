@@ -12,22 +12,27 @@ from scripts.evaluation.run_restaurant_demo import eligible_motion_case, prerequ
 
 BASELINE = Path("configs/restaurant_boundary_response_baseline.json")
 CLOSER = Path("configs/restaurant_crate_closer_calibrated.json")
+ORIGINAL_POSITION = Path("configs/restaurant_crate_original_calibrated.json")
 
 
-def commands():
+def commands(path=CLOSER):
     original = json.loads(BASELINE.read_text())["commands"]["crate-static"]
-    closer = json.loads(CLOSER.read_text())["commands"]["crate-static"]
+    closer = json.loads(path.read_text())["commands"]["crate-static"]
     return original, closer
 
 
 @pytest.mark.parametrize("motion", [False, True])
-def test_closer_placement_keeps_the_real_controller_and_score_configuration(monkeypatch, motion):
-    original, closer = commands()
+@pytest.mark.parametrize("path,scene", [
+    (CLOSER, "restaurant_crate_route_setback3.usda"),
+    (ORIGINAL_POSITION, "restaurant_crate_route_probe.usda"),
+])
+def test_closer_placement_keeps_the_real_controller_and_score_configuration(monkeypatch, motion, path, scene):
+    original, closer = commands(path)
     baseline = vars(parse(monkeypatch, original, motion=motion))
     candidate = vars(parse(monkeypatch, closer, motion=motion))
     assert candidate == {
         **baseline,
-        "restaurant_scene": baseline["restaurant_scene"].with_name("restaurant_crate_route_setback3.usda"),
+        "restaurant_scene": baseline["restaurant_scene"].with_name(scene),
     }
     assert candidate["restaurant_boundary_unit_flux"] == 1.7
     assert candidate["restaurant_calibration"] == "kinetic"
@@ -36,13 +41,15 @@ def test_closer_placement_keeps_the_real_controller_and_score_configuration(monk
     assert candidate["stationary_frames"] == 60
     assert candidate["observe_crate_clearance"]
     assert eligible_motion_case("crate-static", closer)
-    closer.remove("--observe-crate-clearance")
-    with pytest.raises(SystemExit):
-        parse(monkeypatch, closer, motion=motion)
+    if path == CLOSER:
+        closer.remove("--observe-crate-clearance")
+        with pytest.raises(SystemExit):
+            parse(monkeypatch, closer, motion=motion)
 
 
-def test_previous_placement_cannot_supply_the_new_stationary_prerequisite():
-    original, closer = commands()
+@pytest.mark.parametrize("path", [CLOSER, ORIGINAL_POSITION])
+def test_previous_placement_cannot_supply_the_new_stationary_prerequisite(path):
+    original, closer = commands(path)
     baseline = ["C:/isaacsim/python.bat", "-u", *original]
     candidate = ["C:/isaacsim/python.bat", "-u", *closer]
     hashes = {"robot/source.py": "unchanged"}
@@ -57,10 +64,11 @@ def test_previous_placement_cannot_supply_the_new_stationary_prerequisite():
                                     expected_command=candidate)
 
 
-def test_recipe_records_unchanged_base_and_bounded_placement():
-    data = json.loads(CLOSER.read_text())
+@pytest.mark.parametrize("path,center,distance", [(CLOSER, 3.42, .02), (ORIGINAL_POSITION, 3.45, .05)])
+def test_recipe_records_unchanged_base_and_bounded_placement(path, center, distance):
+    data = json.loads(path.read_text())
     assert set(data["commands"]) == {"crate-static"}
     assert data["derived_from"]["sha256"] == hashlib.sha256(BASELINE.read_bytes()).hexdigest()
-    assert data["placement"]["crate_center_world_xy"] == [17.5, 3.42]
-    assert data["placement"]["closer_than_baseline_metres"] == .02
+    assert data["placement"]["crate_center_world_xy"] == [17.5, center]
+    assert data["placement"]["closer_than_baseline_metres"] == distance
     assert data["placement"]["driven_trial_limit"] == 1
