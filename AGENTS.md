@@ -1,5 +1,37 @@
 # CRA repository guidance
 
+- Corrected restaurant calibration at ae5c7e8 PASSED all six fresh prerequisites,
+  own60 and native navigation: 8/8 guides,155.3833simsec, clearance.347619m,
+  CBF.194872, stopdrift.002249m, zero bin/crate PhysX contacts. 1084live fields,
+  1082translating; nearby-human curve.378048m from the actual nominal polyline,
+  min center distance1.415778m, measured nearby hold.0333s (not pause-free or a
+  matched smoothing comparison). All35 injective certificates independently
+  pass exact source/ownership/risk/field checks. Preserve the earlier7567c0b
+  failed memory audit and both null-cue audit-formatting failures; no gate was
+  relaxed. Same-record retained bin75/crate308 medianphi .610283/.629747 becomes
+  .293853/.449108; intermittent ownership, fresh-view overlap and20 unavailable-
+  speed crate rows remain. Human205current-owned rows range.8--.973263 with an
+  explicit protection prior;44zero-owner human rows are separate. Potential and
+  thermal remain priors; no complete fresh generic4factor claim. Static source,
+  geometry, motion, fragment, dynamic and camera audits PASS. Map export1144fields,
+  31,664,061current points/23,331,387prior samples/3861source hashes PASS.
+  Native F:/CRA-experiments/restaurant-risk-calibration-witnesses-20261107/long-motion-v1.
+  Keep opt-in/defaultOFF, draftPR247 and all main/primary/PR117 holds. This trial
+  includes scoring and a bounded geometric proof correction, not a causal
+  risk-only trajectory comparison. See docs/restaurant_risk_calibration.md.
+
+- Accepted calibrated presentation is saved separately in outputs/final demo/
+  v5-risk-calibrated. Share restaurant-service-v3-calibrated-share.mp4: H264,
+  1920x1080/10fps,1625frames162.5s (all1565navigation/stop frames+60credits).
+  Both videos fully decoded;1100presentation input hashes and444protected old
+  demo files PASS. Camera uses individual phi; map uses recorded applied policy
+  phi, including priors; fixed restaurant_v1 palette, no frame normalization.
+  Retained-only/no-mask views remain explicit. Human mass still expires at3s;
+  separate static mass/contact120s/60s-half-life policy stays. The report's
+  accepted_current_instances=0 is a legacy single-object counter; multi-object
+  accepted assessments139/current-owned134 are not unique-object counts.
+  Preserve original failed native/replay/old demos and draft/main/primary holds.
+
 - Calibrated native V3 at7567c0b reached8/8guides in156.0667simsec, clearance
   .348148m/CBF.078256/stopdrift.002194m, nearby-human curve.384546m and zero
   bin/crate PhysX contacts, BUT overall native acceptance FAILED. Six static-
@@ -12,11 +44,12 @@
   .10m, but greedy nearest witnesses collapse to1/2points. A bounded defaultOFF
   full injective matching fallback is implemented; do not relax human
   classification, speed, expiry, distance, ownership or risk checks. Replay and
-  fresh native gates remain required. Same-native scoring/source audit passes:
+  fresh native validation were pending at this snapshot; the later pass is above.
+  Same-native scoring/source audit passes:
   bin16fresh/83retained rows, retainedmedianphi .61187->.30948; crateONLY2fresh/
   zero retained, median .60763->.56367. Human242verified/213current-owned/
   38supportedkinetic, phi.8--.98315; fresh bin outlier.87836 remains. No continuous
-  crate evidence or accepted new native video claim. See
+  crate evidence or accepted native video claim for this failed trial. See
   docs/restaurant_risk_calibration.md; all main/primary/PR117 holds stay.
 
 - Corrected calibration validation uses the separate
@@ -31,8 +64,8 @@
   trajectory comparison.4171fullunits239.09s/15CLI/Ruff/diffPASS; final archived
   replay1147fields preserves548legacy accepts, validates50new complete proofs,
   retains491rejects. Exact2987 memory replay passes.2/.3s and rejects.5s; no native
-  acceptance follows from replay. Fresh six prerequisites/own60/full acceptance
-  remain required. Preserve the six original human-overlap failures.
+  acceptance follows from replay alone. The fresh six prerequisites/own60/full
+  acceptance are recorded above. Preserve the six original human-overlap failures.
   Seven additional archive-certificate tests PASS; original failed-v1 audit
   passes with zero certificates while retaining native_overall_passed:false.
 

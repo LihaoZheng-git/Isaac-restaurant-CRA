@@ -132,7 +132,7 @@ not full acceptance.
 The combined presentation and opt-in witness correction then passed **4,171
 unit tests in 239.09 seconds**, with 15 CLI/recipe tests also run separately.
 Repository Ruff and diff checks passed. Fresh corrected native validation is
-still required; these tests do not override the first trial's failed audit.
+recorded below; these tests alone do not override the first trial's failed audit.
 The independent archived-certificate auditor adds seven passing integration
 tests (4.38 seconds), run after that full-suite collection. Its read-only audit
 of the first trial passes with zero recorded injective certificates and retains
@@ -181,7 +181,7 @@ supported kinetic evidence; final phi spans 0.80--0.98315. Human mass remains a
 configured adult prior, and its 0.80 protection floor remains separate from the
 physical estimate. Zero-owner human rows do not become fresh calibrated data.
 
-### Narrow geometry-proof repair under validation
+### Narrow geometry-proof repair
 
 Track 2987 had followed furniture before two centroid jumps, inheriting a
 1.23631 m/s speed into the five-point near-human fragment. All five returns are
@@ -223,3 +223,130 @@ preserved. The follow-up native recipe changes both scoring and
 the opt-in proof method relative to the older V3, so it must not be described as
 a strict risk-only trajectory comparison. Same-record legacy/calibrated score
 comparisons remain valid for studying the scoring function itself.
+
+## Corrected native trial and exact archive validation
+
+At frozen revision `ae5c7e8`, the separate witness recipe passed all six fresh
+prerequisites, its own 60-source parked gate and the complete native mission.
+The launcher exited successfully with no traceback and unchanged sources. The
+original failed trial at `7567c0b` remains failed and unchanged.
+
+| Native result | Observed value |
+|---|---:|
+| Route guides reached | 8/8 |
+| Navigation simulation time | 155.3833 s |
+| Minimum independent clearance | 0.347619 m |
+| Minimum analytical CBF margin | 0.194872 |
+| Stopping drift | 0.002249 m |
+| Bin / crate PhysX contact points | 0 / 0 |
+| Live fields / fields committed while translating | 1,084 / 1,082 |
+| Nearby-human curve from the nominal polyline | 0.378048 m |
+| Minimum human-center distance | 1.415778 m |
+
+The measured nearby-walking translation hold below 0.02 m/s was 0.0333 s; the
+longest interval below 0.05 m/s was 0.0667 s. These are one-run measurements,
+not a matched smoothing comparison or a pause-free whole-mission claim. The
+existing checked-guidance unicycle controller variant, fixed lambda 1.25,
+nominal route, geometry allowances and physical limits remain explicit. This
+was paced development simulation, not real-time performance or exact-paper
+equivalence.
+
+The final source-bound audit compares actual active scores with the saved
+legacy equation on the **same observations**, not a second controller run:
+
+| Current-owned evidence | Rows | Legacy median phi | Active median phi | Active range |
+|---|---:|---:|---:|---:|
+| Bin, retained contact | 75 | 0.610283 | 0.293853 | 0.292942--0.294344 |
+| Crate, retained contact | 308 | 0.629747 | 0.449108 | 0.442518--0.498761 |
+| Human, verified current ownership | 205 | 0.683594 | 0.800000 | 0.800000--0.973263 |
+
+The broader qualified target sets contain 89 bin and 311 crate rows. Fresh
+current-owned contact subsets contain 12 bin and three crate rows; their ranges
+still overlap. Two qualified bin rows have unavailable raw contact cues and
+remain present with explicit prior handling. The broader visualization coverage
+report counts 14 bin and five crate visual observations; those counts are not
+equivalent to the current-owned fresh-contact subsets. Crate retention is
+intermittent, and its 20 unavailable-speed updates remain visible. A changing
+phi does not imply that the stored contact cue changed: motion/context and
+confidence still affect the result.
+
+There are 249 verified-human rows, including 44 with zero current policy returns.
+Those do not become fresh current-owned assessments. The scoring audit finds
+29 current-owned rows with supported kinetic input; the native moving-kinetic
+acceptance metric counts 28 under its separate moving-actor criteria. The 0.80
+human protection floor is a labeled prior. Potential and thermal remain factor
+priors in this scenario, and there are no complete fresh generic four-factor
+assessments.
+
+All archive checks passed:
+
+- Exact scoring, source clocks and target point ownership over 60 parked and
+  1,084 live fields; all 35 recorded injective-support certificates independently
+  bound to original/current arrays, ownership, risk, timestamps and field proof.
+- Static property replay: 1,624 retained rows across 16 objects. Geometry replay:
+  35,953 references and 738 original archives. Motion replay: 1,201 ambiguous
+  proofs. Fragment provenance: 4,710 proofs. These are provenance checks, not
+  calibrated motion accuracy or general occlusion guarantees.
+- Current dynamic evidence: 213 body joins, zero part joins and 19 uncertain
+  human rows. Zero native recovery events; this trial does not validate recovery.
+- Camera presentation: 1,194 displayed masks across 67 tracks, 1,144 verified
+  source pairs, five accepted zero-owner records withheld, exact pixel/score and
+  timing parity. The panel holds the latest assessed RGB between updates.
+- LiDAR export: all 1,144 fields, 31,664,061 current points and 23,331,387 retained
+  geometry samples; 3,861 source-file hashes checked. Receipt selection withheld
+  83 later commits sharing a timestamp. No frame-wise color normalization or
+  recalculated display-only risk was used.
+
+The native archive is
+`F:/CRA-experiments/restaurant-risk-calibration-witnesses-20261107/long-motion-v1`.
+Exact score/certificate outputs are under
+`outputs/restaurant-risk-calibration/witness-native-final-audits-v3/results/`;
+the map audit is `outputs/restaurant-risk-calibration/native-lidar-audit-v1.json`.
+Two earlier audit-helper formatting failures on unavailable contact cues remain
+preserved. The corrected summaries retain null cues and explicit unavailable
+counts; all required score values were independently checked finite. No runtime
+gate or source data was changed to pass those audits.
+
+### Reading retention and report counters correctly
+
+Human mass remains the configured 70 [45, 100] kg prior. Body-identity retention
+does not extend its original three-second mass expiry: the native mass audit
+records 16 original priors and 57 retained epochs, with retained ages up to
+2.9667 s. Static mass/contact has a separate 120-second expiry and 60-second
+confidence half-life; maximum observed target ages were 11.3 s for the bin and
+61.3667 s for the crate. Current LiDAR ownership still has to qualify.
+
+The legacy `accepted_current_instances=0` report field reads a single-object
+diagnostic and is not a valid multi-object count. The corresponding multi-object
+counter records 139 accepted visual assessments, of which 134 own current
+returns; these are not unique-object counts. Likewise, the report's 0.15-second
+occupancy wording concerns the recent-scan queue. Persistent background and
+unknown-geometry priors operate separately. These clarifications are bound to
+native records and source hashes in
+`outputs/restaurant-risk-calibration/native-limitations-clarification.json`.
+
+## Validated native presentation
+
+The new package is `outputs/final demo/v5-risk-calibrated`; share
+`restaurant-service-v3-calibrated-share.mp4`. It contains 1,565 consecutive
+navigation/stopping frames (original source frames 69--1633) plus 60 asset-credit
+frames: 1,625 frames, 162.5 seconds, 1920x1080 at 10 fps. Master and H.264 share
+copies both passed complete FFmpeg decoding and exact frame/format checks.
+The share file is 83,178,024 bytes. Bin, human and credit frames were visually
+inspected after encoding.
+
+The left panel preserves the assessed camera view; the upper-right panel uses
+actual controller-applied LiDAR policy scores; the lower-right panel is the
+native follow camera. The fixed `restaurant_v1` palette is used throughout.
+Camera scores are individual-object values, while map scores include recorded
+group/prior policy handling. The map footer's "original scores" means the scores
+recorded in this new calibrated native trial, not the diagnostic legacy equation.
+No-mask frames can still show current LiDAR risk with qualified retained
+properties. Held RGB, scan age, ordinary policies and prior geometry stay labeled.
+
+All 1,100 presentation-input hashes were rechecked, and all 444 previously
+protected demo files remain byte-identical. The package includes the native
+report, score table, certificate/map audits, source/frame mapping, credits and
+`video-validation.json`. Both the first failed native trial and the clearly
+labeled earlier archived-score replay remain separate. No main/primary/PR117
+promotion is implied; PR247 stays draft.
