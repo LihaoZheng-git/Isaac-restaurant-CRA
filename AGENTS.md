@@ -1,5 +1,24 @@
 # CRA repository guidance
 
+- Full-policy short crate trial at d261e53 PASSED four fresh external gates,
+  own60 and native arrival: N6/dt.2/guidance100 exactly matches accepted V5;
+  crate(17.5,3.00), unchanged full memory/uncertainty/controller/scoring policy.
+  Straight4m goal reached24.20simsec, error9.6956cm, stopdrift2.7277mm,
+  minimumCBF.130150, independentclearance.305773m, zero recorded crate contacts.
+  Entire padded chassis passed18.0s. This is a NEAR-STRAIGHT PASS, not the
+  desired away-side detour: peak2.3052cm TOWARD crate, alongside max1.0289cm
+  toward. Brief zero commands remain; no pause-free claim.172fields166translating;
+  crate retained91fields, cue.359947/contactmedian.187421/phimedian.396152.
+  No bin retained rows in this short trial. Accepted V5 has bin/crate median
+  contact.050713/.254809 and phi.293853/.449108, but mass/context also differ.
+  Source/policy/current-point/score auditsPASS; one sensor-epoch rejection kept.
+  Human heldremote/unexercised, not human/full-mission acceptance. All322video
+  frames retained at10fps and decoded; outputs/service-crate-short-full-controller/.
+  No controller/estimator bug fix or further placement/full-demo run performed.
+  User wants blockers discussed, not autonomous redesign.
+  Preserve V5 and both interrupted V6 attempts; draftPR253/main/primary/PR117
+  holds stay. See docs/service_crate_short_full_controller.md.
+
 - User requests a quick bounded crate placement test with FULL demo settings,
   N6/dt.2/guidance100 and unchanged perception/geometry/uncertainty policies.
   A slight detour is enough; no controller/estimator bug fixes or risk overrides.
@@ -12,7 +31,7 @@
   idle prerequisites and independent60/own60; remote human encounter unexercised,
   never passed by this short test. One driven trial; preserve failures and all
   previous demos. No full-demo promotion or main/primary/PR117 changes. See
-  docs/service_crate_short_full_controller.md. Native validation pending.
+  docs/service_crate_short_full_controller.md. Native outcome is recorded above.
 
 - V6 clearance at f46efdc passed six fresh prerequisites and own60, then
   stalled and was explicitly INTERRUPTED at source75.5/commit75.8, world

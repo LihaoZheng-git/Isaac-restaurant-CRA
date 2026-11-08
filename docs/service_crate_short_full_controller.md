@@ -58,6 +58,67 @@ service and harness regression tests in 27.45 seconds, plus repository Ruff and
 diff checks. The agent's 47 harness/static-controller checks and syntax checks
 also pass. Independent review confirms exact parsed-argument parity and that
 the crate stationary gate cannot be overwritten by later acceptance checks.
-Native validation is pending at this protocol snapshot.
+Native validation was pending at the implementation snapshot; the completed
+result is recorded below.
 Preserve all old short clips, completed V5, both interrupted V6 attempts and
 main/primary/PR117 holds. Do not begin another full-demo run in this bounded task.
+
+## Completed native result (2026-11-08)
+
+Frozen runtime revision `d261e53a7193309fa979b1026ec125838eede2fd` passed the
+four fresh external prerequisites, motion's own60 and the short native run.
+The saved MPC and guidance dictionaries exactly match accepted V5; source,
+recipe, scene, perception and uncertainty-policy checks pass. The native output
+is `F:/CRA-experiments/service-crate-short-full-controller-20261108/motion-v1`.
+
+| Measurement | Recorded result |
+| --- | --- |
+| Four-metre goal | 1/1, reached in 24.20 simulation seconds |
+| Final error / unchanged tolerance | 0.096956 m / 0.10 m |
+| Braking drift | 0.002728 m |
+| Minimum sensor-field CBF margin | 0.130150 |
+| Independent evaluation clearance | 0.305773 m |
+| Entire padded chassis beyond crate | First recorded at 18.00 navigation seconds |
+| Crate PhysX reports | Observer available; zero recorded crate contacts |
+| Committed fields / while translating | 172 / 166 |
+| Retained crate evidence | 91 fields; not continuous retention |
+
+The path is almost straight. Its maximum lateral offset is **2.3052 cm toward
+the crate**, after the robot centre has passed the crate centre. While the robot
+centre is alongside the crate box, its offset reaches 1.0289 cm toward the
+crate. The maximum away-side offset over the complete path is only 0.3198 cm.
+This is successful passage, **not a demonstrated away-side detour**. Brief zero
+commands remain in the recorded command trace; this is not a pause-free run.
+One initial camera/LiDAR epoch rejection is preserved. No runtime algorithm,
+scores or acceptance thresholds were changed to improve the outcome.
+
+The retained crate cue is 0.359947, median calibrated contact 0.187421,
+median phi 0.396152 (range 0.391830--0.428496), and rough mass 2.363315 kg.
+There are no retained bin rows in this short run, so it does not provide a new
+paired comparison. The previously accepted V5 observations above support
+lower bin contact and aggregate phi; their different mass and motion/context
+prevent attributing the entire phi difference to contact alone.
+
+The original human stayed held at its remote start, with zero measured drift,
+minimum robot distance 21.85 m and no runtime human evidence. Its encounter
+is explicitly **unexercised**, not passed. Different initial sensor history
+also means this short run does not repair or replace either interrupted V6
+full mission. Zero recorded PhysX contacts is limited to the available
+observer coverage, not a universal collision guarantee.
+
+Post-run source/property/current-point/calibrated-score audits pass with no
+reported errors. Independent review agrees with the signed trajectory and
+scope interpretation. The separate preview retains all 322 native frames at
+10 fps, including pauses, with a status banner only; full decode and frame/
+epoch checks pass. Key workspace artifacts are:
+
+- `outputs/service-crate-short-full-controller/audits-v1/summary.json`
+- `outputs/service-crate-short-full-controller/audits-v1/policy-contract.json`
+- `outputs/service-crate-short-full-controller/audits-v1/trajectory.png`
+- `outputs/service-crate-short-full-controller/preview-v1/crate-short-pass-share.mp4`
+- `outputs/service-crate-short-full-controller/preview-v1/validation.json`
+
+The bounded placement trial is closed. Keep this as a reliable-passage result
+with minimal path change; do not label it the requested visible detour or
+promote it to a new full demo. No further controller repair or placement sweep
+was performed. Draft PR253 and all main/primary/PR117 holds remain.
