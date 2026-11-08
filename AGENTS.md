@@ -1,5 +1,35 @@
 # CRA repository guidance
 
+- Separate V6 clearance placement trial moves ONLY crate to(17.5,3.10) andbin
+  to(21.2,3.40), +10/+20cm towardroute vsacceptedV5, with35/25cm moreclearance
+  than interruptedV6. KeepN6/guidance100/B1.7/lambda1.25/nominal/actor/phi/colors/
+  evidence/.30m staticprior/limits unchanged. Freshsixgates/own60/fullnative and
+  source/geometry/map/camera/video audits required; previous20cm isolatedN12
+  passesdoNOTvalidatenewpositions.4255fullunits237.23s/27focused6.15s/Ruff/diff
+  PASS;144actualscenehashes/two translationproperties/6commandarrays onlyscene
+  pathsPASS. No native resultyet. Preserveallpriorfiles/failedV6/diagnosticrecipe,
+  newoutputs/final demo/v6-clearance onlyifaccepted. See
+  docs/restaurant_service_v6_clearance.md; main/primary/PR117 holdsremain.
+
+- V6 closer full run at0c01396 passed all6fresh prerequisites/own60, then was
+  INTERRUPTED after sustained crate-approach stall; not a300s timeout or accepted
+  newdemo. Finalsource65.5/commit65.7333/local(8.96744,-.01981,-.29039), bin/goal
+  unreached; nofinalbraking/contact/arrival acceptance. Last8source seconds net
+  .982mm; last5savednavigation seconds249/301zero commands,239withoutreason,
+  freshfield age<=.1667s. Three reconstructed fields identify seven source47.9
+  crate-XY points retained by region7000001184 with approved.30m static allowance,
+  fixedunknownphi.68359375; raster reachesworldy4.0335 beside route4.05. Tested
+  slow translations fail densepaddedgeometry; holds/smallturnspass. No current
+  support toclear thisregion; no exact nativewarm optimizer replay/claim allpaths
+  impossible. Preserve all4243partialfiles/3.56GB and488previousdemofiles; sources
+  unchanged. PartialMP4s unfinalized/unplayable. Do notpromotefullV6 or alterpriors.
+  Prepared58--63s fullrecordingdiagnostic NOTlaunched. FullN12 needs consistent
+  human/dynamic uncertaintyhorizon, notjustCLIrelaxation. Next separateplacement
+  trial crate(17.5,3.10)/bin(21.2,3.40) keepsN6/prior/scoring/route/actor unchanged;
+  oldisolated20cm passesdoNOTvalidatenewpositions. Fresh6gates/own60/fullnative
+  andpostaudits required. See docs/restaurant_service_v6_closer.md and
+  docs/restaurant_service_v6_clearance.md; main/primary/PR117 holds remain.
+
 - User-authorized V6 full-demo placement integration follows both isolated
   calibrated detour+arrival passes. New additive service_pair_v6_closer layers
   over accepted originalV3 move ONLY crate(17.5,3.0->3.45) andbin(21.2,3.2->3.65).

@@ -2,8 +2,8 @@
 
 Use --layout original-v3 for the accepted open-aisle coordinates, or relief20
 for the balanced placement with the crate shifted 20 cm farther from the route.
-The v6-closer placement uses the calibrated witness recipe and moves only
-the two props in additive layers over the accepted original-v3 scene.
+The v6-closer and v6-clearance placements use the calibrated witness recipe and
+move only the two props in additive layers over the accepted original-v3 scene.
 The original generated layers and licensed assets must already be available.
 """
 import argparse
@@ -37,6 +37,21 @@ V6_SCOPE = (
     "Preserve previous scenes, demos and failures. Not a risk-only causal comparison."
 )
 V6_SOURCE_REVISION_ROLE = "historical parent-runtime snapshot; actual native revision is invocation.json.source_revision"
+V6_CLEARANCE_SCOPE = (
+    "Separate V6 clearance placement using the calibrated witness method. "
+    "Move only the bin to (21.20, 3.40), +0.20 m world Y, and crate to (17.50, 3.10), "
+    "+0.10 m world Y, from the accepted original-V3 layout. These new positions have "
+    "more route clearance than the interrupted v6-closer layout; its isolated N12 "
+    "results do not validate this full-service placement. Object meshes, scales, "
+    "human timing, witness bounds, ownership/evidence and uncertainty policies, "
+    "factor scoring, palette, fixed lambda1.25, obstacle-unaware nominal, full "
+    "N6/guidance100 controller and physical limits remain unchanged. Fresh six "
+    "prerequisites, own60 and full native arrival/stopping/source audits are required. "
+    "Historical source_revision/original_invocations identify parent provenance only; "
+    "the launcher records the new frozen native revision. Preserve previous scenes, "
+    "demos, failures and the unlaunched diagnostic recipe. No new native result or "
+    "risk-only causal comparison is claimed."
+)
 
 
 def digest(path):
@@ -73,17 +88,18 @@ def build(layout, output_directory, recipe_path, *, root=ROOT):
         raise ValueError("fresh scene directory and recipe paths required")
     if recipe_path.suffix != ".json":
         raise ValueError("recipe must have a .json suffix")
-    if layout not in ("original-v3", "relief20", "v6-closer"):
-        raise ValueError("choose original-v3, relief20 or v6-closer")
+    if layout not in ("original-v3", "relief20", "v6-closer", "v6-clearance"):
+        raise ValueError("choose original-v3, relief20, v6-closer or v6-clearance")
     original_layout = layout == "original-v3"
-    closer_layout = layout == "v6-closer"
+    calibrated_layout = layout in ("v6-closer", "v6-clearance")
     parent_name = "open_aisle" if original_layout else "balanced"
     centers = [[21.2, 3.2], [17.5, 3.0]] if original_layout else [[21.2, 3.4], [17.5, 3.2]]
     crate_delta = 0.0 if original_layout else -0.2
     bin_delta = 0.0
     base_recipe_path = root / "configs/restaurant_service_demo_v3_balanced_contact.json"
-    if closer_layout:
-        centers = [[21.2, 3.65], [17.5, 3.45]]
+    if calibrated_layout:
+        centers = ([[21.2, 3.65], [17.5, 3.45]] if layout == "v6-closer"
+                   else [[21.2, 3.4], [17.5, 3.1]])
         bin_delta = centers[0][1] - 3.2
         crate_delta = centers[1][1] - 3.0
         base_recipe_path = root / "configs/restaurant_service_risk_calibration_witnesses.json"
@@ -94,7 +110,7 @@ def build(layout, output_directory, recipe_path, *, root=ROOT):
     sources = {}
     for suffix in ("contact", "bench"):
         parent = root / f"scenes/generated/restaurant_service_demo_v3_{parent_name}_{suffix}.usda"
-        if closer_layout:
+        if calibrated_layout:
             parent = root / ("scenes/generated/service_pair_original_v3/"
                              f"restaurant_service_demo_v3_balanced_{suffix}.usda")
         sources[suffix] = (parent, *checked_source(parent))
@@ -167,7 +183,7 @@ def build(layout, output_directory, recipe_path, *, root=ROOT):
                       props=after, layout_parent=str(parent), derived_service_layout=layout,
                       contact_prop_centers_world_xy=centers,
                       crate_translation_delta_world_y_m=crate_delta)
-        if closer_layout:
+        if calibrated_layout:
             result["bin_translation_delta_world_y_m"] = bin_delta
         results.append(result)
     if digest(base_recipe_path) != base_recipe_hash:
@@ -178,7 +194,7 @@ def build(layout, output_directory, recipe_path, *, root=ROOT):
     for result in results:
         write_json(Path(result["scene"]).with_suffix(".json"), result)
     recipe["commands"] = commands
-    if closer_layout:
+    if calibrated_layout:
         recipe["layout_derivation"] = dict(
             parent_recipe=base_recipe_path.relative_to(root).as_posix(),
             parent_recipe_sha256=base_recipe_hash,
@@ -186,7 +202,7 @@ def build(layout, output_directory, recipe_path, *, root=ROOT):
             command_changes="scene paths only; original parked poses and full N6/guidance100 retained",
             native_acceptance_pending=True,
             parent_scope=recipe["scope"], parent_source_revision=recipe["source_revision"])
-        recipe["scope"] = V6_SCOPE
+        recipe["scope"] = V6_SCOPE if layout == "v6-closer" else V6_CLEARANCE_SCOPE
         recipe["source_revision_role"] = V6_SOURCE_REVISION_ROLE
     else:
         recipe["scope"] += f" Reproduced {layout} placement. Fresh native gates and mission acceptance required."
@@ -198,7 +214,7 @@ def build(layout, output_directory, recipe_path, *, root=ROOT):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--layout", choices=("original-v3", "relief20", "v6-closer"), required=True)
+    parser.add_argument("--layout", choices=("original-v3", "relief20", "v6-closer", "v6-clearance"), required=True)
     parser.add_argument("--output-directory", type=Path, required=True)
     parser.add_argument("--recipe", type=Path, required=True)
     args = parser.parse_args()

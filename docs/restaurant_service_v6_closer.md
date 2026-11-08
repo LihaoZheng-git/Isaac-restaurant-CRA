@@ -62,6 +62,49 @@ factor sensing, pause-free motion, risk-only causality or real-time claim follow
 from this demo. Main/primary/PR117 holds remain; all earlier outputs are retained.
 Full native V6 validation is pending at this protocol snapshot.
 
+The native attempt at `0c013963c22f3c1dc0086f5fe09df568aaa058dc` passed all
+six fresh prerequisites and its own60, then was explicitly interrupted after
+sustained crate-approach low progress. This was not a completed 300-second
+timeout. Its final field is source65.5/commit65.7333, local pose
+(8.96744,-0.01981,-0.29039), world XY(16.76786,4.03808). The bin and final goal
+were not reached; no final braking, contact or arrival acceptance exists.
+Keep the interrupted native directory
+`F:/CRA-experiments/service-v6-closer-props-20261107/long-motion-v1` intact.
+The partial MP4s lack closing metadata and are not playable success videos.
+
+Source57.5 through65.5 shows only0.982mm net movement and6.63cm oscillatory
+travel. The last five saved navigation seconds contain249/301 zero-forward
+commands,239 without a stop reason; mean issued speed is0.00373m/s despite
+nominal0.1850--0.1919m/s and field age at most0.1667s. Source/commit clocks and
+navigation command clocks are kept separate. These observations do not by
+themselves distinguish MPC selection from the analytical CBF correction.
+
+Three reconstructed recorded fields reproduce point ownership and placement
+counts. At sources59.9 and65, tested0.025m/s translations pass unpadded
+endpoints but fail dense padded geometry. Hold and small in-place turns pass.
+The rejecting cells belong to persistent background region7000001184: seven
+original source47.9 points, fixed unknown phi0.68359375, approved0.30m position
+allowance. Its retained raster reaches worldy4.0335 beside the nominaly4.05
+route. The seven original XY points lie within the authored crate box, used
+only for evaluation; they lack nearby current support, so the existing
+replacement proof cannot clear them. This diagnoses the tested translations,
+not every possible path or the native optimizer's exact warm-start decision.
+No successful planner snapshots were saved by the failure-only recorder.
+
+Preservation verifies395 runtime files,150 scene/source hashes, the recipe,
+16 bound helpers,488 previous demo files and4,243 partial native files
+(3.56GB). The six gates and own60 pass; one initial parked epoch rejection
+remains recorded. Evidence is under`outputs/service-v6-closer-props/`, notably
+`interruption-v1.json` and`interruption-diagnosis-v1/`.
+
+A bounded full-planner-recording recipe was prepared but not launched. A full
+N12 retry is not a recipe-only change: active human recovery and moving-arc
+gates requireN6, and dynamic uncertainty assumes1.55s rather than the2.75s
+needed for a2.4s horizon plus the existing reserve. Do not loosen these gates
+or claim the isolated N12 passes validate the full demo. The next separate
+placement trial gives the crate and bin more space while preserving N6 and all
+geometry policies; see`docs/restaurant_service_v6_clearance.md`.
+
 Implementation validation: 4,244 full unit tests pass in 234.22 s, 36 focused
 tests pass in 5.99 s, and repository Ruff/diff checks pass. Independent actual
 scene inspection verifies 144 unique source hashes and exactly the two +45 cm
