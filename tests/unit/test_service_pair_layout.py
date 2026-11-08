@@ -114,3 +114,118 @@ def test_corrupt_parent_is_rejected_before_creating_outputs(source_root, damage)
     with pytest.raises(ValueError):
         builder.build("relief20", output, recipe, root=source_root)
     assert not output.exists() and not recipe.exists()
+
+
+@pytest.fixture
+def closer_source_root(source_root):
+    parent = builder.ROOT / "configs/restaurant_service_risk_calibration_witnesses.json"
+    (source_root / "configs" / parent.name).write_bytes(parent.read_bytes())
+    builder.build("original-v3", "scenes/generated/service_pair_original_v3",
+                  "configs/original-v3.json", root=source_root)
+    return source_root
+
+
+def test_closer_pair_only_translates_two_props_and_preserves_calibrated_commands(closer_source_root):
+    root = closer_source_root
+    before = {p: builder.digest(p) for p in root.rglob("*") if p.is_file()}
+    output = root / "scenes/generated/service_pair_v6_closer"
+    recipe_path = root / "configs/closer.json"
+    result = builder.build("v6-closer", output, recipe_path, root=root)
+    assert result["parent_sources_unchanged"] and result["expected_bounds_verified"]
+    assert all(builder.digest(p) == sha for p, sha in before.items())
+    for name in result["scenes"]:
+        stage = Usd.Stage.Open(name)
+        manifest = json.loads(Path(name).with_suffix(".json").read_text())
+        assert manifest["contact_prop_centers_world_xy"] == [[21.2, 3.65], [17.5, 3.45]]
+        parent = Path(manifest["layout_parent"])
+        assert parent.parent.name == "service_pair_original_v3"
+        source = Usd.Stage.Open(str(parent))
+        assert stage.GetStartTimeCode() == source.GetStartTimeCode()
+        assert stage.GetEndTimeCode() == source.GetEndTimeCode()
+        assert stage.GetTimeCodesPerSecond() == source.GetTimeCodesPerSecond()
+        assert UsdGeom.GetStageMetersPerUnit(stage) == UsdGeom.GetStageMetersPerUnit(source)
+        assert UsdGeom.GetStageUpAxis(stage) == UsdGeom.GetStageUpAxis(source)
+        assert stage.GetPrimAtPath("/World/CRAServiceActors/Server").IsActive() == ("_contact" in name)
+        original_props = {p["name"]: p for p in builder.demo_prop_records(source)}
+        for prop in builder.demo_prop_records(stage):
+            original = original_props[prop["name"]]
+            delta = .45 if prop["name"] in ("ServiceContainer", "BrokenCrate") else 0.
+            for key in ("bounds_minimum", "bounds_maximum"):
+                assert prop[key] == pytest.approx([original[key][0], original[key][1] + delta,
+                                                  original[key][2]])
+            assert {k: v for k, v in prop.items() if k not in ("bounds_minimum", "bounds_maximum")} == {
+                k: v for k, v in original.items() if k not in ("bounds_minimum", "bounds_maximum")}
+        layer = Sdf.Layer.FindOrOpen(manifest["additions"])
+        assert list(layer.GetPrimAtPath(DEMO_ROOT + "/ServiceContainer").properties.keys()) == ["xformOp:translate"]
+        assert list(layer.GetPrimAtPath(DEMO_ROOT + "/BrokenCrate").properties.keys()) == ["xformOp:translate"]
+    parent_path = root / "configs/restaurant_service_risk_calibration_witnesses.json"
+    previous = json.loads(parent_path.read_text())
+    current = json.loads(recipe_path.read_text())
+    committed = json.loads((builder.ROOT / "configs/restaurant_service_v6_closer_calibrated.json").read_text())
+    assert current == committed
+    assert current["layout_derivation"]["parent_recipe_sha256"] == builder.digest(parent_path)
+    for case, cmd in current["commands"].items():
+        old = previous["commands"][case]
+        index = cmd.index("--scene" if "--scene" in cmd else "--restaurant-scene") + 1
+        assert Path(cmd[index]).parent == output.relative_to(root)
+        assert Path(cmd[index]).name == Path(old[index]).name
+        cmd[index] = old[index]
+        assert cmd == old
+    frozen = {p: builder.digest(p) for p in output.rglob("*") if p.is_file()}
+    with pytest.raises(ValueError, match="fresh"):
+        builder.build("v6-closer", output, recipe_path, root=root)
+    assert all(builder.digest(p) == sha for p, sha in frozen.items())
+
+
+@pytest.mark.parametrize("damage", ["source", "bounds", "centers"])
+def test_closer_pair_corrupt_accepted_parent_rejected_before_outputs(closer_source_root, damage):
+    root = closer_source_root
+    parent = root / ("scenes/generated/service_pair_original_v3/"
+                     "restaurant_service_demo_v3_balanced_contact.json")
+    if damage == "source":
+        (root / "scenes/generated/licensed-asset.txt").write_text("modified source")
+    else:
+        data = json.loads(parent.read_text())
+        if damage == "bounds":
+            data["props"][0]["bounds_minimum"][0] += .1
+        else:
+            data["contact_prop_centers_world_xy"][0][1] += .1
+        parent.write_text(json.dumps(data))
+    output = root / "scenes/generated/rejected-closer"
+    recipe = root / "configs/rejected-closer.json"
+    with pytest.raises(ValueError):
+        builder.build("v6-closer", output, recipe, root=root)
+    assert not output.exists() and not recipe.exists()
+
+
+def test_committed_closer_recipe_preserves_all_calibrated_parent_commands():
+    parent = builder.ROOT / "configs/restaurant_service_risk_calibration_witnesses.json"
+    previous = json.loads(parent.read_text())
+    current = json.loads((builder.ROOT / "configs/restaurant_service_v6_closer_calibrated.json").read_text())
+    assert current["layout_derivation"]["parent_recipe_sha256"] == builder.digest(parent)
+    assert current["layout_derivation"]["native_acceptance_pending"] is True
+    assert current["layout_derivation"]["contact_prop_centers_world_xy"] == [[21.2, 3.65], [17.5, 3.45]]
+    assert current["original_invocations"] == previous["original_invocations"]
+    assert current["proof_variant"] == previous["proof_variant"]
+    assert current["scope"] == builder.V6_SCOPE
+    assert current["source_revision_role"] == builder.V6_SOURCE_REVISION_ROLE
+    assert current["layout_derivation"]["parent_source_revision"] == previous["source_revision"]
+    assert current["layout_derivation"]["parent_scope"] == previous["scope"]
+    assert current["commands"].keys() == previous["commands"].keys()
+    for case, command in current["commands"].items():
+        index = command.index("--scene" if "--scene" in command else "--restaurant-scene") + 1
+        assert Path(command[index]).parent.as_posix() == "scenes/generated/service_pair_v6_closer"
+        assert Path(command[index]).name == Path(previous["commands"][case][index]).name
+        command[index] = previous["commands"][case][index]
+        assert command == previous["commands"][case]
+
+
+@pytest.mark.parametrize("case", ["long-parallel", "long-parallel-near", "long-parallel-component",
+                                  "long-idle-component", "bin-static", "crate-static"])
+def test_closer_recipe_cli_parses_without_starting_isaac(monkeypatch, case):
+    recipe = json.loads((builder.ROOT / "configs/restaurant_service_v6_closer_calibrated.json").read_text())
+    command = recipe["commands"][case] + ["--output", "outputs/unused-v6-cli-check"]
+    script = builder.ROOT / command[0]
+    monkeypatch.setattr("sys.argv", command)
+    exec(compile(script.read_text().split("args.output.mkdir", 1)[0], str(script), "exec"),
+         {"__file__": str(script)})

@@ -1,5 +1,19 @@
 # CRA repository guidance
 
+- User-authorized V6 full-demo placement integration follows both isolated
+  calibrated detour+arrival passes. New additive service_pair_v6_closer layers
+  over accepted originalV3 move ONLY crate(17.5,3.0->3.45) andbin(21.2,3.2->3.65).
+  Calibrated-witness recipe changes ONLYscene paths; fullN6/guidance100 stays,
+  unlike isolatedN12. KeepB1.7/lambda1.25/nominal/scores/palette/human/evidence/
+  priors/limits/checks. Require actualscene/hash tests, freshsixprerequisites,
+  own60/fullmission, source/geometry/score/camera/LiDAR audits andallframevideo
+  validation. Save separately outputs/final demo/v6-closer-props; preserveV5,
+  allfailures, main/primary/PR117 holds. Newfullnativepending; see
+  docs/restaurant_service_v6_closer.md.4244fullunits234.22s/36focused5.99s/
+  Ruff/diffPASS;144actualscene sourcehashes/two+.45Yoverlays/commandparityPASS.
+  Historicalparentrevision labeled; correctedrecipe matchesgenerated-v2.
+  No sourceeditsduringnative/postaudits.
+
 - Closer calibrated bin at1f9382c PASSED independent60/own60/native arrival:
   center(17.5,3.65),20.8074cm bend,1/1goal32.7833simsec,goalerror9.7171cm,
   stopdrift2.6279mm,CBF.080004. Entire padded chassis passed; box10.7139cm/
