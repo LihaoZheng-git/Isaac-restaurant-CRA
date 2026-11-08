@@ -1,5 +1,20 @@
 # CRA repository guidance
 
+- User approves a separate stronger CRA-to-boundary response experiment while
+  preserving calibrated phi/colors, fixed lambda1.25, evidence/ownership/priors,
+  obstacle-unaware nominal, controller objectives, geometry and wheel limits.
+  --restaurant-boundary-unit-flux defaults1.7; calibrated qualified objects use
+  b=-(.5+(B-.5)*phi), ordinary unassociated policies stay original. Native B>1.7
+  is LIMITED to isolated bin/crate prop-route probes: human fragment/furniture
+  paths still assume the original shared map and are not validated with this.
+  Separate baseline/candidate recipes retain existing N12 4m/45s scenes and
+  require fresh independent60+own60 before wheels. N12/no guidance objective is
+  distinct from full V3 N6/guidance100. Archived frozen-field/declared-command
+  probes are not native MPC replay or route acceptance. No forced detour or
+  object-specific score overrides; keep risk-first overlap ownership. Preserve
+  every old demo/failure and main/primary/PR117 holds. Native results pending at
+  this protocol snapshot; see docs/restaurant_boundary_response.md.
+
 - Corrected restaurant calibration at ae5c7e8 PASSED all six fresh prerequisites,
   own60 and native navigation: 8/8 guides,155.3833simsec, clearance.347619m,
   CBF.194872, stopdrift.002249m, zero bin/crate PhysX contacts. 1084live fields,

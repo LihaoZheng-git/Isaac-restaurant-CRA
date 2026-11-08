@@ -58,12 +58,20 @@ def validate_human_boundary_flux(value):
 
 def applied_field_policies(baseline, policies, objects, *, envelope_origins=None,
                            human_boundary_flux=None, verified_human_identities=(),
-                           sensor_timestamp_seconds=None):
+                           sensor_timestamp_seconds=None, restaurant_boundary_config=None):
     """Return field guidance and an audit without modifying physical evidence."""
     baseline = validate_baseline(baseline)
     human_boundary_flux = validate_human_boundary_flux(human_boundary_flux)
     if human_boundary_flux is not None and baseline is not CRABaseline.CONTINUOUS_CRA_SAFE_SAGE:
         raise ValueError("human-only flux ablation requires continuous CRA baseline")
+    from robot.risk.restaurant_calibration import CalibratedObjectPolicy, RestaurantCalibrationConfig
+    if restaurant_boundary_config is not None and not isinstance(restaurant_boundary_config, RestaurantCalibrationConfig):
+        raise TypeError("restaurant boundary response requires a typed calibration configuration")
+    boundary_ablation = (restaurant_boundary_config is not None
+                         and restaurant_boundary_config.normal_flux_magnitude_at_unit_risk != 1.7)
+    if boundary_ablation and (baseline is not CRABaseline.CONTINUOUS_CRA_SAFE_SAGE
+                              or human_boundary_flux is not None):
+        raise ValueError("restaurant boundary response requires its separate continuous-CRA ablation")
     identities = {}
     if human_boundary_flux is not None:
         from robot.perception.human_body_envelope import HUMAN_ENVELOPE_SOURCE
@@ -120,9 +128,21 @@ def applied_field_policies(baseline, policies, objects, *, envelope_origins=None
                 parent_track_id=parent,
                 scope="increase applied field repulsion only; physical CRA and factor clocks unchanged")
         guidance[key] = parameters
-        if (not math.isclose(parameters.boundary_flux, -(.5 + 1.2 * parameters.risk), abs_tol=1e-12)
+        boundary_override = None
+        expected_flux = -(.5 + 1.2 * parameters.risk)
+        if boundary_ablation and isinstance(value, CalibratedObjectPolicy):
+            if (value.calibration.config != restaurant_boundary_config
+                    or not (value.calibration.eligible or value.calibration.verified_human)):
+                raise ValueError("restaurant boundary response configuration or eligibility mismatch")
+            expected_flux = -restaurant_boundary_config.normal_flux_magnitude_for_risk(parameters.risk)
+            boundary_override = dict(
+                zero_risk_magnitude=.5,
+                unit_risk_magnitude=restaurant_boundary_config.normal_flux_magnitude_at_unit_risk,
+                original_boundary_flux=-(.5 + 1.2 * parameters.risk),
+                scope="separate boundary-response ablation; unchanged CRA phi, lambda and ordinary unknown policy")
+        if (not math.isclose(parameters.boundary_flux, expected_flux, abs_tol=1e-12)
                 or parameters.tangential_strength != 1.25):
-            raise ValueError("primary comparison requires the shared .5..1.7 flux scale and lambda 1.25")
+            raise ValueError("primary comparison requires the shared .5..1.7 flux scale and lambda 1.25 unless its typed boundary ablation is explicit")
         audit.append({
             "track_or_group_id": key,
             "observed_class": semantic_class,
@@ -134,6 +154,7 @@ def applied_field_policies(baseline, policies, objects, *, envelope_origins=None
             "lambda": parameters.tangential_strength,
             "field_used_for_control": baseline is not CRABaseline.GEOMETRIC_VELOCITY_CBF,
             **({"human_flux_ablation": override} if override is not None else {}),
+            **({"restaurant_boundary_response": boundary_override} if boundary_override is not None else {}),
         })
     return guidance, audit
 

@@ -12,13 +12,16 @@ from robot.risk.restaurant_calibration import (
 )
 
 
-def restaurant_calibration_preset(name):
+def restaurant_calibration_preset(name, *, normal_flux_magnitude_at_unit_risk=1.7):
     if name == "off":
+        if normal_flux_magnitude_at_unit_risk != 1.7:
+            raise ValueError("alternative boundary response requires restaurant calibration")
         return None
     if name not in {"equal", "kinetic"}:
         raise ValueError("unknown restaurant calibration preset")
     return RestaurantCalibrationConfig(enabled=True, kinetic_energy_scale_j=50.,
-        weights=RestaurantFactorWeights(kinetic=1.5 if name == "kinetic" else 1.))
+        weights=RestaurantFactorWeights(kinetic=1.5 if name == "kinetic" else 1.),
+        normal_flux_magnitude_at_unit_risk=normal_flux_magnitude_at_unit_risk)
 
 
 def object_is_eligible(detail):
@@ -121,4 +124,8 @@ def apply_restaurant_calibration(objects, policies, config, envelopes, sensor_ti
         verified_human_ids=sorted(humans), confirmed_groups=calibrated_groups,
         legacy_confirmed_groups=(carried_groups or {}).get("confirmed_groups", []),
         unknown_policy_unchanged=True,
+        boundary_mapping=dict(zero_risk_magnitude=.5,
+            unit_risk_magnitude=config.normal_flux_magnitude_at_unit_risk,
+            formula="b=-(0.5+(unit_risk_magnitude-0.5)*phi)",
+            scope="calibrated verified/retained object policies only; phi and palette unchanged"),
         scope="after original ownership and physical evidence; fixed lambda and geometry unchanged")

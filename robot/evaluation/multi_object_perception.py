@@ -586,6 +586,7 @@ def assess_all_objects(worker, packet):
         human_boundary_flux=worker.human_boundary_flux,
         verified_human_identities=envelope_audit,
         sensor_timestamp_seconds=packet.sensor_timestamp_seconds,
+        restaurant_boundary_config=calibration_config,
     )
     recovery_geometry = [p for p in envelope_memory.recovery_audit
         if p['decision'] == 'reacquired_verified_visual_part_geometry'] if envelope_memory is not None else []

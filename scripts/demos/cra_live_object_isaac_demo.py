@@ -24,6 +24,8 @@ parser.add_argument("--output", type=Path, required=True)
 parser.add_argument("--motion", action="store_true")
 parser.add_argument("--restaurant-calibration", choices=("off", "equal", "kinetic"), default="off",
                     help="separate verified-object factor calibration; ordinary unknown policy unchanged")
+parser.add_argument("--restaurant-boundary-unit-flux", type=float, default=1.7,
+                    help="separate verified-object normal-flux endpoint; >=1.7, zero-risk endpoint .5; phi/colors/lambda/unknown policy unchanged")
 parser.add_argument('--grid-resolution', type=float, choices=(.05, .1), default=.1,
                     help='explicit numerical field-grid comparison in metres; .1 preserves legacy; physical margins and all observed occupancy stay unchanged')
 parser.add_argument('--mpc-unfinished-qp-proposal', action='store_true',
@@ -903,6 +905,14 @@ if not 0 < args.object_factor_prior_risk < 1:
 if args.restaurant_calibration != "off" and (not args.persistent_object_risk_map
         or args.experiment_baseline != "continuous_cra_safe_sage"):
     parser.error("restaurant calibration requires the continuous all-object CRA baseline")
+if not math.isfinite(args.restaurant_boundary_unit_flux) or args.restaurant_boundary_unit_flux < 1.7:
+    parser.error("restaurant boundary unit flux must be finite and >=1.7")
+if args.restaurant_boundary_unit_flux != 1.7 and args.restaurant_calibration == "off":
+    parser.error("alternative restaurant boundary response requires restaurant calibration")
+if args.restaurant_boundary_unit_flux != 1.7 and (
+        not args.crate_route_probe or args.restaurant_human
+        or args.stationary_furniture_memory or args.human_boundary_flux is not None):
+    parser.error("stronger restaurant boundary response is limited to the separate isolated prop-route probes; human/furniture integration is not validated")
 if args.persistent_object_risk_map and args.evidence_gap_diagnostic:
     parser.error(
         "use cra_object_risk_map_replay.py for the new map's stationary gap diagnostic"
@@ -1533,7 +1543,8 @@ def main():
                                                      pixel_denoise=args.contact_pixel_denoise)
                               if args.local_contact_geometry else None),
         capture_risk_masks=args.presentation_risk_camera,
-        restaurant_calibration_config=restaurant_calibration_preset(args.restaurant_calibration),
+        restaurant_calibration_config=restaurant_calibration_preset(args.restaurant_calibration,
+            normal_flux_magnitude_at_unit_risk=args.restaurant_boundary_unit_flux),
         human_mass_body_identity_retention=args.human_mass_body_identity_retention,
         predictive_human_geometry_config=HumanGeometryForecastConfig(
             horizon_seconds=round(args.mpc_horizon_steps * .2, 10),

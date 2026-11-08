@@ -79,6 +79,7 @@ class RestaurantCalibrationConfig:
     uncertainty_gain: float = 0.25
     weights: RestaurantFactorWeights = field(default_factory=RestaurantFactorWeights)
     human_protection_floor: float = 0.8
+    normal_flux_magnitude_at_unit_risk: float = 1.7
 
     def __post_init__(self):
         if not isinstance(self.enabled, bool):
@@ -100,6 +101,21 @@ class RestaurantCalibrationConfig:
         if not 0 <= gain <= 0.5:
             raise ValueError("uncertainty_gain must be in [0, .5]")
         object.__setattr__(self, "uncertainty_gain", gain)
+        flux = _finite(self.normal_flux_magnitude_at_unit_risk,
+                       "normal_flux_magnitude_at_unit_risk")
+        if flux < 1.7:
+            raise ValueError("restaurant boundary response cannot weaken the original 1.7 endpoint")
+        if not self.enabled and flux != 1.7:
+            raise ValueError("alternative restaurant boundary response requires enabled calibration")
+        object.__setattr__(self, "normal_flux_magnitude_at_unit_risk", flux)
+
+    def normal_flux_magnitude_for_risk(self, risk):
+        """Map the unchanged normalized score to a separate field strength.
+
+        The zero-risk endpoint stays 0.5. Only the verified/retained-object
+        calibration path uses this map; ordinary unknown policies are untouched.
+        """
+        return .5 + (self.normal_flux_magnitude_at_unit_risk - .5) * _unit(risk, "risk")
 
 
 @dataclass(frozen=True)
@@ -489,7 +505,9 @@ def calibrate_object_policy(
     """Return the legacy object unchanged when disabled or wholly unassessed.
 
     The caller applies this once, after the original factor/human-mass updates.
-    The shared .5..1.7 flux mapping and existing lambda/passing side are retained.
+    The input must use the original shared .5..1.7 mapping. An explicit
+    calibrated-object endpoint can strengthen the output without altering risk,
+    lambda, passing side, evidence or unassessed-object policies.
     """
     if not isinstance(original, CRASafeSAGEPolicyResult):
         raise TypeError("original policy must be an uncalibrated CRASafeSAGEPolicyResult")
@@ -511,5 +529,6 @@ def calibrate_object_policy(
     )
     parameters = replace(original.guidance_parameters,
         safety_parameters=replace(original.guidance_parameters.safety_parameters,
-            risk=assessment.phi, boundary_flux_magnitude=.5 + 1.2 * assessment.phi))
+            risk=assessment.phi,
+            boundary_flux_magnitude=config.normal_flux_magnitude_for_risk(assessment.phi)))
     return CalibratedObjectPolicy(original, assessment, parameters)
