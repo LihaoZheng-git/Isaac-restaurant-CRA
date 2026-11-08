@@ -1,5 +1,24 @@
 # CRA repository guidance
 
+- Boundary-response pair at838c3ec completed fresh independent60/own60 and native
+  arrival/stopping for B1.7/B2.9, but stronger b did NOT enlarge the crate bend:
+  8.6657/8.2217cm; 1/1 goals in29.3833/26.9500simsec, goalerror9.6643/9.6017cm,
+  stopdrift2.6615/2.6024mm, CBF.119365/.127872. Padded crate-box clearance
+  3.7116/3.3499cm; zero recorded crate/nonfloor PhysX contacts with floor-positive
+  reporting. Historical circle metric still FAILS(-4.0924/-4.6778cm), evaluation
+  only. Source unchanged; boundary/admission/point audits PASS, but continuous
+  crate retention FAILS:78/282 and81/264 fields; 13 wholecenter rows each. Median
+  retained phi.519938/.506020, b-1.123925/-1.714449; fresh inputs differ between
+  the two live runs, not a causal/statistical speedup. Potential/thermal priors,
+  rough mass and velocity fallbacks remain. Frozen-field review finds unchanged
+  local tangential ring guidance despite changed normal b/h; no1.7clamp. Keep
+  B2.9 opt-in and do not promote to full V3 or blindly tune higher. Next trace
+  field/constraint activation and cell ownership on matched inputs; changing
+  coupling/objective/lambda/geometry is a separate method decision.4210units/
+  83finalfocused/Ruff/diffPASS;28V5manifest files unchanged. Preserve all native
+  F:/CRA-experiments/boundary-response-20261107 results, old demos/failures,
+  draftPR248 and main/primary/PR117 holds. See docs/restaurant_boundary_response.md.
+
 - User approves a separate stronger CRA-to-boundary response experiment while
   preserving calibrated phi/colors, fixed lambda1.25, evidence/ownership/priors,
   obstacle-unaware nominal, controller objectives, geometry and wheel limits.
