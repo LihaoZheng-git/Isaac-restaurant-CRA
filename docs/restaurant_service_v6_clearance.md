@@ -5,7 +5,9 @@ and the rounded bin to (21.20, 3.40). Relative to the accepted calibrated V5
 layout, these are +10 cm and +20 cm in world Y toward the unchanged y=4.05
 aisle route. They leave 35 cm and 25 cm more route clearance, respectively,
 than the interrupted V6 closer-prop placement. Their longitudinal separation
-remains 3.70 m. This is a new layout with no native acceptance result yet.
+remains 3.70 m. The native trial passed its seven parked/component gates but
+stalled near the crate and was explicitly interrupted. It is not an accepted
+new demo; the completed calibrated V5 remains the current full presentation.
 
 The previous V6 attempt reached the crate approach and was interrupted after
 sustained low progress. Its partial native sources, missing final report and
@@ -71,16 +73,9 @@ simulated and execution is paced. This placement comparison is not a risk-only
 causal result, continuous fresh four-factor sensing, real-time proof or exact
 Safe-SAGE equivalence. Main, primary-comparison and PR117 holds remain.
 
-Implementation checks pass: 4,255 full unit tests in237.23s, 27 focused
-builder/recipe/CLI tests in6.15s, repository Ruff and diff checks. The actual
-composed-scene proof verifies144 unique parent/source hashes, exactly the
-bin+.20Y/crate+.10Y translation properties, unchanged other props/actor/timing/
-units, and scene-path-only changes in all six command arrays. Validation
-artifacts are in`outputs/service-v6-clearance-preparation/`. These source and
-scene checks are not a native placement or mission result.
-
-Implementation validation: 27 focused builder, preservation and CLI tests pass
-in 6.15 s; Ruff on the changed Python files and the diff whitespace check pass.
+Implementation validation: 4,255 full unit tests pass in 237.23 s and 27
+focused builder, preservation and CLI tests pass in 6.15 s. Repository Ruff
+and the diff whitespace check pass.
 Independent inspection of the actual generated layers verifies 144 unique
 source hashes, exactly the two translation properties, unchanged other prop
 bounds and metadata, actor state, stage timing and units. All six command arrays
@@ -90,4 +85,95 @@ tracked recipe matches its saved snapshot byte-for-byte, SHA256
 Proofs and logs are under `outputs/service-v6-clearance-preparation/`.
 Standalone USD cannot resolve the remote Carter/human assets; these local
 geometry checks do not replace native component and stationary validation.
-Full regression and native results are pending at this protocol snapshot.
+
+## Native result and preservation
+
+The run at `f46efdc0e2741984eef173ec63ce0460323751f9` passed the bin and crate
+stationary60, idle actor, moving-human component, startup60 and nearby-human60
+prerequisites, then its own60. One initial camera/LiDAR epoch rejection remains
+recorded. Motion reached the first route guide and the crate-centre region,
+then stalled. The final field is source75.5/commit75.8, local pose
+(9.768353,-0.022642,-0.023692), world XY(17.568777,4.035959). The robot centre
+passed the crate centre; full rear passage, the bin encounter and final arrival
+were not accepted.
+
+Source67.5 through75.5 records only 0.448 mm net movement and 3.62 mm total
+drift, with every field numeric-ready. The last two saved navigation seconds
+contain 121/121 zero-forward commands, all `waiting_for_fresh_valid_plan`.
+The final five contain 299/301 zero-forward commands. The last command
+checkpoint is elapsed navigation65.1833; source/commit timestamps are absolute
+simulation time and are not interchangeable with that clock.
+
+The process was explicitly interrupted after this sustained stall and all
+native processes exited. It did not complete a 300-second timeout. There is no
+final native report, launcher execution result, braking acceptance or complete
+contact/arrival evaluation. All three partial MP4s lack closing metadata and
+remain unplayable; none is presented as a completed demo.
+
+`outputs/service-v6-clearance/interruption-v1.json` records this outcome.
+Its preservation proof hashes 4,897 native files (4,164,726,733 bytes), checks
+395 runtime files, 150 scene/source hashes, the recipe, 17 bound helpers and
+six historical audit hashes, and verifies all 488 previous demo files and all
+4,243 first-interruption files unchanged. The archive contains 472 complete
+live-field records and no malformed rows. The corrected partial-trajectory
+figure is `interruption-artifacts-v1/interrupted-trajectory-v2.png`; earlier
+plots and the native archive remain intact.
+
+## Exact diagnosis
+
+The two saved failed requests at source66.2 and70.1 reproduce the native
+failure statuses, entire returned command sequences and predicted chassis
+states using their original field, temporal derivative, nominal sequence,
+lookahead goal, warm start and numerical-library versions. No environment
+upgrade or horizon comparison was made. Both replays fail the MPC's dense
+padded geometry check. The immediate analytical CBF would preserve the nominal
+approximately 0.19988 m/s command: current h is about 0.1443 and its constraint
+margin about 0.3744. This distinguishes the failed plan from a CBF stop or an
+independent authored-world veto.
+
+The rejecting cells belong to persistent background regions7000001259 and
+7000001290: seven and four original points from source54.1 and55.8. Both retain
+the approved 0.30 m position allowance, fixed unknown phi0.68359375,
+b=-1.3203125 and lambda1.25. Their original XY points lie inside the authored
+crate box, used only for post-run attribution. Current returns are 0.79--1.12 m
+from these retained points at the replay sources, so the existing 0.10 m
+replacement-witness test cannot retire them. This does not establish physical
+crate movement or missing current sensor fields.
+
+At source66.2, the actual rectangular footprint including its original 5 cm
+margin is 9.61 cm clear of the eleven retained 0.30 m point disks in these two
+regions; this is not whole-scene or PhysX clearance. However, one
+of the original padded hold hypotheses overlaps a disk by 2.65 mm; the nominal
+horizon's worst sampled overlap is 6.79 cm. Finer yaw/raster resolution would
+not remove these continuous overlaps for the unchanged hold and nominal
+candidates, although it could affect optimizer behavior. Grid rasterization
+also contributes: the
+hold's rejecting negative-yaw slice remains 5.92 cm clear of the exact disks
+when evaluated as a rectangle at that quantized yaw.
+
+The unchanged geometry uses 5 cm cells and 16 yaw slices. The physical chassis
+extents are front0.14/rear0.587351/half-width0.2466 m; the safety reference is
+0.10 m forward, yielding front0.04/rear0.687351 m at that reference. The padded
+queries use +/-0.025 m in the local-field x/y axes and +/-0.21 rad yaw, with
+the original first-interval ramp. The continuous-geometry diagnostic evaluates
+the same finite Cartesian query set; it is not exhaustive uncertainty coverage.
+Holding, slow forward motion and small rotations fail the native dense check
+despite positive endpoint/DTCBF margins. These finite probes do not prove that
+all possible trajectories are infeasible or that N12 would fix the full route.
+
+Exact inputs, probes, ownership, numerical provenance, hashes and the reviewed
+figure are in `outputs/service-v6-clearance/interruption-diagnosis-v1/`.
+`README.md`, `exact-request-probes.json`, `geometry-resolution-audit.json` and
+`continuous-versus-raster-geometry.png` explain the distinction. Exactly two
+original MPC requests were replayed; the geometry comparison ran no optimizer.
+Native inputs remained byte-identical and the three diagnostic scripts pass
+Ruff. Runtime/scene files stayed frozen through preservation and diagnosis;
+this result documentation was updated afterward.
+
+No new full-demo video is accepted. Both isolated N12 detour-and-arrival clips
+remain valid within their documented limits, but do not validate this N6 full
+mission. Preserve V5, both interrupted V6 attempts and all existing holds.
+The next design review should address the interaction of retained background
+geometry and padded full-route planning. Do not silently shrink uncertainty,
+discard retained points, alter phi, relax the human-horizon contract or declare
+an untested placement successful to obtain a more visible curve.

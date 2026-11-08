@@ -1,5 +1,29 @@
 # CRA repository guidance
 
+- V6 clearance at f46efdc passed six fresh prerequisites and own60, then
+  stalled and was explicitly INTERRUPTED at source75.5/commit75.8, world
+  (17.568777,4.035959). Centre passed crate centre; rear/bin/final goal not
+  accepted. Last8 source seconds moved only0.448mm net; last2 saved navigation
+  seconds121/121zero, waiting_for_fresh_valid_plan. Not a300s timeout; no final
+  braking/contact/arrival report, partial MP4s unplayable. Preserve4897native
+  files/4.16GB,4243first-interruption files and488old-demo files (hashesPASS).
+  Frozen395runtime/150scene/recipe/17helpers preserved through exact diagnosis.
+  Two original failed MPC requests at66.2/70.1 reproduce exactly; immediate
+  analytical CBF preserves nominal, dense padded MPC geometry fails. Owners
+  7000001259/1290 retain11crate-XY points with approved.30m allowance and fixed
+  unknownphi.68359375. Actual rectangle+5cm margin is9.61cm clear of those two
+  regions, not a whole-scene/PhysX clearance result,
+  but original finite padded hold hypotheses overlap2.65mm; nominal6.79cm.
+  Raster conservatism ALSO contributes, not a yaw-resolution-only fix. Query
+  offsets are local-field +/- .025m, yaw+/- .21rad,16slices/.05m grid; finite
+  tests do not prove universal infeasibility. No fresh witnesses can retire
+  these points under current rule. No new policy/controller change or full
+  demo accepted. Keep isolated20cm N12 passes distinct from fullN6 failure;
+  do not silently shrink priors/drop points/relax N12 human-horizon gates.
+  Review retained-background/planning interaction before another attempt.
+  See docs/restaurant_service_v6_clearance.md and its exact diagnosis artifacts.
+  Main/primary/PR117 holds and completed V5 remain unchanged; draftPR252.
+
 - Separate V6 clearance placement trial moves ONLY crate to(17.5,3.10) andbin
   to(21.2,3.40), +10/+20cm towardroute vsacceptedV5, with35/25cm moreclearance
   than interruptedV6. KeepN6/guidance100/B1.7/lambda1.25/nominal/actor/phi/colors/
