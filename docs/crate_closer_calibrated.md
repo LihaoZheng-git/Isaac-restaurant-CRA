@@ -79,3 +79,32 @@ association and field-side uncertainty, so it is deferred. The original y=3.45
 position has no surveyed furniture-box overlap and plausible initial camera
 projection, but neither proves sensor acceptance or native feasibility. See
 `outputs/crate-closer-calibrated/roomier-placement-review-v3.json`.
+
+## Original-position calibrated result
+
+The separately calibrated y=3.45 trial at `561b5d9` passed both fresh 60-source
+parked checks and native arrival/stopping. It reached the 4 m goal in 26.6833
+simulated seconds with 9.6478 cm final error and 2.7552 mm braking drift. The
+alongside bend was **19.9544 cm**, versus 8.6657 cm for the calibrated y=3.40
+baseline. The entire padded chassis passed the crate and returned to the goal.
+Minimum padded crate-box clearance was 4.6490 cm, minimum CBF margin .089971,
+and PhysX recorded zero crate contacts in parked, navigation and braking phases.
+The historical enclosing-circle score remains a separate FAIL: 1.9742 cm versus
+its original 2 cm diagnostic. It did not veto the sensor-only controller.
+
+Source/point/boundary audits pass and frozen sources are unchanged. Original
+crate evidence qualified on 63/262 fields, so continuous property retention
+still fails. Median retained phi was .406991; no score or boundary override was
+used. Separate live observations differ across placements; this is one trial
+per position, not a causal risk-only comparison or repeatability result. Both
+earlier calibrated placements and the old uncalibrated return-stall remain.
+Full-path comparison and audits are in
+`outputs/crate-closer-calibrated/original-audit-v1/`. The separate H264 preview
+in `outputs/crate-closer-calibrated/preview-original-v1/` preserves all 345 native
+frames, including parked checks and braking; full decode and source hashes pass.
+
+The user now authorizes a closer-bin short test and, if both props produce a
+useful detour with arrival, a separately saved full restaurant demo using the
+selected positions. Full service uses N6/guidance100 rather than the isolated
+N12 controller and therefore requires its own fresh gates and full mission.
+Existing V5, failures and main/primary/PR117 holds remain protected.

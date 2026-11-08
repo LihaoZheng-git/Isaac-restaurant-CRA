@@ -1,5 +1,19 @@
 # CRA repository guidance
 
+- Calibrated original-position crate at561b5d9 passed independent60/own60 and
+  native arrival/stopping: y3.45, 19.9544cm alongside bend (baseline8.6657cm),
+  1/1goal26.6833simsec, 9.6478cm goalerror, 2.7552mm stopdrift, CBF.089971.
+  Entire padded chassis passed; crate-box clearance4.6490cm, zero recorded
+  PhysX crate contacts. Historical circle1.9742cm still FAILS its2cm diagnostic.
+  Source/point/boundary auditsPASS, source unchanged; continuous retentionFAIL
+  63/262fields, medianphi.406991. One trial, differing fresh evidence, no causal
+  risk-only or repeatability claim. All345native video frames preserved in
+  outputs/crate-closer-calibrated/preview-original-v1; all3paths/audits in
+  original-audit-v1. User authorizes closer-bin test then separately saved full
+  demo if both detour+arrive. FullN6/guidance100 differs from isolatedN12 and
+  needs fresh full validation. Preserve all old results/V5 and main/primary/
+  PR117 holds. See docs/crate_closer_calibrated.md.
+
 - Calibrated y3.42 trial at2ab49e4 passed independent60/own60/native arrival:
   1/1 goal27.50simsec, goalerror9.5883cm, stopdrift2.6480mm, CBF.132738,
   but bend8.1085cm vs baseline8.6657cm is NOT an improvement. Padded crate-box
