@@ -419,7 +419,8 @@ if args.moving_view_image_objects and not (args.image_object_approach or args.se
     parser.error("moving-view groups require the bounded static-prop approach and its stationary gates")
 if args.static_prop_evidence and not ((args.image_object_approach or args.service_static_props) and args.moving_view_image_objects):
     parser.error("static-prop evidence requires the bounded approach and independent/own stationary gates")
-matched_bin_scene = bool(args.restaurant_scene and args.restaurant_scene.name == 'restaurant_bin_matched_pass.usda')
+matched_bin_scene = bool(args.restaurant_scene and args.restaurant_scene.name in {
+    'restaurant_bin_matched_pass.usda', 'restaurant_bin_closer25_pass.usda'})
 short_prop_name = 'ServiceContainer' if matched_bin_scene else 'BrokenCrate'
 if args.confirmed_prop_refresh and (not args.static_prop_evidence or not args.image_object_approach
         or not args.contact_pixel_denoise or args.service_static_props

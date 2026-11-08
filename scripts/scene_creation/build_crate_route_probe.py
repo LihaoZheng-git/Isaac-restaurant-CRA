@@ -17,13 +17,16 @@ from pxr import Gf, Sdf, Usd, UsdGeom
 from robot.scene.restaurant_demo_build import DEMO_ROOT, demo_prop_records
 
 
-def build(*, setback_cm=0, matched_bin=False):
+def build(*, setback_cm=0, matched_bin=False, closer_bin=False):
+    if closer_bin and (not matched_bin or setback_cm != 5):
+        raise ValueError('closer bin requires the original matched-bin placement')
     base = ROOT / 'scenes/generated/restaurant_service_demo_v3_open_aisle_bench.usda'
     output = base.with_name('restaurant_crate_route_probe.usda')
     if matched_bin:
         if setback_cm != 5:
             raise ValueError('the matched bin uses the 5 cm crate placement')
-        output = base.with_name('restaurant_bin_matched_pass.usda')
+        output = base.with_name('restaurant_bin_closer25_pass.usda' if closer_bin
+                                else 'restaurant_bin_matched_pass.usda')
     elif setback_cm in (3, 5, 10, 15):
         base = output
         output = base.with_name(f'restaurant_crate_route_setback{setback_cm}.usda')
@@ -58,7 +61,7 @@ def build(*, setback_cm=0, matched_bin=False):
         position = attr.Get()
         # The authored translation is an asset pivot. Register the XY center
         # of the composed mesh bounds while preserving scale and ground contact.
-        dest_y = 3.45 - setback_cm / 100
+        dest_y = 3.45 - setback_cm / 100 + (.25 if closer_bin else 0.)
         if matched_bin:
             original, = (prop for prop in manifest['props'] if prop['name'] == target)
             x, y = [(lo + hi) / 2 for lo, hi in zip(original['bounds_minimum'][:2], original['bounds_maximum'][:2])]
@@ -89,4 +92,6 @@ if __name__ == '__main__':
     parser.add_argument('--setback-cm', type=int, choices=(0, 3, 5, 10, 15), default=0,
                         help='Distance away from the route, measured from the original closer-crate fixture.')
     parser.add_argument('--matched-bin', action='store_true', help='Substitute the original rounded bin at the 5 cm crate site.')
+    parser.add_argument('--closer-bin', action='store_true',
+                        help='Move only the matched bin 25 cm toward the route in a fresh scene.')
     build(**vars(parser.parse_args()))

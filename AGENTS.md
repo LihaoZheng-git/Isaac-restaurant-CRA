@@ -1,5 +1,16 @@
 # CRA repository guidance
 
+- Next bounded calibrated bin test uses world(17.50,3.65), 25cm nearer than its
+  old matched position. Build --matched-bin --setback-cm5 --closer-bin into new
+  restaurant_bin_closer25_pass.usda; only scene path changes in calibratedB1.7
+  recipe restaurant_bin_closer_calibrated.json. KeepN12/lambda1.25/4m nominal/
+  45s/scoring/colors/priors/evidence/limits. Fresh independent60+own60 before one
+  driven trial; geometry/contacts evaluation-only. Old uncalibratedbin is not
+  matched baseline. Ifdetour+arrival, user authorizes newfull demo with crate
+  (17.50,3.45)/bin(21.20,3.65); fullN6/guidance100 needs separate validation.
+  Preserve alloldresults/V5/main/primary/PR117 holds. Nativepending; see
+  docs/bin_closer_calibrated.md.
+
 - Calibrated original-position crate at561b5d9 passed independent60/own60 and
   native arrival/stopping: y3.45, 19.9544cm alongside bend (baseline8.6657cm),
   1/1goal26.6833simsec, 9.6478cm goalerror, 2.7552mm stopdrift, CBF.089971.
