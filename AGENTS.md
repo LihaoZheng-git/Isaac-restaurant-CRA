@@ -1,5 +1,17 @@
 # CRA repository guidance
 
+- User approves one modestly closer calibrated crate test: center (17.50,3.42),
+  2 cm nearer the route than y3.40, retaining 3 cm setback from the old y3.45
+  failed stress case. Recipe restaurant_crate_closer_calibrated.json changes
+  ONLY scene path from calibrated B1.7 baseline; keep N12, lambda1.25, scoring,
+  palette, evidence/priors, straight4m nominal, physical limits and all checks.
+  Build separate layer with build_crate_route_probe.py --setback-cm 3. Fresh
+  independent60+own60 before ONE driven trial. Authored geometry/PhysX remain
+  passive navigation evaluation; no external veto or authored detour. Compare
+  bend AND arrival/stop/clearance/source coverage. Native pending at protocol
+  snapshot. Preserve old placements/demos/failures and all main/primary/PR117
+  holds. See docs/crate_closer_calibrated.md.
+
 - Boundary-response pair at838c3ec completed fresh independent60/own60 and native
   arrival/stopping for B1.7/B2.9, but stronger b did NOT enlarge the crate bend:
   8.6657/8.2217cm; 1/1 goals in29.3833/26.9500simsec, goalerror9.6643/9.6017cm,

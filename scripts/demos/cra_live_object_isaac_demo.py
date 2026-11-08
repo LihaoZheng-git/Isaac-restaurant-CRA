@@ -425,7 +425,7 @@ if args.confirmed_prop_refresh and (not args.static_prop_evidence or not args.im
         or not args.contact_pixel_denoise or args.service_static_props
         or args.stationary_prop_target != short_prop_name or args.restaurant_human or args.restaurant_server):
     parser.error('confirmed refresh requires the matching isolated corrected-contact prop')
-crate_setback_scenes = {f'restaurant_crate_route_setback{cm}.usda' for cm in (5, 10, 15)}
+crate_setback_scenes = {f'restaurant_crate_route_setback{cm}.usda' for cm in (3, 5, 10, 15)}
 if args.crate_route_probe and (not args.confirmed_prop_refresh
         or args.stationary_prop_world_pose != [15.65, 4.05, 0.]
         or not args.restaurant_scene
