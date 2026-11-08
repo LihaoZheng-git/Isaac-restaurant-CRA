@@ -22,6 +22,8 @@ sys.path.insert(0, str(ROOT))
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument("--output", type=Path, required=True)
 parser.add_argument("--motion", action="store_true")
+parser.add_argument('--service-crate-short-probe', action='store_true',
+                    help='fixed 4m crate route using unchanged full calibrated service settings; separate evaluation only')
 parser.add_argument("--restaurant-calibration", choices=("off", "equal", "kinetic"), default="off",
                     help="separate verified-object factor calibration; ordinary unknown policy unchanged")
 parser.add_argument("--restaurant-boundary-unit-flux", type=float, default=1.7,
@@ -390,6 +392,19 @@ parser.add_argument('--unknown-distinct-surface-witnesses', action='store_true',
 parser.add_argument('--human-verified-part-recovery', action='store_true',
                     help='bounded recovery across a previously verified human parent/part ID swap; complete old region must fit current body')
 args = parser.parse_args()
+service_crate_short_profile = None
+if args.service_crate_short_probe:
+    from robot.evaluation.service_crate_short_probe import (
+        REFERENCE_RECIPE, validate_service_crate_short_probe,
+    )
+    reference_path = ROOT / REFERENCE_RECIPE
+    reference_command = json.loads(reference_path.read_text())['commands']['long-parallel']
+    reference_args = parser.parse_args(reference_command[1:] + ['--output', str(args.output)])
+    try:
+        service_crate_short_profile = validate_service_crate_short_probe(args, reference_args)
+        service_crate_short_profile['reference_recipe_sha256'] = hashlib.sha256(reference_path.read_bytes()).hexdigest()
+    except ValueError as exc:
+        parser.error(str(exc))
 crate_v3_profile = None
 if args.crate_delay_robust_bypass and not args.crate_v3_controller:
     parser.error('delay-robust crate bypass requires the gated V3 static crate controller')
@@ -1079,6 +1094,12 @@ if args.restaurant_human == 'parallel' and not args.long_service_parallel:
     stationary.ROBOT_START_YAW_RADIANS = PARALLEL_ROBOT_YAW
     ROUTE = PARALLEL_ROBOT_ROUTE
     GOAL = ROUTE[-1]
+if args.service_crate_short_probe:
+    from robot.evaluation.service_crate_short_probe import START_WORLD_XY_YAW, ROUTE_LOCAL_XY
+    stationary.ROBOT_START_POSITION_WORLD = (*START_WORLD_XY_YAW[:2], stationary.ROBOT_START_POSITION_WORLD[2])
+    stationary.ROBOT_START_YAW_RADIANS = START_WORLD_XY_YAW[2]
+    ROUTE, GOAL = ROUTE_LOCAL_XY, ROUTE_LOCAL_XY[-1]
+    restaurant_target = 'BrokenCrate'  # Independent evaluation target, never estimator input.
 GROUND_SCOPE = "bounded separated ground sphere; observed flat plane with assumed unseen local support/landing continuity"
 PLUME_SCOPE = "bounded rendered matte sphere and opaque bright puffs; validated initial clean reference; registered object-associated visible-plume proxy only"
 if args.actor_shape == "upright_capsule":
@@ -1152,8 +1173,11 @@ def save_instance_snapshot(result):
 
 def main():
     save_json("run-configuration.json", {
+        **({"service_crate_short_scope": service_crate_short_profile} if service_crate_short_profile else {}),
+        **{
         key: str(value) if isinstance(value, Path) else value
         for key, value in vars(args).items()
+        },
     })
     global ACTIVE_HUMAN
     print("Auditing/loading existing local models...", flush=True)
@@ -1807,6 +1831,11 @@ def main():
         from robot.safety.delay_robust_bypass import DelayRobustBypassMPC
         mpc = DelayRobustBypassMPC(mpc.paper_filter, mpc.config, guidance_config=mpc.guidance_config)
     control = SafeSAGEControlRuntime(mpc=mpc, backup_filter=backup, crossing_strategy=args.crossing_strategy)
+    if service_crate_short_profile is not None:
+        save_json('service-crate-short-profile.json', dict(service_crate_short_profile,
+            mpc_configuration=asdict(mpc.config), guidance_configuration=asdict(mpc.guidance_config),
+            configured_start_world_xy_yaw=(*stationary.ROBOT_START_POSITION_WORLD[:2], stationary.ROBOT_START_YAW_RADIANS),
+            nominal_route_local_xy=ROUTE))
     if crate_v3_profile is not None:
         save_json('controller-profile-validation.json', dict(crate_v3_profile,
             mpc_configuration=asdict(mpc.config), guidance_configuration=asdict(mpc.guidance_config),
@@ -2204,6 +2233,10 @@ def main():
             gate["route_start_sensor_checks"] = restaurant_route_sensor_checks(records)
             gate["fixture_gate_scope"] = "new long-route start: current owned mass/contact/motion on at least one observed track; remote FoodBowl is diagnostic only; no tabletop hazard acceptance"
             gate["passed"] = stationary_ready = bool(stationary_ready and all(gate["route_start_sensor_checks"].values()))
+            if args.service_crate_short_probe:
+                gate['service_crate_short_scope'] = service_crate_short_profile
+                gate['fixture_gate_scope'] = 'short full-policy crate probe; original route numeric checks plus current owned crate mass/contact/motion'
+                gate['passed'] = stationary_ready = bool(stationary_ready and all(gate['restaurant_component_checks'].values()))
         elif human is None:
             gate["passed"] = stationary_ready = bool(stationary_ready and all(gate["restaurant_component_checks"].values()))
         else:
@@ -3104,6 +3137,8 @@ def main():
         and moving_field_count >= 10
     )
     completed = completed and (post_goal_observation is None or post_goal_observation['passed'])
+    robot_completion_before_human_audits = completed
+    service_crate_short_validation = None
     human_validation = None
     passing_validation = None
     person_relative_validation = None
@@ -3269,6 +3304,16 @@ def main():
             save_json("carry-validation.json", carry_validation)
             save_json("carry-records.json", human.carry.records)
     simultaneous_kinetic_updates = 0
+    if args.service_crate_short_probe:
+        from robot.evaluation.service_crate_short_probe import summarize_unexercised_human_scope
+        service_crate_short_validation = summarize_unexercised_human_scope(live_fields, human.records)
+        # Keep every original raw audit and any exercised human acceptance. Only
+        # a proven remote, held and unobserved actor has no encounter to score.
+        if service_crate_short_validation['unexercised']:
+            completed = robot_completion_before_human_audits
+        human_validation['short_probe_encounter_scope'] = service_crate_short_validation
+        save_json('service-crate-short-validation.json', service_crate_short_validation)
+        save_json('human-navigation-validation.json', human_validation)
     live_kinetic_validation = None
     if args.moving_actor:
         for record in live_fields:
@@ -3303,7 +3348,9 @@ def main():
     save_json("waypoint-events.json", waypoint_events)
     save_json("nearby-track-coverage-events.json", coverage_events)
     report = {
-        "acceptance_scope": "V3 service navigation including human validation; independent geometry scored separately"
+        "acceptance_scope": "4m crate probe with full service policy; human encounter exercise reported separately; arrival/stopping/source/field checks retained"
+        if args.service_crate_short_probe else
+        "V3 service navigation including human validation; independent geometry scored separately"
         if args.observe_service_clearance else
         "sensor-controlled prop navigation, arrival, live fields and stopping; clearance scored separately"
         if args.observe_crate_clearance
@@ -3311,6 +3358,8 @@ def main():
         if args.persistent_object_risk_map
         else "bounded_conservative_navigation; four-factor availability reported separately",
         "passed": completed and scene_unchanged and root_unchanged_by_fixture,
+        "service_crate_short_probe": service_crate_short_profile,
+        "service_crate_short_validation": service_crate_short_validation,
         "experiment_baseline": args.experiment_baseline,
         "nominal_route_policy": {
             "waypoint_mode": args.waypoint_mode,

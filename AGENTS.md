@@ -1,5 +1,19 @@
 # CRA repository guidance
 
+- User requests a quick bounded crate placement test with FULL demo settings,
+  N6/dt.2/guidance100 and unchanged perception/geometry/uncertainty policies.
+  A slight detour is enough; no controller/estimator bug fixes or risk overrides.
+  Report any discovered blocker for discussion. Candidate is accepted V5 crate
+  (17.5,3.00),10cm farther than failed clearance3.10; reuse V5 scene unchanged.
+  Separate --service-crate-short-probe test selector changes only start to
+  (15.65,4.05,0), straight4m nominal and short evaluation scope; max45s recipe.
+  Keep all full-mode policies, lambda, scores/colors, robot limits and padding.
+  Old isolated N6 static memory is NOT equivalent. Retain fresh component/near/
+  idle prerequisites and independent60/own60; remote human encounter unexercised,
+  never passed by this short test. One driven trial; preserve failures and all
+  previous demos. No full-demo promotion or main/primary/PR117 changes. See
+  docs/service_crate_short_full_controller.md. Native validation pending.
+
 - V6 clearance at f46efdc passed six fresh prerequisites and own60, then
   stalled and was explicitly INTERRUPTED at source75.5/commit75.8, world
   (17.568777,4.035959). Centre passed crate centre; rear/bin/final goal not
