@@ -1,5 +1,18 @@
 # CRA repository guidance
 
+- Closer calibrated bin at1f9382c PASSED independent60/own60/native arrival:
+  center(17.5,3.65),20.8074cm bend,1/1goal32.7833simsec,goalerror9.7171cm,
+  stopdrift2.6279mm,CBF.080004. Entire padded chassis passed; box10.7139cm/
+  circle4.6825cm, zero recordedbin/nonfloor contacts with floorpositivecoverage.
+  Source/point/boundaryPASS/sourceunchanged; continuousretentionFAIL201/315.
+  Median retainedphi.277342 vs separatecrate.406991; differentgeometry/evidence,
+  notrisk-onlycausality. Brief planinvalidations/waits and low-speed recovered
+  seed remain; notpause-free. Auditbin-native-audit-v1/preview-bin-v1 preserve
+  all406frames. Bothshortplacementsnowdetour+arrive; userauthorizesnewfullV6
+  crate(17.5,3.45)/bin(21.2,3.65), originalfullN6/guidance100/scores/lambda/
+  policies. Requirefreshfullgates+mission/audits. PreserveV5/alloldfailures and
+  main/primary/PR117 holds. See docs/bin_closer_calibrated.md; draftPR250.
+
 - Next bounded calibrated bin test uses world(17.50,3.65), 25cm nearer than its
   old matched position. Build --matched-bin --setback-cm5 --closer-bin into new
   restaurant_bin_closer25_pass.usda; only scene path changes in calibratedB1.7

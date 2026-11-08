@@ -47,3 +47,35 @@ assertion changes. Independent scene composition verifies all 135 source
 hashes, exact +25 cm bin translation, unchanged dimensions/height and inactive
 crate. Standalone USD cannot resolve the remote Carter reference; native Isaac
 parked validation is still required before motion.
+
+## Native result
+
+At frozen `1f9382c`, independent60 and own60 passed, followed by native arrival
+and stopping. The bin produced a **20.8074 cm** alongside bend and the complete
+padded chassis passed it. Goal arrival took 32.7833 simulated seconds, with
+9.7171 cm final error and 2.6279 mm braking drift. Padded bin-box clearance was
+10.7139 cm; historical enclosing-circle clearance was 4.6825 cm, passing its
+original 2 cm diagnostic. Minimum sensor-field CBF margin was .080004.
+PhysX recorded zero bin/nonfloor contacts with floor positive controls in all
+three phases. Source freeze, source/point and boundary audits pass.
+
+Original bin mass/contact qualified on 201/315 fields; continuous retention
+still fails. The retained rough mass was .455366 kg and outline cue .0860923,
+with live calibrated contact .03068--.03891 and phi .27414--.28259 (median
+.277342). This is lower than the separate closer-crate trial's median .406991,
+but different geometry and fresh observations prevent a risk-only causal
+trajectory comparison. The bin's slightly larger bend is not evidence of a
+higher assessed risk. Potential/thermal remain priors and mass is uncalibrated.
+
+The approach/return included pauses and slow recovery. Saved command windows
+show new-field plan invalidation/waiting, then a low-speed recovered MPC seed;
+this is not a pause-free or smoothing result. No controller, score, time-limit
+or safety-check change was made to complete the run. Audits and full-path plot:
+`outputs/crate-closer-calibrated/bin-native-audit-v1/`. The separate H264 preview
+in `preview-bin-v1/` preserves all 406 native frames including parked/braking
+and pauses; frame/source checks and full decode pass.
+
+Both bounded placements have now produced visible detours and reached the goal.
+Proceed to a new additive full scene and calibrated recipe with the crate at
+(17.50,3.45) and bin at (21.20,3.65), subject to the existing full-service fresh
+prerequisites, mission and source/geometry/evidence/video audits. Preserve V5.
