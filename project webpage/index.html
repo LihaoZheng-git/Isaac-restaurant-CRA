@@ -6,58 +6,61 @@
   <meta name="description" content="Anonymous review materials for Continuous Risk Assessment for Safety-critical Visual Navigation.">
   <meta name="robots" content="noindex, nofollow, noarchive">
   <title>CRA: Continuous Risk Assessment for Safety-critical Visual Navigation</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@700;800&amp;family=Inter:wght@400;500;600;700&amp;display=swap">
   <link rel="stylesheet" href="styles.css">
   <script src="content.js" defer></script>
   <script src="page.js" defer></script>
 </head>
 <body>
   <header class="paper-heading wrap">
-    <h1 data-copy="title"></h1>
-    <div class="review-notices">
-      <p data-copy="repository"></p>
+    <div class="paper-copy">
+      <h1 class="paper-title" data-copy="title"></h1>
+      <p class="review-notice" data-copy="repository"></p>
     </div>
-  </header>
-  <main class="wrap">
-    <img class="media wide" src="media/restaurant-highlight.gif" width="640" height="360"
+    <img class="media highlight" src="media/restaurant-highlight.gif" width="640" height="360"
       alt="Highlights of Carter navigating the restaurant and delivering food.">
+  </header>
 
-    <section aria-labelledby="abstract-title">
+  <main class="wrap">
+    <section class="page-section abstract-section" aria-labelledby="abstract-title">
       <h2 id="abstract-title" data-copy="abstractTitle"></h2>
       <p class="abstract" data-copy="abstract"></p>
     </section>
 
-    <section aria-labelledby="pipeline-title">
+    <section class="page-section" aria-labelledby="pipeline-title">
       <h2 id="pipeline-title" data-copy="pipeline"></h2>
-      <img class="media wide pipeline" src="media/pipeline.png" width="2100" height="1288" loading="lazy"
+      <img class="media pipeline" src="media/pipeline.png" width="2100" height="1288" loading="lazy"
         alt="CRA research pipeline linking scene observations, physical cues, risk assessment, and navigation control.">
     </section>
 
-    <section class="results" aria-labelledby="results-title">
+    <section class="page-section results" aria-labelledby="results-title">
       <h2 id="results-title" data-copy="results"></h2>
-      <section aria-labelledby="restaurant-title">
+      <section class="result-card result-wide" aria-labelledby="restaurant-title">
         <h3 id="restaurant-title" data-copy="restaurant"></h3>
         <p class="caption intro" data-copy="restaurantNote"></p>
-        <video class="media wide" src="media/restaurant.mp4" controls playsinline preload="metadata"
+        <video class="media" src="media/restaurant.mp4" controls playsinline preload="metadata"
           width="1920" height="1080" aria-labelledby="restaurant-title"></video>
       </section>
 
-      <section aria-labelledby="speed-title">
+      <section class="result-card" aria-labelledby="speed-title">
         <h3 id="speed-title" data-copy="speed"></h3>
-        <img class="media wide" src="media/running-boy.gif" width="640" height="360" loading="lazy"
+        <img class="media" src="media/running-boy.gif" width="640" height="360" loading="lazy"
           alt="Carter yields as a running boy crosses its route in the restaurant.">
       </section>
 
-      <section aria-labelledby="hole-title">
-        <h3 id="hole-title" data-copy="hole"></h3>
-        <img class="media wide" src="media/warehouse-hole.gif" width="960" height="384" loading="lazy"
-          alt="Carter changes course to go around an opening in the warehouse floor.">
+      <section class="result-card" aria-labelledby="aggregation-title">
+        <h3 id="aggregation-title" data-copy="aggregation"></h3>
+        <img class="media" src="media/hot-pot-sample.gif" width="704" height="528" loading="lazy"
+          alt="Carter approaches a person carrying a hot pot in the restaurant." aria-describedby="aggregation-note">
+        <p class="caption" id="aggregation-note" data-copy="aggregationNote"></p>
       </section>
 
-      <section aria-labelledby="aggregation-title">
-        <h3 id="aggregation-title" data-copy="aggregation"></h3>
-        <p class="caption intro" id="aggregation-note" data-copy="aggregationNote"></p>
-        <img class="media wide" src="media/hot-pot-sample.gif" width="704" height="528" loading="lazy"
-          alt="Carter approaches a person carrying a hot pot in the restaurant." aria-describedby="aggregation-note">
+      <section class="result-card result-wide" aria-labelledby="hole-title">
+        <h3 id="hole-title" data-copy="hole"></h3>
+        <img class="media" src="media/warehouse-hole.gif" width="960" height="384" loading="lazy"
+          alt="Carter changes course to go around an opening in the warehouse floor.">
       </section>
     </section>
   </main>

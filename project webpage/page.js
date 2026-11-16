@@ -31,9 +31,18 @@
   if (!editor) {
     const preview = new URLSearchParams(location.search).get("draft") === "1";
     const content = preview ? draftContent() : base;
+    const titlePrefix = "CRA:";
     document.title = content.title;
     for (const node of document.querySelectorAll("[data-copy]")) {
-      node.textContent = content[node.dataset.copy] ?? "";
+      const copy = content[node.dataset.copy] ?? "";
+      if (node.classList.contains("paper-title") && copy.startsWith(titlePrefix + " ")) {
+        const acronym = document.createElement("span");
+        acronym.className = "paper-acronym";
+        acronym.textContent = titlePrefix;
+        node.replaceChildren(acronym, copy.slice(titlePrefix.length));
+      } else {
+        node.textContent = copy;
+      }
     }
     return;
   }
