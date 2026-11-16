@@ -3,6 +3,7 @@ window.CRA_CONTENT = {
   "repository": "Github link will be ready soon..",
   "restaurant": "Demo on restaurant service",
   "restaurantNote": "Carter delivers two meals in the Isaac Sim restaurant.",
+  "speed": "CRA “sees” high speed",
   "hole": "CRA “sees” a hole!",
   "aggregation": "Aggregation with human carrying a hot pot",
   "aggregationNote": "CRA combines kinetic, potential, and thermal risk into a single assessment.",
