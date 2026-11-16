@@ -2,7 +2,7 @@ window.CRA_CONTENT = {
   "title": "CRA: Continuous Risk Assessment for Safety-critical Visual Navigation",
   "repository": "Github link will be ready soon..",
   "restaurant": "Demo on restaurant service",
-  "restaurantNote": "Carter delivers two meals in the Isaac Sim restaurant.",
+  "restaurantNote": "In the Isaac Sim restaurant, Carter delivers a meal, collects the customer’s used plate, and returns to the service bar before delivering a second meal.",
   "speed": "CRA “sees” high speed",
   "hole": "CRA “sees” a hole!",
   "aggregation": "Aggregation with human carrying a hot pot",
