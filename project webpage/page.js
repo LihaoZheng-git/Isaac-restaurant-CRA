@@ -7,11 +7,9 @@
     results: "Experiment Results heading",
     restaurant: "Restaurant section",
     restaurantNote: "Restaurant video caption",
-    speed: "High-speed section",
     hole: "Warehouse hole section",
-    contact: "Contact risk section",
-    thermal: "Thermal risk section",
-    steamNote: "Steam mask caption",
+    aggregation: "Hot-pot aggregation section",
+    aggregationNote: "Hot-pot video caption",
     abstractTitle: "Abstract heading",
     abstract: "Abstract",
     pipeline: "Pipeline heading"
