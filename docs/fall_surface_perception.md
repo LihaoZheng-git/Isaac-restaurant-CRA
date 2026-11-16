@@ -1,5 +1,11 @@
 # LiDAR support and landing surfaces
 
+The later opt-in [general object height component](object_height_estimation.md)
+reports support even without a visible landing and separates grounded/elevated
+hypotheses from strict drop evidence. Its stationary results and experimental
+settings are separate from the historical diagnostics below; legacy runtime
+defaults remain unchanged.
+
 `estimate_lidar_fall_surfaces` estimates fall height only from local surface
 geometry. It removes the tracked object's own returns, localizes a support
 height band adjacent to the object, and searches radial landing corridors. A

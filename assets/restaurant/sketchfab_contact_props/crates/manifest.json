@@ -1,0 +1,35 @@
+{
+  "archive": "wooden_dirty_crates_-_broken_whole_2_piece_set.zip",
+  "archive_sha256": "f42892658a180a781a4e9300d987336e81fa23ab4e92a382cd771c9555987c3b",
+  "license": "CC-BY-4.0",
+  "files": [
+    {
+      "path": "source/license.txt",
+      "sha256": "26f27b10d633f90d835d2ff22f0e71647ad0832ab3278ec5254c53cb8972a73e"
+    },
+    {
+      "path": "source/scene.bin",
+      "sha256": "a9866ceaccab5d49b40a7376a4f6429a83592f24d18b0ee94c53369ab7328465"
+    },
+    {
+      "path": "source/scene.gltf",
+      "sha256": "7c6c6339294889e3f2a1bd649f0125823c5b740499eca23733b66915ac0f09b3"
+    },
+    {
+      "path": "source/textures/Crate_2x_diffuse.png",
+      "sha256": "279e81cb5e7132eaf5f8219edb0b356f5981c892a896c6819e33ef3e0872b104"
+    },
+    {
+      "path": "source/textures/Crate_2x_normal.png",
+      "sha256": "0ca58772b7a4bd9db74ce352b34254875c699a9e18b221a4a999d7c5bde27d4f"
+    },
+    {
+      "path": "source/textures/Crate_2x_occlusion.png",
+      "sha256": "a426c9ccaf4b0a4612c63cbd5c7a48d091a68103223a8dc95aa4547b93a404d2"
+    },
+    {
+      "path": "source/textures/Crate_2x_specularGlossiness.png",
+      "sha256": "529592c7e183a82250ab1098b8da4784c175c7031a69a9fda3111f806358205e"
+    }
+  ]
+}

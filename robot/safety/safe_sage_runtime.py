@@ -18,7 +18,7 @@ import copy
 import math
 import time
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from numbers import Real
 from typing import Sequence
 
@@ -40,6 +40,8 @@ from robot.safety.obstacle_tracking import (
     ObstacleTracker,
     ObstacleTrackingResult,
 )
+from robot.safety.encounter_motion_estimate import EncounterPolicyMotion
+from robot.safety.person_relative_rear import CurrentRearApproachReference, PersonRelativeRearReference
 from robot.safety.safe_sage_field_pipeline import (
     SafeSAGEFieldPipelineConfig,
     SafeSAGEFieldPipelineResult,
@@ -80,6 +82,85 @@ def _finite_real(value: object, *, name: str) -> float:
     if not math.isfinite(result):
         raise ValueError(f"{name} must be finite.")
     return result
+
+
+@dataclass
+class SafeSAGEPlanExecutionLease:
+    """Separate old optimizer candidates from freshly verified execution.
+
+    The caller must validate the entire horizon from the current state against
+    the current field with exact DTCBF/dense geometry checks before recording
+    success. Source age is never renewed. This does not extend field/evidence
+    freshness, and the analytical CBF still checks each executed physics step.
+    """
+
+    source_timestamp_seconds: float
+    maximum_candidate_age_seconds: float = 0.2
+    execution_interval_seconds: float = 0.2
+    revalidation_interval_seconds: float = 0.15
+    validated_timestamp_seconds: float | None = None
+    validated_generation: int | None = None
+
+    def __post_init__(self):
+        for name in (
+            "source_timestamp_seconds",
+            "maximum_candidate_age_seconds",
+            "execution_interval_seconds",
+            "revalidation_interval_seconds",
+        ):
+            value = _finite_real(getattr(self, name), name=name)
+            if value < 0 or (name != "source_timestamp_seconds" and value == 0):
+                raise ValueError(f"{name} must be nonnegative/positive")
+            setattr(self, name, value)
+        if self.revalidation_interval_seconds >= self.execution_interval_seconds:
+            raise ValueError(
+                "revalidation must precede the verified first interval's expiry"
+            )
+        if (
+            self.validated_timestamp_seconds is not None
+            or self.validated_generation is not None
+        ):
+            raise ValueError("a new optimizer candidate is never prevalidated")
+
+    def candidate_available(self, now):
+        age = _finite_real(now, name="current time") - self.source_timestamp_seconds
+        return 0 <= age <= self.maximum_candidate_age_seconds + 1e-9
+
+    def needs_validation(self, now, generation):
+        return (
+            self.validated_timestamp_seconds is None
+            or self.validated_generation != generation
+            or _finite_real(now, name="current time") - self.validated_timestamp_seconds
+            >= self.revalidation_interval_seconds
+        )
+
+    def record_validation(self, now, generation, *, accepted):
+        if not isinstance(accepted, bool):
+            raise TypeError("horizon validation must supply an explicit boolean result")
+        if (
+            isinstance(generation, bool)
+            or not isinstance(generation, int)
+            or generation < 0
+        ):
+            raise ValueError("field generation must be a nonnegative integer")
+        self.validated_timestamp_seconds = None
+        self.validated_generation = None
+        if accepted and self.candidate_available(now):
+            self.validated_timestamp_seconds = _finite_real(now, name="current time")
+            self.validated_generation = generation
+
+    def can_execute(self, now, generation, *, field_fresh):
+        if not isinstance(field_fresh, bool):
+            raise TypeError("field freshness must be an explicit boolean")
+        return bool(
+            field_fresh
+            and self.candidate_available(now)
+            and self.validated_timestamp_seconds is not None
+            and self.validated_generation == generation
+            and 0
+            <= now - self.validated_timestamp_seconds
+            <= self.execution_interval_seconds + 1e-9
+        )
 
 
 def _finite_vector(value: object, *, size: int, name: str) -> np.ndarray:
@@ -186,6 +267,16 @@ class SafeSAGERuntimeField:
     temporal_safety_derivative: TemporalSafetyDerivativeInput
     build_wall_seconds: float
     cra_policy_result: CRATrackPolicyResult | None = None
+    motion_passing_reference_track_ids: tuple[int, ...] = ()
+    motion_passing_reference_sides: tuple[str, ...] = ()
+    motion_passing_reference_source_timestamp_seconds: float | None = None
+    crossing_yield_track_ids: tuple[int, ...] | None = None
+    rear_pass_reference_track_ids: tuple[int, ...] = ()
+    rear_pass_route_direction_grid_xy: tuple[float, float] | None = None
+    rear_pass_policy_motion: tuple[EncounterPolicyMotion, ...] = ()
+    person_relative_rear_reference: PersonRelativeRearReference | CurrentRearApproachReference | None = None
+    predictive_human_geometry: object | None = None
+    observed_motion_forecast: object | None = None
 
     def __post_init__(self) -> None:
         frame_id = _nonnegative_integer(
@@ -196,6 +287,19 @@ class SafeSAGERuntimeField:
             self.sensor_timestamp_seconds,
             name="sensor_timestamp_seconds",
         )
+        if self.observed_motion_forecast is not None:
+            from robot.safety.observed_motion_reference import ObservedHumanMotionReference
+            if not isinstance(self.observed_motion_forecast, ObservedHumanMotionReference):
+                raise TypeError('typed observed-motion advisory required')
+            self.observed_motion_forecast.validate_current(self.tracking_result, frame_id, sensor_time)
+            if self.motion_passing_reference_track_ids != (self.observed_motion_forecast.track_id,):
+                raise ValueError('observed-motion advisory needs one current motion-selected human')
+        if self.predictive_human_geometry is not None:
+            from robot.safety.predictive_human_geometry import PredictiveHumanGeometry
+            if not isinstance(self.predictive_human_geometry, PredictiveHumanGeometry):
+                raise TypeError("typed predictive human geometry required")
+            self.predictive_human_geometry.validate_source(frame_id, sensor_time,
+                self.anchor_position_world_xy, self.anchor_yaw)
         all_count = _nonnegative_integer(
             self.all_obstacle_point_count,
             name="all_obstacle_point_count",
@@ -215,6 +319,71 @@ class SafeSAGERuntimeField:
             )
         if not isinstance(self.tracking_result, ObstacleTrackingResult):
             raise TypeError("tracking_result must be an ObstacleTrackingResult.")
+        if self.predictive_human_geometry is not None:
+            tracks = {t.track_id: t for t in self.tracking_result.tracked_obstacles}
+            prediction = self.predictive_human_geometry
+            if (self.tracking_result.timestamp_seconds != sensor_time
+                or not set(prediction.required_track_ids) <= tracks.keys()
+                or any(tracks[f.track_id].point_count < prediction.config.minimum_points
+                    or not np.allclose(f.centroids_world_xy[-1], tracks[f.track_id].centroid_world_xy,
+                    rtol=0, atol=1e-9) for f in prediction.forecasts)):
+                raise ValueError('predictions require their original current positive track identities/centroids')
+        reference_ids = tuple(self.motion_passing_reference_track_ids)
+        current_ids = {t.track_id for t in self.tracking_result.tracked_obstacles if t.point_count >= 3}
+        if (any(isinstance(k, bool) or not isinstance(k, int) or k not in current_ids for k in reference_ids)
+            or len(set(reference_ids)) != len(reference_ids)
+            or reference_ids and self.tracking_result.timestamp_seconds != sensor_time):
+            raise ValueError("motion reference requires unique current positive track IDs at the field epoch")
+        object.__setattr__(self, "motion_passing_reference_track_ids", reference_ids)
+        sides = tuple(self.motion_passing_reference_sides)
+        source = self.motion_passing_reference_source_timestamp_seconds
+        if sides:
+            if (len(sides) != len(reference_ids) or any(s not in {"left", "right"} for s in sides)
+                or isinstance(source, bool) or not isinstance(source, Real)
+                or not math.isfinite(source) or not 0 <= sensor_time-source <= 8. + 1e-9):
+                raise ValueError("selected tangent sides require current positive identities and original bounded selection epoch")
+        elif source is not None:
+            raise ValueError("selected tangent epoch requires explicit sides")
+        object.__setattr__(self, "motion_passing_reference_sides", sides)
+        if self.crossing_yield_track_ids is not None:
+            yield_ids = tuple(self.crossing_yield_track_ids)
+            if (len(set(yield_ids)) != len(yield_ids) or any(isinstance(k, bool) or not isinstance(k, int)
+                or k not in reference_ids for k in yield_ids)):
+                raise ValueError('encounter yielding requires a subset of current selected human IDs')
+            object.__setattr__(self, 'crossing_yield_track_ids', yield_ids)
+        rear_ids = tuple(self.rear_pass_reference_track_ids)
+        if (len(set(rear_ids)) != len(rear_ids) or len(rear_ids) > 1
+            or any(isinstance(k, bool) or not isinstance(k, int) or k not in reference_ids for k in rear_ids)
+            or rear_ids and (not sides or self.rear_pass_route_direction_grid_xy is None)):
+            raise ValueError("rear reference requires one currently selected positive track and route context")
+        object.__setattr__(self, "rear_pass_reference_track_ids", rear_ids)
+        if self.rear_pass_route_direction_grid_xy is not None:
+            from robot.safety.encounter_motion import validated_route_direction
+            direction = validated_route_direction(self.rear_pass_route_direction_grid_xy)
+            object.__setattr__(self, "rear_pass_route_direction_grid_xy", tuple(direction))
+        policy_motion = tuple(self.rear_pass_policy_motion)
+        if (any(not isinstance(m, EncounterPolicyMotion) for m in policy_motion)
+            or len({m.track_id for m in policy_motion}) != len(policy_motion)
+            or any(m.track_id not in reference_ids for m in policy_motion)):
+            raise ValueError("rear policy motion requires unique currently selected source-window fits")
+        for estimate in policy_motion:
+            track = next(t for t in self.tracking_result.tracked_obstacles if t.track_id == estimate.track_id)
+            estimate.validate_current_track(track, sensor_time)
+        object.__setattr__(self, "rear_pass_policy_motion", policy_motion)
+        person_reference = self.person_relative_rear_reference
+        if person_reference is not None:
+            if (not isinstance(person_reference, (PersonRelativeRearReference, CurrentRearApproachReference))
+                or rear_ids != (person_reference.track_id,)):
+                raise ValueError("person-relative curve needs the current qualified rear identity")
+            track = next(t for t in self.tracking_result.tracked_obstacles if t.track_id == person_reference.track_id)
+            c, s = math.cos(anchor_yaw), math.sin(anchor_yaw)
+            rotation = np.array([[c, s], [-s, c]])
+            estimate = next((m for m in policy_motion if m.track_id == track.track_id), None)
+            velocity = track.velocity_world_xy if estimate is None else estimate.velocity_world_xy
+            person_reference.validate_current(track_id=track.track_id, selection_timestamp=source,
+                source_timestamp=sensor_time,
+                person_xy=rotation@(np.asarray(track.centroid_world_xy)-self.anchor_position_world_xy),
+                velocity_xy=rotation@np.asarray(velocity), route_direction=self.rear_pass_route_direction_grid_xy)
         if not isinstance(self.label_result, SemanticLabelResult):
             raise TypeError("label_result must be a SemanticLabelResult.")
         if not isinstance(self.pipeline, SafeSAGEFieldPipelineResult):
@@ -1021,6 +1190,7 @@ class SafeSAGEControlRuntime:
         *,
         mpc: SafeSAGEUnicycleMPC,
         backup_filter: SafeSAGEUnicycleCBFFilter,
+        crossing_strategy: str = "legacy",
     ) -> None:
         if not isinstance(mpc, SafeSAGEUnicycleMPC):
             raise TypeError("mpc must be a SafeSAGEUnicycleMPC.")
@@ -1030,6 +1200,9 @@ class SafeSAGEControlRuntime:
             )
         self.mpc = mpc
         self.backup_filter = backup_filter
+        if crossing_strategy not in {"legacy", "rear-pass-or-yield", "yield-then-go"}:
+            raise ValueError("unsupported crossing strategy")
+        self.crossing_strategy = crossing_strategy
 
     def plan(
         self,
@@ -1039,11 +1212,70 @@ class SafeSAGEControlRuntime:
         *,
         initial_command_guess: Sequence[float] | np.ndarray | None = None,
         preferred_lateral_direction_grid_y: float | None = None,
+        nominal_goal_grid_xy: Sequence[float] | np.ndarray | None = None,
+        prediction_state_timestamp_seconds: float | None = None,
+        planning_applied_command: Sequence[float] | np.ndarray | None = None,
     ) -> SafeSAGEUnicycleMPCResult:
         """Run predictive filtering against one accepted field snapshot."""
 
         self._validate_field(field)
-        return self.mpc.plan(
+        mpc = self.mpc
+        from robot.safety.laplace_guidance_tracking_mpc import LaplaceGuidanceTrackingMPC
+        reference_ids = getattr(field, "motion_passing_reference_track_ids", ())
+        reference_sides = getattr(field, "motion_passing_reference_sides", ())
+        if (isinstance(mpc, LaplaceGuidanceTrackingMPC)
+            and mpc.guidance_config.tangent_velocity_fraction > 0 and (not reference_ids
+                or mpc.guidance_config.reference_tangent_basis == "selected_observed_obstacle" and not reference_sides)):
+            # Own this request's configuration; never mutate the shared planner
+            # or enable a motion-specific objective from old/absent selection.
+            mpc = LaplaceGuidanceTrackingMPC(mpc.paper_filter, mpc.config,
+                guidance_config=replace(mpc.guidance_config, tangent_velocity_fraction=0.))
+        extra = {}
+        if planning_applied_command is not None:
+            from robot.safety.delay_robust_bypass import DelayRobustBypassMPC
+            if not isinstance(mpc, DelayRobustBypassMPC):
+                raise ValueError('applied-command planning reserve requires its explicit static ablation')
+            extra['planning_applied_command'] = _finite_vector(planning_applied_command, size=2,
+                name='previous physically issued command')
+        prediction = getattr(field, "predictive_human_geometry", None)
+        advisory = getattr(field, 'observed_motion_forecast', None)
+        advisory_enabled = (isinstance(mpc, LaplaceGuidanceTrackingMPC)
+            and mpc.guidance_config.motion_forecast_maximum_outward_fraction > 0)
+        if prediction_state_timestamp_seconds is not None and prediction is None and not advisory_enabled:
+            raise ValueError('prediction request has no current field forecast; no legacy fallback')
+        if advisory_enabled:
+            if prediction_state_timestamp_seconds is None:
+                raise ValueError('observed-motion preference requires actual planning-state epoch')
+            age = _finite_real(prediction_state_timestamp_seconds, name='advisory state epoch')-field.sensor_timestamp_seconds
+            if not 0 <= age <= .35+1e-9:
+                raise ValueError('advisory field source age exceeds unchanged freshness')
+            extra.update(observed_motion_forecast=advisory, observed_motion_source_age_seconds=age,
+                observed_motion_anchor=(*field.anchor_position_world_xy, field.anchor_yaw))
+        if prediction is not None:
+            if prediction_state_timestamp_seconds is None:
+                raise ValueError("predictive geometry requires the actual planning-state epoch")
+            mpc = copy.copy(mpc)
+            mpc.predictive_geometry = prediction
+            mpc.predictive_source_age_seconds = _finite_real(prediction_state_timestamp_seconds,
+                name='actual prediction planning-state epoch')-field.sensor_timestamp_seconds
+        if (isinstance(mpc, LaplaceGuidanceTrackingMPC)
+            and mpc.guidance_config.reference_tangent_basis == "selected_observed_obstacle"
+            and mpc.guidance_config.tangent_velocity_fraction > 0):
+            tracks = {t.track_id: t for t in field.tracking_result.tracked_obstacles}
+            c, s = math.cos(field.anchor_yaw), math.sin(field.anchor_yaw)
+            rotation = np.array([[c, -s], [s, c]])
+            extra["selected_passing_tangents"] = tuple((key, tuple(
+                (np.asarray(tracks[key].centroid_world_xy)-field.anchor_position_world_xy) @ rotation), side)
+                for key, side in zip(reference_ids, reference_sides))
+        if nominal_goal_grid_xy is not None:
+            if not isinstance(mpc, LaplaceGuidanceTrackingMPC):
+                raise ValueError(
+                    "nominal goal preference is only available in the explicit guidance ablation"
+                )
+            extra["nominal_goal_grid_xy"] = _finite_vector(
+                nominal_goal_grid_xy, size=2, name="nominal_goal_grid_xy"
+            )
+        result = mpc.plan(
             chassis_state_grid,
             nominal_commands,
             initial_command_guess=initial_command_guess,
@@ -1051,10 +1283,19 @@ class SafeSAGEControlRuntime:
             h_full=field.pipeline.h_full,
             guidance_fields=field.pipeline.guidance_fields,
             temporal_safety_derivative=field.temporal_safety_derivative,
-            preferred_lateral_direction_grid_y=(
-                preferred_lateral_direction_grid_y
-            ),
+            preferred_lateral_direction_grid_y=(preferred_lateral_direction_grid_y),
+            **extra,
         )
+        if isinstance(mpc, LaplaceGuidanceTrackingMPC) and hasattr(result, "guidance_tracking"):
+            result = replace(result, guidance_tracking=replace(result.guidance_tracking,
+                tangent_reference_track_ids=reference_ids))
+        strategy = getattr(self, "crossing_strategy", "legacy")
+        if strategy != "legacy":
+            from robot.safety.crossing_maneuver import apply_crossing_maneuver
+            result = apply_crossing_maneuver(mpc, result, chassis_state_grid,
+                nominal_commands, field, strategy,
+                lambda: self.filter_command((0., 0.), chassis_state_grid, field))
+        return result
 
     def filter_command(
         self,

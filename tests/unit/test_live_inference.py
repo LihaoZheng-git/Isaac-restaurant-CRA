@@ -23,12 +23,14 @@ def test_control_thread_can_continue_while_single_worker_is_busy():
     runner = LiveInferenceRunner(work)
     try:
         assert runner.submit(frame_id=1, sensor_timestamp_seconds=1.0, packet=2)
+        assert runner.busy
         assert entered.wait(timeout=1)
         assert runner.poll(current_sensor_time_seconds=1.1) is None
         assert not runner.submit(frame_id=2, sensor_timestamp_seconds=1.1, packet=3)
         release.set()
         completed(runner)
         result = runner.poll(current_sensor_time_seconds=1.2)
+        assert not runner.busy
         assert result.accepted and result.value == 4
         assert result.sensor_timestamp_seconds == 1.0
         assert runner.submit(frame_id=2, sensor_timestamp_seconds=1.1, packet=3)
@@ -62,6 +64,24 @@ def test_failed_inference_is_not_an_empty_safe_result():
         result = runner.poll(current_sensor_time_seconds=1.1)
         assert not result.accepted and result.value is None
         assert "mask rejected" in result.rejection_reason
+    finally:
+        runner.close()
+
+
+@pytest.mark.parametrize(
+    "now, accepted", [(1.35, True), (1.3500000001, True), (1.350001, False)]
+)
+def test_deadline_roundoff_does_not_retime_or_relax_meaningfully_late_results(
+    now, accepted
+):
+    runner = LiveInferenceRunner(lambda packet: packet)
+    try:
+        runner.submit(frame_id=1, sensor_timestamp_seconds=1.0, packet="field")
+        completed(runner)
+        result = runner.poll(current_sensor_time_seconds=now)
+        assert result.accepted is accepted
+        assert result.sensor_timestamp_seconds == 1.0
+        assert (result.value == "field") is accepted
     finally:
         runner.close()
 

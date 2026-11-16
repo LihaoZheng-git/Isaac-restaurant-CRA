@@ -66,8 +66,10 @@ class RestaurantTrialResult:
             value = float(getattr(self, name))
             if not math.isfinite(value):
                 raise ValueError(f"{name} must be finite")
-        if self.minimum_clearance_m < 0 or self.elapsed_seconds < 0:
-            raise ValueError("clearance and elapsed time cannot be negative")
+        if self.elapsed_seconds < 0:
+            raise ValueError("elapsed time cannot be negative")
+        if self.minimum_clearance_m < 0 and not self.collision:
+            raise ValueError("negative signed clearance must retain collision=True")
         if self.intervention_count < 0 or self.fallback_count < 0:
             raise ValueError("counts cannot be negative")
         if self.baseline in PRIMARY_BASELINES[1:] and self.lambda_value != 1.25:

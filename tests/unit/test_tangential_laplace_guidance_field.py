@@ -29,6 +29,78 @@ from robot.safety.tangential_laplace_guidance_field import (
 )
 
 
+def test_equal_policy_connected_region_is_invariant_to_track_fragmentation():
+    from robot.safety.tangential_laplace_guidance_field import _obstacle_components
+
+    policy = make_class_policy()
+    guidance = make_guidance_policy()
+    config = LocalOccupancyGridConfig(
+        resolution=0.1, minimum_x=-2, maximum_x=2, minimum_y=-2, maximum_y=2
+    )
+    points = np.array([[0, 0], [0.1, 0], [0.2, 0], [0.3, 0]])
+    split = build_local_occupancy_grid(
+        points,
+        point_track_ids=np.array([0, 0, 1, 1]),
+        class_safety_policy=policy,
+        config=config,
+    )
+    joined = replace(split, cell_track_ids=np.where(split.occupied_mask, 0, -1))
+    options = TangentialLaplaceGuidanceFieldConfig(
+        allow_dense_scene_arbitration=True, merge_equal_policy_regions=True
+    )
+    first = solve_tangential_laplace_guidance_field(
+        split, guidance_policy=guidance, config=options
+    )
+    second = solve_tangential_laplace_guidance_field(
+        joined, guidance_policy=guidance, config=options
+    )
+    np.testing.assert_array_equal(
+        first.tangential_interface_mask, second.tangential_interface_mask
+    )
+    np.testing.assert_allclose(
+        first.tangential_boundary_vectors_robot_xy,
+        second.tangential_boundary_vectors_robot_xy,
+        atol=1e-12,
+    )
+    assert np.unique(split.cell_track_ids[split.occupied_mask]).tolist() == [0, 1]
+    labels, components = _obstacle_components(
+        split,
+        guidance_policy=guidance,
+        semantic_by_track_id={},
+        guidance_by_track_id={},
+        merge_equal_policy_regions=True,
+    )
+    assert len(components) == 1
+    # Distinct policies stay distinct even where geometry is connected.
+    parameters = {
+        0: guidance.parameters_for("unknown"),
+        1: guidance.parameters_for("chair"),
+    }
+    labels, components = _obstacle_components(
+        split,
+        guidance_policy=guidance,
+        semantic_by_track_id={},
+        guidance_by_track_id=parameters,
+        merge_equal_policy_regions=True,
+    )
+    assert len(components) == 2
+    # Disconnected physical regions retain separate tangential components.
+    apart = build_local_occupancy_grid(
+        np.array([[-1, 0], [1, 0]]),
+        point_track_ids=np.array([0, 1]),
+        class_safety_policy=policy,
+        config=config,
+    )
+    labels, components = _obstacle_components(
+        apart,
+        guidance_policy=guidance,
+        semantic_by_track_id={},
+        guidance_by_track_id={},
+        merge_equal_policy_regions=True,
+    )
+    assert len(components) == 2
+
+
 def make_safety_parameters(
     risk: float,
     flux_magnitude: float,
@@ -131,11 +203,7 @@ def make_grid(
 ):
     """Return a square unit-resolution occupancy grid."""
 
-    obstacle_points = (
-        np.empty((0, 2), dtype=np.float64)
-        if points is None
-        else points
-    )
+    obstacle_points = np.empty((0, 2), dtype=np.float64) if points is None else points
     return build_local_occupancy_grid(
         obstacle_points,
         point_track_ids=track_ids,
@@ -213,9 +281,7 @@ def test_normal_boundary_condition_is_preserved() -> None:
     result = solve_single_obstacle()
 
     assert result.vector_at_cell(8, 7) == pytest.approx((-3.0, 0.0))
-    assert result.obstacle_normals_robot_xy[8, 7] == pytest.approx(
-        (1.0, 0.0)
-    )
+    assert result.obstacle_normals_robot_xy[8, 7] == pytest.approx((1.0, 0.0))
 
 
 def test_pass_left_points_toward_positive_robot_y() -> None:
@@ -226,9 +292,7 @@ def test_pass_left_points_toward_positive_robot_y() -> None:
     )
 
     assert result.tangential_interface_mask[8, 5]
-    assert result.tangential_normals_robot_xy[8, 5] == pytest.approx(
-        (1.0, 0.0)
-    )
+    assert result.tangential_normals_robot_xy[8, 5] == pytest.approx((1.0, 0.0))
     assert result.vector_at_cell(8, 5) == pytest.approx((0.0, 0.75))
 
 
@@ -279,9 +343,7 @@ def test_tangential_guidance_propagates_into_free_space() -> None:
 
 
 def test_tangential_boundary_is_perpendicular_with_requested_strength() -> None:
-    result = solve_single_obstacle(
-        policy=make_guidance_policy(chair_strength=0.75)
-    )
+    result = solve_single_obstacle(policy=make_guidance_policy(chair_strength=0.75))
     mask = result.tangential_interface_mask
     normals = result.tangential_normals_robot_xy[mask]
     vectors = result.tangential_boundary_vectors_robot_xy[mask]
@@ -294,12 +356,8 @@ def test_tangential_boundary_is_perpendicular_with_requested_strength() -> None:
 
 
 def test_larger_strength_increases_tangential_magnitude() -> None:
-    weak = solve_single_obstacle(
-        policy=make_guidance_policy(chair_strength=0.5)
-    )
-    strong = solve_single_obstacle(
-        policy=make_guidance_policy(chair_strength=1.5)
-    )
+    weak = solve_single_obstacle(policy=make_guidance_policy(chair_strength=0.5))
+    strong = solve_single_obstacle(policy=make_guidance_policy(chair_strength=1.5))
 
     weak_magnitude = np.linalg.norm(weak.vector_at_cell(8, 5))
     strong_magnitude = np.linalg.norm(strong.vector_at_cell(8, 5))
@@ -326,18 +384,10 @@ def test_classes_prescribe_independent_normal_and_tangential_strengths() -> None
 
     # The two obstacles have identical one-cell geometry. Their normal and
     # tangential boundary magnitudes differ only because their classes do.
-    assert np.linalg.norm(result.vector_at_cell(14, 7)) == pytest.approx(
-        3.0
-    )
-    assert np.linalg.norm(result.vector_at_cell(14, 19)) == pytest.approx(
-        6.0
-    )
-    assert np.linalg.norm(result.vector_at_cell(14, 5)) == pytest.approx(
-        0.75
-    )
-    assert np.linalg.norm(result.vector_at_cell(14, 17)) == pytest.approx(
-        1.25
-    )
+    assert np.linalg.norm(result.vector_at_cell(14, 7)) == pytest.approx(3.0)
+    assert np.linalg.norm(result.vector_at_cell(14, 19)) == pytest.approx(6.0)
+    assert np.linalg.norm(result.vector_at_cell(14, 5)) == pytest.approx(0.75)
+    assert np.linalg.norm(result.vector_at_cell(14, 17)) == pytest.approx(1.25)
 
 
 def test_zero_strength_recovers_normal_only_solution() -> None:
@@ -394,9 +444,7 @@ def test_unlabeled_track_uses_unknown_parameters() -> None:
     )
 
     assert result.vector_at_cell(8, 7) == pytest.approx((-6.0, 0.0))
-    assert np.linalg.norm(result.vector_at_cell(8, 5)) == pytest.approx(
-        1.25
-    )
+    assert np.linalg.norm(result.vector_at_cell(8, 5)) == pytest.approx(1.25)
 
 
 def test_overlapping_buffers_are_rejected() -> None:
@@ -443,10 +491,7 @@ def test_dense_scene_arbitration_resolves_overlapping_buffers() -> None:
 
     assert result.tangential_interface_cell_count > 0
     assert np.all(np.isfinite(result.vectors_robot_xy))
-    assert not np.any(
-        result.tangential_interface_mask
-        & result.obstacle_interface_mask
-    )
+    assert not np.any(result.tangential_interface_mask & result.obstacle_interface_mask)
 
 
 def test_dense_scene_arbitration_accepts_symmetric_normal_saddle() -> None:
@@ -544,9 +589,7 @@ def test_invalid_buffer_configuration_is_rejected(
 
 def test_non_numeric_buffer_configuration_is_rejected() -> None:
     with pytest.raises(TypeError, match="real number"):
-        TangentialLaplaceGuidanceFieldConfig(
-            tangential_buffer_radius="wide"
-        )
+        TangentialLaplaceGuidanceFieldConfig(tangential_buffer_radius="wide")
 
 
 def test_duplicate_semantic_track_ids_are_rejected() -> None:

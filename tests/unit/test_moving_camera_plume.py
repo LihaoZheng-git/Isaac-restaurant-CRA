@@ -73,6 +73,63 @@ def score(
     return estimator, result
 
 
+def test_explicit_reference_recovery_needs_three_fresh_pairs_and_keeps_clean_epoch():
+    from robot.perception.moving_camera_plume import MovingCameraPlumeConfig
+
+    estimator = MovingCameraObjectPlumeEstimator(
+        MovingCameraPlumeConfig(allow_reference_recovery=True)
+    )
+    estimator.set_reference(observed(0), clean_reference_validated=True)
+    first = estimator.update(
+        observed(5, plume=True), negative_validation_scope="synthetic observed recovery"
+    )
+    assert not first.thermal.heat_source_likelihood.is_available
+    for index in (6, 7):
+        result = estimator.update(
+            observed(index, plume=True),
+            negative_validation_scope="synthetic observed recovery",
+        )
+    assert result.thermal.heat_source_likelihood.is_available
+    assert result.thermal.heat_source_likelihood.value > 0
+    assert estimator.references[4].detections.source_timestamp_seconds == 1.0
+    assert result.thermal.heat_source_likelihood.timestamp_seconds == pytest.approx(1.7)
+
+
+def test_above_source_background_excludes_unrelated_floor_reflections_without_lowering_gates():
+    from robot.perception.moving_camera_plume import MovingCameraPlumeConfig
+
+    config = MovingCameraPlumeConfig(background_scope="above_source")
+    estimator = MovingCameraObjectPlumeEstimator(config)
+    estimator.set_reference(
+        observed(0, camera_motion=False), clean_reference_validated=True
+    )
+    for index in (1, 2, 3):
+        current = observed(index, camera_motion=False)
+        image = current.rgb.copy()
+        image[210:] = np.minimum(image[210:].astype(int) + 100, 255).astype(np.uint8)
+        current = replace(current, rgb=image)
+        result = estimator.update(
+            current, negative_validation_scope="synthetic above-source domain"
+        )
+    assert result.thermal.heat_source_likelihood.is_available
+    assert result.thermal.heat_source_likelihood.value == 0.0
+    assert estimator.last_diagnostics[4]["background_scope"] == "above_source"
+
+
+def test_above_source_lighting_change_remains_unknown():
+    from robot.perception.moving_camera_plume import MovingCameraPlumeConfig
+
+    old, current = observed(0, camera_motion=False), observed(1, camera_motion=False)
+    image = current.rgb.copy()
+    image[:140] = np.minimum(image[:140].astype(int) + 100, 255).astype(np.uint8)
+    result = register_background_pair(
+        old,
+        replace(current, rgb=image),
+        config=MovingCameraPlumeConfig(background_scope="above_source"),
+    )
+    assert result.homography is None
+
+
 def test_moving_camera_no_plume_is_low_only_in_a_validated_negative_domain():
     estimator, result = score(plume=False)
     assert result.thermal.heat_source_likelihood.is_available, result.rejection_reasons

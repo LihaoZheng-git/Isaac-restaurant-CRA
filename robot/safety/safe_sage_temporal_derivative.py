@@ -111,6 +111,7 @@ class SafeSAGETemporalDerivativeResult:
     time_delta_seconds: float
     egomotion_translation_grid_xy: tuple[float, float]
     smoothing_factor: float
+    require_valid_samples: bool = False
 
     def __post_init__(self) -> None:
         values = np.asarray(self.values, dtype=np.float64)
@@ -215,6 +216,14 @@ class SafeSAGETemporalDerivativeResult:
             yaw,
             yaw_slice_count=self.shape[0],
         )
+        if self.require_valid_samples:
+            validity = [
+                _bilinear_sample_cell_centers(self.valid_mask[index].astype(float),
+                                             point_grid_xy=point, config=self.grid_config)
+                for index in (lower_yaw, upper_yaw)
+            ]
+            if (1 - yaw_weight) * validity[0] + yaw_weight * validity[1] < 1 - 1e-12:
+                raise ValueError("temporal query has no valid consecutive-source overlap")
         lower_value = _bilinear_sample_cell_centers(
             self.values[lower_yaw],
             point_grid_xy=point,

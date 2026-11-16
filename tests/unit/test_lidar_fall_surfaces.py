@@ -141,3 +141,23 @@ def test_ambiguous_opposing_drops_stay_unavailable():
     )
     assert not result.is_available
     assert "ambiguous" in result.rejection_reasons[0]
+
+
+def test_equal_height_landing_opt_in_keeps_impact_direction_unknown():
+    from dataclasses import replace
+
+    table = plane(0.8, (-0.18, 0.18), (-0.8, 0.8))
+    item = object_points()
+    left = plane(0.0, (-1.2, -0.3), (-0.3, 0.3))
+    right = plane(0.0, (0.3, 1.2), (-0.3, 0.3))
+    config = replace(CONFIG, allow_equal_height_multiple_landings=True)
+    result = estimate_lidar_fall_surfaces(np.vstack((table, left, right, item)), item,
+                                         timestamp_seconds=2, config=config)
+    assert result.is_available and result.fall_direction_robot_xy is None
+    assert estimate_fall_height(result.evidence, timestamp_seconds=2).value == pytest.approx(0.8)
+    different = right.copy()
+    different[:, 2] = 0.3
+    result = estimate_lidar_fall_surfaces(np.vstack((table, left, different, item)), item,
+                                         timestamp_seconds=2, config=config)
+    assert not result.is_available
+    assert "disagree" in result.rejection_reasons[0]

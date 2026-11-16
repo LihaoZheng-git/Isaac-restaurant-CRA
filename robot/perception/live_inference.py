@@ -44,6 +44,11 @@ class LiveInferenceRunner:
         self.last_time = -1.0
         self.closed = False
 
+    @property
+    def busy(self):
+        """Whether the single slot still owns a pending or unconsumed job."""
+        return self.pending is not None
+
     def submit(self, *, frame_id, sensor_timestamp_seconds, packet):
         if self.closed:
             raise RuntimeError("inference runner is closed")
@@ -86,7 +91,9 @@ class LiveInferenceRunner:
             reason = f"sensor inference failed: {type(error).__name__}: {error}"
         if current_sensor_time_seconds < source_time - 1e-9:
             reason = "inference result is future evidence"
-        elif current_sensor_time_seconds - source_time > self.maximum_age:
+        # Match the future-epoch nanosecond roundoff tolerance. Accumulated
+        # binary simulation times can otherwise reject an exact .35 s age.
+        elif current_sensor_time_seconds - source_time > self.maximum_age + 1e-9:
             reason = "inference result is stale at acquisition-time age"
         return InferenceOutcome(
             frame,

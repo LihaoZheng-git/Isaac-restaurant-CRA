@@ -9,6 +9,7 @@ from robot.perception.sensor_epochs import (
     EgoPoseHistory,
     EgoPoseSample,
     align_camera_lidar_epoch,
+    gravity_aligned_robot_transform,
 )
 from robot.safety.obstacle_tracking import ObstacleTracker, ObstacleTrackerConfig
 
@@ -52,6 +53,23 @@ def test_interpolated_pose_and_camera_alignment_use_both_acquisition_epochs():
     np.testing.assert_allclose(aligned.camera_from_scan_robot @ scan_point, expected)
     assert not np.allclose(expected, scan_point)
     assert aligned.sensor_age_seconds == pytest.approx(0.1)
+
+
+def test_gravity_alignment_preserves_world_points_and_prevents_tilted_floor_height_artifacts():
+    matrix = np.eye(4)
+    matrix[:3, :3] = Rotation.from_euler("xyz", [0.04, 0.05, 0.8]).as_matrix()
+    matrix[:3, 3] = [4.0, 3.0, 0.3]
+    points_world = np.array([[6.0, 3.0, 0.0, 1.0], [5.0, 4.0, 0.4, 1.0]])
+    robot_points = (np.linalg.inv(matrix) @ points_world.T).T
+    aligned_from_body = gravity_aligned_robot_transform(matrix)
+    aligned = (aligned_from_body @ robot_points.T).T
+    np.testing.assert_allclose(aligned[:, 2], [-0.3, 0.1], atol=1e-12)
+    np.testing.assert_allclose(
+        (matrix @ np.linalg.inv(aligned_from_body) @ aligned.T).T,
+        points_world,
+        atol=1e-12,
+    )
+    assert abs(robot_points[0, 2] + 0.3) > 0.05
 
 
 def test_velocity_is_derived_from_pose_history_without_retiming():

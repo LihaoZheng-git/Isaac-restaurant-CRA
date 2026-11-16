@@ -1,0 +1,31 @@
+{
+  "archive": "kitchen_cleaver.zip",
+  "archive_sha256": "5458a9da6d014eb5f09dadeea8750e8f00ef967770d9ba998f3c52b3599ed4f7",
+  "license": "CC-BY-4.0",
+  "files": [
+    {
+      "path": "source/license.txt",
+      "sha256": "aaef0e0c295a20e5339d4c09850b7123249749c60c04c847fc1364d0220c9576"
+    },
+    {
+      "path": "source/scene.bin",
+      "sha256": "48958168c81ac16537c52fb6735160654e22167eb1b187e3589e55e748a42002"
+    },
+    {
+      "path": "source/scene.gltf",
+      "sha256": "1553f38fc292abb030e07bc01ce08261911f799763cf83c359cf88b87dd9c28e"
+    },
+    {
+      "path": "source/textures/Tesak_baseColor.png",
+      "sha256": "e337ec1b93258fdfc70c2b7e6927b3e913b7c4e87fa675b85d006e460cbb9214"
+    },
+    {
+      "path": "source/textures/Tesak_metallicRoughness.png",
+      "sha256": "de0878d735cb7fc7a0a6653f16559d617b70ee33026d3fcff4ad3689e8ede820"
+    },
+    {
+      "path": "source/textures/Tesak_normal.png",
+      "sha256": "a94f5748ae1a6ad19277e63ec598cde464668d5dd760aa52692a92d8a1ee85f3"
+    }
+  ]
+}

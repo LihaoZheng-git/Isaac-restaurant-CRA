@@ -1,0 +1,19 @@
+{
+  "archive": "broken_plate_low_poly.zip",
+  "archive_sha256": "dd48c2696c7018013964029b922febb7f3a5c0c35102b8154502b10355f7d6d1",
+  "license": "CC-BY-4.0",
+  "files": [
+    {
+      "path": "source/license.txt",
+      "sha256": "85772ef7236adf87fbd9290c4b336579ae73ea4dadc162677e15699d93c82177"
+    },
+    {
+      "path": "source/scene.bin",
+      "sha256": "a27acfb41a601668966048225db9c274928df9d28987c845d259d79aea31779f"
+    },
+    {
+      "path": "source/scene.gltf",
+      "sha256": "27ea89375bef4205eeb24d709bd94ffef97b23536eb59537028c5b613628a376"
+    }
+  ]
+}

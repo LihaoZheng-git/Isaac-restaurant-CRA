@@ -20,6 +20,9 @@ from robot.perception.physical_attributes import (
     combine_estimate_statuses,
 )
 from robot.risk.cra import PhysicalRiskProfile, RiskFactorEstimate
+from robot.perception.temporal_object_evidence import TEMPORAL_EVIDENCE_MARKER
+from robot.perception.persistent_object_evidence import PERSISTENT_PROPERTY_MARKER
+from robot.perception.human_mass_identity_retention import HUMAN_MASS_RETENTION_MARKER
 
 
 ADAPTER_SOURCE = "physical_evidence_cra_adapter"
@@ -54,8 +57,18 @@ class PhysicalFactorAdapterConfig:
     contact_sharpness_weight: float = 0.7
     allow_visual_contact_proxy: bool = False
     allow_visual_thermal_proxy: bool = False
+    maximum_retained_mass_age_seconds: float | None = None
+    maximum_retained_contact_age_seconds: float | None = None
+    maximum_persistent_property_age_seconds: float | None = None
 
     def __post_init__(self) -> None:
+        for name in ("maximum_retained_mass_age_seconds", "maximum_retained_contact_age_seconds", "maximum_persistent_property_age_seconds"):
+            value = getattr(self, name)
+            if value is not None:
+                value = _number(value, name)
+                if value <= 0:
+                    raise ValueError(f"{name} must be positive")
+                object.__setattr__(self, name, value)
         for name in (
             "potential_energy_scale_j",
             "kinetic_energy_scale_j",
@@ -135,6 +148,30 @@ def _effective_confidence(
     return item.confidence
 
 
+def _maximum_input_age(name, item, config):
+    """Extend opted-in property priors, never motion or route inputs."""
+    if (item.status is EstimateStatus.PRIOR and name == 'mass_kg'
+        and HUMAN_MASS_RETENTION_MARKER in item.evidence):
+        limit = config.maximum_persistent_property_age_seconds
+        return min(3., config.maximum_evidence_age_seconds if limit is None else limit)+1e-9
+    if (item.status is EstimateStatus.PRIOR
+            and PERSISTENT_PROPERTY_MARKER in item.evidence
+            and config.maximum_persistent_property_age_seconds is not None
+            and name in {"mass_kg", "fall_height_m", "harmful_fall_interaction",
+                         "visual_exposed_edge_proxy", "visual_silhouette_geometry_proxy",
+                         "heat_source_likelihood"}):
+        return config.maximum_persistent_property_age_seconds + 1e-9
+    if item.status is EstimateStatus.PRIOR and TEMPORAL_EVIDENCE_MARKER in item.evidence:
+        attribute = {
+            "mass_kg": "maximum_retained_mass_age_seconds",
+            "visual_exposed_edge_proxy": "maximum_retained_contact_age_seconds",
+            "visual_silhouette_geometry_proxy": "maximum_retained_contact_age_seconds",
+        }.get(name)
+        if attribute is not None and getattr(config, attribute) is not None:
+            return getattr(config, attribute) + 1e-9
+    return config.maximum_evidence_age_seconds
+
+
 def _factor(
     factor: str,
     inputs: tuple[tuple[str, ScalarEstimate], ...],
@@ -146,7 +183,7 @@ def _factor(
     for name, item in inputs:
         if item.timestamp_seconds > timestamp:
             reasons.append(f"{name}: future evidence")
-        elif timestamp - item.timestamp_seconds > config.maximum_evidence_age_seconds:
+        elif timestamp - item.timestamp_seconds > _maximum_input_age(name, item, config):
             reasons.append(f"{name}: stale evidence")
         if not item.is_available:
             reasons.append(f"{name}: unavailable")
@@ -241,7 +278,7 @@ def _direct_factor(
             reasons.append(f"{name}: unavailable")
         elif item.timestamp_seconds > timestamp:
             reasons.append(f"{name}: future evidence")
-        elif timestamp - item.timestamp_seconds > config.maximum_evidence_age_seconds:
+        elif timestamp - item.timestamp_seconds > _maximum_input_age(name, item, config):
             reasons.append(f"{name}: stale evidence")
         if item.status is EstimateStatus.PRIOR and not config.allow_priors:
             reasons.append(f"{name}: priors disabled")
@@ -400,7 +437,9 @@ def adapt_physical_factors(
     if thermal_basis == "visual_object_plume_proxy":
         if not settings.allow_visual_thermal_proxy:
             raise ValueError("object plume proxy requires explicit configuration opt-in")
-        if attributes.thermal.heat_source_likelihood.source != "object_visible_plume_proxy":
+        if attributes.thermal.heat_source_likelihood.source not in {
+            "object_visible_plume_proxy", "registered_rgb_object_plume_proxy",
+        }:
             raise ValueError("object plume basis requires object plume evidence source")
     thermal = _direct_factor(
         "thermal",

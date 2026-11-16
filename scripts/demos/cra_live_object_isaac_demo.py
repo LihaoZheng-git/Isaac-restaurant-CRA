@@ -1,0 +1,3707 @@
+"""Live RGB/LiDAR CRA in a bounded session fixture, stationary gate first.
+
+Perception and MPC run off the simulation thread on copied observations.
+During navigation the simulator advances continuously; stale evidence/failed
+control causes a recorded safety stop, never a scheduled observation pause.
+Simulation pacing is explicit and is not a real-time performance claim.
+"""
+
+import argparse
+from dataclasses import asdict, replace
+import hashlib
+import json
+import math
+import os
+from pathlib import Path
+import sys
+import time
+import traceback
+
+ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT))
+parser = argparse.ArgumentParser(description=__doc__)
+parser.add_argument("--output", type=Path, required=True)
+parser.add_argument("--motion", action="store_true")
+parser.add_argument('--service-crate-short-probe', action='store_true',
+                    help='fixed 4m crate route using unchanged full calibrated service settings; separate evaluation only')
+parser.add_argument("--restaurant-calibration", choices=("off", "equal", "kinetic"), default="off",
+                    help="separate verified-object factor calibration; ordinary unknown policy unchanged")
+parser.add_argument("--restaurant-boundary-unit-flux", type=float, default=1.7,
+                    help="separate verified-object normal-flux endpoint; >=1.7, zero-risk endpoint .5; phi/colors/lambda/unknown policy unchanged")
+parser.add_argument('--grid-resolution', type=float, choices=(.05, .1), default=.1,
+                    help='explicit numerical field-grid comparison in metres; .1 preserves legacy; physical margins and all observed occupancy stay unchanged')
+parser.add_argument('--mpc-unfinished-qp-proposal', action='store_true',
+    help='separate finite iteration-limited QP proposals; unchanged exact trajectory acceptance')
+parser.add_argument('--mpc-tapered-rescue-seed', action='store_true',
+                    help='separate bounded advance/brake numerical rescue initialization; original objective, solver budgets and all exact checks remain')
+parser.add_argument('--mpc-consistent-temporal-jacobian', action='store_true',
+                    help='analytic full chain rule of the existing state-sampled temporal forecast; values/objective/acceptance unchanged')
+parser.add_argument("--waypoint-mode", choices=("checkpoints", "guides"), default="checkpoints",
+                    help="separate pose-only route-guide variant; final-goal arrival and stopping remain mandatory")
+parser.add_argument("--route-guide-lookahead", type=float, default=1.0)
+parser.add_argument("--route-guide-max-cross-track", type=float, default=1.5,
+                    help="intermediate-plane route association bound, not obstacle clearance")
+parser.add_argument("--experiment-baseline", choices=("geometric_velocity_cbf", "fixed_class_safe_sage", "continuous_cra_safe_sage"),
+                    default="continuous_cra_safe_sage", help="explicit matched restaurant comparison; physical assessments always retained")
+parser.add_argument("--motion-aware-passing", action="store_true",
+                    help="opt-in current LiDAR crossing-side preference; unchanged CRA scores/lambda/safety checks")
+parser.add_argument('--parallel-guidance-ablation', action='store_true',
+                    help='separate observed oncoming-human away-tangent selector; requires explicit checked guidance tracking, not primary')
+parser.add_argument('--predictive-human-geometry-ablation', action='store_true',
+                    help='separate current-LiDAR constant-velocity body-envelope PRIOR; adds hard future MPC geometry, never changes primary CRA/field')
+parser.add_argument('--human-prediction-uncertainty-rate', type=float, default=.25,
+                    help='explicit additional forecast-radius growth PRIOR in m/s, separate from unchanged current human body margin')
+parser.add_argument('--human-prediction-uncertainty-floor', type=float, default=None,
+                    help='separate adaptive growth PRIOR: floor+current raw/window velocity disagreement, capped by uncertainty-rate; fixed by default')
+parser.add_argument('--predictive-parallel-redesign', action='store_true',
+                    help='separate early current-person preparation with explicit 6-step/1.2s or 10-step/2s predictive MPC; primary unchanged')
+parser.add_argument('--parallel-preparation-exit-lateral', type=float, default=None,
+                    help='separate held-preference exit hysteresis in[1.6,2.2]m; initial1.6m gate and original8s source lease unchanged')
+parser.add_argument('--human-mass-body-identity-retention', action='store_true',
+                    help='separate current-body-identity adult mass PRIOR retention; original source expiry remains 3s')
+parser.add_argument("--crossing-strategy", choices=("legacy", "rear-pass-or-yield", "yield-then-go"), default="legacy",
+                    help="separate maneuver ablation; yielding requires exact predictive and analytical checks")
+parser.add_argument("--zero-tangential-bias-ablation", action="store_true",
+                    help="explicit wait-and-go field lambda=0; physical CRA and normal repulsion unchanged")
+parser.add_argument('--checked-wait-transition', action='store_true',
+                    help='separate live stopped-field admission ablation; requires encounter guidance/comparison')
+parser.add_argument('--checked-rear-pass-reference', action='store_true',
+                    help='separate live sensor-tracked checked rear-reference experiment, with admitted-wait fallback')
+parser.add_argument('--rear-existing-turn-heading', type=float, default=None,
+                    help='optional current trailing-turn continuation threshold in radians; behavior assumption only')
+parser.add_argument('--rear-minimum-first-translation', type=float, default=0.,
+                    help='optional rear-reference first-interval progress quality in metres; never a minimum executable velocity')
+parser.add_argument('--rear-reference-offset', type=float, default=.7,
+                    help='rear-reference lateral target offset in metres; behavior preference, never a safety/body margin')
+parser.add_argument('--rear-encounter-motion-fit', action='store_true',
+                    help='separate rear ablation: bounded original-source centroid fit for encounter classification only; physical motion unchanged')
+parser.add_argument('--rear-consistent-motion-fit', action='store_true',
+                    help='use the same validated source-window fit for rear maneuver policy; physical tracking/CRA/occupancy unchanged')
+parser.add_argument('--rear-turn-first-fallback', action='store_true',
+                    help='prefer translating rear references, permit fully checked productive turn-first references when none qualify')
+parser.add_argument('--rear-feasibility-start', action='store_true',
+                    help='separate ablation: permit full checked rear search below the non-safety lead preference for a currently ahead crossing')
+parser.add_argument('--rear-person-relative', action='store_true',
+                    help='separate frozen person-relative rear curve with bounded timing and unchanged exact safety checks')
+parser.add_argument('--rear-delayed-commit', action='store_true',
+                    help='separate rear ablation: require 1.05m current motion-rear separation before freezing; retain a compatible frozen curve to its original deadline')
+parser.add_argument('--rear-preparation', action='store_true',
+                    help='separate current-source checked approach before a complete rear curve is feasible; never counted as full rear execution')
+parser.add_argument('--human-crossing-layout', choices=('legacy', 'lower-aisle'), default='legacy',
+                    help='separate longer lower-aisle pedestrian encounter and obstacle-unaware robot route; authored poses are never physical evidence')
+parser.add_argument('--post-goal-observation-seconds', type=float, default=0.,
+                    help='separate 0..12s zero-command observation AFTER lower-aisle goal arrival; original braking window/checks retained')
+parser.add_argument('--encounter-guidance-ablation', action='store_true',
+                    help='selected observed crossing human lambda0, normal lambda1.25 for parallel/other occupancy; separate from primary')
+parser.add_argument('--encounter-comparison', action='store_true',
+                    help='explicit variant comparison: arrival/safety/source gates required, curved-bypass metrics reported separately for every variant')
+parser.add_argument("--guidance-tracking-weight", type=float, default=0.0,
+                    help="separate checked Laplace local-path MPC ablation; zero preserves primary")
+parser.add_argument('--observed-motion-reference', action='store_true',
+                    help='advisory approaching-human forecast shapes checked guidance reference; original1.2s hard checks remain')
+parser.add_argument('--motion-forecast-outward-fraction', type=float, default=.35,
+                    help='bounded advisory reference preference only; no physical margin or executed minimum')
+parser.add_argument('--motion-forecast-growth-prior-mps', type=float, default=.5,
+                    help='uncalibrated radius-growth hypothesis for advisory reference only, never hard geometry')
+parser.add_argument("--mpc-horizon-steps", type=int,
+                    help="separate 6..30-step prediction-horizon ablation; omitted preserves the controller default and .2 s command interval")
+parser.add_argument("--guidance-activation-h", type=float, default=1.0,
+                    help="ablation reference activates smoothly below this safety-field value")
+parser.add_argument("--guidance-max-heading-bias-degrees", type=float, default=45.0,
+                    help="maximum local-reference heading bias about the active waypoint bearing")
+parser.add_argument("--guidance-reference-goal-radius", type=float, default=0.04,
+                    help="local reference stops inside this radius; actual waypoint acceptance is unchanged")
+parser.add_argument("--guidance-fade-distance", type=float, default=0.5,
+                    help="fade local guidance bias toward the active waypoint inside this distance")
+parser.add_argument("--guidance-minimum-reference-progress", type=float, default=.01,
+                    help="minimum checked-reference progress in metres: displacement in filtered mode, goal gain in legacy mode; zero disables this quality gate")
+parser.add_argument("--guidance-reference-minimum-speed-fraction", type=float, choices=(.25, .5, .75, 1.), default=1.,
+                    help="explicit reduced-speed reference pool in the separate tracking ablation; 1 preserves the legacy single speed")
+parser.add_argument("--guidance-turn-first-minimum-cap", type=float, default=.4,
+                    help="minimum turn-first reference pool cap in rad/s; .1 reproduces the legacy pool; never an executable lower bound")
+parser.add_argument("--guidance-reference-mode", choices=("bounded_field_heading", "filtered_goal_velocity", "planar_forecast_velocity"),
+                    default="bounded_field_heading", help="explicit reference ablation; filtered goal velocity uses v_sem as the CBF normal")
+parser.add_argument("--guidance-tangent-velocity-fraction", type=float, default=0.,
+                    help="separate proactive tangent-velocity reference, 0..1; runtime requires a current observed-motion passing selection")
+parser.add_argument("--guidance-tangent-basis", choices=("planar_gradient", "selected_observed_obstacle"),
+                    default="planar_gradient", help="explicit reference ablation; selected observed centroid/side avoids combined-gradient orientation ambiguity")
+parser.add_argument("--guidance-tangent-blend", choices=("additive", "convex"), default="additive",
+                    help="separate parallel route-guide ablation: convex blending reduces goal pull toward the current observed away tangent")
+parser.add_argument("--guidance-outward-reference-fraction", type=float, default=0.,
+                    help="separate parallel smoothing preference0..1: tilt current observed tangent outward; no geometry or safety-margin change")
+parser.add_argument("--guidance-turn-translation-fraction", type=float, default=0.,
+                    help="separate parallel turning reference preference0..1 of nominal speed BEFORE affine projection/exact checks; never an executed speed floor")
+parser.add_argument("--human-positive-fragment-extent", action="store_true",
+                    help="bare-human recent-coobservation/current-positive-return fragment association; no free-space or factor transfer")
+parser.add_argument("--human-positive-fragment-surface", action="store_true",
+                    help="require fresh complete coverage of retained positive fragment surface; unchanged distances/epochs; no body prior")
+parser.add_argument("--human-unique-full-surface", action="store_true",
+                    help="unique full-surface positive correspondence despite distant parent centroid/partial neighboring patches; no hidden geometry or factor transfer")
+parser.add_argument("--human-visual-fragment-association", action="store_true",
+                    help="fresh RGB/current-positive 3D small-body-part association in separated bare-human observed-only mode")
+parser.add_argument("--human-fragment-mask-boundary-pixels", type=int, choices=(0, 1), default=0,
+                    help="separate one-native-pixel mask-boundary association prior; >=95%% original mask support, unchanged current 3D/clock/ambiguity gates")
+parser.add_argument("--human-visual-part-field-policy", action="store_true",
+                    help="current positive associated parts share verified human control flux/side; physical child CRA, class, geometry and clocks stay unchanged")
+parser.add_argument("--human-prior-geometry-associations", action="store_true",
+                    help="explicit current raw-LiDAR/RGB helper scope with existing body-envelope PRIOR geometry; no wider bounds or new physical evidence")
+parser.add_argument("--human-fresh-person-policy", action="store_true",
+                    help="fresh audited person-mask/current validated LiDAR identity cue for passing eligibility; no physical evidence refresh")
+parser.add_argument("--human-observed-passing-target", action="store_true",
+                    help="require fresh person/SAM association for new human passing choices; all obstacles retain CRA/safety intervention")
+parser.add_argument("--human-passing-identity-prior-max-age", type=float, default=0.,
+                    help="separate selection ablation: <=.5 s original person identity with current verified LiDAR envelope; zero keeps fresh-only")
+parser.add_argument("--profile-runtime", action="store_true",
+                    help="diagnostic worker call profiles for jobs over 3 wall seconds; profiling timings are not performance acceptance")
+parser.add_argument('--planner-replay-source-window', nargs=2, type=float,
+    help='Keep every offline planner snapshot in this source-time window (at most 5 seconds).')
+parser.add_argument("--save-planner-replay", action="store_true",
+                    help="trusted local offline numeric snapshots, latest request per five-second source-time bucket; export counts against worker age")
+parser.add_argument('--save-failed-planner-replay', action='store_true',
+    help='diagnostic first rejected request per five-second source bucket; export counts against worker age; never runtime input')
+parser.add_argument("--guidance-reference-search-width", type=int, choices=(0,4,8), default=0,
+                    help="opt-in exact/guidance-checked local search only when greedy references fail; primary/default disabled")
+parser.add_argument("--guidance-reference-search-candidates", type=int, default=4800)
+parser.add_argument("--guidance-moving-arc-reference", action="store_true",
+                    help="separate current-selected-human full-horizon arc search before turn-first reference selection")
+parser.add_argument("--human-body-contact-prior", type=float,
+                    help="opt-in fresh-person blunt-body contact PRIOR, e.g. .10; not measured sharpness")
+parser.add_argument("--human-body-envelope-radius", type=float,
+                    help="opt-in configured body-radius occupancy PRIOR; no actor geometry is read")
+parser.add_argument("--human-envelope-centroid-uncertainty", type=float, default=0.2)
+parser.add_argument("--human-envelope-identity-max-age", type=float, default=30.0)
+parser.add_argument("--human-tracking-uncertainty", action="store_true",
+                    help="represent unresolved human geometry as a growing planning prior; no factor or identity renewal")
+parser.add_argument("--human-track-recovery", action="store_true",
+                    help="explicit .6 s positive-track recovery and full-reach missing-person exclusion prior; original visual clocks retained")
+parser.add_argument("--human-observed-occupancy-only", action="store_true",
+                    help="separate ablation: retain verified human identity/domain guards but add no circular prior occupancy")
+parser.add_argument("--human-boundary-flux", type=float,
+                    help="separate human-only applied flux ablation in [-1.7,-.5]; computed CRA and all nonhuman policies unchanged")
+parser.add_argument("--human-fragment-coverage-prior", action="store_true",
+                    help="opt-in full-region/motion/risk coverage by current verified body envelope; strict observed merges unchanged")
+parser.add_argument("--human-short-fragment-coverage", action="store_true",
+                    help="separate same-envelope proof at both observations, including new fragments; original .35s expiry")
+parser.add_argument("--human-fragment-maximum-point-speed", type=float, default=1.,
+                    help="explicit uncalibrated point-motion PRIOR in m/s, used to expand the whole missing region")
+parser.add_argument("--restaurant-scene", type=Path,
+                    help="separate dressed restaurant scene; bounded 2.2 m real-bowl component route")
+parser.add_argument("--restaurant-layout-survey", type=Path,
+                    help="fingerprinted authored layout raster, independent clearance monitor only")
+parser.add_argument("--restaurant-view", choices=("bowl", "pot", "counter", "front", "server", "demo-bin", "demo-rounded", "demo-utensils", "demo-container"), default="bowl",
+                    help="explicit stationary robot view; target names are evaluation metadata only")
+parser.add_argument("--restaurant-route", choices=("short", "service", "human-service", "long-service"), default="short")
+parser.add_argument('--service-wide-corner', action='store_true',
+    help='separate authored long-service route: corner x26.2 instead of25.8; unchanged hazard encounter and safety checks')
+parser.add_argument("--rolling-local-field", action="store_true",
+                    help="opt-in translating window with original timestamps and strict temporal-overlap queries")
+parser.add_argument("--presentation-follow-camera", action="store_true",
+                    help="render-only elevated robot follow camera; never a perception source")
+parser.add_argument("--presentation-risk-camera", action="store_true",
+                    help="render-only source-aligned accepted RGB/LiDAR masks colored by CRA phi; records priors and frame age")
+parser.add_argument("--service-demo-v2", action="store_true",
+                    help="explicit revised prop views and existing stylized pot steam layer; no supplied risk evidence")
+parser.add_argument("--long-service-parallel", action="store_true",
+                    help="separate long-route native parallel actor; requires independent near-view component gate")
+parser.add_argument("--background-service-walk", action="store_true",
+                    help="v2 actor-only background walking circuit before/after the parallel encounter; separate native route gate required")
+parser.add_argument("--background-upper-departure", action="store_true",
+                    help="separate actor-only upper-aisle departure after the unchanged encounter; requires fresh route gates")
+parser.add_argument('--straight-service-walk', action='store_true',
+                    help='v3 actor-only straight far-end walk, timed before the encounter; no looping')
+parser.add_argument('--service-static-props', action='store_true',
+                    help='v3 mixed scene: verified separated static props plus unchanged human perception')
+parser.add_argument('--observe-service-clearance', action='store_true',
+                    help='balanced V3 mission: score independent geometry after navigation')
+parser.add_argument("--stationary-furniture-memory", action="store_true",
+                    help="separate bounded repeated-surface background PRIOR; current people/motion excluded, no source renewal")
+parser.add_argument("--stationary-furniture-fragment-proof", action="store_true",
+                    help="separate repeated-current-support proof for already-qualified fragments only; parent motion exclusion stays")
+parser.add_argument("--unknown-obstacle-planning", action="store_true",
+                    help="lost positive geometry becomes an unknown planning obstacle; no ID-loss termination")
+parser.add_argument("--unknown-obstacle-phi", type=float, default=.68359375,
+                    help="fixed unknown-obstacle phi, with any higher original risk preserved")
+parser.add_argument("--unknown-supported-background-prior", action="store_true",
+                    help="separate dominant repeated-support stationary hypothesis; retains all old geometry")
+parser.add_argument("--long-service-human-gates", nargs=3, type=Path,
+                    help="current-source native component, near-human stationary and long-idle folders; required for long human motion")
+parser.add_argument("--restaurant-server", action="store_true", help="explicit static-server scene opt-in; stationary actor gate required before wheels")
+parser.add_argument("--restaurant-human", choices=("standing", "crossing", "continuous-crossing", "parallel"),
+                    help="native adult-human control integration; no static occupancy or shape persistence")
+parser.add_argument("--human-camera-upward-degrees", type=float, default=0.,
+                    help="explicit experimental left RGB mount pitch, 0..25 degrees; actual extrinsics re-read")
+parser.add_argument("--human-camera-raise-metres", type=float, default=0.,
+                    help="explicit experimental RGB mount height increase, 0...6 m")
+parser.add_argument("--stationary-prop-camera", action="store_true",
+                    help="allow the experimental RGB mount in a stationary restaurant prop test only; no wheel-motion acceptance")
+parser.add_argument("--stationary-prop-standoff-metres", type=float,
+                    help="separate zero-wheel demo-container sensing survey, .8..3m from authored fixture center; never an estimator input")
+parser.add_argument("--stationary-prop-view-yaw-degrees", type=float, default=0.,
+                    help="stationary standoff survey viewing direction, 0..360 degrees; fixture placement only")
+parser.add_argument("--stationary-prop-world-pose", type=float, nargs=3,
+                    metavar=("X", "Y", "YAW_DEGREES"),
+                    help="explicit zero-wheel observation pose for a separately placed prop; never an estimator input")
+parser.add_argument("--stationary-prop-target", choices=("ServiceContainer", "BrokenCrate"),
+                    help="independent evaluation target for an explicit zero-wheel prop pose; never perception input")
+parser.add_argument("--stationary-prop-rgb-width", type=int, choices=(640, 1280, 1920), default=640,
+                    help="stationary-only native RGB sampling survey, same authored lens/aspect; no image upscaling")
+parser.add_argument("--rgb-camera", choices=("front_hawk_left", "front_hawk_right", "front_owl"),
+                    default="front_hawk_left", help="one existing authored camera per trial; actual lens/extrinsics are read, no multi-camera fusion")
+parser.add_argument("--human-crossing-trigger-y", type=float, default=7.8,
+                    help="actor-only world-y trigger: 6.8..8.4 for standalone crossing, legacy max7.8 otherwise; not control/evidence input")
+parser.add_argument("--human-crossing-delay-seconds", type=float,
+                    help="opt-in exogenous actor start after navigation begins; shared timing across baselines, independent of robot progress")
+parser.add_argument("--human-crossing-direction", choices=("right-to-left", "left-to-right"), default="right-to-left",
+                    help="authored standalone actor fixture only; never supplies estimator velocity or passing direction")
+parser.add_argument("--human-continuing-away", action="store_true",
+                    help="separate bare crossing then same-side upper-aisle departure at .5 m/s; actor fixture only")
+parser.add_argument("--human-walking-speed", type=float, default=.7,
+                    help="explicit native actor speed .5..1 m/s; never estimator input")
+parser.add_argument('--human-crossing-extension', type=float, default=0.,
+                    help='separate actor-only crossing/departure endpoint extension 0..0.5 m; legacy route unchanged by default')
+parser.add_argument('--human-crossing-line-y', type=float, default=8.9,
+                    help='separate authored crossing line y=8.4..8.9; never estimator/control context')
+parser.add_argument("--human-cluster-radius", type=float, default=.12,
+                    help="explicit human 3D connectivity radius .12...20 m; original occupancy and safety gates retained")
+parser.add_argument("--human-lidar-range", type=float, default=7.5,
+                    help="actual-return preprocessing radius 7.5..10 m; legacy 7.5, no identity/geometry lease extension")
+parser.add_argument("--human-carry-bowl", action="store_true",
+                    help="native held bowl in explicit continuous-crossing mode; separate bowl perception remains unvalidated")
+parser.add_argument("--human-upper-continuation", action="store_true",
+                    help="cross once then continue in upper aisle; authored actor route only, no factor/control input")
+parser.add_argument("--human-carry-facing-crossing", action="store_true",
+                    help="explicit initial native actor heading along the first crossing leg; never evidence input")
+parser.add_argument("--human-start-view", choices=("original", "approach-forward", "crossing-approach"), default="original",
+                    help="explicit bounded carrying start; fixed world human-service waypoints remain unchanged")
+parser.add_argument("--human-mass-prior", nargs=3, type=float, default=(70.,45.,100.),
+                    metavar=("KG", "LOWER", "UPPER"), help="configured adult demonstration mass interval; not measured weight")
+parser.add_argument("--stationary-image-objects", action="store_true",
+                    help="Separate stationary image-first multi-fragment CRA experiment; no wheels/humans")
+parser.add_argument("--image-object-overlap-hold", action="store_true",
+                    help="stationary-only: reject incomplete support overlapping an original hypothesis without enrolling a competing identity")
+parser.add_argument("--local-contact-geometry", action="store_true",
+                    help="Separate stationary local convex boundary proxy; no global elongation risk term")
+parser.add_argument("--contact-mask-refinement", action="store_true",
+                    help="Contact-only SAM boundary refinement on verified stationary RGB object crops")
+parser.add_argument("--contact-pixel-denoise", action="store_true",
+                    help="Opt-in one-pixel contact-contour resolution assumption; original masks/occupancy unchanged")
+parser.add_argument("--image-object-maximum-extent", type=float, default=.9,
+                    help="Labeled separated-prop grouping extent assumption in metres")
+parser.add_argument("--sam-track-extent-retry", action="store_true",
+                    help="separate same-track box proposal for accepted low-coverage masks; original quality/ownership gates stay")
+parser.add_argument("--sam-observed-context-box", action="store_true",
+                    help="explicit generic observed-LiDAR context-box retry; unchanged SAM quality/ownership gates")
+parser.add_argument("--restaurant-plume-diagnostic", action="store_true",
+                    help="zero-wheel clean-reference / no-plume / visible-puff continuous cue evaluation")
+parser.add_argument(
+    "--persistent-object-risk-map",
+    action="store_true",
+    help="all-track numeric CRA with explicitly labeled factor/property priors",
+)
+parser.add_argument("--object-factor-prior-risk", type=float, default=0.25)
+parser.add_argument("--fixture-layout", choices=("single", "three"), default="single")
+parser.add_argument("--fixture-spacing", choices=("tight", "separated"), default="tight")
+parser.add_argument("--progress-timeout-seconds", type=float, default=0.0)
+parser.add_argument("--stationary-frames", type=int, default=12)
+parser.add_argument("--kinetic-diagnostic", action="store_true")
+parser.add_argument("--moving-actor", action="store_true")
+parser.add_argument("--actor-shape", choices=("sphere", "upright_capsule"), default="sphere")
+parser.add_argument("--visual-reassessment-interval", type=float, default=1.0,
+                    help="explicit frozen-property vision retry interval; geometry/motion and numeric scores remain current")
+parser.add_argument("--live-visual-tracks", type=int, choices=(1, 2), default=2,
+                    help="existing fair visual-attempt budget per live update; all tracks still receive geometry/motion and numeric policies")
+parser.add_argument("--vectorized-fields", action="store_true")
+parser.add_argument("--image-object-property-persistence", action="store_true",
+                    help="reuse existing guarded physical evidence memory for currently verified image groups; default OFF")
+parser.add_argument("--image-object-approach", action="store_true",
+                    help="separate static-prop 40cm nominal approach with original group gates, own60 and ordinary unknown fallback; default OFF")
+parser.add_argument("--moving-view-image-objects", action="store_true",
+                    help="separate calibrated static-prop partial correspondence; original source clocks/point bounds, inferred mask warp; default OFF")
+parser.add_argument("--static-prop-evidence", action="store_true",
+                    help="retain verified mass/contact at separated static locations with live LiDAR/kinetic; default OFF")
+parser.add_argument('--confirmed-prop-refresh', action='store_true',
+                    help='reassess repeatedly verified better coverage in the bounded isolated prop experiments; default OFF')
+parser.add_argument('--crate-route-probe', '--prop-route-probe', action='store_true',
+                    help='straight 4m nominal route with confirmed refresh and original own60/controller gates; default OFF')
+parser.add_argument('--observe-crate-clearance', '--observe-prop-clearance', action='store_true',
+                    help='score independent clearance after the isolated prop run; CRA + Safe-SAGE drives the encounter')
+parser.add_argument('--crate-delay-robust-bypass', action='store_true',
+    help='Separate static crate controller: planning reserve and checked longer-horizon fallback')
+parser.add_argument('--crate-v3-controller', action='store_true',
+                    help='separate closer-crate repeat with explicit validated V3 controller/no-human-selection settings; default OFF')
+parser.add_argument("--object-height-evidence", action="store_true",
+                    help="opt-in general LiDAR floor/elevation/support evidence; no carried-object relationship or hidden-base inference")
+parser.add_argument("--height-support-margin", type=float, default=.12,
+                    help="explicit general-height support neighborhood in metres; legacy defaults remain unchanged")
+parser.add_argument("--height-support-gap", type=float, default=.06,
+                    help="maximum visible-lower-boundary to support gap for general-height inference; not measured contact")
+parser.add_argument("--stream-live-records", action="store_true",
+                    help="append complete field records as compact JSONL; JSON checkpoint contains only the latest five fields")
+parser.add_argument("--immediate-replan", action="store_true",
+                    help="request a new solve without the periodic wait after rejected/invalidated plans; all execution gates remain")
+parser.add_argument("--qp-iteration-limit", type=int, default=4000,
+                    help="explicit live OSQP iteration budget; failed solves still require exact-safe recovery or stopping")
+parser.add_argument("--nonlinear-rescue-iterations", type=int, default=300,
+                    help="explicit optional SLSQP rescue budget; exact verification and recovery remain mandatory")
+parser.add_argument("--progress-seed-fraction", type=float, default=.5,
+                    help="search existing exact-safe turn seeds when MPC forward speed falls below this fraction of nominal; legacy .5, audited early-search .9")
+parser.add_argument("--plume-view-fov", type=float, default=140.0)
+parser.add_argument(
+    "--evidence-gap-diagnostic",
+    action="store_true",
+    help="stationary-only controlled SAM-output loss and recovery; never a natural-occlusion claim",
+)
+parser.add_argument("--disable-evidence-retention", action="store_true")
+parser.add_argument(
+    "--disable-lidar-deskew",
+    action="store_true",
+    help="legacy whole-scan start-time transform baseline",
+)
+parser.add_argument(
+    "--save-sensor-snapshots",
+    action="store_true",
+    help="save bounded early/periodic copied RGB/XYZ/timing diagnostic snapshots",
+)
+parser.add_argument(
+    "--static-occupancy-memory-prior",
+    action="store_true",
+    help="explicit static fixture/environment assumption to retain positive occupancy through LiDAR blind regions",
+)
+parser.add_argument("--plume-control", choices=("none", "persistent"), default="none")
+parser.add_argument(
+    "--simulation-rate",
+    type=float,
+    default=0.1,
+    help="maximum simulation seconds per wall second; reported explicitly",
+)
+parser.add_argument("--maximum-seconds", type=float, default=40.0)
+parser.add_argument(
+    "--planner-result-max-age",
+    type=float,
+    default=0.2,
+    help="optimizer candidate age cap; every executed horizon still needs fresh exact validation",
+)
+parser.add_argument('--unknown-persistent-background-prior', action='store_true',
+                    help='persistent qualified static-map PRIOR, capped at .30m until person/motion contradiction')
+parser.add_argument('--unknown-unclassified-static-prior', action='store_true',
+                    help='separate static default for unclassified lost geometry, .30m; excludes people/confirmed movers')
+parser.add_argument('--unknown-verified-dynamic-evidence', action='store_true',
+                    help='require validated human association or confirmed motion for persistent dynamic labels')
+parser.add_argument('--unknown-distinct-surface-witnesses', action='store_true',
+                    help='separate full injective current-point witness proof for whole-surface geometry replacement')
+parser.add_argument('--human-verified-part-recovery', action='store_true',
+                    help='bounded recovery across a previously verified human parent/part ID swap; complete old region must fit current body')
+args = parser.parse_args()
+service_crate_short_profile = None
+if args.service_crate_short_probe:
+    from robot.evaluation.service_crate_short_probe import (
+        REFERENCE_RECIPE, validate_service_crate_short_probe,
+    )
+    reference_path = ROOT / REFERENCE_RECIPE
+    reference_command = json.loads(reference_path.read_text())['commands']['long-parallel']
+    reference_args = parser.parse_args(reference_command[1:] + ['--output', str(args.output)])
+    try:
+        service_crate_short_profile = validate_service_crate_short_probe(args, reference_args)
+        service_crate_short_profile['reference_recipe_sha256'] = hashlib.sha256(reference_path.read_bytes()).hexdigest()
+    except ValueError as exc:
+        parser.error(str(exc))
+crate_v3_profile = None
+if args.crate_delay_robust_bypass and not args.crate_v3_controller:
+    parser.error('delay-robust crate bypass requires the gated V3 static crate controller')
+if args.crate_v3_controller:
+    from robot.evaluation.crate_v3_controller import validate_crate_v3_controller
+    try:
+        crate_v3_profile = validate_crate_v3_controller(args)
+    except ValueError as exc:
+        parser.error(str(exc))
+if args.image_object_overlap_hold and not args.stationary_image_objects:
+    parser.error("overlapping image hypotheses require the stationary image-object experiment")
+if args.local_contact_geometry and not args.stationary_image_objects:
+    parser.error("local contact geometry requires stationary image-object validation before motion use")
+if args.contact_mask_refinement and not (args.stationary_image_objects and args.local_contact_geometry):
+    parser.error("contact mask refinement requires stationary image objects and local contact geometry")
+if args.contact_pixel_denoise and (not args.local_contact_geometry or not args.stationary_image_objects
+        or (args.restaurant_human and not args.service_static_props)
+        or (args.motion and not ((args.image_object_approach or args.service_static_props) and args.static_prop_evidence))):
+    parser.error("contact pixel denoising requires stationary validation, the gated short approach or the gated mixed service scene")
+if args.stationary_prop_rgb_width != 640 and (
+    not args.stationary_prop_camera or not args.restaurant_scene or args.motion or args.restaurant_human
+):
+    parser.error("higher RGB sampling requires a stationary restaurant prop test without humans/wheels")
+if args.image_object_property_persistence and not args.stationary_image_objects:
+    parser.error("group property memory requires the explicit image-object experiment")
+if args.moving_view_image_objects and not (args.image_object_approach or args.service_static_props):
+    parser.error("moving-view groups require the bounded static-prop approach and its stationary gates")
+if args.static_prop_evidence and not ((args.image_object_approach or args.service_static_props) and args.moving_view_image_objects):
+    parser.error("static-prop evidence requires the bounded approach and independent/own stationary gates")
+matched_bin_scene = bool(args.restaurant_scene and args.restaurant_scene.name in {
+    'restaurant_bin_matched_pass.usda', 'restaurant_bin_closer25_pass.usda'})
+short_prop_name = 'ServiceContainer' if matched_bin_scene else 'BrokenCrate'
+if args.confirmed_prop_refresh and (not args.static_prop_evidence or not args.image_object_approach
+        or not args.contact_pixel_denoise or args.service_static_props
+        or args.stationary_prop_target != short_prop_name or args.restaurant_human or args.restaurant_server):
+    parser.error('confirmed refresh requires the matching isolated corrected-contact prop')
+crate_setback_scenes = {f'restaurant_crate_route_setback{cm}.usda' for cm in (3, 5, 10, 15)}
+if args.crate_route_probe and (not args.confirmed_prop_refresh
+        or args.stationary_prop_world_pose != [15.65, 4.05, 0.]
+        or not args.restaurant_scene
+        or not (matched_bin_scene or args.restaurant_scene.name in {'restaurant_crate_route_probe.usda', *crate_setback_scenes})):
+    parser.error('prop route probe requires confirmed refresh and its separate fixed scene/start pose')
+if args.restaurant_scene and (matched_bin_scene or args.restaurant_scene.name in crate_setback_scenes) and not args.observe_crate_clearance:
+    parser.error('matched prop placement requires the sensor-controlled observation protocol')
+if args.observe_crate_clearance and (
+    not args.crate_route_probe or args.experiment_baseline != 'continuous_cra_safe_sage'
+    or args.moving_actor or args.restaurant_human or args.restaurant_server
+    or args.progress_timeout_seconds or args.post_goal_observation_seconds
+):
+    parser.error('clearance observation requires the isolated continuous-CRA static crate route')
+if args.image_object_approach and (not args.image_object_property_persistence
+    or not args.stationary_prop_camera or args.restaurant_view != "demo-container"
+    or args.restaurant_route != "short" or args.restaurant_human or args.restaurant_server
+    or args.stationary_frames != 60 or args.stationary_prop_rgb_width != 640
+    or args.stationary_prop_standoff_metres is not None or args.stationary_prop_view_yaw_degrees != 0
+    or not args.image_object_overlap_hold or not args.local_contact_geometry
+    or args.contact_mask_refinement or args.disable_lidar_deskew):
+    parser.error("image-object approach requires original container view, own60, guarded group memory/hold/local contact, deskew and no humans/refinement/view changes")
+if args.stationary_image_objects and not args.service_static_props and (not args.stationary_prop_camera or (args.motion and not args.image_object_approach)
+    or args.restaurant_human or not args.persistent_object_risk_map):
+    parser.error("image-object experiment requires stationary prop camera, persistent mapping and no humans/wheels")
+if args.service_static_props and (not args.stationary_image_objects or not args.static_prop_evidence
+    or not args.moving_view_image_objects or not args.image_object_property_persistence
+    or not args.image_object_overlap_hold or not args.local_contact_geometry
+    or args.restaurant_human != 'parallel' or not args.restaurant_server
+    or not args.persistent_object_risk_map or args.human_camera_raise_metres != .6
+    or args.contact_mask_refinement or args.image_object_approach or args.disable_lidar_deskew):
+    parser.error('v3 static props require explicit mixed human scene, original property/ownership/deskew gates and raised camera')
+balanced_service = bool(args.restaurant_scene and args.restaurant_scene.name == 'restaurant_service_demo_v3_balanced_contact.usda')
+if args.service_static_props and balanced_service != args.observe_service_clearance:
+    parser.error('the balanced service placement requires its passive evaluation protocol')
+if args.observe_service_clearance and (
+    not balanced_service or not args.service_static_props or args.moving_actor or args.human_carry_bowl
+    or args.experiment_baseline != 'continuous_cra_safe_sage' or args.post_goal_observation_seconds
+    or (args.motion and (args.restaurant_route != 'long-service' or not args.straight_service_walk
+                        or not args.long_service_parallel or args.progress_timeout_seconds))
+):
+    parser.error('service clearance observation requires the balanced mixed service setup and its unchanged long motion protocol')
+if not math.isfinite(args.image_object_maximum_extent) or not .1 <= args.image_object_maximum_extent <= 1.5:
+    parser.error("image-object extent assumption must lie in [.1, 1.5] m")
+if (not math.isfinite(args.stationary_prop_view_yaw_degrees)
+    or not 0 <= args.stationary_prop_view_yaw_degrees < 360
+    or args.stationary_prop_view_yaw_degrees != 0 and args.stationary_prop_standoff_metres is None):
+    parser.error('prop viewing yaw requires explicit standoff and finite angle in [0,360)')
+if args.stationary_prop_standoff_metres is not None and (
+    not args.stationary_prop_camera or args.restaurant_view != 'demo-container'
+    or not math.isfinite(args.stationary_prop_standoff_metres)
+    or not .8 <= args.stationary_prop_standoff_metres <= 3.):
+    parser.error('prop standoff requires stationary demo-container survey and finite .8..3m')
+if args.stationary_prop_world_pose is not None:
+    bounded_contact_pose = args.contact_pixel_denoise and args.image_object_approach and args.static_prop_evidence
+    if ((args.motion and not bounded_contact_pose) or args.restaurant_human or args.restaurant_server
+        or not args.stationary_prop_camera or args.restaurant_view != 'demo-container'
+        or not args.restaurant_scene or args.stationary_prop_target is None
+        or args.stationary_prop_standoff_metres is not None
+        or args.stationary_prop_view_yaw_degrees != 0
+        or not all(math.isfinite(v) for v in args.stationary_prop_world_pose)):
+        parser.error('explicit prop pose requires a stationary test or the gated corrected-contact approach, with an evaluation target')
+elif args.stationary_prop_target is not None:
+    parser.error('independent prop target requires an explicit stationary pose')
+if args.sam_track_extent_retry and not args.sam_observed_context_box:
+    parser.error('SAM track-extent retry requires --sam-observed-context-box')
+if args.human_verified_part_recovery and (not args.human_track_recovery
+        or not args.human_tracking_uncertainty or not args.human_visual_fragment_association
+        or not args.unknown_verified_dynamic_evidence):
+    parser.error('verified part recovery requires tracking uncertainty, visual fragments and verified unknown-obstacle mode')
+if args.unknown_verified_dynamic_evidence and not args.unknown_unclassified_static_prior:
+    parser.error('verified dynamic evidence requires explicit unclassified static prior')
+if args.unknown_distinct_surface_witnesses and not args.unknown_obstacle_planning:
+    parser.error('distinct surface witnesses require explicit unknown obstacle planning')
+if args.unknown_unclassified_static_prior and not args.unknown_persistent_background_prior:
+    parser.error('unclassified static prior requires explicit persistent background prior')
+if args.unknown_persistent_background_prior and not args.unknown_supported_background_prior:
+    parser.error('persistent background prior requires explicit supported background prior')
+if args.unknown_supported_background_prior and not args.unknown_obstacle_planning:
+    parser.error("supported background prior requires explicit unknown obstacle planning")
+if (not math.isfinite(args.unknown_obstacle_phi) or not 0 < args.unknown_obstacle_phi <= 1
+        or args.unknown_obstacle_planning and not args.stationary_furniture_memory):
+    parser.error("unknown obstacle planning requires explicit furniture memory and phi in (0,1]")
+if args.stationary_furniture_fragment_proof and not args.stationary_furniture_memory:
+    parser.error("fragment-level proof requires explicit stationary furniture memory")
+if args.save_planner_replay and args.save_failed_planner_replay:
+    parser.error('choose full or bounded failed planner replay, not both')
+if args.planner_replay_source_window is not None:
+    window_start, window_end = args.planner_replay_source_window
+    if (not args.save_planner_replay or not math.isfinite(window_start)
+        or not math.isfinite(window_end) or not 0 <= window_start < window_end <= window_start + 5):
+        parser.error('planner replay window requires --save-planner-replay and finite 0<=start<end<=start+5')
+if args.parallel_preparation_exit_lateral is not None and (not args.predictive_parallel_redesign
+    or not math.isfinite(args.parallel_preparation_exit_lateral) or not 1.6 <= args.parallel_preparation_exit_lateral <= 2.2):
+    parser.error('preparation exit hysteresis requires separate redesign and explicit limit in[1.6,2.2]m')
+if args.human_prediction_uncertainty_floor is not None and (not args.predictive_parallel_redesign
+    or not math.isfinite(args.human_prediction_uncertainty_floor)
+    or not .3 <= args.human_prediction_uncertainty_floor <= args.human_prediction_uncertainty_rate <= 1.):
+    parser.error('adaptive uncertainty requires separate predictive redesign and explicit .30<=floor<=ceiling<=1m/s')
+if args.human_mass_body_identity_retention and args.human_body_envelope_radius is None:
+    parser.error('adult mass identity retention requires explicit current body identity')
+if args.predictive_parallel_redesign and not args.predictive_human_geometry_ablation:
+    parser.error('predictive parallel redesign requires the separate predictive geometry ablation')
+if (not math.isfinite(args.human_prediction_uncertainty_rate) or not .25 <= args.human_prediction_uncertainty_rate <= 1.
+    or args.human_prediction_uncertainty_rate != .25 and not args.predictive_human_geometry_ablation):
+    parser.error('forecast uncertainty growth requires explicit predictive geometry and rate in[.25,1]m/s')
+if args.predictive_human_geometry_ablation and (not args.parallel_guidance_ablation
+    or args.human_body_envelope_radius is None or args.human_observed_occupancy_only
+    or args.mpc_horizon_steps not in ((6, 10) if args.predictive_parallel_redesign else (6,)) or args.waypoint_mode != 'guides'):
+    parser.error('predictive human geometry requires the separate parallel route-guide ablation, active body prior and explicit six-step (redesign: six/ten-step) horizon')
+if (not math.isfinite(args.guidance_turn_translation_fraction)
+    or not 0 <= args.guidance_turn_translation_fraction <= 1
+    or args.guidance_turn_translation_fraction > 0 and (not args.parallel_guidance_ablation
+        or args.waypoint_mode != 'guides' or args.guidance_tangent_blend != 'convex')):
+    parser.error('turn translation requires fraction0..1 and separate convex parallel route-guide ablation')
+if (not math.isfinite(args.guidance_outward_reference_fraction)
+    or not 0 <= args.guidance_outward_reference_fraction <= 1
+    or args.guidance_outward_reference_fraction > 0 and (not args.parallel_guidance_ablation
+        or args.waypoint_mode != 'guides' or args.guidance_tangent_blend != 'convex')):
+    parser.error('outward reference requires fraction0..1 and separate convex parallel route-guide ablation')
+if args.guidance_tangent_blend == 'convex' and (not (args.parallel_guidance_ablation or args.crate_v3_controller)
+    or args.waypoint_mode != 'guides'):
+    parser.error('convex tangent blend requires the separate parallel guidance ablation with route guides')
+if args.parallel_guidance_ablation and (args.restaurant_human != 'parallel'
+    or not args.motion_aware_passing or not args.human_observed_passing_target
+    or args.guidance_tracking_weight <= 0 or args.guidance_tangent_velocity_fraction <= 0
+    or args.guidance_tangent_basis != 'selected_observed_obstacle'
+    or args.guidance_reference_mode != 'planar_forecast_velocity'
+    or args.experiment_baseline != 'continuous_cra_safe_sage'):
+    parser.error('parallel guidance ablation requires observed parallel human, positive checked forecast tracking and selected-obstacle tangent')
+if any(not math.isfinite(x) or x <= 0 for x in
+       (args.route_guide_lookahead, args.route_guide_max_cross_track)):
+    parser.error("route-guide lookahead/association distances must be finite and positive")
+if args.mpc_horizon_steps is not None and not 6 <= args.mpc_horizon_steps <= 30:
+    parser.error("explicit MPC horizon ablation must use 6..30 unchanged .2 s intervals")
+if args.guidance_moving_arc_reference and not args.crate_v3_controller and (not args.parallel_guidance_ablation
+    or args.guidance_tracking_weight <= 0 or args.guidance_reference_mode != 'planar_forecast_velocity'
+    or args.guidance_tangent_basis != 'selected_observed_obstacle' or args.guidance_tangent_blend != 'convex'
+    or args.guidance_tangent_velocity_fraction <= 0 or not args.human_observed_passing_target
+    or not args.motion_aware_passing or args.mpc_horizon_steps not in (None, 6)
+    or args.predictive_human_geometry_ablation or args.predictive_parallel_redesign or args.rear_preparation
+    or args.observed_motion_reference or args.mpc_unfinished_qp_proposal):
+    parser.error('moving arc reference requires separate selected-human parallel forecast tracking, full horizon and original solver policy')
+if args.observed_motion_reference and (not args.parallel_guidance_ablation or args.human_body_envelope_radius is None
+    or args.predictive_human_geometry_ablation or args.predictive_parallel_redesign or args.rear_preparation
+    or args.mpc_horizon_steps not in (None, 6) or args.guidance_tracking_weight <= 0
+    or args.guidance_tangent_basis != 'selected_observed_obstacle' or args.guidance_tangent_blend != 'convex'):
+    parser.error('observed-motion advisory needs separate parallel tracking/body identity, original six steps and no preparation/hard prediction')
+if (not math.isfinite(args.motion_forecast_outward_fraction) or not 0 < args.motion_forecast_outward_fraction <= 1
+    or not math.isfinite(args.motion_forecast_growth_prior_mps) or not .25 <= args.motion_forecast_growth_prior_mps <= .5
+    or not args.observed_motion_reference and (args.motion_forecast_outward_fraction != .35 or args.motion_forecast_growth_prior_mps != .5)):
+    parser.error('advisory parameters require explicit opt-in, fraction(0,1] and growth[.25,.5]m/s')
+if (not math.isfinite(args.guidance_tangent_velocity_fraction)
+    or not 0 <= args.guidance_tangent_velocity_fraction <= 1
+    or args.guidance_tangent_velocity_fraction > 0 and (not args.motion_aware_passing
+        or args.guidance_tracking_weight <= 0 or args.guidance_reference_mode != "planar_forecast_velocity")):
+    parser.error("tangent reference requires fraction 0..1, positive explicit tracking, forecast mode and motion-aware passing")
+if args.guidance_tangent_basis == "selected_observed_obstacle" and not args.crate_v3_controller and (
+    args.guidance_tangent_velocity_fraction <= 0 or not args.human_observed_passing_target
+    or args.guidance_reference_search_width > 0):
+    parser.error("selected observed tangent requires positive fraction, observed-person selection and zero legacy search width")
+if (not math.isfinite(args.guidance_tracking_weight) or args.guidance_tracking_weight < 0
+    or not math.isfinite(args.guidance_activation_h) or args.guidance_activation_h <= 0):
+    parser.error("guidance tracking weight must be finite/nonnegative; activation h finite/positive")
+if args.crossing_strategy != "legacy" and (not args.motion_aware_passing
+    or not args.human_observed_passing_target or args.restaurant_human != "crossing"
+    or args.human_carry_bowl or args.experiment_baseline != "continuous_cra_safe_sage"):
+    parser.error("crossing strategy requires current observed bare-human passing in continuous CRA")
+if args.crossing_strategy == "rear-pass-or-yield" and (args.guidance_tracking_weight <= 0
+    or args.guidance_tangent_basis != "selected_observed_obstacle" or args.guidance_tangent_velocity_fraction <= 0):
+    parser.error("rear passing requires the selected observed-obstacle reference ablation")
+if args.zero_tangential_bias_ablation and (args.crossing_strategy != "yield-then-go"
+    or args.guidance_tracking_weight != 0 or args.guidance_tangent_velocity_fraction != 0):
+    parser.error("zero tangential bias is a separate wait-and-go ablation with zero extra tracking weight/fraction")
+if args.checked_wait_transition and (not args.encounter_guidance_ablation or not args.encounter_comparison):
+    parser.error("checked waiting requires encounter guidance and explicit encounter comparison")
+if args.checked_rear_pass_reference and (not args.checked_wait_transition or args.waypoint_mode != 'guides'):
+    parser.error('live checked rear reference requires checked waiting and explicit route guides')
+if args.rear_encounter_motion_fit and not args.checked_rear_pass_reference:
+    parser.error('encounter motion fit requires the separate checked rear-reference experiment')
+if args.rear_consistent_motion_fit and not args.rear_encounter_motion_fit:
+    parser.error('consistent rear motion requires the explicit bounded encounter fit')
+if args.rear_turn_first_fallback and (not args.checked_rear_pass_reference or args.rear_minimum_first_translation <= 0):
+    parser.error('turn-first fallback requires explicit rear mode with a positive preferred first-translation quality')
+if args.rear_feasibility_start and not (args.rear_consistent_motion_fit and args.rear_turn_first_fallback):
+    parser.error('feasibility-led rear starts require consistent motion and checked turn-first fallback')
+if args.rear_person_relative and not args.rear_feasibility_start:
+    parser.error('person-relative rear mode requires the explicit consistent/checked/feasibility rear experiment')
+if args.rear_existing_turn_heading is not None and (not args.checked_rear_pass_reference
+    or not math.isfinite(args.rear_existing_turn_heading) or not 0 < args.rear_existing_turn_heading < math.pi/2):
+    parser.error('rear turn continuation requires the explicit live rear mode and a threshold in (0,pi/2)')
+if (not math.isfinite(args.rear_minimum_first_translation) or args.rear_minimum_first_translation < 0
+    or args.rear_minimum_first_translation > 0 and not args.checked_rear_pass_reference):
+    parser.error('nonnegative first-translation quality requires the explicit live rear mode')
+if (not math.isfinite(args.rear_reference_offset) or args.rear_reference_offset <= 0
+    or args.rear_reference_offset != .7 and not args.checked_rear_pass_reference):
+    parser.error('positive rear target offset requires the explicit live rear mode')
+if args.encounter_guidance_ablation and (args.zero_tangential_bias_ablation
+    or args.crossing_strategy != 'yield-then-go' or not args.human_observed_passing_target
+    or args.human_body_envelope_radius is None or args.guidance_tracking_weight != 0
+    or args.guidance_tangent_velocity_fraction != 0):
+    parser.error('encounter guidance requires verified-human yield mode and zero extra tracking; global zero bias is separate')
+if args.encounter_comparison and (args.restaurant_human != 'crossing'
+    or not args.motion_aware_passing or not args.human_observed_passing_target
+    or not args.human_continuing_away or args.guidance_tracking_weight != 0
+    or args.guidance_tangent_velocity_fraction != 0):
+    parser.error('encounter comparison requires the explicit bare-human mixed fixture with no extra tracking objective')
+if args.guidance_tracking_weight > 0 and args.experiment_baseline == "geometric_velocity_cbf":
+    parser.error("guidance tracking is a separate MPC ablation, unavailable for geometric CBF")
+if not math.isfinite(args.guidance_max_heading_bias_degrees) or not 0 < args.guidance_max_heading_bias_degrees < 90:
+    parser.error("guidance heading bias must be finite and strictly between 0 and 90 degrees")
+if not math.isfinite(args.guidance_reference_goal_radius) or args.guidance_reference_goal_radius <= 0:
+    parser.error("guidance reference goal radius must be finite and positive")
+if not math.isfinite(args.guidance_fade_distance) or args.guidance_fade_distance <= args.guidance_reference_goal_radius:
+    parser.error("guidance fade distance must exceed the positive reference goal radius")
+if args.guidance_reference_minimum_speed_fraction < 1 and args.guidance_tracking_weight <= 0:
+    parser.error("reduced-speed references require explicit positive guidance tracking weight")
+if not math.isfinite(args.guidance_minimum_reference_progress) or args.guidance_minimum_reference_progress < 0:
+    parser.error("minimum guidance reference progress must be finite and nonnegative")
+if not math.isfinite(args.guidance_turn_first_minimum_cap) or not 0 < args.guidance_turn_first_minimum_cap <= .8:
+    parser.error("turn-first reference pool cap must be finite and in (0,.8]")
+if (not 1 <= args.guidance_reference_search_candidates <= 4800
+    or args.guidance_reference_search_width > 0 and (
+        args.guidance_reference_mode != "planar_forecast_velocity" or args.guidance_tracking_weight <= 0)):
+    parser.error("bounded reference search requires forecast tracking mode and candidate budget 1..4800")
+if args.human_observed_passing_target and not (args.motion_aware_passing and args.restaurant_human and not args.human_carry_bowl):
+    parser.error("observed-human passing requires the bare-human motion-aware component")
+if (not math.isfinite(args.human_passing_identity_prior_max_age)
+    or not 0 <= args.human_passing_identity_prior_max_age <= .5
+    or args.human_passing_identity_prior_max_age > 0 and (
+        not args.human_observed_passing_target or args.human_body_envelope_radius is None)):
+    parser.error("identity-prior passing requires observed-human/envelope mode and age in [0,.5]")
+if args.human_body_envelope_radius is not None:
+    from robot.perception.human_body_envelope import HumanBodyEnvelopeConfig
+    from robot.safety.predictive_human_geometry import HumanGeometryForecastConfig
+    from robot.safety.parallel_preparation import ParallelPreparationConfig
+    try:
+        HumanBodyEnvelopeConfig(body_radius_m=args.human_body_envelope_radius,
+            centroid_uncertainty_m=args.human_envelope_centroid_uncertainty,
+            maximum_identity_age_seconds=args.human_envelope_identity_max_age)
+    except ValueError as exc:
+        parser.error(str(exc))
+    if not (args.restaurant_human and args.human_mass_prior and args.persistent_object_risk_map) or args.human_carry_bowl or args.static_occupancy_memory_prior:
+        parser.error("human envelope requires standalone live human/person-prior object-map mode without static memory")
+if args.human_tracking_uncertainty and (not args.human_track_recovery or args.human_observed_occupancy_only
+    or args.predictive_human_geometry_ablation):
+    parser.error("tracking uncertainty requires occupied recovery mode without the separate predictive ablation")
+if args.human_track_recovery and (args.human_body_envelope_radius is None
+    or args.human_observed_occupancy_only or args.mpc_horizon_steps != 6):
+    parser.error("track recovery requires occupied human body prior and the full six-step horizon")
+from robot.evaluation.restaurant_baselines import validate_human_boundary_flux
+try:
+    validate_human_boundary_flux(args.human_boundary_flux)
+except ValueError as exc:
+    parser.error(str(exc))
+if (args.human_observed_occupancy_only or args.human_boundary_flux is not None) and (
+    args.human_body_envelope_radius is None or args.experiment_baseline != "continuous_cra_safe_sage"
+):
+    parser.error("human-only ablations require verified body-identity configuration and continuous CRA")
+if args.human_observed_occupancy_only and (
+    args.human_fragment_coverage_prior or args.human_passing_identity_prior_max_age > 0
+):
+    parser.error("observed-only ablation requires strict fragment continuity and fresh-only passing selection")
+if args.human_positive_fragment_extent and (args.restaurant_human is None or args.human_carry_bowl):
+    parser.error("positive fragment extent requires the bounded bare native-human scenario")
+if args.human_positive_fragment_surface and not args.human_positive_fragment_extent:
+    parser.error("positive fragment surface requires the explicit bare-human extent mode")
+if args.human_unique_full_surface and not args.human_positive_fragment_surface:
+    parser.error("unique full surface correspondence requires positive surface association")
+if args.human_prior_geometry_associations and (args.human_observed_occupancy_only
+    or args.human_body_envelope_radius is None or args.restaurant_human is None
+    or args.human_carry_bowl or not (args.human_visual_fragment_association or args.human_fresh_person_policy)):
+    parser.error("prior-geometry associations require explicit bare-human body-prior geometry and current helpers")
+if args.human_visual_fragment_association and (not (args.human_observed_occupancy_only or args.human_prior_geometry_associations)
+    or args.restaurant_human is None or args.human_carry_bowl):
+    parser.error("visual fragment association requires the separated bare-human observed-only fixture")
+if args.human_fragment_mask_boundary_pixels and not args.human_visual_fragment_association:
+    parser.error("mask boundary prior requires explicit visual fragment association")
+if args.human_visual_part_field_policy and (not args.human_visual_fragment_association
+    or args.human_body_envelope_radius is None or not args.motion_aware_passing):
+    parser.error("human-part field policy requires visual parts, verified human identity and motion passing")
+if args.human_fresh_person_policy and (not (args.human_observed_occupancy_only or args.human_prior_geometry_associations)
+    or not args.human_observed_passing_target or not args.motion_aware_passing
+    or args.restaurant_human is None or args.human_carry_bowl):
+    parser.error("fresh person policy requires the bare-human observed-only person-selected passing fixture")
+from robot.perception.human_fragment_coverage import HumanFragmentCoverageConfig
+if args.human_short_fragment_coverage and not args.human_fragment_coverage_prior:
+    parser.error("short fragment coverage requires explicit human fragment coverage prior")
+fragment_coverage_config = HumanFragmentCoverageConfig(
+    "bounded separated adult fixture; all points in a missing fragment assumed within configured speed bound; .35 s original-source expiry",
+    maximum_point_speed_mps=args.human_fragment_maximum_point_speed,
+    short_fragment_coverage=args.human_short_fragment_coverage) if args.human_fragment_coverage_prior else None
+if args.human_fragment_coverage_prior and (args.human_body_envelope_radius is None
+    or args.experiment_baseline != "continuous_cra_safe_sage"):
+    parser.error("fragment coverage requires the validated human-envelope continuous-CRA mode")
+if not math.isfinite(args.progress_seed_fraction) or not 0 < args.progress_seed_fraction < 1:
+    parser.error("progress seed fraction must be finite and in (0,1)")
+if args.human_crossing_direction == "left-to-right" and args.restaurant_human != "crossing":
+    parser.error("mirrored actor direction requires standalone crossing mode")
+if args.human_continuing_away and (args.restaurant_human != "crossing"
+    or args.human_carry_bowl
+    or args.human_walking_speed != .5):
+    parser.error("continuing-away fixture requires bare standalone crossing at .5 m/s")
+if (not math.isfinite(args.human_crossing_extension) or not 0 <= args.human_crossing_extension <= .5
+    or args.human_crossing_extension and not args.human_continuing_away):
+    parser.error('crossing extension requires explicit continuing-away mode and 0..0.5 m')
+if (not math.isfinite(args.human_crossing_line_y) or not 8.4 <= args.human_crossing_line_y <= 8.9
+    or args.human_crossing_line_y != 8.9 and not args.human_continuing_away):
+    parser.error('crossing line adjustment requires continuing-away mode and y=8.4..8.9')
+if args.motion_aware_passing and not (args.restaurant_human in {"crossing", "parallel"} and args.persistent_object_risk_map
+                                    and args.experiment_baseline != "geometric_velocity_cbf"):
+    parser.error("bounded motion-aware passing requires the standalone crossing object-map scenario")
+if args.human_crossing_delay_seconds is not None and (
+    args.restaurant_human not in {"crossing", "continuous-crossing", "parallel"}
+    or not math.isfinite(args.human_crossing_delay_seconds)
+    or not 0 <= args.human_crossing_delay_seconds <= 30
+):
+    parser.error("exogenous crossing delay requires crossing mode and 0..30 seconds")
+if args.experiment_baseline != "continuous_cra_safe_sage" and not (args.restaurant_scene and args.persistent_object_risk_map):
+    parser.error("matched baselines require the explicit persistent restaurant runner")
+if args.human_body_contact_prior is not None and (
+    not args.restaurant_human or not math.isfinite(args.human_body_contact_prior)
+    or not 0 < args.human_body_contact_prior < 1
+):
+    parser.error("body contact PRIOR requires a native human and a finite score strictly between 0 and 1")
+if (not math.isfinite(args.height_support_margin) or not .12 <= args.height_support_margin <= 1.
+        or not math.isfinite(args.height_support_gap) or not .02 <= args.height_support_gap <= .20):
+    raise ValueError("height support margin/gap must lie within [.12,1.] / [.02,.20] m")
+if not args.object_height_evidence and (args.height_support_margin != .12 or args.height_support_gap != .06):
+    raise ValueError("height support configuration requires --object-height-evidence")
+if (not math.isfinite(args.human_lidar_range) or not 7.5 <= args.human_lidar_range <= 10.
+    or args.human_lidar_range != 7.5 and not args.restaurant_human):
+    parser.error("extended LiDAR range requires human mode and radius in[7.5,10]m")
+if not .12 <= args.human_cluster_radius <= .20 or (args.human_cluster_radius != .12 and not args.restaurant_human):
+    parser.error("human 3D radius .12...20 requires a native human scenario")
+if not .5 <= args.human_walking_speed <= 1. or (
+    args.human_walking_speed != .7 and args.restaurant_human not in {"crossing", "continuous-crossing", "parallel"}
+):
+    parser.error("coupled walking-speed override requires crossing mode, .5..1 m/s")
+from robot.scene.rear_pass_encounter import (
+    validate_crossing_layout, OPEN_ROBOT_START_WORLD, OPEN_ROBOT_YAW, open_robot_route_local_xy,
+)
+open_crossing_layout = validate_crossing_layout(args.human_crossing_layout,
+    direction=args.human_crossing_direction, extension=args.human_crossing_extension,
+    crossing_y=args.human_crossing_line_y)
+if open_crossing_layout and (not args.human_continuing_away or args.restaurant_route != 'human-service'
+    or args.restaurant_human != 'crossing' or args.human_start_view != 'original'):
+    parser.error('lower-aisle layout requires the bare continuing-away human-service experiment')
+if args.rear_delayed_commit and not args.rear_person_relative:
+    parser.error('delayed rear commitment requires the explicit person-relative experiment')
+if args.rear_preparation and not args.rear_delayed_commit:
+    parser.error('rear preparation requires the explicit delayed person-relative experiment')
+if args.long_service_parallel and (args.restaurant_route != 'long-service'
+    or args.restaurant_human != 'parallel' or args.human_crossing_delay_seconds is not None
+    or not args.human_unique_full_surface
+    or not 8.8 <= args.human_crossing_trigger_y <= 9.2):
+    parser.error('long-service parallel requires its explicit route/actor and y=8.8..9.2 trigger, no timed delay')
+if args.long_service_parallel and args.motion:
+    from robot.evaluation.restaurant_long_service_validation import verify_near_human_gates
+    if not args.long_service_human_gates:
+        parser.error('long human motion requires component and near-view stationary evidence')
+    verify_near_human_gates(args.long_service_human_gates, ROOT, args.restaurant_scene,
+                           require_background_walk=args.background_service_walk,
+                           require_upper_departure=args.background_upper_departure,
+                           require_straight_walk=args.straight_service_walk)
+elif args.long_service_human_gates:
+    parser.error('near-human gate references require explicit long-service human motion')
+if args.restaurant_human == 'parallel' and (args.human_walking_speed != .5
+    or (args.human_crossing_delay_seconds is None and not args.long_service_parallel) or args.human_continuing_away
+    or args.human_carry_bowl or args.human_start_view != 'original'
+    or args.human_crossing_direction != 'right-to-left' or args.crossing_strategy != 'legacy'
+    or args.encounter_guidance_ablation or args.zero_tangential_bias_ablation):
+    parser.error('parallel fixture requires explicit timing, bare .5m/s adult, original selectors and normal fixed guidance')
+if (not math.isfinite(args.post_goal_observation_seconds) or not 0 <= args.post_goal_observation_seconds <= 12.
+    or args.post_goal_observation_seconds and not open_crossing_layout):
+    parser.error('post-goal observation requires the explicit lower-aisle layout and 0..12 seconds')
+minimum_crossing_trigger_y = 6.0 if open_crossing_layout else 6.8
+maximum_crossing_trigger_y = 8.4 if args.restaurant_human == "crossing" and not args.human_carry_bowl else 7.8
+maximum_crossing_trigger_y = 6.6 if open_crossing_layout else maximum_crossing_trigger_y
+if args.long_service_parallel:
+    minimum_crossing_trigger_y, maximum_crossing_trigger_y = 8.8, 9.2
+if not minimum_crossing_trigger_y <= args.human_crossing_trigger_y <= maximum_crossing_trigger_y or (
+    args.human_crossing_trigger_y != 7.8 and args.restaurant_human not in {"crossing", "continuous-crossing"}
+    and not args.long_service_parallel
+):
+    parser.error(f"crossing trigger override requires crossing mode, world y=6.8..{maximum_crossing_trigger_y}")
+if args.restaurant_human == "continuous-crossing" and args.human_walking_speed != .5:
+    parser.error("bounded continuous crossing currently requires .5 m/s")
+if args.human_carry_bowl and args.restaurant_human != "continuous-crossing":
+    parser.error("native carrying requires explicit continuous crossing")
+if args.human_upper_continuation and not args.human_carry_bowl:
+    parser.error("upper continuation requires the explicit carried-server scenario")
+if args.human_carry_facing_crossing and not args.human_carry_bowl:
+    parser.error("initial carrying heading requires the carried bowl")
+if args.human_start_view != "original" and (not args.human_carry_bowl or args.restaurant_route != "human-service"):
+    parser.error("forward robot start requires carrying and the human-service world route")
+if args.stationary_prop_camera and (not args.restaurant_scene or (args.motion and not args.image_object_approach)
+    or args.restaurant_human or args.restaurant_view not in {"demo-container", "demo-bin", "demo-rounded", "demo-utensils", "pot"}):
+    parser.error("stationary prop camera requires a restaurant prop view, no native human and no motion")
+if not 0 <= args.human_camera_upward_degrees <= 25 or not 0 <= args.human_camera_raise_metres <= .6 or (
+    (args.human_camera_upward_degrees or args.human_camera_raise_metres)
+    and not (args.restaurant_human or args.stationary_prop_camera)
+):
+    parser.error("experimental RGB mount requires native human mode or explicit stationary prop camera")
+if args.restaurant_scene and (
+    not args.persistent_object_risk_map
+    or (args.static_occupancy_memory_prior == bool(args.restaurant_human))
+    or args.fixture_layout != "single" or args.actor_shape != "sphere"
+    or args.plume_control != "none" or args.moving_actor or args.kinetic_diagnostic
+    or args.evidence_gap_diagnostic or args.restaurant_layout_survey is None
+):
+    parser.error("restaurant component requires static persistent mapping, single/default selectors, no emitted plume/actors, and an independent authored layout survey")
+if args.restaurant_human and (not args.restaurant_scene or not args.restaurant_server
+    or args.restaurant_view != "bowl" or args.restaurant_plume_diagnostic
+    or args.disable_lidar_deskew or (args.restaurant_route not in {"service", "human-service"}
+                                   and not args.long_service_parallel)):
+    parser.error("native human requires restaurant service route/server, deskew, bowl start and no plume")
+if args.restaurant_route == "human-service" and not args.restaurant_human:
+    parser.error("human-service is the separate native-human centerline route")
+if args.rolling_local_field and not args.persistent_object_risk_map:
+    parser.error("rolling local field requires the transactional all-track map")
+if args.restaurant_route == "long-service" and (not args.rolling_local_field
+    or (args.restaurant_human and not args.long_service_parallel)):
+    parser.error("long-service first requires rolling coverage; human episodes have separate gates")
+if args.presentation_follow_camera and not args.restaurant_scene:
+    parser.error("presentation follow camera requires a restaurant scene")
+if args.background_service_walk and not args.long_service_parallel:
+    parser.error("background service walk requires the separate long-service parallel experiment")
+if args.background_upper_departure and not args.background_service_walk:
+    parser.error('upper departure requires background service walk')
+if args.straight_service_walk and (not args.long_service_parallel or args.background_service_walk):
+    parser.error('one-way service walk requires its separate long-service parallel episode')
+if args.service_demo_v2 and not args.restaurant_scene:
+    parser.error("v2 presentation requires its separate restaurant scene")
+if args.service_wide_corner and not (args.service_demo_v2 and args.long_service_parallel):
+    parser.error('wide corner requires the separate v2 long-service human experiment')
+if args.presentation_risk_camera and not (args.restaurant_scene and args.persistent_object_risk_map):
+    parser.error("presentation risk camera requires a restaurant scene and the transactional all-track map")
+if args.restaurant_layout_survey and not args.restaurant_scene:
+    parser.error("restaurant layout survey requires the explicit restaurant scene")
+if args.restaurant_view != "bowl" and (not args.restaurant_scene or (args.motion and not args.image_object_approach)):
+    parser.error("additional restaurant views are stationary-only component diagnostics")
+if args.restaurant_route != "short" and (not args.restaurant_scene or args.restaurant_view != "bowl"):
+    parser.error("restaurant service route requires the validated bowl start view")
+if args.restaurant_plume_diagnostic and (
+    not args.restaurant_scene or args.restaurant_view not in (("bowl", "pot") if args.service_demo_v2 else ("bowl",)) or args.motion
+    or not 12 <= args.stationary_frames <= 20
+):
+    parser.error("restaurant plume diagnostic requires zero wheels, bowl view and 12..20 frames per phase")
+if args.restaurant_server and (not args.restaurant_scene or (args.restaurant_plume_diagnostic and not args.service_demo_v2)):
+    parser.error("static restaurant server requires a separate restaurant/no-plume diagnostic")
+if args.restaurant_view == "server" and not args.restaurant_server:
+    parser.error("server observation requires the explicit static-server scene opt-in")
+if not 30 <= args.plume_view_fov < 170:
+    parser.error("plume view FOV must lie within [30, 170) degrees")
+if args.progress_timeout_seconds != 0 and not 10 <= args.progress_timeout_seconds <= 30:
+    parser.error("progress watchdog must be disabled or within [10, 30] seconds")
+if args.fixture_spacing != "tight" and args.fixture_layout != "three":
+    parser.error("spacing option requires the three-object fixture")
+if not (0.2 if args.restaurant_human else 1) <= args.visual_reassessment_interval <= 10:
+    parser.error("visual reassessment interval must lie within [.2, 10] for native humans, [1, 10] otherwise")
+if not 100 <= args.qp_iteration_limit <= 4000:
+    parser.error("live QP iteration budget must lie within [100, 4000]")
+if not 1 <= args.nonlinear_rescue_iterations <= 300:
+    parser.error("nonlinear rescue budget must lie within [1, 300]")
+if args.moving_actor and (not args.motion or args.kinetic_diagnostic or args.fixture_layout != "single" or not args.persistent_object_risk_map or args.static_occupancy_memory_prior or args.plume_control != "none"):
+    parser.error("moving actor requires single/no-plume live motion, persistent map, and no static occupancy memory")
+if args.actor_shape != "sphere" and (args.fixture_layout != "single" or args.plume_control != "none" or not args.persistent_object_risk_map or args.kinetic_diagnostic or args.evidence_gap_diagnostic):
+    parser.error("capsule is a separate single/no-plume prior-aware kinetic fixture")
+if args.kinetic_diagnostic and (args.motion or args.fixture_layout != "single" or not args.persistent_object_risk_map or args.static_occupancy_memory_prior or args.plume_control != "none"):
+    parser.error("kinetic diagnostic requires single/no-plume persistent map, zero wheels, and no static occupancy memory")
+if not 12 <= args.stationary_frames <= 60:
+    parser.error("stationary frames must be within [12, 60]")
+if args.fixture_layout != "single" and not args.persistent_object_risk_map:
+    parser.error("multi-object fixture requires the all-track risk map")
+if not 0 < args.object_factor_prior_risk < 1:
+    parser.error("object factor prior must be strictly between zero and one")
+if args.restaurant_calibration != "off" and (not args.persistent_object_risk_map
+        or args.experiment_baseline != "continuous_cra_safe_sage"):
+    parser.error("restaurant calibration requires the continuous all-object CRA baseline")
+if not math.isfinite(args.restaurant_boundary_unit_flux) or args.restaurant_boundary_unit_flux < 1.7:
+    parser.error("restaurant boundary unit flux must be finite and >=1.7")
+if args.restaurant_boundary_unit_flux != 1.7 and args.restaurant_calibration == "off":
+    parser.error("alternative restaurant boundary response requires restaurant calibration")
+if args.restaurant_boundary_unit_flux != 1.7 and (
+        not args.crate_route_probe or args.restaurant_human
+        or args.stationary_furniture_memory or args.human_boundary_flux is not None):
+    parser.error("stronger restaurant boundary response is limited to the separate isolated prop-route probes; human/furniture integration is not validated")
+if args.persistent_object_risk_map and args.evidence_gap_diagnostic:
+    parser.error(
+        "use cra_object_risk_map_replay.py for the new map's stationary gap diagnostic"
+    )
+if args.evidence_gap_diagnostic and (args.motion or args.disable_evidence_retention):
+    parser.error("evidence-gap diagnostic requires retention and zero wheel motion")
+maximum_trial_seconds = 300 if args.restaurant_route == "long-service" else 120
+if not 0 < args.simulation_rate <= 1 or not 0 < args.maximum_seconds <= maximum_trial_seconds:
+    parser.error("invalid bounded simulation rate/duration")
+if not 0.1 <= args.planner_result_max_age <= 0.5:
+    parser.error("planner candidate age must be within [.1, .5] seconds")
+args.output.mkdir(parents=True, exist_ok=True)
+if args.stream_live_records and (args.output / "live-fields.jsonl").exists():
+    parser.error("streaming diagnostics require a fresh output directory")
+os.environ.setdefault("WARP_CACHE_PATH", str(args.output / "warp"))
+os.environ.setdefault("ISAAC_SIM_HEADLESS", "1")
+os.environ.setdefault("ISAAC_RTX_HISTORY_TRANSFORM_COUNT", "128")
+if args.restaurant_human:
+    os.environ["CRA_NATIVE_HUMAN"] = "1"
+
+# Import the existing vision stack before Kit changes package resolution.
+from robot.perception.visual_mass_runtime import (
+    VisualMassRuntimeConfig,
+    VisualMassRuntimeEstimator,
+)
+from robot.perception.sam_instance_segmentation import (
+    SamInstanceConfig,
+    SamInstanceResult,
+    SamInstanceSegmenter,
+)
+from robot.perception.temporal_object_evidence import TemporalObjectEvidenceConfig
+from robot.perception.persistent_object_evidence import PersistentObjectEvidenceConfig
+from robot.risk.object_risk_policy import ObjectRiskPriorConfig
+from robot.evaluation.restaurant_calibration_runtime import restaurant_calibration_preset
+from robot.risk.cra import PhysicalRiskVector
+from robot.perception.yolo_detector import (
+    YoloSegmentationConfig,
+    YoloSegmentationDetector,
+)
+from robot.perception.human_mass_prior import HumanMassPriorConfig, PERSON_CHECKPOINT_SHA256
+from scripts.demos import safe_sage_unicycle_mpc_motion_demo as existing
+
+import cv2
+import carb
+import numpy as np
+import omni.timeline
+from isaacsim.core.simulation_manager import SimulationManager
+import isaacsim.core.experimental.utils.app as app_utils
+from pxr import Gf, Sdf, Usd, UsdGeom, UsdPhysics, UsdShade
+from robot.control.differential_drive import NovaCarterController
+from robot.evaluation.live_object_perception import (
+    LiveObjectPacket,
+    LiveObjectPerception,
+)
+from robot.evaluation.restaurant_comparison import planner_result_diagnostic
+from robot.evaluation.runtime_diagnostics import profile_call, numeric_runtime_contract
+from robot.evaluation.factor_specific_cra import diagnose_factor_specific_cra
+from robot.evaluation.kinetic_fixture import actor_offset_velocity, summarize_kinetic_records, summarize_live_relative_motion
+from robot.evaluation.nearby_track_loss_guard import NearbyTrackLossConfig, NearbyTrackLossGuard
+from robot.evaluation.object_map_validation import summarize_fixture_assessments, bounded_fixture_checks, kinetic_actor_fixture_checks
+from robot.evaluation.restaurant_service_validation import (
+    authored_raster_clearance, load_authored_layout_monitor, restaurant_asset_checks, restaurant_plume_checks,
+)
+from robot.evaluation.simple_object_test import disk_footprint_clearance, sample_stopping_sweep
+from robot.evaluation.crate_clearance_observation import recorded_actor_centers, summarize_clearance_samples, world_pose_from_local
+from robot.navigation.waypoint_controller import (
+    RobotPose2D,
+    Waypoint,
+    WaypointController,
+    WaypointControllerConfig,
+)
+from robot.perception.live_inference import LiveInferenceRunner
+from robot.perception.lidar_deskew import deskew_uncompensated_lidar
+from robot.perception.physical_attributes import EstimateStatus
+from robot.perception.lidar_fall_surfaces import LidarFallSurfaceConfig
+from robot.perception.sensor_epochs import (
+    EgoPoseHistory,
+    EgoPoseSample,
+    align_camera_lidar_epoch,
+    gravity_aligned_robot_transform,
+)
+from robot.safety.obstacle_detection import (
+    ObstacleDetectionConfig,
+    detect_obstacle_points_3d,
+)
+from robot.safety.safe_sage_configuration_space import RectangularRobotFootprint
+from robot.safety.safe_sage_live_field import (
+    SafeSAGELiveFieldBuffer,
+    SafeSAGELiveFieldSnapshot,
+)
+from robot.safety.safe_sage_runtime import (
+    SafeSAGEControlRuntime,
+    SafeSAGEPlanExecutionLease,
+)
+from robot.safety.safe_sage_unicycle_mpc import SafeSAGEUnicycleMPC
+from robot.safety.laplace_guidance_tracking_mpc import LaplaceGuidanceTrackingMPC, LaplaceGuidanceTrackingConfig
+from robot.scene.camera_calibration import read_fisheye_polynomial_calibration
+from robot.scene.loader import load_robot_scene
+from robot.scene.transforms import compute_relative_prim_transform
+from robot.scene.controlled_semantic_obstacle import read_world_bounds
+from robot.scene.restaurant_service_build import (
+    RESTAURANT_OBSERVATIONS, SERVICE_ROOT, active_service_props, restaurant_route_local_xy,
+)
+from robot.scene.restaurant_server import SERVER_OBSERVATION, SERVER_PRIM_PATH
+from robot.sensor.camera import NovaCarterCamera, CAMERA_PRIM_PATHS
+from robot.sensor.lidar import NovaCarterLidar
+from robot.sensor.lidar_geometry import filter_valid_points, transform_points
+
+stationary = existing.stationary
+app = existing.simulation_app
+ACTIVE_HUMAN = None
+ACTIVE_SERVICE_VIDEO = None
+RADIUS = 0.18
+ACTOR_HEIGHT = 1.4 if args.actor_shape == "upright_capsule" else 2 * RADIUS
+ACTOR_CENTER_Z = ACTOR_HEIGHT / 2
+GOAL = (3.8 if args.fixture_spacing == "separated" else 3.5 if args.fixture_layout == "three" else 2.5, 0.0)
+SCENE_PATH = args.restaurant_scene.resolve() if args.restaurant_scene else Path(stationary.ROBOT_SCENE_PATH)
+if args.restaurant_scene:
+    from robot.scene.restaurant_demo_build import DEMO_OBSERVATIONS
+    observation_options = {**RESTAURANT_OBSERVATIONS, **DEMO_OBSERVATIONS}
+    if args.service_demo_v2:
+        from robot.scene.restaurant_demo_build import DEMO_V2_OBSERVATIONS
+        observation_options.update(DEMO_V2_OBSERVATIONS)
+    restaurant_target, restaurant_start, restaurant_yaw = (SERVER_OBSERVATION
+        if args.restaurant_view == "server" else observation_options[args.restaurant_view])
+    if args.stationary_prop_standoff_metres is not None:
+        from robot.scene.restaurant_container_bench import CONTAINER_CENTER_XY
+        restaurant_yaw = math.radians(args.stationary_prop_view_yaw_degrees)
+        restaurant_start = (CONTAINER_CENTER_XY[0] - args.stationary_prop_standoff_metres * math.cos(restaurant_yaw),
+                            CONTAINER_CENTER_XY[1] - args.stationary_prop_standoff_metres * math.sin(restaurant_yaw), restaurant_start[2])
+    if args.stationary_prop_world_pose is not None:
+        x, y, yaw = args.stationary_prop_world_pose
+        restaurant_start = (x, y, restaurant_start[2])
+        restaurant_yaw = math.radians(yaw)
+        restaurant_target = args.stationary_prop_target
+    if args.human_start_view != "original":
+        restaurant_yaw = math.pi / 2
+    if args.human_start_view == "crossing-approach":
+        restaurant_start = (28.8, 7.4, restaurant_start[2])
+    stationary.ROBOT_START_POSITION_WORLD = restaurant_start
+    stationary.ROBOT_START_YAW_RADIANS = restaurant_yaw
+    if args.restaurant_route == "long-service":
+        from robot.scene.restaurant_service_build import LONG_ROUTE_WORLD_XY
+        stationary.ROBOT_START_POSITION_WORLD = (*LONG_ROUTE_WORLD_XY[0], restaurant_start[2])
+        stationary.ROBOT_START_YAW_RADIANS = 0.
+    GOAL = restaurant_route_local_xy(args.restaurant_route, human_start_view=args.human_start_view,
+                                     wide_corner=args.service_wide_corner)[-1]
+ROUTE = restaurant_route_local_xy(args.restaurant_route, human_start_view=args.human_start_view,
+                                wide_corner=args.service_wide_corner) if args.restaurant_scene else (GOAL,)
+if args.image_object_approach:
+    # Authored short measurement route, independent of obstacle/factor outputs.
+    # Original waypoint arrival tolerance and all physical controller checks stay.
+    ROUTE = ((4.0 if args.crate_route_probe else .40, 0.),)
+    GOAL = ROUTE[-1]
+if open_crossing_layout:
+    stationary.ROBOT_START_POSITION_WORLD = OPEN_ROBOT_START_WORLD
+    stationary.ROBOT_START_YAW_RADIANS = OPEN_ROBOT_YAW
+    ROUTE = open_robot_route_local_xy()
+    GOAL = ROUTE[-1]
+if args.restaurant_human == 'parallel' and not args.long_service_parallel:
+    from robot.scene.parallel_walk_encounter import PARALLEL_ROBOT_START, PARALLEL_ROBOT_YAW, PARALLEL_ROBOT_ROUTE
+    stationary.ROBOT_START_POSITION_WORLD = PARALLEL_ROBOT_START
+    stationary.ROBOT_START_YAW_RADIANS = PARALLEL_ROBOT_YAW
+    ROUTE = PARALLEL_ROBOT_ROUTE
+    GOAL = ROUTE[-1]
+if args.service_crate_short_probe:
+    from robot.evaluation.service_crate_short_probe import START_WORLD_XY_YAW, ROUTE_LOCAL_XY
+    stationary.ROBOT_START_POSITION_WORLD = (*START_WORLD_XY_YAW[:2], stationary.ROBOT_START_POSITION_WORLD[2])
+    stationary.ROBOT_START_YAW_RADIANS = START_WORLD_XY_YAW[2]
+    ROUTE, GOAL = ROUTE_LOCAL_XY, ROUTE_LOCAL_XY[-1]
+    restaurant_target = 'BrokenCrate'  # Independent evaluation target, never estimator input.
+GROUND_SCOPE = "bounded separated ground sphere; observed flat plane with assumed unseen local support/landing continuity"
+PLUME_SCOPE = "bounded rendered matte sphere and opaque bright puffs; validated initial clean reference; registered object-associated visible-plume proxy only"
+if args.actor_shape == "upright_capsule":
+    PLUME_SCOPE = "bounded separated matte upright capsule; validated initial clean reference; visible-plume proxy only, not body temperature"
+
+
+def json_default(value):
+    if isinstance(value, Path):
+        return str(value)
+    if isinstance(value, np.generic):
+        return value.item()
+    if isinstance(value, np.ndarray):
+        return value.tolist()
+    raise TypeError(f"unsupported report type: {type(value).__name__}")
+
+
+def save_json(name, value):
+    (args.output / name).write_text(
+        json.dumps(value, indent=2, allow_nan=False, default=json_default) + "\n",
+        encoding="utf-8",
+    )
+
+
+def field_record(result, now, state=None):
+    return {
+        "sensor_frame_id": result.field.sensor_frame_id,
+        "sensor_timestamp": result.field.sensor_timestamp_seconds,
+        "commit_simulation_time": now,
+        "build_wall_seconds": result.field.build_wall_seconds,
+        "phi": result.policy.risk,
+        "primary_record_scope": "first geometric track only; use objects for the all-track experiment"
+        if result.objects
+        else "legacy selected target",
+        "objects": [
+            {
+                "track_id": item.attributes.track_id,
+                "cra_control": item.policy.as_dict(),
+                "readiness": asdict(item.readiness),
+                "attributes": asdict(item.attributes),
+                "diagnostics": item.diagnostics,
+            }
+            for item in result.objects
+        ],
+        "factor_specific_diagnostics": diagnose_factor_specific_cra(
+            result.adapted
+        ).to_dict(),
+        "boundary_flux": result.policy.boundary_flux,
+        "readiness": asdict(result.readiness),
+        "factors": {
+            name: asdict(getattr(result.adapted, name))
+            for name in ("potential", "kinetic", "contact", "thermal")
+        },
+        "attributes": asdict(result.attributes),
+        "diagnostics": result.diagnostics,
+        "state_at_commit": None if state is None else state.tolist(),
+    }
+
+
+def save_instance_snapshot(result):
+    if not args.save_sensor_snapshots or not result.detections.detections:
+        return
+    snapshot = args.output / "sensor-snapshots"
+    snapshot.mkdir(exist_ok=True)
+    np.savez_compressed(
+        snapshot / f"{result.field.sensor_frame_id:06d}-instance.npz",
+        mask=result.detections.detections[0].mask,
+        camera_frame_id=result.detections.source_frame_id,
+        camera_timestamp=result.detections.source_timestamp_seconds,
+    )
+
+
+def main():
+    save_json("run-configuration.json", {
+        **({"service_crate_short_scope": service_crate_short_profile} if service_crate_short_profile else {}),
+        **{
+        key: str(value) if isinstance(value, Path) else value
+        for key, value in vars(args).items()
+        },
+    })
+    global ACTIVE_HUMAN
+    print("Auditing/loading existing local models...", flush=True)
+    weights = {}
+    for name, variable, default in (
+        ("sam", "SAM2_CHECKPOINT", "outputs/sam2_integration/sam2.1_t.pt"),
+        (
+            "mass",
+            "VISUAL_MASS_CHECKPOINT",
+            "outputs/visual_mass_data/abo/baseline_frozen_final_v2/best.pt",
+        ),
+        (
+            "contact",
+            "CONTACT_SEGMENTATION_CHECKPOINT",
+            "runs/segment/outputs/contact_perception/training/yolo11n_seg_paco_geometry/weights/best.pt",
+        ),
+    ):
+        path = Path(os.environ.get(variable, default)).resolve()
+        if not path.is_file():
+            raise FileNotFoundError(f"{variable} requires existing local weights")
+        weights[name] = {
+            "path": str(path),
+            "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+        }
+    device = os.environ.get("YOLO_DEVICE", "0")
+    segmenter = SamInstanceSegmenter(
+        SamInstanceConfig(Path(weights["sam"]["path"]), device=device,
+                          observed_context_box_retry=args.sam_observed_context_box,
+                          track_extent_retry=args.sam_track_extent_retry,
+                          foreground_depth_gap_m=0.5 if args.fixture_layout == "three" or args.restaurant_scene else None)
+    )
+    mass = VisualMassRuntimeEstimator(
+        VisualMassRuntimeConfig(
+            Path(weights["mass"]["path"]),
+            device=device,
+            allow_category_free_instances=True,
+            allow_stationary_image_objects=args.stationary_image_objects,
+        )
+    )
+    contact = YoloSegmentationDetector(
+        YoloSegmentationConfig(
+            Path(weights["contact"]["path"]),
+            device=device,
+            confidence_threshold=0.25,
+            allowed_classes=("exposed_edge",),
+        )
+    )
+    contact.initialize()
+    person = None
+    if args.restaurant_human:
+        path = ROOT / "outputs/restaurant_human_model_audit/yolo11n-seg.pt"
+        digest = hashlib.sha256(path.read_bytes()).hexdigest()
+        if digest != PERSON_CHECKPOINT_SHA256:
+            raise ValueError("person weights differ from the audited official checkpoint")
+        weights["person"] = {"path": str(path), "sha256": digest}
+        person = YoloSegmentationDetector(YoloSegmentationConfig(
+            path, device=device, confidence_threshold=.5, allowed_classes=("person",)))
+        person.initialize()
+    print("Local models ready; loading the unchanged scene...", flush=True)
+    original_hash = hashlib.sha256(
+        SCENE_PATH.read_bytes()
+    ).hexdigest()
+    loaded = load_robot_scene(
+        scene_path=SCENE_PATH,
+        simulation_app=app,
+        robot_prim_path=stationary.ROBOT_PRIM_PATH,
+        expected_meters_per_unit=1.0,
+    )
+    stage = loaded.stage
+    source_hashes = {layer.realPath: hashlib.sha256(Path(layer.realPath).read_bytes()).hexdigest()
+        for layer in stage.GetLayerStack() if layer.realPath and Path(layer.realPath).is_file()}
+    human = None
+    if args.restaurant_human:
+        from robot.scene.restaurant_human_episode import RestaurantHumanEpisode
+        human = RestaurantHumanEpisode(stage, mode=args.restaurant_human, output=args.output,
+                                       crossing_direction=args.human_crossing_direction,
+                                       trigger_robot_y=args.human_crossing_trigger_y, speed_mps=args.human_walking_speed,
+                                       crossing_delay_seconds=args.human_crossing_delay_seconds,
+                                       carry_bowl=args.human_carry_bowl,
+                                       carry_facing_crossing=args.human_carry_facing_crossing,
+                                       upper_continuation=args.human_upper_continuation,
+                                       continuing_away=args.human_continuing_away,
+                                       long_service_parallel=args.long_service_parallel,
+                                       background_service_walk=args.background_service_walk,
+                                       background_upper_departure=args.background_upper_departure,
+                                       straight_service_walk=args.straight_service_walk,
+                                       crossing_extension_m=args.human_crossing_extension,
+                                       crossing_y_m=args.human_crossing_line_y, crossing_layout=args.human_crossing_layout)
+        ACTIVE_HUMAN = human
+        save_json("human-native-setup.json", human.setup)
+        for _ in range(20):
+            app.update()
+        human.bake()
+    center_world = np.array(stationary.ROBOT_START_POSITION_WORLD[:2]) + [1.3, 0.0]
+    fixture_specs = [
+        {"name": "ground", "offset_xy": (1.3, 0.3 if args.fixture_layout == "three" else 0.0), "drop_m": 0.0,
+         "color": (0.15, 0.45, 0.95), "plume": args.fixture_layout == "single" and args.actor_shape == "sphere"},
+    ]
+    if args.restaurant_scene:
+        server_prim = stage.GetPrimAtPath(SERVER_PRIM_PATH)
+        has_server = bool(server_prim and server_prim.IsActive())
+        if has_server != args.restaurant_server:
+            raise RuntimeError("server presence must match explicit --restaurant-server opt-in")
+        fixture_specs = []  # Real dressed meshes remain in their saved additions layer.
+    if args.fixture_layout == "three":
+        fixture_specs.extend([
+            {"name": "raised", "offset_xy": (2.6, 1.5), "drop_m": 0.30,
+             "color": (0.85, 0.25, 0.15), "plume": False},
+            {"name": "plume", "offset_xy": (3.0 if args.fixture_spacing == "separated" else 2.2, -0.65), "drop_m": 0.0,
+             "color": (0.2, 0.8, 0.3), "plume": True},
+        ])
+    fixtures = []
+    actor_translate = None
+    actor_start_time = None
+    root_before = stage.GetRootLayer().ExportToString()
+    with Usd.EditContext(stage, stage.GetSessionLayer()):
+        puffs = []
+        for spec in fixture_specs:
+            xy = np.array(stationary.ROBOT_START_POSITION_WORLD[:2]) + spec["offset_xy"]
+            base = f"/World/CRALiveObject/{spec['name']}"
+            sphere = (UsdGeom.Capsule.Define(stage, base + "/Capsule") if args.actor_shape == "upright_capsule"
+                      else UsdGeom.Sphere.Define(stage, base + "/Sphere"))
+            center_z = ACTOR_CENTER_Z + spec["drop_m"]
+            if args.actor_shape == "upright_capsule":
+                sphere.CreateAxisAttr("Z")
+                sphere.CreateHeightAttr(ACTOR_HEIGHT - 2 * RADIUS)
+                sphere.CreateExtentAttr([Gf.Vec3f(-RADIUS, -RADIUS, -ACTOR_CENTER_Z),
+                                         Gf.Vec3f(RADIUS, RADIUS, ACTOR_CENTER_Z)])
+            sphere.CreateRadiusAttr(RADIUS)
+            translate = sphere.AddTranslateOp()
+            translate.Set(Gf.Vec3d(*xy, center_z))
+            if spec["name"] == "ground":
+                actor_translate = translate
+            sphere.CreateDisplayColorAttr([Gf.Vec3f(*spec["color"])])
+            UsdPhysics.CollisionAPI.Apply(sphere.GetPrim())
+            material = UsdShade.Material.Define(stage, base + "/Matte")
+            shader = UsdShade.Shader.Define(stage, base + "/Matte/Shader")
+            shader.CreateIdAttr("UsdPreviewSurface")
+            shader.CreateInput("diffuseColor", Sdf.ValueTypeNames.Color3f).Set(Gf.Vec3f(*spec["color"]))
+            shader.CreateInput("roughness", Sdf.ValueTypeNames.Float).Set(1.0)
+            shader.CreateInput("specularColor", Sdf.ValueTypeNames.Color3f).Set(Gf.Vec3f(0))
+            material.CreateSurfaceOutput().ConnectToSource(shader.ConnectableAPI(), "surface")
+            UsdShade.MaterialBindingAPI.Apply(sphere.GetPrim()).Bind(material)
+            fixtures.append({**spec, "center_world_xy": xy.tolist(), "radius_m": RADIUS,
+                             "center_world_xyz": [*xy.tolist(), center_z], "actor_shape": args.actor_shape,
+                             "authored_height_rendering_only_m": ACTOR_HEIGHT,
+                             "monitor_radius_m": 0.7 / math.sqrt(2) if spec["drop_m"] else RADIUS})
+            if spec["drop_m"]:
+                support = UsdGeom.Cube.Define(stage, base + "/Support")
+                support.CreateSizeAttr(1.0)
+                support.AddTranslateOp().Set(Gf.Vec3d(*xy, spec["drop_m"] / 2))
+                support.AddScaleOp().Set(Gf.Vec3f(0.7, 0.7, spec["drop_m"]))
+                support.CreateDisplayColorAttr([Gf.Vec3f(0.35)])
+                UsdPhysics.CollisionAPI.Apply(support.GetPrim())
+            if not spec["plume"]:
+                continue
+            for index in range(4):
+                puff = UsdGeom.Sphere.Define(stage, base + f"/Plume/Puff{index}")
+                puff.CreateRadiusAttr((0.035 + 0.009 * index) * (1.7 if args.fixture_layout == "three" else 1.0))
+                puff.AddTranslateOp().Set(
+                    Gf.Vec3d(xy[0], xy[1] + 0.012 * (-1) ** index,
+                             spec["drop_m"] + 2 * RADIUS + 0.07 + 0.085 * index)
+                )
+                puff.AddScaleOp().Set(Gf.Vec3f(1, 1, 1.4))
+                puff.CreateDisplayColorAttr([Gf.Vec3f(0.8)])
+                puff.MakeInvisible()
+                puffs.append(puff)
+    restaurant_props = []
+    layout_monitor = None
+    if args.restaurant_scene:
+        if args.service_demo_v2:
+            from robot.scene.restaurant_visual_steam import STEAM_PATH
+            steam = UsdGeom.Imageable(stage.GetPrimAtPath(STEAM_PATH))
+            if not steam:
+                raise RuntimeError("v2 requires its separate authored steam layer")
+            if args.restaurant_plume_diagnostic:
+                with Usd.EditContext(stage, stage.GetSessionLayer()):
+                    steam.MakeInvisible()
+                puffs.append(steam)
+        for spec in active_service_props(stage):
+            path = f"{SERVICE_ROOT}/{spec.name}"
+            bounds = read_world_bounds(stage, path)
+            restaurant_props.append({"name":spec.name,"prim_path":path,
+                "bounds_minimum":bounds.minimum,"bounds_maximum":bounds.maximum})
+            if spec.name == restaurant_target:
+                fixtures.append({"name":spec.name,"center_world_xy":bounds.center[:2],
+                    "center_world_xyz":bounds.center,"monitor_radius_m":math.hypot(*bounds.size[:2])/2,
+                    "actor_shape":"audited_CC0_restaurant_mesh","plume":False,"drop_m":None})
+                if args.restaurant_plume_diagnostic and not args.service_demo_v2:
+                    with Usd.EditContext(stage, stage.GetSessionLayer()):
+                        for index in range(4):
+                            puff = UsdGeom.Sphere.Define(stage, f"/World/CRARestaurantVisiblePlume/Puff{index}")
+                            puff.CreateRadiusAttr(.045 + .01*index)
+                            puff.AddTranslateOp().Set(Gf.Vec3d(bounds.center[0], bounds.center[1]+.012*(-1)**index,
+                                bounds.maximum[2]+.18+.09*index))
+                            puff.AddScaleOp().Set(Gf.Vec3f(1,1,1.4))
+                            puff.CreateDisplayColorAttr([Gf.Vec3f(.9)])
+                            puff.MakeInvisible()
+                            puffs.append(puff)
+        from robot.scene.restaurant_demo_build import demo_prop_records, payload_geometry_check
+        serving_payload = payload_geometry_check(stage)
+        save_json("serving-payload-geometry.json", serving_payload)
+        for item in demo_prop_records(stage):
+            restaurant_props.append(item)
+            if item["name"] == restaurant_target:
+                bounds = read_world_bounds(stage, item["prim_path"])
+                fixtures.append({"name": item["name"], "center_world_xy": bounds.center[:2],
+                    "center_world_xyz": bounds.center, "monitor_radius_m": math.hypot(*bounds.size[:2])/2,
+                    "actor_shape": "restaurant_demo_mesh", "plume": False, "drop_m": None})
+        if args.restaurant_view in DEMO_OBSERVATIONS and not any(f["name"] == restaurant_target for f in fixtures):
+            raise RuntimeError("demo observation requires the matching authored demo layer")
+        if has_server and human is None:
+            bounds = read_world_bounds(stage,SERVER_PRIM_PATH)
+            restaurant_props.append({"name":"Server","prim_path":SERVER_PRIM_PATH,
+                "bounds_minimum":bounds.minimum,"bounds_maximum":bounds.maximum})
+            fixtures.append({"name":"Server","center_world_xy":bounds.center[:2],
+                "monitor_radius_m":math.hypot(*bounds.size[:2])/2,"actor_shape":"static_staff_avatar",
+                "plume":False,"drop_m":None,"matching_scope":"independent planar match; full authored height is not observed geometry"})
+        layout_monitor = load_authored_layout_monitor(args.restaurant_layout_survey, restaurant_props)
+        save_json("restaurant-placement-monitor.json", {"props":restaurant_props,
+            "basis":("authored bounds for setup and post-navigation evaluation" if args.observe_crate_clearance or args.observe_service_clearance
+                else "authored actual-mesh bounds for independent evaluation/abort only; no factor inputs"),
+            "humans_added":int(has_server),"actor_motion_enabled":args.restaurant_human in {"crossing", "continuous-crossing", "parallel"},
+            "payload_added":serving_payload["present"],"serving_payload":serving_payload,
+            "human_carried_bowl_added":args.human_carry_bowl})
+        setup_footprint = RectangularRobotFootprint(stationary.ROBOT_FRONT_EXTENT,
+            stationary.ROBOT_REAR_EXTENT,stationary.ROBOT_LEFT_EXTENT,
+            stationary.ROBOT_RIGHT_EXTENT,stationary.ROBOT_SAFETY_MARGIN)
+        setup_pose = (*stationary.ROBOT_START_POSITION_WORLD[:2],stationary.ROBOT_START_YAW_RADIANS)
+        setup_clearance = authored_raster_clearance(layout_monitor[0],setup_pose,setup_footprint,layout_monitor[1])
+        save_json("restaurant-setup-validation.json",{"passed":setup_clearance>.02,
+            "configured_pose_world_xy_yaw":setup_pose,"independent_clearance_m":setup_clearance,
+            "scope":"independent authored setup/abort guard; never perception, nominal or safety-filter input"})
+        if setup_clearance <= .02:
+            raise RuntimeError("restaurant robot setup overlaps/approaches authored occupancy; no perception or wheel trial accepted")
+    save_json("fixture-monitor.json", {"fixtures": fixtures, "scope": "authored geometry for rendering and independent validation only; never estimator inputs"})
+    root_unchanged_by_fixture = stage.GetRootLayer().ExportToString() == root_before
+    controller = NovaCarterController(robot_prim_path=stationary.ROBOT_PRIM_PATH)
+    SimulationManager.setup_simulation(
+        dt=stationary.PHYSICS_DT, device=stationary.PHYSICS_DEVICE
+    )
+    timeline = omni.timeline.get_timeline_interface()
+    contact_observers = {}
+    if args.observe_crate_clearance or args.observe_service_clearance:
+        from robot.evaluation.crate_contact_observer import install
+        for prop, label in (("ServiceContainer", "bin"), ("BrokenCrate", "crate")):
+            if args.observe_service_clearance or prop == restaurant_target:
+                target_prim, = (item["prim_path"] for item in restaurant_props if item["name"] == prop)
+                contact_observers[label] = install(stage, stationary.ROBOT_PRIM_PATH, target_prim, target_label=label)
+    if args.human_carry_bowl:
+        carb.settings.get_settings().set("/app/player/useFixedTimeStepping", True)
+        timeline.set_play_every_frame(True)
+        timeline.set_time_codes_per_second(60)
+    timeline.play()
+    app_utils.update_app(steps=10)
+    if human is not None and not args.human_carry_bowl:
+        human.initialize()
+        human.start_video()
+    controller.verify_articulation()
+    if args.human_carry_bowl:
+        # Match the validated native component's startup chronology. Pickup
+        # before native idle settling can select a different articulated pose.
+        yaw = stationary.ROBOT_START_YAW_RADIANS
+        controller.robot.set_world_poses(positions=[stationary.ROBOT_START_POSITION_WORLD],
+            orientations=[[math.cos(yaw/2), 0., 0., math.sin(yaw/2)]])
+    else:
+        stationary.position_robot_for_experiment(controller)
+    if open_crossing_layout or args.restaurant_human == 'parallel':
+        from robot.scene.rear_pass_encounter import reset_open_encounter_velocity
+        reset_open_encounter_velocity(controller)
+    for _ in range(stationary.SETTLE_STEPS):
+        controller.stop()
+        app.update()
+    if args.long_service_parallel:
+        human.hold_initial_idle()
+    if args.human_carry_bowl:
+        human.start_video()
+        for _ in range(30):
+            controller.stop()
+            app.update()
+        human.initialize()
+        for _ in range(60):
+            controller.stop()
+            app.update()
+        human.begin_carry()
+        for _ in range(180):
+            controller.stop()
+            app.update()
+            pose = stationary.read_robot_pose(stage)
+            human.update(float(timeline.get_current_time()), (pose.x, pose.y), (0., 0.), layout_monitor)
+            if human.carry.ready:
+                break
+        if not human.carry.ready:
+            raise RuntimeError("native stationary hand attachment failed before perception")
+        save_json("native-carry-startup-audit.json", {
+            "robot_settle_steps": stationary.SETTLE_STEPS, "camera_settle_steps": 30,
+            "native_idle_settle_steps": 60, "pickup_ready_time": float(timeline.get_current_time()),
+            "pickup_status": str(human.agent.get_task_status(human.carry.task)),
+            "scope": "initial zero-wheel native component chronology; no scheduled observation pauses during navigation"})
+    anchor = stationary.read_robot_pose(stage)
+    if layout_monitor is not None:
+        settled_clearance = authored_raster_clearance(layout_monitor[0],(anchor.x,anchor.y,anchor.yaw),setup_footprint,layout_monitor[1])
+        if settled_clearance <= .02:
+            controller.stop()
+            raise RuntimeError("settled restaurant setup fails independent clearance guard")
+    active_waypoint_local = ROUTE[0]
+    active_waypoint_index = 0
+    save_json("fixture-monitor.json", {"fixtures": fixtures,
+        "anchor_world_xy_yaw": [anchor.x, anchor.y, anchor.yaw],
+        "scope": "authored fixture and oracle anchor for independent evaluation/rendering only; never factor input"})
+    from robot.scene.camera_mount import apply_experimental_camera_pitch
+    rgb_resolution = ((args.stationary_prop_rgb_width * 5 // 8, args.stationary_prop_rgb_width)
+                      if args.restaurant_scene else (480, 640))
+    camera = NovaCarterCamera(camera_prim_path=CAMERA_PRIM_PATHS[args.rgb_camera],
+        resolution=rgb_resolution)
+    save_json("camera-mount-audit.json", apply_experimental_camera_pitch(
+        stage, camera.camera_prim_path,
+        args.human_camera_upward_degrees, stationary.ROBOT_BASE_PRIM_PATH,
+        raise_metres=args.human_camera_raise_metres,
+    ))
+    calibration = read_fisheye_polynomial_calibration(
+        stage,
+        camera_prim_path=camera.camera_prim_path,
+        output_resolution=rgb_resolution,
+    )
+    if args.restaurant_scene and (
+        calibration.output_width * calibration.nominal_height
+        != calibration.output_height * calibration.nominal_width
+    ):
+        raise RuntimeError("restaurant RGB acquisition must match the authored calibration aspect ratio")
+    save_json("camera-calibration.json", asdict(calibration))
+    lidar = NovaCarterLidar(lidar_prim_path=stationary.PANDAR_XT32_LIDAR_PRIM_PATH)
+    camera.initialize()
+    lidar.initialize()
+    robot_from_lidar = compute_relative_prim_transform(
+        stage,
+        source_prim_path=stationary.PANDAR_XT32_LIDAR_PRIM_PATH,
+        target_prim_path=stationary.ROBOT_BASE_PRIM_PATH,
+    )
+    camera_from_robot = compute_relative_prim_transform(
+        stage,
+        source_prim_path=stationary.ROBOT_BASE_PRIM_PATH,
+        target_prim_path=camera.camera_prim_path,
+    )
+    policies = existing.create_fixed_field_configuration()
+    class_policy, guidance, grid, field_config = policies
+    grid = replace(grid, resolution=args.grid_resolution)
+    field_grid_diagnostic = {'geometry': asdict(grid),
+        'scope': 'numerical raster resolution only; unchanged physical footprint/body margins, raw occupancy, CRA policy and source clocks'}
+    save_json('field-grid-configuration.json', field_grid_diagnostic)
+    field_config = replace(
+        field_config,
+        configuration_space_config=replace(
+            field_config.configuration_space_config, yaw_slice_count=16,
+            expansion_backend="vectorized" if args.vectorized_fields else "loop",
+        ),
+        h_full_config=replace(field_config.h_full_config, yaw_slice_count=16),
+        guidance_field_config=replace(
+            field_config.guidance_field_config,
+            allow_dense_scene_arbitration=True,
+            solver_backend="sparse_direct",
+            interface_backend="vectorized",
+        ),
+    )
+    field_config = replace(
+        field_config,
+        h_full_config=replace(
+            field_config.h_full_config,
+            poisson_config=replace(
+                field_config.h_full_config.poisson_config,
+                solver_backend="sparse_direct",
+            ),
+        ),
+    )
+    from robot.perception.object_height import ObjectHeightConfig
+    from robot.perception.human_body_contact import HumanBodyContactPriorConfig
+    from robot.safety.motion_aware_passing import MotionAwarePassingConfig
+    from robot.safety.encounter_motion import EncounterMotionConfig
+    from robot.perception.human_body_envelope import HumanBodyEnvelopeConfig
+    from robot.perception.human_track_recovery import HumanTrackRecoveryConfig
+
+    from robot.perception.local_contact_geometry import LocalContactGeometryConfig
+    from robot.perception.contact_mask_refinement import ContactMaskRefinementConfig
+    from robot.perception.visual_shape_contact import SilhouetteContactConfig
+    perception = LiveObjectPerception(
+        contact_mask_refinement_config=ContactMaskRefinementConfig() if args.contact_mask_refinement else None,
+        shape_contact_config=(SilhouetteContactConfig(local_geometry=LocalContactGeometryConfig(),
+                                                     pixel_denoise=args.contact_pixel_denoise)
+                              if args.local_contact_geometry else None),
+        capture_risk_masks=args.presentation_risk_camera,
+        restaurant_calibration_config=restaurant_calibration_preset(args.restaurant_calibration,
+            normal_flux_magnitude_at_unit_risk=args.restaurant_boundary_unit_flux),
+        human_mass_body_identity_retention=args.human_mass_body_identity_retention,
+        predictive_human_geometry_config=HumanGeometryForecastConfig(
+            horizon_seconds=round(args.mpc_horizon_steps * .2, 10),
+            velocity_uncertainty_floor_prior_mps=args.human_prediction_uncertainty_floor,
+            velocity_uncertainty_prior_mps=args.human_prediction_uncertainty_rate) if args.predictive_human_geometry_ablation else None,
+        observed_motion_reference=args.observed_motion_reference,
+        parallel_preparation_config=ParallelPreparationConfig(exit_lateral_separation_m=args.parallel_preparation_exit_lateral)
+            if args.predictive_parallel_redesign else None,
+        segmenter=segmenter,
+        mass_estimator=mass,
+        contact_detector=contact,
+        person_detector=person,
+        human_mass_prior_config=HumanMassPriorConfig(
+            "bounded adult-human navigation; visually associated configured mass interval, not calibration",
+            mass_kg=args.human_mass_prior[0], lower_kg=args.human_mass_prior[1], upper_kg=args.human_mass_prior[2],
+        ) if person is not None else None,
+        human_body_contact_config=HumanBodyContactPriorConfig(
+            score=args.human_body_contact_prior,
+        ) if args.human_body_contact_prior is not None else None,
+        experiment_baseline=args.experiment_baseline,
+        motion_passing_config=MotionAwarePassingConfig(require_visual_person_selection=args.human_observed_passing_target,
+            encounter_geometry='oncoming_parallel' if args.parallel_guidance_ablation else 'transverse_crossing',
+            maximum_identity_prior_selection_age_seconds=args.human_passing_identity_prior_max_age) if args.motion_aware_passing else None,
+        human_body_envelope_config=HumanBodyEnvelopeConfig(body_radius_m=args.human_body_envelope_radius,
+            centroid_uncertainty_m=args.human_envelope_centroid_uncertainty,
+            maximum_identity_age_seconds=args.human_envelope_identity_max_age) if args.human_body_envelope_radius is not None else None,
+        human_observed_occupancy_only=args.human_observed_occupancy_only,
+        human_tracking_uncertainty=args.human_tracking_uncertainty,
+        human_track_recovery_config=HumanTrackRecoveryConfig(
+            verified_part_recovery=args.human_verified_part_recovery,
+            robot_radius_m=math.hypot(max(stationary.ROBOT_FRONT_EXTENT, stationary.ROBOT_REAR_EXTENT) + stationary.ROBOT_SAFETY_MARGIN,
+                max(stationary.ROBOT_LEFT_EXTENT, stationary.ROBOT_RIGHT_EXTENT) + stationary.ROBOT_SAFETY_MARGIN))
+            if args.human_track_recovery else None,
+        human_boundary_flux=args.human_boundary_flux,
+        human_visual_fragment_association=args.human_visual_fragment_association,
+        human_fragment_mask_boundary_pixels=args.human_fragment_mask_boundary_pixels,
+        human_visual_part_field_policy=args.human_visual_part_field_policy,
+        human_prior_geometry_associations=args.human_prior_geometry_associations,
+        human_fresh_person_policy=args.human_fresh_person_policy,
+        zero_tangential_bias_ablation=args.zero_tangential_bias_ablation,
+        encounter_motion_config=EncounterMotionConfig()
+            if args.encounter_guidance_ablation else None,
+        human_fragment_coverage_config=fragment_coverage_config,
+        calibration=calibration,
+        class_policy=class_policy,
+        guidance_policy=guidance,
+        grid_config=grid,
+        field_config=field_config,
+        anchor_position_world_xy=(anchor.x, anchor.y),
+        anchor_yaw=anchor.yaw,
+        ground_prior_scope=GROUND_SCOPE if args.actor_shape == "sphere" and not args.restaurant_scene and not args.object_height_evidence else None,
+        negative_plume_scope=("bounded stationary restaurant vessel view: explicitly clean reference phase; object-associated visible cue only, not absence of heat"
+            if args.restaurant_plume_diagnostic else None) if args.restaurant_scene else PLUME_SCOPE,
+        rectify_plume=True,
+        occupancy_retention_seconds=0.15 if args.kinetic_diagnostic or args.moving_actor or human is not None else 0.5,
+        static_occupancy_memory_prior_scope=("bounded static dressed restaurant and stationary staff avatar; positive observed occupancy retained; no moving people/assets or free-space clearing"
+            if args.restaurant_scene else "bounded static sphere/environment; positive occupancy remains until experiment end; no dynamic-actor or free-space-clearing claim")
+        if args.static_occupancy_memory_prior
+        else None,
+        evidence_retention_config=None
+        if args.disable_evidence_retention or args.persistent_object_risk_map
+        else TemporalObjectEvidenceConfig(),
+        persistent_property_config=PersistentObjectEvidenceConfig(
+            "bounded one-adult navigation: only intrinsic mass may persist for 3 s; articulated shape/contact, support, plume and motion remain current",
+            maximum_property_age_seconds=3.0,
+            confidence_half_life_seconds=1.5,
+            retained_properties=("mass",),
+            translate_instance_bounds_prior=False,
+            allow_instance_bounds_prior=False,
+            minimum_visual_reassessment_interval_seconds=args.visual_reassessment_interval,
+            maximum_visual_tracks_per_update=args.live_visual_tracks,
+        ) if human is not None else PersistentObjectEvidenceConfig(
+            "bounded static restaurant: acquired intrinsic properties persist with original expiry; potential/thermal unsupported inputs retain configured priors"
+            if args.restaurant_scene else "bounded separated fixture: mass/visible contact/plume assumed unchanged; support invalidates on displacement; current motion/route; moving actor uses short occupancy expiry",
+            translate_instance_bounds_prior=args.kinetic_diagnostic or args.moving_actor,
+            minimum_visual_reassessment_interval_seconds=args.visual_reassessment_interval,
+            maximum_visual_tracks_per_update=args.live_visual_tracks,
+        )
+        if args.persistent_object_risk_map
+        else None,
+        object_factor_prior_config=ObjectRiskPriorConfig(
+            PhysicalRiskVector(
+                args.object_factor_prior_risk,
+                args.object_factor_prior_risk,
+                args.object_factor_prior_risk,
+                args.object_factor_prior_risk,
+            )
+        )
+        if args.persistent_object_risk_map
+        else None,
+        fall_surface_config=LidarFallSurfaceConfig(
+            support_xy_margin_m=0.30, support_maximum_gap_m=0.20,
+            minimum_support_overhang_m=0.05, landing_maximum_offset_m=2.5,
+            allow_equal_height_multiple_landings=True,
+        ) if args.fixture_layout == "three" and not args.object_height_evidence else None,
+        fall_interaction_prior_scope="bounded multi-object support test; worst-case harmful fall interaction, not measured fall probability"
+        if args.fixture_layout == "three" or args.object_height_evidence else None,
+        object_height_config=ObjectHeightConfig(surface_config=LidarFallSurfaceConfig(
+            support_xy_margin_m=args.height_support_margin,
+            support_maximum_gap_m=args.height_support_gap,
+        )) if args.object_height_evidence else None,
+        cluster_in_3d=args.fixture_layout == "three" or args.actor_shape == "upright_capsule" or bool(args.restaurant_scene),
+        cluster_radius_m=args.human_cluster_radius if human is not None else None,
+        camera_visibility_radius_pixels=4 if args.fixture_layout == "three" or args.actor_shape == "upright_capsule" or args.restaurant_scene else 0,
+        mask_foreground_depth_gap_m=0.5 if args.fixture_layout == "three" or args.actor_shape == "upright_capsule" or args.restaurant_scene else None,
+        plume_view_fov_degrees=args.plume_view_fov,
+    )
+    if args.stationary_image_objects:
+        perception.service_static_props = args.service_static_props
+        from robot.perception.image_object_association import ImageObjectConfig
+        perception.image_object_config = ImageObjectConfig(maximum_extent_m=args.image_object_maximum_extent,
+            hold_overlapping_hypotheses=args.image_object_overlap_hold,
+            confirmed_evidence_refresh=args.confirmed_prop_refresh)
+        perception.image_object_property_persistence = args.image_object_property_persistence
+        if args.moving_view_image_objects:
+            from robot.perception.moving_view_association import MovingViewAssociationConfig
+            perception.moving_image_object_config = MovingViewAssociationConfig()
+            perception.image_object_archive_directory = args.output / 'image-object-sources'
+        if args.static_prop_evidence:
+            from robot.perception.static_prop_evidence import StaticPropEvidenceConfig
+            perception.static_prop_evidence_config = StaticPropEvidenceConfig()
+    if args.stationary_furniture_memory:
+        if not (args.restaurant_human == "parallel" and args.rolling_local_field and args.persistent_object_risk_map) or args.static_occupancy_memory_prior:
+            raise ValueError("furniture memory requires the separate long-human rolling experiment, not global static memory")
+        from robot.perception.stationary_furniture_memory import FurnitureMemoryConfig, StationaryFurnitureMemory
+        perception.stationary_furniture_memory = StationaryFurnitureMemory(FurnitureMemoryConfig(
+            fragment_level_proof=args.stationary_furniture_fragment_proof))
+    if args.unknown_obstacle_planning:
+        from robot.perception.unknown_obstacle_memory import UnknownObstacleConfig, UnknownObstacleMemory
+        perception.unknown_obstacle_memory = UnknownObstacleMemory(UnknownObstacleConfig(
+            unknown_phi=args.unknown_obstacle_phi,
+            supported_background_prior=args.unknown_supported_background_prior,
+            persistent_background_prior=args.unknown_persistent_background_prior,
+            unclassified_static_prior=args.unknown_unclassified_static_prior,
+            require_verified_dynamic_evidence=args.unknown_verified_dynamic_evidence,
+            distinct_surface_witness_matching=args.unknown_distinct_surface_witnesses))
+        from robot.evaluation.unknown_obstacle_validation import UnknownObstacleGeometryArchive
+        unknown_geometry_archive = UnknownObstacleGeometryArchive(args.output)
+    history = EgoPoseHistory()
+    if args.rolling_local_field:
+        from robot.safety.rolling_local_field import RollingLocalField
+        perception.rolling_field = RollingLocalField(grid)
+    captures, rejections, records = [], [], []
+    last_sensor_id = -1
+    copied_scan = None
+    latest_source_packet = None
+    sensor_archive_payloads = {}
+    navigation_active = False
+    global ACTIVE_SERVICE_VIDEO
+    if args.restaurant_scene and (args.presentation_risk_camera or (
+        serving_payload["present"] and (human is None or args.presentation_follow_camera))):
+        from robot.scene.service_demo_video import ServiceDemoVideo
+        ACTIVE_SERVICE_VIDEO = ServiceDemoVideo(stage, args.output,
+            risk_camera=args.presentation_risk_camera,
+            risk_palette="restaurant_v1" if args.restaurant_calibration != "off" else "legacy",
+            follow_pose=(anchor.x, anchor.y, anchor.yaw) if args.presentation_follow_camera else None)
+
+    def state():
+        pose = stationary.read_robot_pose(stage)
+        dx, dy = pose.x - anchor.x, pose.y - anchor.y
+        c, s = math.cos(anchor.yaw), math.sin(anchor.yaw)
+        return np.array(
+            [
+                c * dx + s * dy,
+                -s * dx + c * dy,
+                (pose.yaw - anchor.yaw + math.pi) % math.tau - math.pi,
+            ]
+        )
+
+    def step(command=(0.0, 0.0), paced=False):
+        started = time.perf_counter()
+        if ACTIVE_SERVICE_VIDEO is not None:
+            pose = stationary.read_robot_pose(stage)
+            ACTIVE_SERVICE_VIDEO.update_pose(float(timeline.get_current_time()), (pose.x, pose.y, pose.yaw))
+        if actor_start_time is not None:
+            offset, _, _ = actor_offset_velocity(max(0, float(timeline.get_current_time()) - actor_start_time))
+            with Usd.EditContext(stage, stage.GetSessionLayer()):
+                actor_translate.Set(Gf.Vec3d(center_world[0], center_world[1] + offset, ACTOR_CENTER_Z))
+        controller.apply_command(*command)
+        app.update()
+        now = float(timeline.get_current_time())
+        matrix = compute_relative_prim_transform(
+            stage,
+            source_prim_path=stationary.ROBOT_BASE_PRIM_PATH,
+            target_prim_path="/World",
+        )
+        history.append(
+            EgoPoseSample(now, matrix, EstimateStatus.ORACLE, "isaac_usd_chassis_pose")
+        )
+        if ACTIVE_SERVICE_VIDEO is not None:
+            ACTIVE_SERVICE_VIDEO.record(now, command, (matrix[0, 3], matrix[1, 3]))
+        if human is not None:
+            human.update(now, (matrix[0, 3], matrix[1, 3]), command, layout_monitor,
+                         navigation=navigation_active)
+            if human.carry is not None and human.carry.ready:
+                pose = stationary.read_robot_pose(stage)
+                bowl = human.carry.records[-1]
+                clearance = min(
+                    disk_footprint_clearance((pose.x, pose.y, pose.yaw),
+                        center_xy=human.position()[:2], radius_m=human.setup["collision_radius_m"],
+                        footprint=setup_footprint),
+                    disk_footprint_clearance((pose.x, pose.y, pose.yaw),
+                        center_xy=bowl["bowl_center_xyz"][:2],
+                        radius_m=float(np.linalg.norm(bowl["world_half_extents"][:2])),
+                        footprint=setup_footprint))
+                human.records[-1]["independent_robot_clearance_m"] = clearance
+                if clearance <= .02:
+                    controller.stop()
+                    raise RuntimeError("independent body/bowl robot-clearance guard")
+        if paced:
+            time.sleep(
+                max(
+                    0.0,
+                    stationary.PHYSICS_DT / args.simulation_rate
+                    - (time.perf_counter() - started),
+                )
+            )
+        return now
+
+    mpc, backup = existing.create_controller_stack(controller)
+    substeps = round(mpc.config.time_step / stationary.PHYSICS_DT)
+    mpc = SafeSAGEUnicycleMPC(
+        mpc.paper_filter,
+        replace(
+            mpc.config,
+            horizon_steps=mpc.config.horizon_steps if args.mpc_horizon_steps is None else args.mpc_horizon_steps,
+            safety_substeps_per_interval=substeps,
+            integration_substeps_per_interval=substeps,
+            enable_progress_seeds=True,
+            enable_recovery_cost_pruning=True,
+            enable_recovery_feasibility_pruning=True,
+            enable_tapered_rescue_seed=args.mpc_tapered_rescue_seed,
+            use_consistent_temporal_jacobian=args.mpc_consistent_temporal_jacobian,
+            maximum_solver_iterations=args.qp_iteration_limit,
+            maximum_nonlinear_rescue_iterations=args.nonlinear_rescue_iterations,
+            enable_unfinished_qp_proposal=args.mpc_unfinished_qp_proposal,
+            progress_seed_linear_fraction=args.progress_seed_fraction,
+            configuration_position_padding_m=0.025,
+            configuration_yaw_padding_radians=0.21,
+            configuration_padding_initial_fraction=0.1,
+        ),
+    )
+    if args.guidance_tracking_weight > 0:
+        mpc = LaplaceGuidanceTrackingMPC(mpc.paper_filter, mpc.config,
+            guidance_config=LaplaceGuidanceTrackingConfig(args.guidance_tracking_weight, args.guidance_activation_h,
+                math.radians(args.guidance_max_heading_bias_degrees), args.guidance_reference_goal_radius,
+                args.guidance_fade_distance, args.guidance_minimum_reference_progress,
+                args.guidance_turn_first_minimum_cap, args.guidance_reference_mode,
+                args.guidance_reference_search_width, args.guidance_reference_search_candidates,
+                args.guidance_tangent_velocity_fraction, args.guidance_tangent_basis,
+                minimum_reference_speed_fraction=args.guidance_reference_minimum_speed_fraction,
+                tangent_blend_mode=args.guidance_tangent_blend,
+                outward_reference_fraction=args.guidance_outward_reference_fraction,
+                turn_translation_fraction=args.guidance_turn_translation_fraction,
+                moving_arc_reference=args.guidance_moving_arc_reference,
+                motion_forecast_maximum_outward_fraction=args.motion_forecast_outward_fraction if args.observed_motion_reference else 0.,
+                motion_forecast_growth_prior_mps=args.motion_forecast_growth_prior_mps))
+    if args.crate_delay_robust_bypass:
+        from robot.safety.delay_robust_bypass import DelayRobustBypassMPC
+        mpc = DelayRobustBypassMPC(mpc.paper_filter, mpc.config, guidance_config=mpc.guidance_config)
+    control = SafeSAGEControlRuntime(mpc=mpc, backup_filter=backup, crossing_strategy=args.crossing_strategy)
+    if service_crate_short_profile is not None:
+        save_json('service-crate-short-profile.json', dict(service_crate_short_profile,
+            mpc_configuration=asdict(mpc.config), guidance_configuration=asdict(mpc.guidance_config),
+            configured_start_world_xy_yaw=(*stationary.ROBOT_START_POSITION_WORLD[:2], stationary.ROBOT_START_YAW_RADIANS),
+            nominal_route_local_xy=ROUTE))
+    if crate_v3_profile is not None:
+        save_json('controller-profile-validation.json', dict(crate_v3_profile,
+            mpc_configuration=asdict(mpc.config), guidance_configuration=asdict(mpc.guidance_config),
+            motion_passing_enabled=args.motion_aware_passing,
+            delay_robust_bypass=asdict(mpc.bypass_config) if args.crate_delay_robust_bypass else None))
+    if args.checked_rear_pass_reference:
+        from robot.evaluation.live_rear_pass import LiveRearPassControlRuntime
+        from robot.safety.checked_rear_pass_reference import CheckedRearPassReferenceConfig
+        person_config = None
+        if args.rear_person_relative:
+            from robot.safety.person_relative_rear import PersonRelativeRearConfig, PersonRelativeRearMemory
+            person_config = PersonRelativeRearConfig(rear_distance_m=args.rear_reference_offset,
+                minimum_current_rear_separation_m=1.05 if args.rear_delayed_commit else 0.,
+                continue_frozen_until_deadline=args.rear_delayed_commit,
+                enable_preparation=args.rear_preparation,
+                maximum_linear_velocity=mpc.config.maximum_linear_velocity,
+                maximum_angular_velocity=min(mpc.config.maximum_angular_velocity, abs(mpc.config.minimum_angular_velocity)))
+            perception.person_relative_rear_memory = PersonRelativeRearMemory(person_config)
+        perception.live_rear_pass_config = CheckedRearPassReferenceConfig(
+            existing_turn_heading_radians=args.rear_existing_turn_heading,
+            minimum_first_translation_m=args.rear_minimum_first_translation,
+            offset_m=args.rear_reference_offset,
+            allow_turn_first_fallback=args.rear_turn_first_fallback,
+            feasibility_led_start=args.rear_feasibility_start,
+            person_relative=person_config)
+        control = LiveRearPassControlRuntime(mpc=mpc, backup_filter=backup,
+            config=perception.live_rear_pass_config)
+        if args.rear_encounter_motion_fit:
+            from robot.safety.encounter_motion_estimate import EncounterMotionEstimate
+            perception.rear_encounter_motion_estimate = EncounterMotionEstimate()
+            perception.rear_consistent_motion_fit = args.rear_consistent_motion_fit
+    staged_perception = None
+    if args.checked_wait_transition:
+        from robot.evaluation.live_checked_wait import StagedLivePerception
+        guard_mpc = SafeSAGEUnicycleMPC(mpc.paper_filter, mpc.config)
+        perception.checked_wait_control = SafeSAGEControlRuntime(
+            mpc=guard_mpc, backup_filter=backup, crossing_strategy=args.crossing_strategy)
+        staged_perception = StagedLivePerception(perception)
+    if args.rolling_local_field and staged_perception is None:
+        from robot.evaluation.live_checked_wait import StagedLivePerception
+        staged_perception = StagedLivePerception(perception)
+    checked_wait_admissions = []
+
+    def capture(clean=False):
+        nonlocal last_sensor_id, copied_scan
+        if copied_scan is None:
+            raw = lidar.get_point_cloud().copy()
+            info = lidar.get_frame_info()
+            if info.sensor_frame_id <= last_sensor_id:
+                return None
+            rgb = camera.get_rgb().copy()
+            camera_info = camera.get_frame_info()
+            metadata = lidar.get_scan_metadata()
+            if human is not None:
+                copied_scan = (raw, info, rgb, camera_info, metadata, float(timeline.get_current_time()))
+                last_sensor_id = info.sensor_frame_id
+        if copied_scan is not None:
+            raw, info, rgb, camera_info, metadata, queued_time = copied_scan
+            offsets = metadata.point_time_offsets_nanoseconds
+            now = float(timeline.get_current_time())
+            if offsets is None or not len(offsets) or now - queued_time > .05 + 1e-9:
+                copied_scan = None
+                raise ValueError("copied human scan missing timing or exceeded .05 s pose wait")
+            if info.sensor_timestamp_nanoseconds * 1e-9 + int(offsets.max()) * 1e-9 > history.samples[-1].timestamp_seconds + 1e-9:
+                return None
+            copied_scan = None
+        scan_audit = metadata.summary()
+        for name, scan_pose in (
+            ("start", metadata.frame_start),
+            ("end", metadata.frame_end),
+        ):
+            if scan_pose is None:
+                continue
+            try:
+                from scipy.spatial.transform import Rotation
+
+                sensor_pose = (
+                    history.sample(
+                        scan_pose.timestamp_nanoseconds * 1e-9
+                    ).world_from_robot
+                    @ robot_from_lidar
+                )
+                rotation = Rotation.from_quat(scan_pose.orientation_xyzw).as_matrix()
+                angle = Rotation.from_matrix(
+                    sensor_pose[:3, :3].T @ rotation
+                ).magnitude()
+                scan_audit[f"{name}_usd_position_error_m"] = float(
+                    np.linalg.norm(sensor_pose[:3, 3] - scan_pose.position_m)
+                )
+                scan_audit[f"{name}_usd_rotation_error_radians"] = float(angle)
+            except ValueError as error:
+                scan_audit[f"{name}_pose_comparison_unavailable"] = str(error)
+        scan_time = info.sensor_timestamp_nanoseconds * 1e-9
+        epoch = align_camera_lidar_epoch(
+            history,
+            lidar_timestamp_seconds=scan_time,
+            camera_timestamp_seconds=camera_info.simulation_time_seconds,
+            camera_from_robot=camera_from_robot,
+        )
+        velocity = history.velocity_world_xy(scan_time)
+        if args.disable_lidar_deskew:
+            scene = transform_points(filter_valid_points(raw), robot_from_lidar)
+            scan_audit["ego_motion_correction"] = {
+                "method": "legacy_scan_start_transform"
+            }
+        else:
+            scene, scan_audit["ego_motion_correction"] = deskew_uncompensated_lidar(
+                raw,
+                metadata,
+                history,
+                robot_from_sensor=robot_from_lidar,
+                reference_timestamp_seconds=scan_time,
+            )
+        pose = epoch.lidar_pose.world_from_robot
+        yaw = math.atan2(pose[1, 0], pose[0, 0])
+        gravity_from_body = gravity_aligned_robot_transform(pose)
+        body_from_gravity = np.linalg.inv(gravity_from_body)
+        scene = transform_points(scene, gravity_from_body)
+        floor = -float(pose[2, 3])
+        points = detect_obstacle_points_3d(
+            scene,
+            ObstacleDetectionConfig(
+                minimum_height=floor + 0.05,
+                maximum_height=floor + (1.8 if human is not None else 1.0),
+                minimum_range=0.15,
+                maximum_range=args.human_lidar_range if human is not None else 5.0,
+                forward_only=False,
+                angular_bin_size_degrees=None,
+            ),
+        )
+        c, s = math.cos(anchor.yaw), math.sin(anchor.yaw)
+        goal_world = (
+            anchor.x + c * active_waypoint_local[0] - s * active_waypoint_local[1],
+            anchor.y + s * active_waypoint_local[0] + c * active_waypoint_local[1],
+        )
+        segment = np.asarray(ROUTE[active_waypoint_index]) - (np.asarray(ROUTE[active_waypoint_index-1])
+            if active_waypoint_index > 0 else np.zeros(2))
+        segment_length = float(np.linalg.norm(segment))
+        route_direction = None
+        if (args.encounter_guidance_ablation or args.parallel_guidance_ablation) and segment_length >= .2:
+            segment = segment / segment_length
+            route_direction = (c*segment[0]-s*segment[1], s*segment[0]+c*segment[1])
+        packet = LiveObjectPacket(
+            info.sensor_frame_id,
+            scan_time,
+            camera_info.read_index,
+            camera_info.simulation_time_seconds,
+            rgb,
+            scene,
+            points,
+            tuple(pose[:2, 3]),
+            yaw,
+            velocity,
+            epoch.camera_from_scan_robot @ body_from_gravity,
+            floor,
+            goal_world,
+            clean,
+            epoch.lidar_pose.source,
+            epoch.lidar_pose.status,
+            (
+                np.stack(
+                    [pose]
+                    + [
+                        item.world_from_robot
+                        for item in history.samples
+                        if scan_time
+                        < item.timestamp_seconds
+                        <= camera_info.simulation_time_seconds
+                    ]
+                )
+                if args.disable_lidar_deskew
+                else np.stack([pose])
+            )
+            @ body_from_gravity,
+            "bounded static scene; legacy conservative scan-interval union, not per-return deskew"
+            if args.disable_lidar_deskew
+            else "bounded static scene; per-return ego-motion deskew to retained scan-header pose; no independently moving object correction",
+            nominal_route_direction_world_xy=route_direction,
+            nominal_route_terminal_goal_world_xy=(
+                anchor.x+c*ROUTE[-1][0]-s*ROUTE[-1][1], anchor.y+s*ROUTE[-1][0]+c*ROUTE[-1][1]
+            ) if args.rear_person_relative else None,
+        )
+        last_sensor_id = info.sensor_frame_id
+        captures.append(
+            {
+                "lidar_id": info.sensor_frame_id,
+                "lidar_time": scan_time,
+                "camera_id": camera_info.read_index,
+                "camera_time": camera_info.simulation_time_seconds,
+                "state": state().tolist(),
+                "scan_metadata": scan_audit,
+            }
+        )
+        if args.save_sensor_snapshots and human is not None:
+            # Diagnostic copies only. Keep the last accepted source protected
+            # while at most one newer perception job is in flight.
+            pose_samples = list(history.samples)
+            pose_times = np.array([item.timestamp_seconds for item in pose_samples])
+            return_times = scan_time + metadata.point_time_offsets_nanoseconds * 1e-9
+            first = max(0, int(np.searchsorted(pose_times, return_times.min(), side="right")) - 1)
+            last = min(len(pose_times), int(np.searchsorted(pose_times, return_times.max(), side="left")) + 1)
+            sensor_archive_payloads[info.sensor_frame_id] = {
+                "raw_sensor_xyz": raw.copy(),
+                "scene_xyz": scene.copy(),
+                "obstacle_xyz": points.copy(),
+                "point_time_offsets_ns": metadata.point_time_offsets_nanoseconds.copy(),
+                "robot_from_lidar": robot_from_lidar.copy(),
+                "world_from_robot": pose.copy(),
+                "gravity_from_body": gravity_from_body.copy(),
+                "camera_from_scan_robot": packet.camera_from_scan_robot,
+                "source_lidar_timestamp_seconds": scan_time,
+                "source_lidar_timestamp_nanoseconds": info.sensor_timestamp_nanoseconds,
+                "pose_history_timestamps_seconds": pose_times[first:last],
+                "pose_history_world_from_robot": np.stack(
+                    [item.world_from_robot for item in pose_samples[first:last]]),
+                "scan_metadata_json": json.dumps(scan_audit, default=json_default),
+            }
+            keep = set(list(sensor_archive_payloads)[-4:])
+            if latest_source_packet is not None:
+                keep.add(latest_source_packet.sensor_frame_id)
+            for key in tuple(sensor_archive_payloads):
+                if key not in keep:
+                    del sensor_archive_payloads[key]
+        if args.save_sensor_snapshots and (
+            args.moving_view_image_objects or len(captures) <= 24 or len(captures) % 20 == 0
+        ):
+            snapshot = args.output / "sensor-snapshots"
+            snapshot.mkdir(exist_ok=True)
+            stem = f"{info.sensor_frame_id:06d}"
+            cv2.imwrite(str(snapshot / f"{stem}.png"), rgb[:, :, ::-1])
+            np.savez_compressed(
+                snapshot / f"{stem}.npz",
+                raw_sensor_xyz=raw,
+                scene_xyz=scene,
+                obstacle_xyz=points,
+                point_time_offsets_ns=np.empty(0, dtype=np.int64)
+                if metadata.point_time_offsets_nanoseconds is None
+                else metadata.point_time_offsets_nanoseconds,
+                point_timing_available=metadata.point_time_offsets_nanoseconds
+                is not None,
+                robot_from_lidar=robot_from_lidar,
+                world_from_robot=pose,
+                camera_from_scan_robot=packet.camera_from_scan_robot,
+            )
+            (snapshot / f"{stem}.json").write_text(
+                json.dumps(captures[-1], indent=2, default=json_default) + "\n",
+                encoding="utf-8",
+            )
+        return packet
+
+    # Stationary calibration/development gate, distinct from navigation.
+    # Let the RGB renderer/reference domain settle before its clean reference.
+    for _ in range(60):
+        step()
+    latest = None
+    observation_frames = args.stationary_frames * (3 if args.restaurant_plume_diagnostic else 1)
+    for _ in range(max(1000 if args.restaurant_plume_diagnostic else 400,
+                       observation_frames * 10 + 40)):
+        now = step()
+        try:
+            packet = capture(clean=(len(records) < args.stationary_frames
+                if args.restaurant_plume_diagnostic else not records))
+        except (RuntimeError, ValueError) as error:
+            rejections.append(str(error))
+            continue
+        if packet is None:
+            continue
+        latest = perception(packet)
+        print(
+            json.dumps(
+                {
+                    "stationary_frame": len(records) + 1,
+                    "build_wall_seconds": latest.field.build_wall_seconds,
+                    "readiness": latest.readiness.ready,
+                    "unknown": latest.diagnostics.get("unknown_factors"),
+                    "timings": latest.diagnostics.get("stage_wall_seconds"),
+                    "objects": len(latest.objects),
+                    "thermal_evidence": latest.attributes.thermal.heat_source_likelihood.evidence,
+                },
+                default=json_default,
+            ),
+            flush=True,
+        )
+        if args.stationary_furniture_memory:
+            from robot.evaluation.furniture_memory_validation import audit_snapshot
+            latest.diagnostics["furniture_memory_human_audit"] = audit_snapshot(latest.furniture_memory_snapshot, human.records)
+        if args.unknown_obstacle_planning:
+            from robot.evaluation.unknown_obstacle_validation import audit_static_human_exclusion
+            latest.diagnostics["unknown_obstacle_static_human_audit"] = audit_static_human_exclusion(latest.unknown_obstacle_snapshot, human.records)
+            latest.diagnostics["unknown_obstacle_geometry_archive"] = unknown_geometry_archive.save(latest.unknown_obstacle_snapshot)
+        records.append(field_record(latest, now))
+        if human is not None and human.background_walk is not None and len(records) >= args.stationary_frames-20:
+            # Actor-only pre-roll during the last zero-wheel assessments. This
+            # supplies no preparation/avoidance command to the robot.
+            human.background_walk_requested = True
+        if ACTIVE_SERVICE_VIDEO is not None:
+            ACTIVE_SERVICE_VIDEO.accept_risk_assessment(latest)
+        if args.restaurant_plume_diagnostic:
+            phase = (len(records)-1)//args.stationary_frames
+            records[-1]["restaurant_plume_phase"] = ("clean_reference_validation", "no_plume", "visible_plume")[phase]
+            records[-1]["stationary_rgb_pose"] = state().tolist()
+            records[-1]["camera_frame_id"] = packet.camera_frame_id
+            directory = args.output/"plume-rgb"
+            directory.mkdir(exist_ok=True)
+            cv2.imwrite(str(directory/f"{len(records):03d}.png"), packet.rgb[:,:,::-1])
+            if len(records) == 2*args.stationary_frames:
+                cv2.imwrite(str(args.output/"no-plume-current.png"), packet.rgb[:,:,::-1])
+                with Usd.EditContext(stage, stage.GetSessionLayer()):
+                    for puff in puffs:
+                        puff.MakeVisible()
+        save_instance_snapshot(latest)
+        if len(records) == 1:
+            cv2.imwrite(
+                str(args.output / "clean-reference.png"), packet.rgb[:, :, ::-1]
+            )
+            if not args.restaurant_scene and not (
+                latest.diagnostics.get("accepted_instance")
+                or latest.diagnostics.get("accepted_instance_count", 0)
+            ):
+                raise RuntimeError(
+                    "stationary clean reference lacks an accepted instance"
+                )
+            with Usd.EditContext(stage, stage.GetSessionLayer()):
+                if args.plume_control == "persistent":
+                    for puff in puffs:
+                        puff.MakeVisible()
+        if len(records) >= observation_frames:
+            cv2.imwrite(
+                str(args.output / "stationary-current.png"), packet.rgb[:, :, ::-1]
+            )
+            break
+    save_json("stationary-fields.json", records)
+    save_json("captures.json", captures)
+    stationary_ready = (
+        latest is not None and len(records) >= 12 and latest.readiness.ready
+    )
+    if args.persistent_object_risk_map:
+        stationary_ready = (
+            latest is not None
+            and len(records) >= 12
+            and all(
+                record["diagnostics"]["controller_numeric_policy_ready"]
+                for record in records
+            )
+            and any(
+                record["diagnostics"]["accepted_instance_count"] > 0
+                for record in records
+            )
+        )
+    gate = {
+        "passed": stationary_ready,
+        "frames": len(records),
+        "nonzero_wheel_commands": 0,
+        "plume_control": args.plume_control,
+        "fixture_layout": args.fixture_layout,
+        "fixture_spacing": args.fixture_spacing,
+        "actor_shape": "real_restaurant_meshes" if args.restaurant_scene else args.actor_shape,
+        "plume_view_fov_degrees": args.plume_view_fov,
+        "rejections": sorted(set(rejections)),
+        "weights": weights,
+        "last_readiness": None if latest is None else asdict(latest.readiness),
+        "persistent_object_risk_map": args.persistent_object_risk_map,
+        "last_objects": []
+        if latest is None
+        else [
+            {
+                "track_id": item.attributes.track_id,
+                "phi": item.policy.risk,
+                "perception_ready": item.readiness.ready,
+                "factor_scores": item.diagnostics["factor_scores"],
+            }
+            for item in latest.objects
+        ],
+        "scope": "stationary all-track numeric-policy dataflow with accepted visual observations and configured factor priors; not complete visual estimation for every track"
+        if args.persistent_object_risk_map
+        else "live fresh stationary RGB/LiDAR; category-free rough mass, explicit local ground/fall interaction priors, visual contact/plume proxies",
+    }
+    if args.restaurant_scene:
+        evaluation_records = records
+        if args.stationary_image_objects:
+            from robot.evaluation.image_object_runtime import coalesce_image_members_for_evaluation
+            evaluation_records = coalesce_image_members_for_evaluation(records)
+        object_summary = summarize_fixture_assessments(evaluation_records, fixtures, maximum_distance_m=0.20)
+        if args.stationary_image_objects:
+            object_summary["image_object_scope"] = "verified image groups replace only their listed raw members in object-level evaluation; original records/occupancy preserved; same .20m unique fixture gate"
+        if args.restaurant_server and human is None:
+            server_summary = summarize_fixture_assessments(records,[f for f in fixtures if f["name"]=="Server"],maximum_distance_m=.40)
+            object_summary["fixtures"]["Server"] = server_summary["fixtures"]["Server"]
+            object_summary["server_matching_scope"] = "independent planar .40 m partial-body match; unchanged mask/ownership gates; not calibrated whole-human geometry"
+        gate["restaurant_component_checks"] = restaurant_asset_checks(object_summary, restaurant_target)
+        gate["restaurant_observation"] = args.restaurant_view
+        gate["fixture_gate_scope"] = f"real {restaurant_target} mesh: owned RGB/LiDAR mass, contact proxy and motion; potential/thermal may use labeled priors; not full four-factor sensor acceptance"
+        if args.restaurant_route == "long-service":
+            from robot.evaluation.restaurant_service_validation import restaurant_route_sensor_checks
+            gate["route_start_sensor_checks"] = restaurant_route_sensor_checks(records)
+            gate["fixture_gate_scope"] = "new long-route start: current owned mass/contact/motion on at least one observed track; remote FoodBowl is diagnostic only; no tabletop hazard acceptance"
+            gate["passed"] = stationary_ready = bool(stationary_ready and all(gate["route_start_sensor_checks"].values()))
+            if args.service_crate_short_probe:
+                gate['service_crate_short_scope'] = service_crate_short_profile
+                gate['fixture_gate_scope'] = 'short full-policy crate probe; original route numeric checks plus current owned crate mass/contact/motion'
+                gate['passed'] = stationary_ready = bool(stationary_ready and all(gate['restaurant_component_checks'].values()))
+        elif human is None:
+            gate["passed"] = stationary_ready = bool(stationary_ready and all(gate["restaurant_component_checks"].values()))
+        else:
+            gate["other_restaurant_components_scope"] = "bowl diagnostics retained; the selected stationary component is the human; unsupported other tracks retain occupancy and labeled factor priors"
+        if args.restaurant_server and human is None:
+            gate["server_component_checks"] = restaurant_asset_checks(object_summary,"Server")
+            gate["passed"] = stationary_ready = bool(stationary_ready and all(gate["server_component_checks"].values()))
+        save_json("stationary-object-validation.json", object_summary)
+        if human is not None and not args.long_service_parallel:
+            from robot.evaluation.human_navigation_validation import human_stationary_checks
+            gate["human_component_checks"] = human_stationary_checks(records)
+            if args.human_body_envelope_radius is not None:
+                from robot.evaluation.human_body_envelope_validation import validate_human_body_envelopes
+                envelope_validation = validate_human_body_envelopes(records, human.records,
+                    reference_radius_m=human.setup["collision_radius_m"])
+                envelope_validation["used_for_control"] = not args.human_observed_occupancy_only
+                envelope_validation["scope"] = ("shadow audit of an unused circular prior; independent human clearance remains required"
+                    if args.human_observed_occupancy_only else "active body-prior containment acceptance")
+                save_json("stationary-human-envelope-validation.json", envelope_validation)
+                gate["human_body_envelope_checks"] = envelope_validation["checks"]
+                gate["human_body_envelope_used_for_control"] = not args.human_observed_occupancy_only
+                if not args.human_observed_occupancy_only:
+                    stationary_ready = stationary_ready and envelope_validation["passed"]
+            gate["passed"] = stationary_ready = bool(stationary_ready
+                and all(gate["human_component_checks"].values()))
+            gate["fixture_gate_scope"] = "fresh visually associated adult mass prior/current motion/contact proxy; potential and thermal priors; wheels still blocked until this gate passes"
+        elif human is not None:
+            gate["remote_human_scope"] = "human is outside the startup view; this route-start gate is not human perception acceptance; launcher requires separate current-source near-view component and stationary gates before motion"
+            if any(r['diagnostics'].get('human_body_envelope_priors') for r in records):
+                from robot.evaluation.human_body_envelope_validation import validate_human_body_envelopes
+                remote_envelopes = validate_human_body_envelopes(records, human.records,
+                    reference_radius_m=human.setup['collision_radius_m'])
+                gate['remote_view_emitted_envelope_audit'] = remote_envelopes
+                gate['passed'] = stationary_ready = bool(stationary_ready and remote_envelopes['passed'])
+        if args.restaurant_plume_diagnostic:
+            plume_validation = restaurant_plume_checks(records, fixtures, target_name=restaurant_target)
+            save_json("restaurant-plume-validation.json", plume_validation)
+            gate["restaurant_plume_checks"] = plume_validation["checks"]
+            gate["passed"] = stationary_ready = bool(stationary_ready and plume_validation["passed"])
+    elif args.fixture_layout == "three" or args.moving_actor or args.actor_shape == "upright_capsule":
+        object_summary = summarize_fixture_assessments(records, fixtures, maximum_distance_m=0.25)
+        gate["bounded_fixture_checks"] = (kinetic_actor_fixture_checks(object_summary)
+            if args.actor_shape == "upright_capsule" else bounded_fixture_checks(object_summary))
+        gate["fixture_gate_scope"] = ("kinetic-component gate with explicit potential prior; not complete four-factor perception or calibrated human estimation"
+            if args.actor_shape == "upright_capsule" else "sphere/support/plume fixture evidence gate")
+        gate["passed"] = stationary_ready = bool(stationary_ready and gate["bounded_fixture_checks"] and all(gate["bounded_fixture_checks"].values()))
+        save_json("stationary-object-validation.json", object_summary)
+    if args.stationary_furniture_memory:
+        memory_checks = {
+            "source_aligned_human_audits_pass": all(r["diagnostics"]["furniture_memory_human_audit"]["passed"] for r in records),
+            "repeated_surface_enrollment_exercised": any(r["diagnostics"]["stationary_furniture_memory"]["enrolled_track_ids"] for r in records),
+        }
+        gate["stationary_furniture_memory_checks"] = memory_checks
+        gate["passed"] = stationary_ready = bool(stationary_ready and all(memory_checks.values()))
+    if args.unknown_obstacle_planning:
+        from robot.evaluation.unknown_obstacle_validation import summarize_unknown_obstacles
+        unknown_stationary = summarize_unknown_obstacles(records)
+        gate["unknown_obstacle_validation"] = unknown_stationary
+        gate["passed"] = stationary_ready = bool(stationary_ready and unknown_stationary["passed"])
+    if args.predictive_human_geometry_ablation:
+        prediction = latest.field.predictive_human_geometry
+        gate['predictive_geometry_ready'] = bool(prediction is not None and prediction.ready and prediction.forecasts)
+        gate['passed'] = stationary_ready = bool(stationary_ready and gate['predictive_geometry_ready'])
+    if args.predictive_parallel_redesign:
+        from robot.evaluation.parallel_preparation_validation import validate_parallel_preparation
+        preparation_gate = validate_parallel_preparation(records)
+        gate['parallel_preparation_checks'] = preparation_gate['checks']
+        gate['passed'] = stationary_ready = bool(stationary_ready and preparation_gate['passed'])
+        save_json('stationary-parallel-preparation-validation.json', preparation_gate)
+    if args.human_mass_body_identity_retention:
+        from robot.evaluation.human_mass_retention_validation import validate_human_mass_identity_retention
+        mass_gate = validate_human_mass_identity_retention(records)
+        gate['human_mass_identity_retention_checks'] = mass_gate['checks']
+        applied_mass_gate = mass_gate
+        if args.long_service_parallel:
+            from robot.evaluation.restaurant_long_service_validation import distant_start_retention_audit
+            applied_mass_gate = distant_start_retention_audit(mass_gate)
+            gate['distant_start_mass_retention_scope'] = applied_mass_gate
+        gate['passed'] = stationary_ready = bool(stationary_ready and applied_mass_gate['passed'])
+        save_json('stationary-human-mass-identity-retention-validation.json', mass_gate)
+    if args.image_object_approach:
+        from robot.evaluation.image_object_runtime import current_target_group_memory_ready
+        group_memory = getattr(getattr(perception, "image_object_state", None), "property_memory", None)
+        fixture_center = next(f['center_world_xyz'] for f in fixtures if f['name'] == restaurant_target)
+        memory_ready = current_target_group_memory_ready(latest.objects, group_memory,
+            fixture_center, latest.field.sensor_timestamp_seconds) if latest is not None else False
+        gate["image_object_memory_checks"] = {"sixty_current_fields": len(records) >= 60,
+            "current_target_group_has_mass_and_contact_sources": memory_ready}
+        if args.static_prop_evidence:
+            static_memory = getattr(perception.image_object_state, 'static_properties', None)
+            target_keys = [o.attributes.track_id for o in latest.objects
+                          if o.diagnostics.get('accepted_instance')
+                          and o.diagnostics.get('image_object_association')
+                          and np.linalg.norm(np.asarray(o.diagnostics['instance_centroid_world_xyz'])-fixture_center) <= .20]
+            gate['image_object_memory_checks']['current_target_has_static_property_record'] = bool(
+                static_memory is not None and any(key in static_memory.records for key in target_keys))
+        gate["passed"] = stationary_ready = bool(stationary_ready and all(gate["image_object_memory_checks"].values()))
+    for label, observer in contact_observers.items():
+        name = f"parked-{label}-contact-observer.json" if args.observe_service_clearance else "parked-contact-observer.json"
+        save_json(name, observer.report())
+    save_json("stationary-gate.json", gate)
+    print(json.dumps({key: value for key, value in gate.items() if key != "last_objects"}, default=json_default), flush=True)
+    if not stationary_ready:
+        controller.stop()
+        raise RuntimeError("stationary restaurant component gate failed; wheels are blocked"
+                           if args.restaurant_scene else "stationary four-factor gate failed; wheels are blocked")
+    if args.persistent_object_risk_map:
+        perception.persistent_properties.freeze_properties()
+    if args.kinetic_diagnostic:
+        actor_start_time = float(timeline.get_current_time())
+        kinetic_records = []
+        while float(timeline.get_current_time()) - actor_start_time < 12.1:
+            now = step()
+            try:
+                packet = capture()
+                if packet is None:
+                    continue
+                latest = perception(packet)
+            except (ValueError, RuntimeError) as error:
+                rejections.append(str(error))
+                continue
+            elapsed = packet.sensor_timestamp_seconds - actor_start_time
+            if elapsed < 0:
+                continue
+            offset, speed, phase = actor_offset_velocity(elapsed)
+            record = field_record(latest, now, state())
+            record["actor_monitor"] = {
+                "elapsed_seconds": elapsed, "phase": phase,
+                "center_world_xy": [center_world[0], center_world[1] + offset],
+                "velocity_world_xy": [0, speed],
+                "scope": "authored kinematic motion truth for evaluation only; never perception or factor input",
+            }
+            kinetic_records.append(record)
+            if len(kinetic_records) % 20 == 0:
+                print(json.dumps({"kinetic_frames": len(kinetic_records), "elapsed": elapsed, "phase": phase}), flush=True)
+        report = summarize_kinetic_records(kinetic_records)
+        report.update(nonzero_wheel_commands=0, rejections=sorted(set(rejections)),
+                      occupancy_retention_seconds=perception.occupancy_retention_seconds,
+                      scene_unchanged=original_hash == hashlib.sha256(Path(stationary.ROBOT_SCENE_PATH).read_bytes()).hexdigest())
+        report["maximum_robot_translation_m"] = max(np.linalg.norm(record["state_at_commit"][:2]) for record in kinetic_records)
+        report["maximum_robot_yaw_radians"] = max(abs(record["state_at_commit"][2]) for record in kinetic_records)
+        report["checks"]["stationary_robot"] = bool(report["maximum_robot_translation_m"] < 0.02 and report["maximum_robot_yaw_radians"] < 0.03)
+        report["checks"]["scene_invariants"] = report["scene_unchanged"] and root_unchanged_by_fixture
+        report["maximum_retained_occupancy_age_seconds"] = max(
+            (record["sensor_timestamp"] - item["timestamp"]
+             for record in kinetic_records
+             for item in record["diagnostics"]["retained_occupancy_epochs"]), default=0.0)
+        report["checks"]["bounded_old_occupancy"] = report["maximum_retained_occupancy_age_seconds"] <= 0.15 + 1e-8
+        report["passed"] = all(report["checks"].values())
+        save_json("kinetic-fields.json", kinetic_records)
+        save_json("kinetic-gate.json", report)
+        cv2.imwrite(str(args.output / "kinetic-current.png"), packet.rgb[:, :, ::-1])
+        print(json.dumps(report), flush=True)
+        controller.stop()
+        timeline.stop()
+        if not report["passed"]:
+            raise RuntimeError("moving-object kinetic gate failed")
+        return
+    if args.evidence_gap_diagnostic:
+        # Real fresh RGB/LiDAR continue; explicitly suppress only the visual
+        # instance output. This is a fault-injection continuity diagnostic,
+        # not a claim that the camera naturally occluded the object.
+        original_set_image, original_propose = segmenter.set_image, segmenter.propose
+        gap_records, recovery_records = [], []
+        segmenter.set_image = lambda rgb: None
+        segmenter.propose = lambda *a, **kw: SamInstanceResult(
+            None, ("stationary diagnostic injected missing instance output",)
+        )
+        try:
+            for _ in range(200):
+                now = step()
+                try:
+                    packet = capture()
+                except (RuntimeError, ValueError):
+                    continue
+                if packet is None:
+                    continue
+                latest = perception(packet)
+                gap_records.append(field_record(latest, now))
+                if len(gap_records) == 1:
+                    cv2.imwrite(
+                        str(args.output / "gap-current.png"), packet.rgb[:, :, ::-1]
+                    )
+                if len(gap_records) >= 13:
+                    break
+        finally:
+            segmenter.set_image, segmenter.propose = (
+                original_set_image,
+                original_propose,
+            )
+        for _ in range(100):
+            now = step()
+            try:
+                packet = capture()
+            except (RuntimeError, ValueError):
+                continue
+            if packet is None:
+                continue
+            latest = perception(packet)
+            recovery_records.append(field_record(latest, now))
+            if len(recovery_records) >= 5:
+                break
+        retained_mass = sum(
+            r["diagnostics"]["temporal_object_evidence"]["mass"]["mode"] == "retained"
+            for r in gap_records
+        )
+        retained_contact = sum(
+            r["diagnostics"]["temporal_object_evidence"]["contact"]["mode"]
+            == "retained"
+            for r in gap_records
+        )
+        expired_contact = sum(
+            "contact" in r["diagnostics"]["unknown_factors"] for r in gap_records
+        )
+        recovered = latest.diagnostics["accepted_instance"] and latest.readiness.ready
+        unchanged = (
+            original_hash
+            == hashlib.sha256(
+                Path(stationary.ROBOT_SCENE_PATH).read_bytes()
+            ).hexdigest()
+        )
+        report = {
+            "passed": len(gap_records) == 13
+            and retained_mass > 0
+            and retained_contact > 0
+            and expired_contact > 0
+            and recovered
+            and unchanged
+            and root_unchanged_by_fixture,
+            "scope": "stationary fresh sensor data with explicitly injected missing SAM output; no natural occlusion or moving-view acceptance",
+            "nonzero_wheel_commands": 0,
+            "gap_frames": len(gap_records),
+            "retained_mass_frames": retained_mass,
+            "retained_contact_frames": retained_contact,
+            "contact_unavailable_after_expiry_frames": expired_contact,
+            "recovered_four_factor_readiness": bool(recovered),
+            "scene_unchanged": unchanged,
+            "retention_config": asdict(perception.evidence_memory.config),
+        }
+        save_json("evidence-gap-fields.json", gap_records)
+        save_json("evidence-recovery-fields.json", recovery_records)
+        save_json("evidence-gap-report.json", report)
+        print(json.dumps(report, default=json_default), flush=True)
+        controller.stop()
+        timeline.stop()
+        if not report["passed"]:
+            raise RuntimeError("stationary evidence continuity diagnostic failed")
+        return
+    if not args.motion:
+        controller.stop()
+        for observer in contact_observers.values():
+            observer.close()
+        timeline.stop()
+        return
+
+    save_json("numeric-runtime-contract.json", numeric_runtime_contract())
+
+    waypoint = WaypointController(
+        [Waypoint(*point) for point in ROUTE],
+        config=WaypointControllerConfig(
+            maximum_linear_velocity=0.2,
+            maximum_angular_velocity=0.6,
+            rotate_in_place_threshold_radians=math.radians(100),
+            minimum_alignment_scale=0.25,
+            intermediate_waypoints_as_guides=args.waypoint_mode == "guides",
+            route_guide_lookahead_m=args.route_guide_lookahead,
+            route_guide_max_cross_track_m=args.route_guide_max_cross_track,
+        ),
+        route_start=Waypoint(0., 0.),
+    )
+    footprint = RectangularRobotFootprint(
+        stationary.ROBOT_FRONT_EXTENT,
+        stationary.ROBOT_REAR_EXTENT,
+        stationary.ROBOT_LEFT_EXTENT,
+        stationary.ROBOT_RIGHT_EXTENT,
+        stationary.ROBOT_SAFETY_MARGIN,
+    )
+    buffer = SafeSAGELiveFieldBuffer()
+
+    def commit(result, now):
+        snapshot = SafeSAGELiveFieldSnapshot(
+            result.field.sensor_frame_id,
+            result.field.sensor_timestamp_seconds,
+            now,
+            result.field.build_wall_seconds,
+            result,
+        )
+        (buffer.commit if buffer.initialized else buffer.initialize)(snapshot)
+
+    commit(latest, float(timeline.get_current_time()))
+    coverage_guard = NearbyTrackLossGuard(NearbyTrackLossConfig(
+        allow_observed_fragment_merges=human is not None,
+        allow_positive_extent_merges=args.human_positive_fragment_extent,
+        allow_positive_surface_merges=args.human_positive_fragment_surface,
+        allow_unique_full_surface_merges=args.human_unique_full_surface,
+        allow_many_to_one_full_surface_merges=args.long_service_parallel,
+        allow_stationary_furniture_memory=args.stationary_furniture_memory,
+        allow_tracking_uncertainty=args.human_tracking_uncertainty,
+        allow_unknown_obstacle_planning=args.unknown_obstacle_planning,
+        maximum_visual_mask_boundary_pixels=args.human_fragment_mask_boundary_pixels,
+        allow_current_visual_part_associations=args.human_visual_fragment_association,
+        use_observed_merge_velocity=human is not None),
+        fragment_coverage_config=fragment_coverage_config) if args.moving_actor or human is not None else None
+    coverage_result = None
+    coverage_events = []
+    submitted_packet = None
+    latest_source_packet = packet
+
+    def coverage_geometry(result, source_packet):
+        if human is None:
+            return {}
+        if source_packet.sensor_frame_id != result.field.sensor_frame_id:
+            raise ValueError("coverage guard packet differs from completed source")
+        world = source_packet.obstacle_points_world_xy()
+        return {"current_points_world_xy": world,
+            "current_point_track_ids": result.field.tracking_result.point_track_ids,
+            "current_visual_part_associations": result.diagnostics.get("current_visual_body_part_associations", ()),
+            "current_points_source_time": source_packet.sensor_timestamp_seconds}
+
+    def coverage_archive_geometry(result, source_packet):
+        payload = sensor_archive_payloads.get(source_packet.sensor_frame_id)
+        return {**coverage_geometry(result, source_packet), **(payload or {}),
+            "raw_ray_archive_available": payload is not None,
+            "current_obstacle_xyz_in_packet_frame": source_packet.obstacle_xyz,
+            "packet_robot_position_world_xy": source_packet.robot_position_world_xy,
+            "packet_robot_yaw": source_packet.robot_yaw,
+            "packet_sensor_frame_id": source_packet.sensor_frame_id,
+            **({"packet_world_from_source_frame": source_packet.scan_pose_samples_world[0]}
+               if source_packet.scan_pose_samples_world is not None else {})}
+
+    def coverage_prior_inputs(result, source_packet):
+        if fragment_coverage_config is None and not args.stationary_furniture_memory and not args.human_tracking_uncertainty:
+            return {}
+        return {
+            "current_track_risks": {row["track_or_group_id"]: row["applied_field_risk"]
+                for row in result.diagnostics["applied_field_policies"]},
+            "current_body_envelopes": result.diagnostics["human_body_envelope_priors"],
+            "current_occupancy_grid": result.source_occupancy_grid,
+            "current_grid_anchor_xy": result.field.anchor_position_world_xy,
+            "current_grid_anchor_yaw": result.field.anchor_yaw,
+            "current_camera_timestamp_seconds": source_packet.camera_timestamp_seconds,
+            "current_furniture_snapshot": result.furniture_memory_snapshot,
+            "current_uncertainty_snapshot": result.tracking_uncertainty_snapshot,
+            "current_unknown_obstacle_snapshot": result.unknown_obstacle_snapshot,
+        }
+
+    if coverage_guard is not None:
+        coverage_result = coverage_guard.observe(latest.field.tracking_result.tracked_obstacles,
+            source_time=latest.field.sensor_timestamp_seconds, robot_world_xy=(anchor.x, anchor.y),
+            **coverage_geometry(latest, packet), **coverage_prior_inputs(latest, packet))
+    def infer_with_timing(packet):
+        started = time.perf_counter()
+        result = profile_call(staged_perception or perception, packet,
+            profile_path=args.output / "profiles" / f"perception-{packet.sensor_frame_id}.pstats"
+            if args.profile_runtime else None)
+        elapsed = time.perf_counter() - started
+        if elapsed > 3.0:
+            print(json.dumps({"slow_perception_compute": {
+                "source_frame_id": packet.sensor_frame_id,
+                "source_timestamp": packet.sensor_timestamp_seconds,
+                "wall_seconds": elapsed,
+                "stage_wall_seconds": result.diagnostics.get("stage_wall_seconds"),
+            }}), flush=True)
+        return result
+
+    def plan_with_timing(data):
+        started = time.perf_counter()
+        result = profile_call(control.plan,
+            data[0],
+            data[1],
+            data[2],
+            initial_command_guess=data[3],
+            **(data[5] if args.crate_delay_robust_bypass else {}),
+            **({'prediction_state_timestamp_seconds': data[5]} if args.predictive_human_geometry_ablation or args.observed_motion_reference else {}),
+            **({"nominal_goal_grid_xy": data[4]} if args.guidance_tracking_weight > 0 or args.checked_rear_pass_reference else {}),
+            profile_path=args.output / "profiles" / f"planner-{data[2].sensor_frame_id}.pstats"
+            if args.profile_runtime else None,
+        )
+        if args.save_planner_replay:
+            from robot.evaluation.planner_replay import save_planner_replay
+            save_planner_replay(args.output / "planner-replays", control, data, result,
+                source_window=args.planner_replay_source_window)
+        elif args.save_failed_planner_replay:
+            from robot.evaluation.planner_replay import save_first_failed_planner_replay
+            save_first_failed_planner_replay(args.output / 'planner-replays', control, data, result)
+        elapsed = time.perf_counter() - started
+        if elapsed > 3.0:
+            print(json.dumps({"slow_planner_compute": {
+                "field_frame_id": data[2].sensor_frame_id,
+                "wall_seconds": elapsed,
+                "status": result.status,
+                "sqp_iteration_count": result.sqp_iteration_count,
+                "solver_iteration_count": result.solver_iteration_count,
+            }}), flush=True)
+        return result
+
+    inference = LiveInferenceRunner(infer_with_timing)
+    planner = LiveInferenceRunner(
+        plan_with_timing,
+        maximum_result_age_seconds=args.planner_result_max_age,
+    )
+    start_sim = float(timeline.get_current_time())
+    for observer in contact_observers.values():
+        observer.set_phase("navigation")
+    previous_executed_command = np.zeros(2)
+    navigation_active = True
+    if human is not None:
+        human.navigation_start_time = start_sim
+    if args.moving_actor:
+        actor_start_time = start_sim
+    start_wall = time.perf_counter()
+    plan_id = 0
+    plan_waypoints = {}
+    waypoint_events = []
+    next_plan_due = float(timeline.get_current_time())
+    active_plan = None
+    active_plan_lease = None
+    warm = None
+    command = np.zeros(2)
+    trajectory, commands, stops, live_fields, plan_events = [], [], [], [], []
+    recorded_crate_poses = []
+    minimum_clearance = math.inf
+    minimum_cbf_margin = math.inf
+    arrived = False
+    reason = "duration_limit"
+    consecutive_failures = 0
+    def independent_clearance(current, *, recorded_world_pose=None, recorded_human_xy=None):
+        clearances = []
+        if human is not None:
+            if recorded_world_pose is not None and recorded_human_xy is None:
+                raise ValueError('historical clearance requires the actor position at the same time')
+            human_xy = human.position()[:2] if recorded_human_xy is None else recorded_human_xy
+            xy = np.asarray(human_xy) - [anchor.x, anchor.y]
+            c, s = math.cos(anchor.yaw), math.sin(anchor.yaw)
+            local = (c * xy[0] + s * xy[1], -s * xy[0] + c * xy[1])
+            clearances.append(disk_footprint_clearance(current, center_xy=local,
+                radius_m=human.setup["collision_radius_m"], footprint=footprint))
+            if human.carry is not None and human.carry.records:
+                bowl = human.carry.records[-1]
+                xy = np.array(bowl["bowl_center_xyz"][:2]) - [anchor.x, anchor.y]
+                local = (c*xy[0]+s*xy[1], -s*xy[0]+c*xy[1])
+                clearances.append(disk_footprint_clearance(current, center_xy=local,
+                    radius_m=float(np.linalg.norm(bowl["world_half_extents"][:2])), footprint=footprint))
+        for fixture in fixtures:
+            xy = np.array(fixture["center_world_xy"])
+            if args.moving_actor and fixture["name"] == "ground":
+                xy[1] += actor_offset_velocity(max(0, float(timeline.get_current_time()) - actor_start_time))[0]
+            delta = xy - [anchor.x, anchor.y]
+            c, s = math.cos(anchor.yaw), math.sin(anchor.yaw)
+            local = np.array([c * delta[0] + s * delta[1], -s * delta[0] + c * delta[1]])
+            clearances.append(disk_footprint_clearance(current, center_xy=local,
+                radius_m=fixture["monitor_radius_m"], footprint=footprint))
+        clearance = min(clearances)
+        if layout_monitor is not None:
+            if recorded_world_pose is None:
+                pose = stationary.read_robot_pose(stage)
+                recorded_world_pose = (pose.x, pose.y, pose.yaw)
+            clearance = min(clearance, authored_raster_clearance(
+                layout_monitor[0], recorded_world_pose, footprint, layout_monitor[1]))
+        return clearance
+
+    best_goal_distance = math.inf
+    last_goal_progress = start_sim
+    try:
+        while float(timeline.get_current_time()) - start_sim < args.maximum_seconds:
+            now = float(timeline.get_current_time())
+            current = state()
+            goal_distance = float(np.linalg.norm(np.asarray(GOAL) - current[:2]))
+            if goal_distance < best_goal_distance - 0.025:
+                best_goal_distance, last_goal_progress = goal_distance, now
+            elif args.progress_timeout_seconds and now - last_goal_progress > args.progress_timeout_seconds:
+                reason = "progress_timeout"
+                break
+            if args.observe_crate_clearance or args.observe_service_clearance:
+                recorded_crate_poses.append((now - start_sim, current.tolist()))
+            else:
+                clearance = independent_clearance(current)
+                minimum_clearance = min(minimum_clearance, clearance)
+                if clearance <= 0.02:
+                    reason = "clearance_guard"
+                    break
+            nominal = waypoint.compute_command(RobotPose2D(*current))
+            if nominal.route_complete:
+                arrived, reason = True, "goal_reached"
+                break
+            active_waypoint_local = (nominal.target_waypoint.x, nominal.target_waypoint.y)
+            active_waypoint_index = nominal.target_waypoint_index
+            if nominal.waypoint_advanced:
+                waypoint_events.append({"time": now-start_sim,
+                    "next_waypoint_index": nominal.target_waypoint_index, "state": current.tolist()})
+                active_plan, active_plan_lease, warm = None, None, None
+                next_plan_due = now
+            outcome = inference.poll(current_sensor_time_seconds=now)
+            if outcome is not None:
+                if outcome.value is not None:
+                    if staged_perception is not None and outcome.value.field.crossing_yield_track_ids:
+                        from robot.evaluation.live_checked_wait import check_wait
+                        admission = check_wait(perception.checked_wait_control, current, outcome.value.field)
+                        admission.update(current_simulation_time=now, state_grid=current.tolist(),
+                            source_age_seconds=now-outcome.value.field.sensor_timestamp_seconds)
+                        checked_wait_admissions.append(admission)
+                        outcome.value.diagnostics["checked_wait_current_pose_admission"] = admission
+                        if not admission["accepted"]:
+                            staged_perception.discard()
+                            rejections.append("checked wait rejected at current pose; field unpublished")
+                            controller.stop()
+                            active_plan, active_plan_lease, warm = None, None, None
+                            reason = "checked_wait_current_pose_rejected"
+                            break
+                    if coverage_guard is not None:
+                        if args.save_sensor_snapshots and human is not None:
+                            old_tracks = latest.field.tracking_result.tracked_obstacles
+                            new_tracks = outcome.value.field.tracking_result.tracked_obstacles
+                            lost_ids = (set(t.track_id for t in old_tracks)
+                                & set(coverage_guard.observed)
+                                - set(t.track_id for t in new_tracks))
+                            if lost_ids:
+                                stem = f"track-loss-{latest.field.sensor_frame_id}-{outcome.value.field.sensor_frame_id}"
+                                for label, value, source in (
+                                    ("previous", latest, latest_source_packet),
+                                    ("current", outcome.value, submitted_packet)):
+                                    np.savez_compressed(args.output / f"{stem}-{label}.npz",
+                                        **coverage_archive_geometry(value, source))
+                                    cv2.imwrite(str(args.output / f"{stem}-{label}.png"),
+                                        source.rgb[:, :, ::-1])
+                                save_json(f"{stem}.json", {
+                                    "lost_track_ids": sorted(lost_ids),
+                                    "original_source_time": latest.field.sensor_timestamp_seconds,
+                                    "current_source_time": outcome.value.field.sensor_timestamp_seconds,
+                                    "original_tracks": [asdict(t) for t in old_tracks],
+                                    "current_tracks": [asdict(t) for t in new_tracks],
+                                    "original_field_policies": latest.diagnostics["applied_field_policies"],
+                                    "current_field_policies": outcome.value.diagnostics["applied_field_policies"],
+                                    "scope": "diagnostic source copies before guard decision; current field not yet published; no inferred free space or control change"})
+                        c, s = math.cos(anchor.yaw), math.sin(anchor.yaw)
+                        coverage_result = coverage_guard.observe(outcome.value.field.tracking_result.tracked_obstacles,
+                            source_time=outcome.value.field.sensor_timestamp_seconds,
+                            robot_world_xy=(anchor.x+c*current[0]-s*current[1], anchor.y+s*current[0]+c*current[1]),
+                            **coverage_geometry(outcome.value, submitted_packet), **coverage_prior_inputs(outcome.value, submitted_packet))
+                        if (coverage_result["observed_fragment_merges"] or coverage_result["blocked"]
+                            or coverage_result["prior_covered_missing_tracks"]
+                            or coverage_result["furniture_prior_covered_missing_tracks"]
+                            or coverage_result["furniture_observed_covered_missing_tracks"]
+                            or coverage_result["uncertainty_geometry_covered_missing_tracks"]
+                            or coverage_result["unknown_obstacle_covered_missing_tracks"]
+                            or coverage_result.get("positive_surface_merge_rejections")):
+                            if any(e.get("coexistence_basis") in {"retained_original_coobservation", "recent_original_coobservation_positive_extent"}
+                                   or e.get("coexistence_basis") == "recent_original_coobservation_positive_surface"
+                                   for e in coverage_result["observed_fragment_merges"]):
+                                audit_name = f"coverage-merge-{outcome.value.field.sensor_frame_id}.npz"
+                                np.savez_compressed(args.output / audit_name,
+                                    **coverage_archive_geometry(outcome.value, submitted_packet))
+                                coverage_result["current_positive_geometry_audit_file"] = audit_name
+                            coverage_events.append(coverage_result)
+                        if coverage_result["blocked"]:
+                            reason = "unknown_obstacle_field_coverage_failure" if args.unknown_obstacle_planning else "nearby_track_lost"
+                            controller.stop()
+                            save_json("unpublished-coverage-stop-field.json", field_record(outcome.value, now, current))
+                            if human is not None:
+                                np.savez_compressed(args.output / "unpublished-coverage-source.npz",
+                                    **coverage_archive_geometry(outcome.value, submitted_packet))
+                                np.savez_compressed(args.output / "previous-coverage-source.npz",
+                                    **coverage_archive_geometry(latest, latest_source_packet))
+                            print(json.dumps({"coverage_stop": coverage_result, "sim_seconds": now-start_sim}), flush=True)
+                            break
+                    consecutive_failures = 0
+                    commit(outcome.value, now)
+                    if staged_perception is not None:
+                        staged_perception.accept(outcome.value)
+                    latest = outcome.value
+                    latest_source_packet = submitted_packet
+                    if ACTIVE_SERVICE_VIDEO is not None:
+                        ACTIVE_SERVICE_VIDEO.accept_risk_assessment(latest)
+                    if args.stationary_furniture_memory:
+                        from robot.evaluation.furniture_memory_validation import audit_snapshot
+                        latest.diagnostics["furniture_memory_human_audit"] = audit_snapshot(latest.furniture_memory_snapshot, human.records)
+                    if args.unknown_obstacle_planning:
+                        from robot.evaluation.unknown_obstacle_validation import audit_static_human_exclusion
+                        latest.diagnostics["unknown_obstacle_static_human_audit"] = audit_static_human_exclusion(latest.unknown_obstacle_snapshot, human.records)
+                        latest.diagnostics["unknown_obstacle_geometry_archive"] = unknown_geometry_archive.save(latest.unknown_obstacle_snapshot)
+                    live_fields.append(field_record(latest, now, current))
+                    if args.moving_actor:
+                        elapsed = latest.field.sensor_timestamp_seconds - actor_start_time
+                        offset, speed, phase = actor_offset_velocity(max(0, elapsed))
+                        live_fields[-1]["actor_monitor"] = {"elapsed_seconds": elapsed, "phase": phase,
+                            "center_world_xy": [center_world[0], center_world[1] + offset],
+                            "velocity_world_xy": [0, speed], "scope": "independent authored monitor only"}
+                    if args.stream_live_records:
+                        with (args.output / "live-fields.jsonl").open("a", encoding="utf-8") as stream:
+                            stream.write(json.dumps(live_fields[-1], default=json_default, allow_nan=False, separators=(",", ":")) + "\n")
+                    if len(live_fields) <= 12 or len(live_fields) % 20 == 0:
+                        save_instance_snapshot(latest)
+                    if len(live_fields) == 1 or len(live_fields) % 20 == 0:
+                        save_json("live-fields.json", live_fields[-5:] if args.stream_live_records else live_fields)
+                        save_json("commands.json", commands)
+                        if packet is not None and packet.camera_frame_id == latest.detections.source_frame_id:
+                            cv2.imwrite(
+                                str(args.output / "live-current.png"),
+                                packet.rgb[:, :, ::-1],
+                            )
+                    if len(live_fields) % 20 == 0:
+                        print(
+                            json.dumps(
+                                {
+                                    "live_fields": len(live_fields),
+                                    "sim_seconds": now - start_sim,
+                                    "state": current.tolist(),
+                                    "phi": latest.policy.risk,
+                                    "phi_scope": "first geometric track only",
+                                    "all_object_phi_range": [min(item.policy.risk for item in latest.objects), max(item.policy.risk for item in latest.objects)] if latest.objects else None,
+                                    "unknown": latest.diagnostics.get(
+                                        "unknown_factors"
+                                    ),
+                                    "objects": len(latest.objects),
+                                    "stage_wall_seconds": latest.diagnostics.get("stage_wall_seconds"),
+                                }
+                            ),
+                            flush=True,
+                        )
+                else:
+                    if staged_perception is not None:
+                        staged_perception.discard()
+                    rejections.append(outcome.rejection_reason)
+                    consecutive_failures += 1
+                    print(
+                        json.dumps(
+                            {
+                                "inference_rejected": outcome.rejection_reason,
+                                "sim_seconds": now - start_sim,
+                                "source_age_seconds": now - outcome.sensor_timestamp_seconds,
+                                "job_to_poll_wall_seconds": outcome.wall_seconds,
+                            }
+                        ),
+                        flush=True,
+                    )
+                    if consecutive_failures >= 5:
+                        reason = "repeated_inference_failure"
+                        break
+            if not inference.busy:
+                try:
+                    packet = capture()
+                    if packet is not None:
+                        inference.submit(
+                            frame_id=packet.sensor_frame_id,
+                            sensor_timestamp_seconds=packet.sensor_timestamp_seconds,
+                            packet=packet,
+                        )
+                        submitted_packet = packet
+                except (RuntimeError, ValueError) as error:
+                    rejections.append(str(error))
+            plan_outcome = planner.poll(current_sensor_time_seconds=now)
+            if plan_outcome is not None:
+                result = plan_outcome.value
+                accepted = (
+                    result is not None
+                    and plan_waypoints.get(plan_outcome.frame_id) == waypoint.current_waypoint_index
+                    and result.success
+                    and not result.fallback_active
+                    and result.minimum_dtcbf_margin >= -mpc.config.constraint_tolerance
+                    and result.minimum_predicted_safety_value
+                    >= -mpc.config.constraint_tolerance
+                )
+                plan_events.append(
+                    {
+                        "time": now - start_sim,
+                        "accepted": bool(accepted),
+                        "request_waypoint_index": plan_waypoints.pop(plan_outcome.frame_id, None),
+                        "wall_seconds": plan_outcome.wall_seconds,
+                        "reason": plan_outcome.rejection_reason
+                        if result is None
+                        else result.status,
+                        "source_age_seconds": now
+                        - plan_outcome.sensor_timestamp_seconds,
+                        **planner_result_diagnostic(result),
+                    }
+                )
+                if accepted:
+                    active_plan = result
+                    active_plan_lease = SafeSAGEPlanExecutionLease(
+                        plan_outcome.sensor_timestamp_seconds,
+                        maximum_candidate_age_seconds=args.planner_result_max_age,
+                        execution_interval_seconds=mpc.config.time_step,
+                        revalidation_interval_seconds=0.75 * mpc.config.time_step,
+                    )
+                    # Always revalidate delayed results at receipt, including
+                    # state drift and any field changes during the solve.
+                    warm = control.shifted_warm_start(result)
+                else:
+                    active_plan = None
+                    active_plan_lease = None
+                    if args.immediate_replan:
+                        next_plan_due = now
+            status = buffer.inspect(current_simulation_time_seconds=now)
+            fresh = not status.fail_closed
+            if fresh and args.experiment_baseline != "geometric_velocity_cbf" and not planner.busy and now >= next_plan_due:
+                reuse = buffer.reuse(current_simulation_time_seconds=now)
+                fresh = not reuse.fail_closed
+                next_plan_due = now + 0.75 * mpc.config.time_step
+            else:
+                reuse = None
+            if fresh and reuse is not None:
+                horizon = waypoint.predict_commands(
+                    RobotPose2D(*current),
+                    horizon_steps=mpc.nominal_horizon_steps if args.crate_delay_robust_bypass else mpc.config.horizon_steps,
+                    time_step=mpc.config.time_step,
+                )
+                sequence = np.array(
+                    [[item.linear_velocity, item.angular_velocity] for item in horizon]
+                )
+                planner.submit(
+                    frame_id=plan_id,
+                    sensor_timestamp_seconds=now,
+                    packet=(current.copy(), sequence, latest.field, warm,
+                        np.array([nominal.target_waypoint.x, nominal.target_waypoint.y], dtype=float)
+                        if args.checked_rear_pass_reference or args.guidance_tracking_weight > 0 else None,
+                        now) if args.predictive_human_geometry_ablation or args.observed_motion_reference else
+                        (current.copy(), sequence, latest.field, warm,
+                        np.array([nominal.target_waypoint.x, nominal.target_waypoint.y], dtype=float),
+                        dict(planning_applied_command=tuple(map(float,previous_executed_command)))) if args.crate_delay_robust_bypass else
+                        (current.copy(), sequence, latest.field, warm,
+                        np.array([nominal.target_waypoint.x, nominal.target_waypoint.y], dtype=float)
+                        if args.checked_rear_pass_reference or args.guidance_tracking_weight > 0 else None),
+                )
+                plan_waypoints[plan_id] = waypoint.current_waypoint_index
+                plan_id += 1
+            stop_reason = None
+            command = np.zeros(2)
+            geometric_diagnostic = None
+            if args.experiment_baseline == "geometric_velocity_cbf":
+                from robot.evaluation.restaurant_baselines import geometric_cbf_command
+                if fresh:
+                    command, geometric_diagnostic = geometric_cbf_command(
+                        latest.field, latest.source_occupancy_grid, current,
+                        (nominal.linear_velocity, nominal.angular_velocity), footprint, now,
+                        alpha=stationary.CBF_GAMMA,
+                    )
+                    stop_reason = geometric_diagnostic["stop_reason"]
+                    if geometric_diagnostic["cbf_margin"] is not None and stop_reason is None:
+                        minimum_cbf_margin = min(minimum_cbf_margin, geometric_diagnostic["cbf_margin"])
+                else:
+                    stop_reason = "stale_field"
+            elif not fresh:
+                stop_reason = "stale_field"
+            elif active_plan is None or not active_plan_lease.candidate_available(now):
+                stop_reason = "waiting_for_fresh_valid_plan"
+            else:
+                # Re-evaluate the complete remaining horizon from the actual
+                # state against each newly accepted field, with identical exact
+                # DTCBF and dense geometry gates. This performs no new solve.
+                if active_plan_lease.needs_validation(now, buffer.generation):
+                    valid = (not args.predictive_human_geometry_ablation or latest.field.predictive_human_geometry is not None) and mpc.revalidate_commands(
+                        current,
+                        active_plan.command_sequence,
+                        configuration_space=latest.field.pipeline.configuration_space,
+                        h_full=latest.field.pipeline.h_full,
+                        guidance_fields=latest.field.pipeline.guidance_fields,
+                        temporal_safety_derivative=latest.field.temporal_safety_derivative,
+                        **({'predictive_geometry': latest.field.predictive_human_geometry,
+                            'predictive_source_age_seconds': now-latest.field.sensor_timestamp_seconds}
+                            if args.predictive_human_geometry_ablation else {}),
+                    )
+                    active_plan_lease.record_validation(
+                        now, buffer.generation, accepted=valid
+                    )
+                    if not valid:
+                        active_plan = None
+                        stop_reason = "new_field_invalidated_plan"
+                        if args.immediate_replan and not planner.busy:
+                            next_plan_due = now
+                if active_plan is not None and active_plan_lease.can_execute(
+                    now, buffer.generation, field_fresh=fresh
+                ):
+                    filtered = control.filter_command(
+                        (active_plan.linear_velocity, active_plan.angular_velocity),
+                        current,
+                        latest.field,
+                    )
+                    if (
+                        filtered.constraint_feasible
+                        and filtered.constraint_satisfied
+                        and not filtered.emergency_stop_active
+                        and math.isfinite(filtered.cbf_margin)
+                    ):
+                        command = np.array(
+                            [
+                                filtered.safe_linear_velocity,
+                                filtered.safe_angular_velocity,
+                            ]
+                        )
+                        minimum_cbf_margin = min(
+                            minimum_cbf_margin, filtered.cbf_margin
+                        )
+                    else:
+                        stop_reason = "cbf_fail_closed"
+                        active_plan = None
+                elif active_plan is not None:
+                    stop_reason = "unverified_command_lease"
+            if stop_reason:
+                stops.append({"time": now - start_sim, "reason": stop_reason})
+            trajectory.append(current.tolist())
+            commands.append(
+                {
+                    "time": now - start_sim,
+                    "v": float(command[0]),
+                    "omega": float(command[1]),
+                    "field_age": status.field_age_seconds,
+                    "generation": buffer.generation,
+                    "target_waypoint_index": waypoint.current_waypoint_index,
+                    "stop_reason": stop_reason,
+                    "nominal_v": nominal.linear_velocity,
+                    "nominal_omega": nominal.angular_velocity,
+                    "experiment_baseline": args.experiment_baseline,
+                    "geometric_cbf": geometric_diagnostic,
+                    "optimizer_candidate_source_age": None
+                    if active_plan_lease is None
+                    else now - active_plan_lease.source_timestamp_seconds,
+                    "horizon_validation_age": None
+                    if active_plan_lease is None
+                    or active_plan_lease.validated_timestamp_seconds is None
+                    else now - active_plan_lease.validated_timestamp_seconds,
+                }
+            )
+            step(command, paced=True)
+            previous_executed_command = command.copy()
+    finally:
+        for observer in contact_observers.values():
+            observer.set_phase("braking")
+        controller.stop()
+        if human is not None and not arrived:
+            human.abort()
+        inference.close()
+        planner.close()
+    braking_start = float(timeline.get_current_time()) - start_sim
+    stopping_sweep = sample_stopping_sweep(state_reader=state, step=step,
+        clearance_reader=independent_clearance, frame_count=60)
+    save_json("stopping-sweep.json", stopping_sweep)
+    final_state = np.array(stopping_sweep["final_state"])
+    stop_drift = stopping_sweep["translation_drift_m"]
+    clearance_observation = None
+    if args.observe_crate_clearance or args.observe_service_clearance:
+        # The last physics step can end at the time limit without another command tick.
+        if not recorded_crate_poses or recorded_crate_poses[-1][0] < braking_start:
+            recorded_crate_poses.append((braking_start, stopping_sweep['initial_state']))
+        anchor_xy_yaw = (anchor.x, anchor.y, anchor.yaw)
+        actor_centers = (recorded_actor_centers(human.records, (start_sim+t for t, _ in recorded_crate_poses))
+                         if args.observe_service_clearance else {})
+        samples = []
+        for t, pose in recorded_crate_poses:
+            actor_xy = actor_centers.get(start_sim+t)
+            sample = dict(phase='navigation', time_seconds=t, local_state=pose,
+                clearance_m=independent_clearance(pose, recorded_world_pose=world_pose_from_local(pose, anchor_xy_yaw),
+                                                  recorded_human_xy=actor_xy))
+            if actor_xy is not None:
+                sample['human_world_xy'] = actor_xy
+            samples.append(sample)
+        minimum_clearance = min(row['clearance_m'] for row in samples)
+        # Braking frame zero is the navigation endpoint already included above.
+        samples.extend(dict(phase='braking', time_seconds=braking_start + row['frame'] * stationary.PHYSICS_DT,
+            local_state=row['state'], clearance_m=row['clearance_m']) for row in stopping_sweep['records'][1:])
+        clearance_observation = summarize_clearance_samples(samples)
+        save_json('independent-clearance-observation.json', dict(clearance_observation, records=samples))
+    minimum_clearance_before_stop = minimum_clearance
+    minimum_clearance = min(minimum_clearance, stopping_sweep["minimum_clearance_m"])
+    post_goal_observation = None
+    if arrived and args.post_goal_observation_seconds:
+        from robot.evaluation.post_goal_observation import summarize_post_goal_observation
+        navigation_active = False
+        observation_start = float(timeline.get_current_time())
+        observation = sample_stopping_sweep(state_reader=state, step=step,
+            clearance_reader=independent_clearance,
+            frame_count=math.ceil(args.post_goal_observation_seconds / stationary.PHYSICS_DT))
+        post_goal_observation = summarize_post_goal_observation(stopping_sweep, observation,
+            goal_xy=GOAL, goal_tolerance=waypoint.config.position_tolerance)
+        post_goal_observation.update(source_start_seconds=observation_start,
+            source_end_seconds=float(timeline.get_current_time()),
+            original_braking_report='stopping-sweep.json', observation=observation)
+        save_json('post-goal-observation.json', post_goal_observation)
+        final_state = np.array(post_goal_observation['final_state'])
+        stop_drift = post_goal_observation['translation_drift_m']
+        minimum_clearance = min(minimum_clearance, post_goal_observation['minimum_clearance_m'])
+    if human is not None and human.carry is not None:
+        minimum_clearance = min(minimum_clearance, min(
+            r["independent_robot_clearance_m"] for r in human.records
+            if "independent_robot_clearance_m" in r))
+    moving_field_count = sum(
+        np.linalg.norm(
+            np.asarray(live_fields[i]["state_at_commit"][:2])
+            - np.asarray(live_fields[i - 1]["state_at_commit"][:2])
+        )
+        > 0.001
+        for i in range(1, len(live_fields))
+    )
+    completed = (
+        arrived
+        and (args.observe_crate_clearance or args.observe_service_clearance or minimum_clearance > 0.02)
+        and stop_drift < 0.05
+        and len(live_fields) >= 10
+        and moving_field_count >= 10
+    )
+    completed = completed and (post_goal_observation is None or post_goal_observation['passed'])
+    robot_completion_before_human_audits = completed
+    service_crate_short_validation = None
+    human_validation = None
+    passing_validation = None
+    person_relative_validation = None
+    strategy_validation = None
+    encounter_validation = None
+    if args.encounter_guidance_ablation:
+        from robot.evaluation.encounter_policy_validation import summarize_encounter_policy
+        encounter_validation = summarize_encounter_policy(live_fields,
+            require_transition=args.human_continuing_away, checked_wait=args.checked_wait_transition,
+            checked_rear=args.checked_rear_pass_reference)
+        completed = completed and encounter_validation['passed']
+        save_json('encounter-guidance-validation.json', encounter_validation)
+    if human is not None:
+        from robot.evaluation.human_navigation_validation import summarize_human_navigation
+        if args.straight_service_walk:
+            from robot.scene.restaurant_straight_walk import audit_straight_walk
+            straight_validation = audit_straight_walk(human.records)
+            save_json('straight-walk-validation.json', straight_validation)
+            completed = completed and straight_validation['passed']
+        if human.background_walk is not None:
+            from robot.scene.restaurant_background_walk import audit_background_walk
+            background_validation = audit_background_walk(human.records, human.background_walk.events,
+                upper_departure=args.background_upper_departure)
+            save_json('background-walk-validation.json', background_validation)
+            completed = completed and background_validation['passed']
+        human_validation = summarize_human_navigation(live_fields, human.records,
+            mode=args.restaurant_human, upper_continuation=args.human_upper_continuation,
+            crossing_direction=args.human_crossing_direction, continuing_away=args.human_continuing_away,
+            crossing_y_m=args.human_crossing_line_y, crossing_layout=args.human_crossing_layout,
+            straight_service_walk=args.straight_service_walk)
+        if args.crossing_strategy == "yield-then-go" and not args.checked_rear_pass_reference:
+            # Waiting deliberately need not include simultaneous translation.
+            # Keep the original motion benchmark and its result untouched.
+            wait_checks = {key: value for key, value in human_validation["checks"].items()
+                if key != "simultaneous_motion_observed"}
+            human_validation["wait_then_go_acceptance"] = dict(checks=wait_checks,
+                passed=all(wait_checks.values()),
+                scope="separate yield strategy; observed human velocity still required; simultaneous robot translation is not claimed")
+            completed = completed and all(wait_checks.values())
+        else:
+            completed = completed and human_validation["passed"]
+        if args.human_body_envelope_radius is not None:
+            from robot.evaluation.human_body_envelope_validation import validate_human_body_envelopes
+            envelope_validation = validate_human_body_envelopes(live_fields, human.records,
+                reference_radius_m=human.setup["collision_radius_m"])
+            human_validation["human_envelope_checks"] = envelope_validation["checks"]
+            human_validation["human_envelope_used_for_control"] = not args.human_observed_occupancy_only
+            envelope_validation["used_for_control"] = not args.human_observed_occupancy_only
+            envelope_validation["scope"] = ("shadow audit of an unused circular prior; independent human clearance remains required"
+                if args.human_observed_occupancy_only else "active body-prior containment acceptance")
+            save_json("live-human-envelope-validation.json", envelope_validation)
+            if not args.human_observed_occupancy_only:
+                completed = completed and envelope_validation["passed"]
+        if args.human_tracking_uncertainty:
+            from robot.evaluation.human_body_envelope_validation import validate_tracking_uncertainty
+            uncertainty_validation = validate_tracking_uncertainty(live_fields, human.records,
+                reference_radius_m=human.setup['collision_radius_m'])
+            completed = completed and uncertainty_validation['passed']
+            human_validation['tracking_uncertainty_validation'] = uncertainty_validation
+            save_json('tracking-uncertainty-validation.json', uncertainty_validation)
+        save_json("human-navigation-validation.json", human_validation)
+        if human.departure is not None:
+            save_json("human-departure-events.json", human.departure.events)
+        save_json("human-truth-evaluation-only.json", human.records)
+        if args.predictive_human_geometry_ablation:
+            from robot.evaluation.predictive_human_geometry_validation import validate_predictive_human_geometry
+            prediction_validation = validate_predictive_human_geometry(live_fields, human.records,
+                reference_radius_m=human.setup['collision_radius_m'])
+            human_validation['predictive_geometry'] = prediction_validation
+            completed = completed and prediction_validation['passed']
+            save_json('live-predictive-human-geometry-validation.json', prediction_validation)
+        if args.observed_motion_reference:
+            from robot.evaluation.observed_motion_reference_validation import validate_observed_motion_reference
+            advisory_validation = validate_observed_motion_reference(live_fields)
+            human_validation['observed_motion_reference'] = advisory_validation
+            completed = completed and advisory_validation['passed']
+            save_json('live-observed-motion-reference-validation.json', advisory_validation)
+        if args.predictive_parallel_redesign:
+            from robot.evaluation.parallel_preparation_validation import validate_parallel_preparation
+            preparation_validation = validate_parallel_preparation(records+live_fields)
+            human_validation['parallel_preparation'] = preparation_validation
+            completed = completed and preparation_validation['passed']
+            save_json('live-parallel-preparation-validation.json', preparation_validation)
+        if args.human_mass_body_identity_retention:
+            from robot.evaluation.human_mass_retention_validation import validate_human_mass_identity_retention
+            mass_validation = validate_human_mass_identity_retention(records+live_fields)
+            human_validation['mass_body_identity_retention'] = mass_validation
+            completed = completed and mass_validation['passed']
+            save_json('live-human-mass-identity-retention-validation.json', mass_validation)
+        if args.restaurant_human == 'parallel':
+            from robot.evaluation.parallel_walking_validation import (
+                anchored_nominal_route_world, validate_parallel_curve)
+            parallel_route = anchored_nominal_route_world((anchor.x, anchor.y, anchor.yaw), ROUTE)
+            parallel_goal = parallel_route[-1]
+            parallel_validation = validate_parallel_curve(live_fields, human.records, goal_world_xy=parallel_goal,
+                nominal_route_world_xy=parallel_route if args.long_service_parallel else None,
+                straight_service_walk=args.straight_service_walk)
+            human_validation['parallel_curve'] = parallel_validation
+            completed = completed and parallel_validation['passed']
+            save_json('parallel-walking-validation.json', parallel_validation)
+            if args.parallel_guidance_ablation:
+                from robot.evaluation.parallel_walking_validation import validate_parallel_selection
+                selection_validation = validate_parallel_selection(live_fields,
+                    maximum_identity_prior_selection_age_seconds=args.human_passing_identity_prior_max_age)
+                human_validation['parallel_selection'] = selection_validation
+                completed = completed and selection_validation['passed']
+                save_json('parallel-selection-validation.json', selection_validation)
+        if args.motion_aware_passing and args.restaurant_human != 'parallel':
+            from robot.evaluation.motion_passing_validation import summarize_motion_passing
+            passing_goal = (anchor.x + math.cos(anchor.yaw)*ROUTE[-1][0] - math.sin(anchor.yaw)*ROUTE[-1][1],
+                            anchor.y + math.sin(anchor.yaw)*ROUTE[-1][0] + math.cos(anchor.yaw)*ROUTE[-1][1])
+            passing_validation = summarize_motion_passing(live_fields, human.records, moving_robot=True,
+                nominal_goal_world_xy=passing_goal, expected_lambda=0. if args.zero_tangential_bias_ablation else 1.25,
+                continuing_away=args.human_continuing_away)
+            if args.encounter_guidance_ablation:
+                # Keep all legacy identity/flux/route/arc scoring; only the
+                # declared per-row lambda expectation differs for this variant.
+                passing_validation = summarize_motion_passing(live_fields, human.records, moving_robot=True,
+                    nominal_goal_world_xy=passing_goal, continuing_away=args.human_continuing_away,
+                    encounter_guidance=True)
+            if args.crossing_strategy == "legacy":
+                if not args.encounter_comparison:
+                    completed = completed and passing_validation["passed"]
+            else:
+                from robot.evaluation.crossing_strategy import summarize_crossing_strategy
+                strategy_validation = summarize_crossing_strategy(passing_validation, human.records,
+                    strategy="rear-pass-or-yield" if args.checked_rear_pass_reference else args.crossing_strategy,
+                    nominal_goal_world_xy=passing_goal,
+                    continuing_away=args.human_continuing_away)
+                if args.checked_rear_pass_reference:
+                    from robot.evaluation.live_rear_pass import summarize_rear_execution
+                    execution = summarize_rear_execution(plan_events, commands, human.records,
+                        navigation_start_time=start_sim)
+                    strategy_validation["rear_reference_execution"] = execution
+                    strategy_validation["passed"] &= execution["passed"]
+                if args.crossing_strategy == "yield-then-go" and not args.checked_rear_pass_reference:
+                    from robot.evaluation.crossing_strategy import summarize_wait_execution
+                    execution = summarize_wait_execution(plan_events, human.records)
+                    strategy_validation["wait_execution"] = execution
+                    strategy_validation["passed"] &= execution["passed"]
+                if not args.encounter_comparison:
+                    completed = completed and strategy_validation["passed"]
+                save_json("crossing-strategy-validation.json", strategy_validation)
+            if args.encounter_comparison:
+                from robot.evaluation.encounter_policy_validation import summarize_variant_passing
+                comparison = summarize_variant_passing(passing_validation,
+                    require_encounter=args.encounter_guidance_ablation,
+                    encounter=encounter_validation, strategy=strategy_validation)
+                passing_validation['comparison_acceptance'] = comparison
+                completed = completed and comparison['passed']
+            save_json("motion-passing-validation.json", passing_validation)
+            if args.rear_person_relative:
+                from robot.evaluation.person_relative_rear_validation import summarize_person_relative_rear
+                person_relative_validation = summarize_person_relative_rear(human.records, nominal_goal_world_xy=passing_goal)
+                completed = completed and person_relative_validation['passed']
+                save_json('person-relative-rear-validation.json', person_relative_validation)
+        if human.carry is not None:
+            from robot.scene.restaurant_human_carry import summarize_carry_records
+            carry_validation = summarize_carry_records(human.carry.records, continuous=human.circuit is not None)
+            carry_validation["source_asset_unchanged"] = hashlib.sha256(Path(human.carry_setup["source"]).read_bytes()).hexdigest() == human.carry_setup["source_sha256"]
+            carry_validation["scope"] = "native attachment during live robot navigation; separate bowl physical perception remains unvalidated; no actor endpoint-stop claim"
+            completed = completed and carry_validation["passed"] and carry_validation["source_asset_unchanged"]
+            save_json("carry-validation.json", carry_validation)
+            save_json("carry-records.json", human.carry.records)
+    simultaneous_kinetic_updates = 0
+    if args.service_crate_short_probe:
+        from robot.evaluation.service_crate_short_probe import summarize_unexercised_human_scope
+        service_crate_short_validation = summarize_unexercised_human_scope(live_fields, human.records)
+        # Keep every original raw audit and any exercised human acceptance. Only
+        # a proven remote, held and unobserved actor has no encounter to score.
+        if service_crate_short_validation['unexercised']:
+            completed = robot_completion_before_human_audits
+        human_validation['short_probe_encounter_scope'] = service_crate_short_validation
+        save_json('service-crate-short-validation.json', service_crate_short_validation)
+        save_json('human-navigation-validation.json', human_validation)
+    live_kinetic_validation = None
+    if args.moving_actor:
+        for record in live_fields:
+            monitor = record["actor_monitor"]
+            if (abs(monitor["velocity_world_xy"][1]) <= 0
+                or np.linalg.norm(record["diagnostics"]["measured_robot_velocity_world_xy"]) <= 0.02):
+                continue
+            matches = [item for item in record["objects"] if np.linalg.norm(
+                np.array(item["diagnostics"]["centroid_world_xy"]) - monitor["center_world_xy"]) < 0.4]
+            if (len(matches) == 1 and matches[0]["diagnostics"]["policy_return_count"] > 0
+                and matches[0]["diagnostics"]["factor_scores"]["kinetic"]["mode"] == "evidence_supported"):
+                simultaneous_kinetic_updates += 1
+        live_kinetic_validation = summarize_live_relative_motion(live_fields)
+        completed = completed and simultaneous_kinetic_updates >= 5 and live_kinetic_validation["passed"]
+    if args.stationary_furniture_memory:
+        completed = completed and bool(live_fields) and all(
+            r["diagnostics"]["furniture_memory_human_audit"]["passed"] for r in live_fields)
+    unknown_validation = None
+    if args.unknown_obstacle_planning:
+        from robot.evaluation.unknown_obstacle_validation import summarize_unknown_obstacles
+        unknown_validation = summarize_unknown_obstacles(live_fields)
+        completed = bool(completed and unknown_validation["passed"])
+        save_json("unknown-obstacle-validation.json", unknown_validation)
+    scene_unchanged = (
+        original_hash
+        == hashlib.sha256(SCENE_PATH.read_bytes()).hexdigest()
+    ) and all(hashlib.sha256(Path(p).read_bytes()).hexdigest() == h for p, h in source_hashes.items())
+    save_json("live-fields.json", live_fields[-5:] if args.stream_live_records else live_fields)
+    save_json("captures.json", captures)
+    save_json("commands.json", commands)
+    save_json("trajectory.json", trajectory)
+    save_json("waypoint-events.json", waypoint_events)
+    save_json("nearby-track-coverage-events.json", coverage_events)
+    report = {
+        "acceptance_scope": "4m crate probe with full service policy; human encounter exercise reported separately; arrival/stopping/source/field checks retained"
+        if args.service_crate_short_probe else
+        "V3 service navigation including human validation; independent geometry scored separately"
+        if args.observe_service_clearance else
+        "sensor-controlled prop navigation, arrival, live fields and stopping; clearance scored separately"
+        if args.observe_crate_clearance
+        else "bounded_navigation_with_explicit_factor_and_property_priors; all-track numeric scores are separate from physical perception readiness"
+        if args.persistent_object_risk_map
+        else "bounded_conservative_navigation; four-factor availability reported separately",
+        "passed": completed and scene_unchanged and root_unchanged_by_fixture,
+        "service_crate_short_probe": service_crate_short_profile,
+        "service_crate_short_validation": service_crate_short_validation,
+        "experiment_baseline": args.experiment_baseline,
+        "nominal_route_policy": {
+            "waypoint_mode": args.waypoint_mode,
+            "configured_anchors_local_xy": ROUTE,
+            "guide_lookahead_m": args.route_guide_lookahead,
+            "guide_max_cross_track_m": args.route_guide_max_cross_track,
+            "final_goal_tolerance_m": waypoint.config.position_tolerance,
+            "scope": "pose-only obstacle-unaware nominal; intermediate progress is guide passage in guides mode, not checkpoint arrival; final goal and stopping mandatory"},
+        "human_body_contact_prior_config": asdict(perception.human_body_contact_config) if perception.human_body_contact_config is not None else None,
+        "human_control_policy_ablation": {
+            "enabled": args.human_observed_occupancy_only or args.human_boundary_flux is not None,
+            "observed_occupancy_only": args.human_observed_occupancy_only,
+            "requested_boundary_flux": args.human_boundary_flux,
+            "current_visual_part_field_policy_prior": args.human_visual_part_field_policy,
+            "body_prior_geometry_association_scope": args.human_prior_geometry_associations,
+            "visual_part_mask_boundary_prior_pixels": args.human_fragment_mask_boundary_pixels,
+            "physical_cra_unchanged": True,
+            "scope": "separate geometry/flux ablation; not a primary CRA comparison"},
+        "human_body_envelope_config": asdict(perception.human_body_envelope.config) if perception.human_body_envelope is not None else None,
+        "human_track_recovery_config": asdict(perception.human_body_envelope.recovery_config)
+            if perception.human_body_envelope is not None and perception.human_body_envelope.recovery_config is not None else None,
+        "human_fragment_coverage_config": asdict(fragment_coverage_config) if fragment_coverage_config is not None else None,
+        "human_navigation_validation": human_validation,
+        "motion_passing_validation": passing_validation,
+        "crossing_strategy_validation": strategy_validation,
+        "encounter_guidance_validation": encounter_validation,
+        "native_human_mode": args.restaurant_human,
+        "human_tracking_uncertainty_enabled": args.human_tracking_uncertainty,
+        "human_lidar_cluster_radius_m": args.human_cluster_radius,
+        "human_lidar_preprocessing_range_m": args.human_lidar_range if human is not None else 5.0,
+        "native_carried_bowl": args.human_carry_bowl,
+        "native_human_upper_continuation": args.human_upper_continuation,
+        "human_crossing_trigger_robot_world_y": args.human_crossing_trigger_y,
+        "human_crossing_delay_seconds": args.human_crossing_delay_seconds,
+        "human_crossing_direction": args.human_crossing_direction,
+        "human_continuing_away_fixture": args.human_continuing_away,
+        "human_crossing_extension_metres": args.human_crossing_extension,
+        "human_crossing_line_world_y": None if args.restaurant_human == 'parallel' else 7.0 if open_crossing_layout else args.human_crossing_line_y,
+        "motion_aware_passing_config": asdict(perception.motion_passing.config) if perception.motion_passing is not None else None,
+        "actor_trigger_basis": "exogenous_navigation_elapsed_time" if args.human_crossing_delay_seconds is not None else "robot_world_y",
+        "human_requested_walking_speed_mps": args.human_walking_speed,
+        "experimental_camera_mount": {
+            "upward_degrees": args.human_camera_upward_degrees,
+            "raise_metres": args.human_camera_raise_metres,
+        },
+        "human_mass_prior_config": asdict(perception.human_mass_prior_config) if human is not None else None,
+        "scene_source_sha256": source_hashes,
+        "fixture_root_layer_unchanged": root_unchanged_by_fixture,
+        "completed": arrived,
+        "reason": reason,
+        **({"independent_clearance_observation": clearance_observation}
+           if args.observe_crate_clearance or args.observe_service_clearance else {}),
+        "minimum_clearance_m": minimum_clearance,
+        "minimum_clearance_before_stop_m": minimum_clearance_before_stop,
+        "minimum_clearance_during_stop_m": stopping_sweep["minimum_clearance_m"],
+        "stop_yaw_drift_radians": stopping_sweep["yaw_drift_radians"],
+        "minimum_cbf_margin": None
+        if not math.isfinite(minimum_cbf_margin)
+        else minimum_cbf_margin,
+        "stop_drift_m": stop_drift,
+        "post_goal_observation": post_goal_observation,
+        "last_state": final_state.tolist(),
+        "live_field_count": len(live_fields),
+        "live_field_record_storage": "full history in live-fields.jsonl; live-fields.json is latest-five checkpoint"
+        if args.stream_live_records else "full history in live-fields.json",
+        "fields_committed_while_translating": moving_field_count,
+        "simultaneous_robot_actor_kinetic_updates": simultaneous_kinetic_updates,
+        "simultaneous_robot_actor_kinetic_updates_scope": "scripted moving-actor fixture only; native human counts are in human_navigation_validation.simultaneous_rows",
+        "live_relative_motion_validation": live_kinetic_validation,
+        "nearby_track_loss_guard": coverage_result,
+        "unknown_obstacle_validation": unknown_validation,
+        "nearby_track_loss_guard_config": asdict(coverage_guard.config) if coverage_guard is not None else None,
+        "stationary_furniture_memory_validation": {
+            "enabled": args.stationary_furniture_memory,
+            "source_aligned_human_audits_pass": all(r["diagnostics"].get("furniture_memory_human_audit", {}).get("passed", False) for r in live_fields)
+                if args.stationary_furniture_memory else None,
+            "coverage_events": sum(len(r.get("furniture_prior_covered_missing_tracks", ())) for r in coverage_events),
+            "fresh_observed_coverage_events": sum(len(r.get("furniture_observed_covered_missing_tracks", ())) for r in coverage_events),
+        },
+        "perception_evidence_counts": {
+            "accepted_current_instances": sum(
+                r["diagnostics"].get("accepted_instance", False) for r in live_fields
+            ),
+            "four_factor_ready_updates": sum(
+                r["readiness"]["ready"] for r in live_fields
+            ),
+            "ready_updates_by_factor": {
+                name: sum(
+                    next(
+                        f["accepted"]
+                        for f in r["readiness"]["factors"]
+                        if f["factor"] == name
+                    )
+                    for r in live_fields
+                )
+                for name in ("potential", "kinetic", "contact", "thermal")
+            },
+            "retained_updates_by_property": {
+                name: sum(
+                    r["diagnostics"]
+                    .get("temporal_object_evidence", {})
+                    .get(name, {})
+                    .get("mode")
+                    in {"retained", "retained_stronger_contact"}
+                    for r in live_fields
+                )
+                for name in ("mass", "contact")
+            },
+        },
+        "all_object_policy_counts": {
+            "object_assessments": sum(len(r["objects"]) for r in live_fields),
+            "accepted_visual_instances": sum(
+                r["diagnostics"].get("accepted_instance_count", 0) for r in live_fields
+            ),
+            "perception_ready_assessments": sum(
+                r["diagnostics"].get("complete_perception_count", 0)
+                for r in live_fields
+            ),
+            "configured_factor_prior_uses": sum(
+                value["mode"] == "configured_prior"
+                for r in live_fields
+                for item in r["objects"]
+                for value in item["diagnostics"]["factor_scores"].values()
+            ),
+            "persistent_property_uses": sum(
+                value["mode"] == "persistence_prior"
+                for r in live_fields
+                for item in r["objects"]
+                for value in item["diagnostics"]["property_evidence"].values()
+            ),
+        },
+        "object_factor_prior_risk": args.object_factor_prior_risk
+        if args.persistent_object_risk_map
+        else None,
+        "persistent_property_config": asdict(perception.persistent_properties.config)
+        if args.persistent_object_risk_map
+        else None,
+        "temporal_evidence_config": None
+        if perception.evidence_memory is None
+        else asdict(perception.evidence_memory.config),
+        "safety_stops": stops,
+        "plan_events": plan_events,
+        "rejections": sorted(set(rejections)),
+        "scene_unchanged": scene_unchanged,
+        "simulation_rate_limit": args.simulation_rate,
+        "maximum_simulation_seconds": args.maximum_seconds,
+        "planner_candidate_maximum_age_seconds": args.planner_result_max_age,
+        "recovery_lateral_hint_grid_y": None,
+        "recovery_cost_pruning": mpc.config.enable_recovery_cost_pruning,
+        "recovery_feasibility_pruning": mpc.config.enable_recovery_feasibility_pruning,
+        "qp_iteration_limit": mpc.config.maximum_solver_iterations,
+        "nonlinear_rescue_iteration_limit": mpc.config.maximum_nonlinear_rescue_iterations,
+        "unfinished_qp_proposal_enabled": mpc.config.enable_unfinished_qp_proposal,
+        "progress_seed_linear_fraction": mpc.config.progress_seed_linear_fraction,
+        "mpc_configuration": asdict(mpc.config),
+        "guidance_tracking_ablation": {"enabled": args.guidance_tracking_weight > 0,
+            "weight": args.guidance_tracking_weight, "activation_safety_value": args.guidance_activation_h,
+            "maximum_heading_bias_radians": math.radians(args.guidance_max_heading_bias_degrees),
+            "reference_goal_radius_m": args.guidance_reference_goal_radius,
+            "guidance_fade_distance_m": args.guidance_fade_distance,
+            "minimum_reference_progress_m": args.guidance_minimum_reference_progress,
+            "minimum_reference_speed_fraction": args.guidance_reference_minimum_speed_fraction,
+            "minimum_turn_first_rate_cap": args.guidance_turn_first_minimum_cap,
+            "reference_mode": args.guidance_reference_mode,
+            "tangent_velocity_fraction": args.guidance_tangent_velocity_fraction,
+            "tangent_reference_basis": args.guidance_tangent_basis,
+            "tangent_blend_mode": args.guidance_tangent_blend,
+            "configured_outward_reference_fraction": args.guidance_outward_reference_fraction,
+            "configured_turn_translation_fraction": args.guidance_turn_translation_fraction,
+            "moving_arc_reference_enabled": args.guidance_moving_arc_reference,
+            "turn_translation_scope": "current selected reference only; preference before affine projection/full exact checks, not an enforced executed minimum; disabled without current selection",
+            "outward_reference_scope": "current selected observed centroid only; normalized travel preference, not physical geometry/margin/evidence; disabled when current selection is absent",
+            "tangent_runtime_gate": "current positive tracks with an existing observed-motion passing selection; no actor truth",
+            "forward_speed_reference": "maximum forward speed in original obstacle-unaware nominal horizon, clipped to actuator bounds",
+            "heading_reference_basis": "actual_nominal_pose_only_target; route-guide lookahead or strict checkpoint; same field frame; request-time waypoint index",
+            "scope": "separate checked local guidance-path tracking objective; primary nominal unchanged; not paper equivalence"},
+        "immediate_replan_after_invalidations": args.immediate_replan,
+        "verified_command_interval_seconds": mpc.config.time_step,
+        "mpc_prediction_horizon_steps": mpc.config.horizon_steps,
+        "delay_robust_bypass": asdict(mpc.bypass_config) if args.crate_delay_robust_bypass else None,
+        "mpc_prediction_horizon_seconds": mpc.config.horizon_steps * mpc.config.time_step,
+        "mpc_prediction_horizon_basis": "explicit separate horizon ablation" if args.mpc_horizon_steps is not None else "legacy controller default",
+        "wall_seconds": time.perf_counter() - start_wall,
+        "navigation_simulation_seconds": now - start_sim,
+        "controller_scope": "circular_velocity_aware_cbf_nominal_omega_no_mpc; shadow_CRA_fields_for_matched_perception" if args.experiment_baseline == "geometric_velocity_cbf" else "checked_guidance_local_path_ablation_with_exact_DTCBF_geometry_and_analytical_CBF" if args.guidance_tracking_weight > 0 else "online_unicycle_MPC_exact_DTCBF_geometry_and_analytical_CBF",
+        "crossing_strategy_ablation": "live-checked-rear-or-wait" if args.checked_rear_pass_reference else args.crossing_strategy,
+        "parallel_guidance_ablation": args.parallel_guidance_ablation,
+        "zero_tangential_bias_ablation": args.zero_tangential_bias_ablation,
+        "encounter_guidance_ablation": args.encounter_guidance_ablation,
+        "checked_wait_transition_enabled": args.checked_wait_transition,
+        "checked_rear_pass_reference_enabled": args.checked_rear_pass_reference,
+        "rear_existing_turn_heading_radians": args.rear_existing_turn_heading,
+        "rear_minimum_first_translation_m": args.rear_minimum_first_translation,
+        "rear_reference_offset_m": args.rear_reference_offset,
+        "rear_encounter_motion_fit_enabled": args.rear_encounter_motion_fit,
+        "rear_consistent_motion_fit_enabled": args.rear_consistent_motion_fit,
+        "rear_turn_first_fallback_enabled": args.rear_turn_first_fallback,
+        "rear_feasibility_start_enabled": args.rear_feasibility_start,
+        "rear_person_relative_enabled": args.rear_person_relative,
+        "rear_delayed_commit_enabled": args.rear_delayed_commit,
+        "rear_preparation_enabled": args.rear_preparation,
+        "human_crossing_layout": args.human_crossing_layout,
+        "person_relative_rear_validation": person_relative_validation,
+        "checked_wait_current_pose_admissions": checked_wait_admissions,
+        "encounter_comparison": args.encounter_comparison,
+        "physical_CRA_lambda": 1.25,
+        "field_grid_configuration": field_grid_diagnostic,
+        "predictive_human_geometry_ablation": args.predictive_human_geometry_ablation,
+        "observed_motion_reference_ablation": args.observed_motion_reference,
+        "observed_motion_reference_configuration": None if not args.observed_motion_reference else {
+            "maximum_outward_fraction": args.motion_forecast_outward_fraction,
+            "radius_growth_prior_mps": args.motion_forecast_growth_prior_mps,
+            "horizon_seconds": 1.2,
+            "scope": "advisory from current raw LiDAR velocity; no hard future containment claim or changed safety/CRA policy"},
+        "predictive_parallel_redesign": args.predictive_parallel_redesign,
+        "parallel_preparation_exit_lateral_m": args.parallel_preparation_exit_lateral,
+        "human_mass_body_identity_retention": args.human_mass_body_identity_retention,
+        "human_prediction_uncertainty_rate_mps": args.human_prediction_uncertainty_rate if args.predictive_human_geometry_ablation else None,
+        "human_prediction_uncertainty_floor_mps": args.human_prediction_uncertainty_floor,
+        "fixed_lambda": None if args.encounter_guidance_ablation else 0. if args.zero_tangential_bias_ablation else 1.25,
+        "plume_control": args.plume_control,
+        "restaurant_scene": str(SCENE_PATH) if args.restaurant_scene else None,
+        "static_restaurant_server": args.restaurant_server,
+        "sam_observed_context_box_retry": args.sam_observed_context_box,
+        "sam_track_extent_retry": args.sam_track_extent_retry,
+        "stationary_image_objects": args.stationary_image_objects,
+        "image_object_property_persistence": args.image_object_property_persistence,
+        "image_object_approach": args.image_object_approach,
+        "moving_view_image_objects": args.moving_view_image_objects,
+        "static_prop_evidence": args.static_prop_evidence,
+        "confirmed_prop_refresh": args.confirmed_prop_refresh,
+        "crate_route_probe": args.crate_route_probe,
+        "crate_v3_controller_profile": crate_v3_profile,
+        "service_static_props": args.service_static_props,
+        "straight_service_walk": args.straight_service_walk,
+        "image_object_overlap_hold": args.image_object_overlap_hold,
+        "image_object_maximum_extent_prior_m": args.image_object_maximum_extent,
+        "server_component_gate": gate.get("server_component_checks"),
+        "restaurant_component_gate": gate.get("restaurant_component_checks"),
+        "independent_authored_layout_monitor": bool(layout_monitor is not None),
+        "rgb_output_resolution_height_width": [calibration.output_height, calibration.output_width],
+        "fixture_layout": args.fixture_layout,
+        "moving_actor": args.moving_actor,
+        "actor_shape": "real_restaurant_meshes" if args.restaurant_scene else args.actor_shape,
+        "plume_view_fov_degrees": args.plume_view_fov,
+        "goal_local_xy": GOAL,
+        "nominal_route_local_xy": ROUTE,
+        "restaurant_route": args.restaurant_route if args.restaurant_scene else None,
+        "waypoints_reached": len(ROUTE) if arrived else waypoint.current_waypoint_index,
+        "fixture_spacing": args.fixture_spacing,
+        "progress_timeout_seconds": args.progress_timeout_seconds,
+        "serving_payload": serving_payload if args.restaurant_scene else None,
+        "clearance_monitor_scope": "independent authored original mesh raster plus conservative new-prop XY boxes and selected bowl disk; base footprint contains any validated mounted presentation tray; no free payload dynamics; never control/factor input"
+        if args.restaurant_scene else "independent authored sphere disks and circumscribed support disk; never control/factor input",
+        "scheduled_observation_pauses": 0,
+        "lidar_ego_motion_correction": "legacy_scan_start_transform"
+        if args.disable_lidar_deskew
+        else "per_return_ego_motion_deskew",
+        "rtx_history_setting_requested": carb.settings.get_settings().get(
+            "/rtx/scenedb/maxHistoryTransformCount"
+        ),
+        "boundaries": [
+            "paced simulation; not real-time",
+            "RGB read time approximates acquisition; per-return ego deskew uses oracle pose history and corrects only sensor motion"
+            if not args.disable_lidar_deskew
+            else "RGB read time approximates acquisition; legacy scans are not per-return deskewed",
+            "oracle USD ego poses/extrinsics and fixture clearance monitor",
+            "ground/fall interaction priors remain explicit",
+            "session-persistent mass, visible contact, support and initial plume are explicit unchanged-property priors; original timestamps retained; motion/route interaction remain live"
+            if args.persistent_object_risk_map
+            else "short-lived retained mass/contact are persistence priors with original timestamps; no cached motion/plume/fall-height evidence",
+            "renderer internal history warning remains unresolved despite the requested setting",
+            "SAM-associated category-free rough heaviness, visual contact silhouette and registered visible-plume proxies",
+            "v2 pot has stylized visible puffs; rendered appearance supplies no thermal score. Current RGB association/clean-reference gates decide evidence; unsupported thermal retains its labeled prior"
+            if args.service_demo_v2 else "new restaurant assets have no emitted plume or validated negative-plume scope; thermal remains a labeled factor prior; all live LiDAR occupancy retained"
+            if args.restaurant_scene else "rendered puffs are opaque visual fixtures, not steam physics/temperature; all live LiDAR occupancy retained",
+            "real-mesh restaurant component gate; potential/support and thermal may remain configured priors; not full four-factor sensor acceptance, moving-view plume or human validation"
+            if args.restaurant_scene else "bounded separated sources with validated initial clean-reference registration and retained cues; no moving-view plume/human/crowd generalization",
+        ],
+    }
+    if human is not None:
+        report["limitations"] = [
+            "one native adult; human mass is configured 70 [45,100] kg prior selected by fresh person/SAM association; original catalog estimates retained",
+            "only intrinsic mass persists for at most 3 original-source seconds; current view contact, support, plume, motion and old body bounds never borrowed",
+            "potential/thermal use explicit factor priors where unavailable; visual silhouette is not physical sharpness, hardness or injury severity",
+            "all physical LiDAR occupancy retained with .15 s positive expiry; track-loss watchdog is bounded, not general occlusion or crowd support",
+            "oracle ego pose/extrinsics/gravity; RGB acquisition is read-time approximation; ego deskew does not correct moving articulated actors",
+            ("geometric circular velocity-aware CBF reference; nominal omega retained, no MPC/DTCBF/h_full command; shadow fields retain lambda 1.25"
+             if args.experiment_baseline == "geometric_velocity_cbf" else
+             ("physical CRA lambda1.25; explicit wait-go applied field lambda0 ablation; unchanged nominal/exact MPC/DTCBF/analytical CBF; paced, not real-time or causal CRA superiority"
+              if args.zero_tangential_bias_ablation else
+              "physical CRA lambda1.25; separate observed encounter-dependent per-human lambda0/1.25; original safety and source gates, no real-time or causal CRA claim"
+              if args.encounter_guidance_ablation else
+              "fixed lambda 1.25, unchanged nominal/exact MPC/DTCBF/analytical CBF; paced development, not real-time or causal CRA superiority")),
+            "renderer transform-history warning remains unresolved; separate carried-bowl physical assessment, calibrated load and moving-view plume remain unvalidated",
+        ]
+    for label, observer in contact_observers.items():
+        contact_observation = observer.report()
+        observer.close()
+        report[f"{label}_physx_contacts"] = contact_observation
+        save_json(f"{label}-physx-contacts.json", contact_observation)
+    save_json("report.json", report)
+    print(
+        json.dumps(
+            {
+                key: report[key]
+                for key in (
+                    "passed",
+                    "completed",
+                    "reason",
+                    "minimum_clearance_m",
+                    "live_field_count",
+                    "fields_committed_while_translating",
+                    "stop_drift_m",
+                )
+            },
+            default=json_default,
+        ),
+        flush=True,
+    )
+    timeline.stop()
+    if not report["passed"]:
+        raise RuntimeError("live wheel gate failed; inspect saved diagnostics")
+
+
+try:
+    main()
+except Exception:
+    traceback.print_exc()
+    raise
+finally:
+    if ACTIVE_SERVICE_VIDEO is not None:
+        ACTIVE_SERVICE_VIDEO.close()
+    if ACTIVE_HUMAN is not None:
+        ACTIVE_HUMAN.abort()
+        save_json("human-truth-evaluation-only.json", ACTIVE_HUMAN.records)
+        if ACTIVE_HUMAN.carry is not None:
+            save_json("carry-records.json", ACTIVE_HUMAN.carry.records)
+            save_json("native-carry-setup.json", ACTIVE_HUMAN.carry_setup)
+        if ACTIVE_HUMAN.circuit is not None:
+            save_json("continuous-server-route-events.json", ACTIVE_HUMAN.circuit.events)
+        if ACTIVE_HUMAN.background_walk is not None:
+            save_json("background-walk-events.json", ACTIVE_HUMAN.background_walk.events)
+        ACTIVE_HUMAN.close()
+    app.close()

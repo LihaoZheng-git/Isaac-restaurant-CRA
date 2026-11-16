@@ -1,0 +1,55 @@
+{
+  "chapters": [
+    {
+      "kind": "still",
+      "title": "Restaurant service | first demonstration",
+      "seconds": 5,
+      "image": "outputs/restaurant_demo_v1/preview-v4/serving-robot.png",
+      "lines": ["Carter with a mounted serving tray and meal.", "Camera + LiDAR -> continuous physical-risk scores -> per-object phi -> online MPC / CBF.", "Separate bounded trials; explicit evidence and priors."]
+    },
+    {
+      "kind": "native",
+      "actor": "static",
+      "title": "1 | Service-route segment",
+      "source": "outputs/restaurant_demo_v1/static-motion-v6"
+    },
+    {
+      "kind": "native",
+      "title": "2 | Parallel walker: curved pass with a yield",
+      "source": "outputs/restaurant_demo_v1/parallel-motion-v6"
+    },
+    {
+      "kind": "native",
+      "title": "3 | Perpendicular crossing: checked wait and go",
+      "source": "outputs/restaurant_demo_v1/crossing-motion-v6"
+    },
+    {
+      "kind": "still",
+      "title": "Physical cues | rounded-bin component",
+      "seconds": 6,
+      "image": "outputs/restaurant_demo_v1/bin-summary-v4/factor-scores-demo.png",
+      "lines": ["55 accepted owned observations in the stationary mounted-tray run.", "Rough mass, visible contact geometry and current motion accepted.", "Potential and thermal remain labeled factor priors."]
+    },
+    {
+      "kind": "still",
+      "title": "Thermal cue | separate fixed-camera component",
+      "seconds": 7,
+      "image": "outputs/restaurant_service/bowl-plume-v2/stationary-plume-component.png",
+      "lines": ["Continuous visible-plume cue from RGB.", "Retained source-region prior; not temperature.", "Earlier stationary replay only. This cue does not supply the navigation clips' thermal scores."]
+    },
+    {
+      "kind": "still",
+      "title": "Next perception target | tabletop utensils",
+      "seconds": 6,
+      "image": "outputs/restaurant_demo_v1/preview-v4/utensil-comparison.png",
+      "lines": ["Closed caddy and exposed-fork holder are built.", "Small-object separation from the table remains unresolved.", "No validated fork-versus-rounded risk ordering is claimed."]
+    },
+    {
+      "kind": "still",
+      "title": "Scope | a first service demonstration",
+      "seconds": 5,
+      "image": "outputs/restaurant_demo_v1/preview-v4/clearing-station.png",
+      "lines": ["Native Isaac Sim frames; interaction pauses retained.", "Parallel chapter still has a 2.62 s yield.", "Selected scenarios with labeled priors; continuous long mission remains future work."]
+    }
+  ]
+}

@@ -1,0 +1,11 @@
+Model Information:
+* title:	Broken Plate (low poly)
+* source:	https://sketchfab.com/3d-models/broken-plate-low-poly-1cb31d29ec0d4289b43f1794fa05abe1
+* author:	Akimkhan (https://sketchfab.com/akimkhan)
+
+Model License:
+* license type:	CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
+* requirements:	Author must be credited. Commercial use is allowed.
+
+If you use this 3D model in your project be sure to copy paste this credit wherever you share it:
+This work is based on "Broken Plate (low poly)" (https://sketchfab.com/3d-models/broken-plate-low-poly-1cb31d29ec0d4289b43f1794fa05abe1) by Akimkhan (https://sketchfab.com/akimkhan) licensed under CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)

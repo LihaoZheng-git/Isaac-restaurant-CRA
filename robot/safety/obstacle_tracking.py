@@ -35,8 +35,11 @@ class ObstacleTrackerConfig:
     minimum_consecutive_motion_updates: int = 1
     maximum_missed_updates: int = 3
     minimum_time_delta: float = 1e-6
+    clustering_backend: str = "dense"
 
     def __post_init__(self) -> None:
+        if self.clustering_backend not in {"dense", "kdtree"}:
+            raise ValueError("unsupported clustering backend")
         positive_values = {
             "cluster_radius": self.cluster_radius,
             "maximum_association_distance": (
@@ -204,6 +207,8 @@ class ObstacleTracker:
         robot_position_world_xy: np.ndarray,
         robot_yaw: float,
         timestamp_seconds: float,
+        clustering_points_robot_xyz: np.ndarray | None = None,
+        point_instance_groups: tuple[np.ndarray, ...] | None = None,
     ) -> ObstacleTrackingResult:
         """Process one new LiDAR frame.
 
@@ -227,6 +232,15 @@ class ObstacleTracker:
         points_robot = self._validate_points(
             obstacle_points_robot_xy
         )
+        cluster_points = points_robot
+        if clustering_points_robot_xyz is not None:
+            cluster_points = np.asarray(clustering_points_robot_xyz, dtype=np.float64)
+            if (
+                cluster_points.shape != (len(points_robot), 3)
+                or not np.isfinite(cluster_points).all()
+                or not np.array_equal(cluster_points[:, :2], points_robot)
+            ):
+                raise ValueError("3D clustering points must preserve finite input XY and point order")
         robot_position_world = self._validate_vector(
             robot_position_world_xy,
             name="robot_position_world_xy",
@@ -240,12 +254,26 @@ class ObstacleTracker:
         )
 
         clusters = _cluster_point_indices(
-            points_robot,
+            cluster_points,
             cluster_radius=self.config.cluster_radius,
-            minimum_cluster_points=(
-                self.config.minimum_cluster_points
-            ),
+            backend=self.config.clustering_backend,
+            minimum_cluster_points=(self.config.minimum_cluster_points),
         )
+        if point_instance_groups is not None:
+            # Explicit same-source visual instance partitions may separate
+            # touching objects. No point coordinate or velocity is fabricated;
+            # unlisted returns retain -1 rather than disappearing.
+            clusters, used = [], set()
+            for group in point_instance_groups:
+                indices = np.asarray(group)
+                if (indices.ndim != 1 or indices.dtype.kind not in "iu"
+                    or len(indices) < self.config.minimum_cluster_points
+                    or np.any(indices < 0) or np.any(indices >= len(points_robot))
+                    or len(np.unique(indices)) != len(indices)
+                    or used.intersection(indices.tolist())):
+                    raise ValueError("instance groups must be disjoint valid same-source point indices")
+                used.update(indices.tolist())
+                clusters.append(indices.astype(np.int64,copy=True))
 
         point_velocities_robot = np.zeros(
             points_robot.shape,
@@ -742,6 +770,7 @@ def _cluster_point_indices(
     *,
     cluster_radius: float,
     minimum_cluster_points: int,
+    backend: str = "dense",
 ) -> tuple[np.ndarray, ...]:
     """Return connected Euclidean point clusters.
 
@@ -754,7 +783,29 @@ def _cluster_point_indices(
 
     if point_count == 0:
         return ()
+    if backend == "kdtree":
+        from scipy.spatial import cKDTree
+        from scipy.sparse import coo_matrix
+        from scipy.sparse.csgraph import connected_components
 
+        pairs = cKDTree(points_xy).query_pairs(
+            np.nextafter(cluster_radius, math.inf), output_type="ndarray"
+        )
+        # Preserve the baseline's exact squared-distance boundary convention.
+        deltas = points_xy[pairs[:, 0]] - points_xy[pairs[:, 1]]
+        pairs = pairs[np.einsum("ij,ij->i", deltas, deltas) <= cluster_radius**2]
+        graph = coo_matrix(
+            (np.ones(len(pairs)), (pairs[:, 0], pairs[:, 1])),
+            shape=(point_count, point_count),
+        ).tocsr()
+        _, labels = connected_components(graph, directed=False)
+        groups = [np.flatnonzero(labels == label) for label in np.unique(labels)]
+        return tuple(
+            sorted(
+                (group for group in groups if len(group) >= minimum_cluster_points),
+                key=lambda group: int(group[0]),
+            )
+        )
     offsets = (
         points_xy[:, np.newaxis, :]
         - points_xy[np.newaxis, :, :]

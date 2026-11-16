@@ -226,6 +226,21 @@ def test_category_free_instance_needs_no_class_or_density_and_keeps_cap(tmp_path
     ).mass_kg.is_available
 
 
+def test_image_object_source_requires_separate_opt_in_and_keeps_original_cap(tmp_path):
+    from robot.perception.sam_instance_segmentation import SAM_IMAGE_OBJECT_SOURCE
+    frame, association, observed = instance_inputs()
+    frame = replace(frame, model_name=SAM_IMAGE_OBJECT_SOURCE)
+    estimator = instance_estimator(tmp_path)
+    image = np.zeros((10, 12, 3), np.uint8)
+    assert not estimator.estimate_instance(image, frame, association, observed, track_id=4, timestamp_seconds=2).mass_kg.is_available
+    estimator.config = replace(estimator.config, allow_stationary_image_objects=True)
+    mass = estimator.estimate_instance(image, frame, association, observed, track_id=4, timestamp_seconds=2).mass_kg
+    assert mass.value == 5 and mass.confidence == .25 and mass.status is EstimateStatus.INFERRED
+    assert any(SAM_IMAGE_OBJECT_SOURCE in e for e in mass.evidence)
+    fake = replace(frame, model_name="authored_mask")
+    assert not estimator.estimate_instance(image, fake, association, observed, track_id=4, timestamp_seconds=2).mass_kg.is_available
+
+
 @pytest.mark.parametrize(
     "case",
     [

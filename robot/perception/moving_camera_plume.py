@@ -56,8 +56,14 @@ class MovingCameraPlumeConfig:
     minimum_registered_source_iou: float = 0.5
     maximum_reference_age_seconds: float = 60.0
     minimum_clean_air_coverage: float = 0.65
+    allow_reference_recovery: bool = False
+    background_scope: str = "full_image"
 
     def __post_init__(self):
+        if self.background_scope not in {"full_image", "above_source"}:
+            raise ValueError("unsupported independent background scope")
+        if not isinstance(self.allow_reference_recovery, bool):
+            raise TypeError("reference recovery opt-in must be boolean")
         integers = (
             "minimum_features",
             "minimum_inliers",
@@ -71,7 +77,10 @@ class MovingCameraPlumeConfig:
             if isinstance(value, bool) or not isinstance(value, int) or value < 1:
                 raise ValueError(f"{name} must be a positive integer")
         for name in self.__dataclass_fields__:
-            if name in integers:
+            if name in integers or name in {
+                "allow_reference_recovery",
+                "background_scope",
+            }:
                 continue
             value = getattr(self, name)
             if isinstance(value, bool) or not math.isfinite(value) or value <= 0:
@@ -102,8 +111,16 @@ class TrackedRgbObjectFrame:
     detections: SemanticDetectionFrame
     association: TrackSemanticAssociation
     track_timestamp_seconds: float
+    valid_pixel_mask: np.ndarray | None = None
+    native_source_mask_pixels: int | None = None
 
     def __post_init__(self):
+        if self.native_source_mask_pixels is not None and (
+            isinstance(self.native_source_mask_pixels, bool)
+            or not isinstance(self.native_source_mask_pixels, int)
+            or self.native_source_mask_pixels < 0
+        ):
+            raise ValueError("native source pixel count must be a nonnegative integer")
         frame = self.detections
         image = np.array(self.rgb, copy=True)
         if image.dtype != np.uint8 or image.shape != (
@@ -121,6 +138,17 @@ class TrackedRgbObjectFrame:
             raise ValueError("track timestamp must be finite and nonnegative")
         image.setflags(write=False)
         object.__setattr__(self, "rgb", image)
+        valid = (
+            np.ones(image.shape[:2], bool)
+            if self.valid_pixel_mask is None
+            else np.array(self.valid_pixel_mask, copy=True)
+        )
+        if valid.shape != image.shape[:2] or valid.dtype != np.bool_:
+            raise ValueError(
+                "valid pixel mask must be an aligned boolean observation mask"
+            )
+        valid.setflags(write=False)
+        object.__setattr__(self, "valid_pixel_mask", valid)
 
     @property
     def detection(self):
@@ -198,6 +226,7 @@ def register_background_pair(previous, current, *, config=None):
             return reject("source track is stale or future for the RGB frame")
         if (
             detection.confidence < settings.minimum_source_confidence
+            or (item.native_source_mask_pixels is not None and item.native_source_mask_pixels < settings.minimum_source_pixels)
             or mask.sum() < settings.minimum_source_pixels
             or mask[:2].any()
             or mask[-2:].any()
@@ -221,12 +250,19 @@ def register_background_pair(previous, current, *, config=None):
             bool
         )
     )
+    previous_background &= previous.valid_pixel_mask
+    if settings.background_scope == "above_source":
+        previous_background[math.ceil(old.bounding_box.y_min) :] = False
     background = ~(
         roi
         | cv2.dilate(new.mask.astype(np.uint8), np.ones((11, 11), np.uint8)).astype(
             bool
         )
     )
+    background &= current.valid_pixel_mask
+    if settings.background_scope == "above_source":
+        background[math.ceil(new.bounding_box.y_min) :] = False
+    diagnostics["background_scope"] = settings.background_scope
     grey_old = cv2.cvtColor(previous.rgb, cv2.COLOR_RGB2GRAY)
     grey = cv2.cvtColor(current.rgb, cv2.COLOR_RGB2GRAY)
     points = cv2.goodFeaturesToTrack(
@@ -281,7 +317,15 @@ def register_background_pair(previous, current, *, config=None):
         cv2.convexHull(next_xy[good][accepted].astype(np.float32))
     ) / (height * width)
     diagnostics["inlier_image_coverage"] = float(coverage)
-    if coverage < settings.minimum_background_coverage:
+    domain_coverage = coverage
+    if settings.background_scope == "above_source":
+        domain_fraction = float(background.mean())
+        diagnostics["independent_background_image_fraction"] = domain_fraction
+        domain_coverage = coverage / max(domain_fraction, 1e-12)
+        diagnostics["inlier_background_domain_coverage"] = domain_coverage
+        if domain_fraction < 0.15 or coverage < 0.10:
+            return reject("above-source background lacks absolute independent coverage")
+    if domain_coverage < settings.minimum_background_coverage:
         return reject("independent background features cover too little of the image")
     box = new.bounding_box
     local = next_xy[good][accepted]
@@ -481,15 +525,37 @@ class MovingCameraObjectPlumeEstimator:
         ):
             return unknown("clean reference exceeds its declared temporal domain")
         result = register_background_pair(previous, observation, config=self.config)
+        recovered = False
+        if result.homography is None and self.config.allow_reference_recovery:
+            # A clean reference has its own declared lifetime. Direct image
+            # registration can restart a broken chain, without inventing a new
+            # clean frame or relaxing feature/source/photometric gates. Three
+            # fresh current observations are still needed for a thermal score.
+            result = register_background_pair(
+                reference,
+                observation,
+                config=replace(
+                    self.config,
+                    maximum_pair_seconds=self.config.maximum_reference_age_seconds,
+                ),
+            )
+            recovered = result.homography is not None
         self.last_diagnostics[track] = result.diagnostics
+        self.last_diagnostics[track]["registration_basis"] = (
+            "direct_clean_reference_recovery" if recovered else "consecutive_view_chain"
+        )
         if result.homography is None:
             self.windows.pop(track, None)
             return unknown("; ".join(result.rejection_reasons))
-        homography = result.homography @ self.homographies[track]
+        homography = (
+            result.homography
+            if recovered
+            else result.homography @ self.homographies[track]
+        )
         height, width = observation.rgb.shape[:2]
         warped = cv2.warpPerspective(reference.rgb, homography, (width, height))
         valid = cv2.warpPerspective(
-            np.ones((height, width), np.uint8),
+            reference.valid_pixel_mask.astype(np.uint8),
             homography,
             (width, height),
             flags=cv2.INTER_NEAREST,
@@ -505,7 +571,7 @@ class MovingCameraObjectPlumeEstimator:
         ).astype(bool)
         detection = observation.detection
         roi = _region(observation.rgb, detection)
-        usable = roi & valid & ~old_body
+        usable = roi & valid & observation.valid_pixel_mask & ~old_body
         coverage = np.count_nonzero(usable) / max(1, np.count_nonzero(roi))
         self.last_diagnostics[track]["clean_air_coverage"] = coverage
         self.last_diagnostics[track]["reference_frame_id"] = (
@@ -516,7 +582,9 @@ class MovingCameraObjectPlumeEstimator:
             return unknown(
                 "registered clean reference cannot cover enough current air region"
             )
-        exclusion = old_body | detection.mask | ~valid
+        exclusion = old_body | detection.mask | ~valid | ~observation.valid_pixel_mask
+        if self.config.background_scope == "above_source":
+            exclusion[math.ceil(detection.bounding_box.y_min) :] = True
         try:
             backend = StationaryRgbPlumeEstimator(
                 warped,

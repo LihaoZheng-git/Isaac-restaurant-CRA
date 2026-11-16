@@ -40,9 +40,11 @@ global convergence. Legacy callers leave this search disabled by default.
 The module has no Isaac Sim dependency.
 """
 
+import copy
+import itertools
 import math
 from collections.abc import Sequence
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from numbers import Real
 
 import numpy as np
@@ -52,6 +54,7 @@ from scipy.optimize import minimize
 
 from robot.control.unicycle_model import (
     integrate_unicycle_euler,
+    lookahead_control_matrix,
     lookahead_state,
     wrap_to_pi,
 )
@@ -63,6 +66,7 @@ from robot.safety.safe_sage_configuration_space import (
     SafeSAGEConfigurationSpaceResult,
 )
 from robot.safety.safe_sage_h_full import SafeSAGEHFullResult
+from robot.safety.predictive_human_geometry import PredictiveHumanGeometry
 from robot.safety.safe_sage_temporal_derivative import (
     TemporalSafetyDerivativeInput,
     validate_temporal_safety_derivative,
@@ -158,6 +162,11 @@ class SafeSAGEUnicycleMPCConfig:
     line_search_contraction: float = 0.5
     maximum_line_search_iterations: int = 8
     enable_progress_seeds: bool = False
+    enable_recovery_cost_pruning: bool = False
+    enable_recovery_feasibility_pruning: bool = False
+    enable_unfinished_qp_proposal: bool = False
+    enable_tapered_rescue_seed: bool = False
+    use_consistent_temporal_jacobian: bool = False
     progress_seed_linear_fraction: float = 0.25
     configuration_position_padding_m: float = 0.0
     configuration_yaw_padding_radians: float = 0.0
@@ -166,6 +175,16 @@ class SafeSAGEUnicycleMPCConfig:
     def __post_init__(self) -> None:
         if not isinstance(self.enable_progress_seeds, bool):
             raise TypeError("enable_progress_seeds must be a boolean.")
+        if not isinstance(self.enable_unfinished_qp_proposal, bool):
+            raise TypeError('enable_unfinished_qp_proposal must be a boolean.')
+        if not isinstance(self.enable_tapered_rescue_seed, bool):
+            raise TypeError('enable_tapered_rescue_seed must be a boolean.')
+        if not isinstance(self.use_consistent_temporal_jacobian, bool):
+            raise TypeError('use_consistent_temporal_jacobian must be a boolean.')
+        if not isinstance(self.enable_recovery_cost_pruning, bool):
+            raise TypeError("enable_recovery_cost_pruning must be a boolean.")
+        if not isinstance(self.enable_recovery_feasibility_pruning, bool):
+            raise TypeError("enable_recovery_feasibility_pruning must be a boolean.")
         integer_values = {
             "horizon_steps": _positive_integer(
                 self.horizon_steps,
@@ -201,6 +220,8 @@ class SafeSAGEUnicycleMPCConfig:
             ),
         }
         integration_count = integer_values["integration_substeps_per_interval"]
+        if self.enable_tapered_rescue_seed and integer_values['horizon_steps'] < 3:
+            raise ValueError('tapered rescue seed requires at least three intervals')
         safety_count = integer_values["safety_substeps_per_interval"]
         if integration_count > 1 and integration_count % safety_count:
             raise ValueError(
@@ -356,6 +377,10 @@ class SafeSAGEUnicycleMPCResult:
     restoration_used: bool
     status: str
 
+    predictive_geometry: dict | None = field(default=None, kw_only=True)
+    tapered_rescue_seed: dict | None = field(default=None, kw_only=True)
+    unfinished_qp_proposals: tuple[dict, ...] = field(default=(), kw_only=True)
+
     @property
     def first_command(self) -> tuple[float, float]:
         """Return ``(linear_velocity, angular_velocity)`` for execution."""
@@ -403,6 +428,9 @@ class _TrajectoryEvaluation:
     samples: _ReferenceSamples
     safety_values: np.ndarray
     margins: np.ndarray
+    predictive_margins: np.ndarray = field(default_factory=lambda: np.empty((0, 0)))
+    predictive_gradients: np.ndarray = field(default_factory=lambda: np.empty((0, 0, 3)))
+    predictive_dense_safe: bool = True
 
 
 @dataclass(frozen=True)
@@ -423,6 +451,9 @@ class SafeSAGEUnicycleMPC:
         self,
         paper_filter: SafeSAGECBFSafetyFilter,
         config: SafeSAGEUnicycleMPCConfig | None = None,
+        *,
+        predictive_geometry: PredictiveHumanGeometry | None = None,
+        predictive_source_age_seconds: float = 0.,
     ) -> None:
         if not isinstance(paper_filter, SafeSAGECBFSafetyFilter):
             raise TypeError("paper_filter must be a SafeSAGECBFSafetyFilter.")
@@ -430,6 +461,68 @@ class SafeSAGEUnicycleMPC:
         self.config = config or SafeSAGEUnicycleMPCConfig()
         if not isinstance(self.config, SafeSAGEUnicycleMPCConfig):
             raise TypeError("config must be a SafeSAGEUnicycleMPCConfig.")
+        self.predictive_geometry = predictive_geometry
+        self.predictive_source_age_seconds = _finite_real(predictive_source_age_seconds, name="predictive source age")
+        if predictive_geometry is not None and (
+            not isinstance(predictive_geometry, PredictiveHumanGeometry)
+            or self.config.horizon_steps * self.config.time_step > predictive_geometry.config.horizon_seconds + 1e-9
+        ):
+            raise ValueError("predictive geometry requires a typed source and a bounded MPC horizon")
+        if predictive_geometry is not None and not 0 <= self.predictive_source_age_seconds <= predictive_geometry.config.maximum_source_age_seconds:
+            raise ValueError("predictive geometry source age outside its original bounded clock")
+
+    def revalidate_commands(
+        self,
+        initial_chassis_state_grid,
+        commands,
+        *,
+        configuration_space,
+        h_full,
+        guidance_fields,
+        temporal_safety_derivative=0.0,
+        predictive_geometry=None,
+        predictive_source_age_seconds=0.,
+    ) -> bool:
+        """Check an asynchronous horizon at the current state/field, no solve.
+
+        The exact nonlinear DTCBF, actuator bounds and dense configuration
+        checks are identical to plan acceptance. A field generation change or
+        delayed planner result never grants permission to execute an old plan.
+        """
+        if predictive_geometry is not None:
+            # Each asynchronous revalidation uses the CURRENT field's immutable
+            # forecast. Do not mutate the shared planner or renew source times.
+            worker = copy.copy(self)
+            worker.predictive_geometry = predictive_geometry
+            worker.predictive_source_age_seconds = predictive_source_age_seconds
+            return worker.revalidate_commands(initial_chassis_state_grid, commands,
+                configuration_space=configuration_space, h_full=h_full,
+                guidance_fields=guidance_fields, temporal_safety_derivative=temporal_safety_derivative)
+        initial = _finite_vector(
+            initial_chassis_state_grid, size=3, name="initial_chassis_state_grid"
+        )
+        sequence = np.asarray(commands, dtype=float)
+        if (
+            sequence.shape != (self.config.horizon_steps, 2)
+            or not np.isfinite(sequence).all()
+        ):
+            raise ValueError("commands must be a finite complete horizon")
+        if not np.array_equal(sequence, self._clip_commands(sequence)):
+            return False
+        temporal = validate_temporal_safety_derivative(
+            temporal_safety_derivative,
+            h_full=h_full,
+            grid_config=configuration_space.occupancy_grids[0].config,
+        )
+        evaluated = self._evaluate_trajectory(
+            initial,
+            sequence,
+            configuration_space=configuration_space,
+            h_full=h_full,
+            guidance_fields=guidance_fields,
+            temporal_safety_derivative=temporal,
+        )
+        return evaluated is not None and self._trajectory_is_safe(evaluated)
 
     def plan(
         self,
@@ -538,6 +631,8 @@ class SafeSAGEUnicycleMPC:
                 seed_restoration_used = True
 
         total_qp_iterations = 0
+        tapered_rescue_diagnostic = None
+        proposal_audit = []
         completed_sqp_iterations = 0
         guidance_failure: str | None = None
 
@@ -562,6 +657,7 @@ class SafeSAGEUnicycleMPC:
                 reference, improvement_steps, improvement_iterations = (
                     self._improve_safe_warm_start(
                         reference,
+                        proposal_audit=proposal_audit,
                         initial_state=initial_state,
                         nominal_sequence=nominal_sequence,
                         target_chassis_states=target_states,
@@ -578,6 +674,7 @@ class SafeSAGEUnicycleMPC:
             reference, improvement_steps, improvement_iterations = (
                 self._improve_safe_warm_start(
                     reference,
+                    proposal_audit=proposal_audit,
                     initial_state=initial_state,
                     nominal_sequence=nominal_sequence,
                     target_chassis_states=target_states,
@@ -599,6 +696,7 @@ class SafeSAGEUnicycleMPC:
                     target_chassis_states=target_states,
                     configuration_space=configuration_space,
                     derivative_mode="guidance",
+                    proposal_audit=proposal_audit,
                 )
                 total_qp_iterations += solution.iteration_count
                 if not solution.success:
@@ -642,6 +740,7 @@ class SafeSAGEUnicycleMPC:
                     target_chassis_states=target_states,
                     configuration_space=configuration_space,
                     derivative_mode="gradient",
+                    proposal_audit=proposal_audit,
                 )
                 total_qp_iterations += solution.iteration_count
                 if not solution.success:
@@ -684,9 +783,16 @@ class SafeSAGEUnicycleMPC:
                         "exact_qp_restoration_exhausted; "
                         f"minimum_margin={float(np.min(reference.margins)):.3e}"
                     )
+                rescue_reference = reference
+                if self.config.enable_tapered_rescue_seed:
+                    rescue_reference, tapered_rescue_diagnostic = self._select_tapered_rescue_seed(
+                        reference, initial_state=initial_state, nominal_sequence=nominal_sequence,
+                        target_chassis_states=target_states, configuration_space=configuration_space,
+                        h_full=h_full, guidance_fields=guidance_fields,
+                        temporal_safety_derivative=temporal_derivative)
                 rescue, rescue_iterations, rescue_status = (
                     self._solve_exact_nonlinear_rescue(
-                        reference,
+                        rescue_reference,
                         initial_state=initial_state,
                         nominal_sequence=nominal_sequence,
                         target_chassis_states=target_states,
@@ -697,6 +803,12 @@ class SafeSAGEUnicycleMPC:
                     )
                 )
                 total_qp_iterations += rescue_iterations
+                if (rescue is None and rescue_reference is not reference
+                    and self._trajectory_is_safe(rescue_reference)):
+                    # Preserve an already exact-safe numerical seed if the
+                    # original bounded rescue fails to improve it safely.
+                    rescue = rescue_reference
+                    rescue_status = 'exact_safe_tapered_rescue_seed_retained'
                 if rescue is None:
                     recovery, recovery_status = self._recover_feasible_command_horizon(
                         reference,
@@ -720,6 +832,8 @@ class SafeSAGEUnicycleMPC:
                             ),
                             sqp_iterations=completed_sqp_iterations,
                             solver_iterations=total_qp_iterations,
+                            tapered_rescue_seed=tapered_rescue_diagnostic,
+                            unfinished_qp_proposals=tuple(proposal_audit),
                         )
                     reference = recovery
                     feasibility_recovery_status = recovery_status
@@ -729,6 +843,7 @@ class SafeSAGEUnicycleMPC:
                         improvement_iterations,
                     ) = self._improve_safe_warm_start(
                         reference,
+                        proposal_audit=proposal_audit,
                         initial_state=initial_state,
                         nominal_sequence=nominal_sequence,
                         target_chassis_states=target_states,
@@ -791,6 +906,9 @@ class SafeSAGEUnicycleMPC:
             intervention_active=intervention,
             fallback_active=False,
             restoration_used=restoration_used or seed_restoration_used,
+            predictive_geometry=self._predictive_diagnostic(reference),
+            tapered_rescue_seed=tapered_rescue_diagnostic,
+            unfinished_qp_proposals=tuple(proposal_audit),
             status=(
                 feasibility_recovery_status
                 or (
@@ -888,6 +1006,7 @@ class SafeSAGEUnicycleMPC:
                 h_full=h_full,
                 guidance_fields=guidance_fields,
                 temporal_safety_derivative=temporal_safety_derivative,
+                require_feasible=self.config.enable_recovery_feasibility_pruning,
             )
             if candidate is None or not self._trajectory_is_safe(candidate):
                 continue
@@ -904,6 +1023,7 @@ class SafeSAGEUnicycleMPC:
         self,
         reference: _TrajectoryEvaluation,
         *,
+        proposal_audit: list[dict] | None = None,
         initial_state: np.ndarray,
         nominal_sequence: np.ndarray,
         target_chassis_states: np.ndarray | None = None,
@@ -929,6 +1049,7 @@ class SafeSAGEUnicycleMPC:
                 target_chassis_states=target_chassis_states,
                 configuration_space=configuration_space,
                 derivative_mode="guidance",
+                proposal_audit=proposal_audit,
             )
             completed_steps += 1
             solver_iterations += solution.iteration_count
@@ -1126,9 +1247,17 @@ class SafeSAGEUnicycleMPC:
                                 * steering_linear_fraction
                             )
                             commands[:steering_step_count, 1] = steering_rate
+                            if self.config.enable_recovery_cost_pruning:
+                                commands = self._clip_commands(commands)
+                                # This recovery pool has no state-path cost.
+                                # Its clipped command cost is exact; a tie would
+                                # retain the earlier candidate in the old loop.
+                                if self._objective_value(commands, nominal_sequence) >= best_objective:
+                                    continue
                             candidate = self._evaluate_trajectory(
                                 initial_state,
                                 commands,
+                                require_feasible=self.config.enable_recovery_feasibility_pruning,
                                 configuration_space=configuration_space,
                                 h_full=h_full,
                                 guidance_fields=guidance_fields,
@@ -1243,6 +1372,81 @@ class SafeSAGEUnicycleMPC:
             + normal[2]
         )
 
+    def _select_tapered_rescue_seed(
+        self, reference, *, initial_state, nominal_sequence, target_chassis_states,
+        configuration_space, h_full, guidance_fields, temporal_safety_derivative,
+    ):
+        """Improve numerical initialization; no seed is execution authority.
+
+        Sample 1,050 three-phase advance/brake commands within the ORIGINAL
+        actuator bounds. Rank by exact constraint violation, then the existing
+        objective. This happens only after the original SQP restoration fails;
+        the original nonlinear rescue still runs once with its original budget.
+        No actor intention, authored curve, future truth or new cost enters.
+        """
+        before = self._maximum_violation(reference)
+        diagnostic = dict(basis='bounded_tapered_numerical_rescue_initialization',
+            enabled=True, selected=False, tested_candidates=0, analytical_first_rejections=0,
+            finite_ranked_candidates=0, dense_seed_rejections=0,
+            reference_maximum_violation=before if math.isfinite(before) else None,
+            reference_violation_status='finite' if math.isfinite(before) else 'unavailable_infinite_or_geometry',
+            original_nonlinear_iteration_limit=self.config.maximum_nonlinear_rescue_iterations,
+            scope='numerical seed only; unchanged objective/limits/epochs; full exact acceptance and analytical execution still mandatory')
+        if self._trajectory_is_safe(reference) or self.config.maximum_linear_velocity <= 0:
+            return reference, diagnostic
+        normal = lookahead_control_matrix(float(initial_state[2]),
+            lookahead_distance=self.config.lookahead_distance).T @ reference.samples.guidance_normals[0]
+        rhs = (-self.paper_filter.config.gamma * max(0., reference.safety_values[0])
+            - reference.samples.scaled_temporal_derivatives[0])
+        if not np.isfinite(normal).all() or not math.isfinite(rhs):
+            return reference, diagnostic
+        count = self.config.horizon_steps // 3
+        counts = (count, count, self.config.horizon_steps - 2 * count)
+        kwargs = dict(configuration_space=configuration_space, h_full=h_full,
+            guidance_fields=guidance_fields, temporal_safety_derivative=temporal_safety_derivative)
+        def turn(fraction):
+            limit = (self.config.maximum_angular_velocity if fraction >= 0
+                else abs(self.config.minimum_angular_velocity))
+            return fraction * limit
+        ranked = []
+        for first, middle, tail, rate, last_rate in itertools.product(
+            (1., .8), (.6, .5, .4), (.2, .12, .1, .08, .05),
+            (-.25, -.125, 0., .125, .25), (-.5, -.375, -.25, 0., .25, .375, .5),
+        ):
+            diagnostic['tested_candidates'] += 1
+            v = self.config.maximum_linear_velocity
+            commands = np.repeat(np.array([[v * first, turn(rate)],
+                [v * middle, turn(rate)], [v * tail, turn(last_rate)]]), counts, axis=0)
+            if normal @ commands[0] < rhs - self.paper_filter.config.numerical_tolerance:
+                diagnostic['analytical_first_rejections'] += 1
+                continue
+            candidate = self._evaluate_trajectory(initial_state, commands,
+                check_dense_geometry=False, **kwargs)
+            if candidate is None:
+                continue
+            violation = self._maximum_violation(candidate)
+            if not math.isfinite(violation) or violation >= before - self.config.constraint_tolerance:
+                continue
+            cost = self._objective_value(commands, nominal_sequence,
+                chassis_states=candidate.chassis_states, target_chassis_states=target_chassis_states)
+            ranked.append((violation, cost, commands))
+        diagnostic['finite_ranked_candidates'] = len(ranked)
+        for _, _, commands in sorted(ranked, key=lambda item: item[:2]):
+            # Endpoint-only ranking is never permission to skip dense geometry.
+            candidate = self._evaluate_trajectory(initial_state, commands, **kwargs)
+            if candidate is None:
+                diagnostic['dense_seed_rejections'] += 1
+                continue
+            violation = self._maximum_violation(candidate)
+            if not math.isfinite(violation) or violation >= before - self.config.constraint_tolerance:
+                diagnostic['dense_seed_rejections'] += 1
+                continue
+            diagnostic.update(selected=True, selected_maximum_violation=float(violation),
+                seed_commands=candidate.commands.tolist(),
+                seed_exact_safe=self._trajectory_is_safe(candidate))
+            return candidate, diagnostic
+        return reference, diagnostic
+
     def _solve_exact_nonlinear_rescue(
         self,
         reference: _TrajectoryEvaluation,
@@ -1280,7 +1484,8 @@ class SafeSAGEUnicycleMPC:
             ],
             dtype=np.float64,
         )
-        invalid_constraints = np.full(5 * horizon, -1.0, dtype=np.float64)
+        predictive_count = reference.predictive_margins.size
+        invalid_constraints = np.full(5 * horizon + predictive_count, -1.0, dtype=np.float64)
         cached_commands: np.ndarray | None = None
         cached_evaluation: _TrajectoryEvaluation | None = None
 
@@ -1302,6 +1507,7 @@ class SafeSAGEUnicycleMPC:
                 h_full=h_full,
                 guidance_fields=guidance_fields,
                 temporal_safety_derivative=temporal_safety_derivative,
+                check_dense_geometry=False,
             )
             return cached_evaluation
 
@@ -1340,12 +1546,13 @@ class SafeSAGEUnicycleMPC:
                 for axis in (0, 1):
                     values.append(float(state[axis] - grid_minimum[axis]))
                     values.append(float(grid_maximum[axis] - state[axis]))
+            values.extend(evaluation.predictive_margins.ravel())
             return np.asarray(values, dtype=np.float64)
 
         def constraint_jacobian(flattened_commands: np.ndarray) -> np.ndarray:
             evaluation = evaluate(flattened_commands)
             if evaluation is None:
-                return np.zeros((5 * horizon, variable_count), dtype=np.float64)
+                return np.zeros((5 * horizon + predictive_count, variable_count), dtype=np.float64)
             state_sensitivities = self._rollout_state_sensitivities(
                 evaluation.chassis_states,
                 evaluation.commands,
@@ -1367,6 +1574,8 @@ class SafeSAGEUnicycleMPC:
                 for axis in (0, 1):
                     rows.append(safety_sensitivities[index, axis])
                     rows.append(-safety_sensitivities[index, axis])
+            for index, gradients in enumerate(evaluation.predictive_gradients, 1):
+                rows.extend(gradients @ state_sensitivities[index])
             return np.asarray(rows, dtype=np.float64)
 
         actuator_lower, actuator_upper = self._actuator_bounds()
@@ -1389,16 +1598,31 @@ class SafeSAGEUnicycleMPC:
             },
         )
         iteration_count = int(getattr(optimization, "nit", 0))
-        candidate = evaluate(np.asarray(optimization.x, dtype=np.float64))
+        # The optimizer uses smooth endpoint constraints/Jacobians only. Dense
+        # mask work cannot change those values; do it once on the final proposal
+        # before accepting it, including when the optimizer reports failure.
+        candidate = self._evaluate_trajectory(
+            initial_state,
+            np.asarray(optimization.x, dtype=np.float64).reshape(horizon, 2),
+            configuration_space=configuration_space,
+            h_full=h_full,
+            guidance_fields=guidance_fields,
+            temporal_safety_derivative=temporal_safety_derivative,
+        )
         if candidate is not None and self._trajectory_is_safe(candidate):
             return candidate, iteration_count, str(optimization.message)
         minimum_margin = (
             math.nan if candidate is None else float(np.min(candidate.margins))
         )
+        predictive_status = ""
+        if self.predictive_geometry is not None:
+            predictive_minimum = (math.nan if candidate is None or not candidate.predictive_margins.size
+                else float(np.min(candidate.predictive_margins)))
+            predictive_status = f"; minimum_predictive_geometry_margin_m={predictive_minimum:.3e}"
         return (
             None,
             iteration_count,
-            f"{optimization.message}; minimum_margin={minimum_margin:.3e}",
+            f"{optimization.message}; minimum_margin={minimum_margin:.3e}{predictive_status}",
         )
 
     def _solve_sparse_subproblem(
@@ -1409,6 +1633,7 @@ class SafeSAGEUnicycleMPC:
         target_chassis_states: np.ndarray | None = None,
         configuration_space: SafeSAGEConfigurationSpaceResult,
         derivative_mode: str,
+        proposal_audit: list[dict] | None = None,
     ) -> _SparseQPSolution:
         """Assemble and solve one sparse Safe-SAGE SQP subproblem."""
 
@@ -1545,6 +1770,16 @@ class SafeSAGEUnicycleMPC:
                 np.asarray(grid_upper, dtype=np.float64),
             )
         )
+        if reference.predictive_margins.size:
+            # Additional hard geometry rows have NO elastic CBF slack.
+            rows = np.concatenate([g @ state_sensitivities[k]
+                for k, g in enumerate(reference.predictive_gradients, 1)])
+            predictive_matrix = sparse.hstack((sparse.csc_matrix(rows),
+                sparse.csc_matrix((len(rows), slack_variable_count))), format="csc")
+            constraint_matrix = sparse.vstack((constraint_matrix, predictive_matrix), format="csc")
+            constraint_lower = np.concatenate((constraint_lower,
+                rows @ reference_flat - reference.predictive_margins.ravel()))
+            constraint_upper = np.concatenate((constraint_upper, np.full(len(rows), np.inf)))
         objective_matrix, objective_vector = self._quadratic_objective(
             nominal_sequence,
             reference=reference,
@@ -1587,7 +1822,12 @@ class SafeSAGEUnicycleMPC:
 
         status = str(result.info.status)
         solved = status.casefold() in {"solved", "solved inaccurate"}
-        if not solved or result.x is None:
+        unfinished = bool(self.config.enable_unfinished_qp_proposal
+            and status.casefold() == "maximum iterations reached")
+        optimizer = None if result.x is None else np.asarray(result.x, dtype=np.float64)
+        valid_vector = (optimizer is not None and optimizer.shape ==
+            (command_variable_count + slack_variable_count,) and np.isfinite(optimizer).all())
+        if not (solved or unfinished) or not valid_vector:
             return _SparseQPSolution(
                 success=False,
                 commands=reference.commands,
@@ -1595,7 +1835,6 @@ class SafeSAGEUnicycleMPC:
                 status=f"osqp_{status}",
                 maximum_cbf_slack=math.inf,
             )
-        optimizer = np.asarray(result.x, dtype=np.float64)
         commands = self._clip_commands(
             optimizer[:command_variable_count].reshape(
                 self.config.horizon_steps,
@@ -1605,11 +1844,24 @@ class SafeSAGEUnicycleMPC:
         maximum_cbf_slack = float(
             np.max(optimizer[command_variable_count:], initial=0.0)
         )
+        if unfinished and proposal_audit is not None:
+            def finite_residual(name):
+                value = float(getattr(result.info, name, math.nan))
+                return value if math.isfinite(value) else None
+            proposal_audit.append(dict(
+                basis="unfinished_QP_numerical_proposal_not_execution_permission",
+                solver_status=status, derivative_mode=derivative_mode,
+                iterations=int(result.info.iter), primal_residual=finite_residual('prim_res'),
+                dual_residual=finite_residual('dual_res'), maximum_cbf_slack=maximum_cbf_slack,
+                first_proposed_command=commands[0].tolist()))
+        # Success here means a finite numerical proposal is available. The
+        # caller must still pass exact nonlinear DTCBF, dense geometry and
+        # objective/line-search gates; solver status never authorizes execution.
         return _SparseQPSolution(
             success=True,
             commands=commands,
             iteration_count=int(result.info.iter),
-            status=status,
+            status=("unfinished_qp_numerical_proposal" if unfinished else status),
             maximum_cbf_slack=maximum_cbf_slack,
         )
 
@@ -1799,6 +2051,8 @@ class SafeSAGEUnicycleMPC:
         h_full: SafeSAGEHFullResult,
         guidance_fields: Sequence[LaplaceGuidanceFieldResult],
         temporal_safety_derivative: TemporalSafetyDerivativeInput,
+        require_feasible: bool = False,
+        check_dense_geometry: bool = True,
     ) -> _TrajectoryEvaluation | None:
         """Roll out and sample one complete command sequence."""
 
@@ -1815,10 +2069,45 @@ class SafeSAGEUnicycleMPC:
             )
         except (TypeError, ValueError):
             return None
-        if not np.any(samples.unsafe_configuration_mask) and (
-            self.config.safety_substeps_per_interval > 1
-            or self.config.configuration_position_padding_m > 0
-            or self.config.configuration_yaw_padding_radians > 0
+        safety_values = self._time_adjusted_safety_values(samples)
+        margins = safety_values[1:] - self.config.dtcbf_decay * safety_values[:-1]
+        predictive_margins, predictive_gradients = np.empty((0, 0)), np.empty((0, 0, 3))
+        predictive_dense_safe = True
+        if self.predictive_geometry is not None:
+            try:
+                age = _finite_real(self.predictive_source_age_seconds, name="predictive source age")
+                if (not 0 <= age <= self.predictive_geometry.config.maximum_source_age_seconds
+                    or self.config.horizon_steps*self.config.time_step > self.predictive_geometry.config.horizon_seconds+1e-9):
+                    return None
+                predictive_margins, predictive_gradients = self.predictive_geometry.constraints(
+                    chassis_states[1:], age+np.arange(1, self.config.horizon_steps+1)*self.config.time_step,
+                    configuration_space.footprint, self.config.lookahead_distance)
+                if check_dense_geometry:
+                    dense_states, dense_times = self._dense_chassis_queries(chassis_states, clipped_commands)
+                    dense_margins, _ = self.predictive_geometry.constraints(dense_states, age+dense_times,
+                        configuration_space.footprint, self.config.lookahead_distance)
+                    predictive_dense_safe = bool(np.all(dense_margins >= -self.config.constraint_tolerance))
+            except (TypeError, ValueError):
+                return None
+        if require_feasible and (
+            not np.isfinite(margins).all()
+            or np.any(samples.unsafe_configuration_mask)
+            or float(np.min(margins)) < -self.config.constraint_tolerance
+            or np.any(predictive_margins < -self.config.constraint_tolerance)
+            or not predictive_dense_safe
+        ):
+            # Dense geometry cannot repair an already failed exact DTCBF
+            # constraint. Recovery does not use infeasible evaluations for
+            # gradients or restoration, unlike the main solver.
+            return None
+        if (
+            check_dense_geometry
+            and not np.any(samples.unsafe_configuration_mask)
+            and (
+                self.config.safety_substeps_per_interval > 1
+                or self.config.configuration_position_padding_m > 0
+                or self.config.configuration_yaw_padding_radians > 0
+            )
         ):
             unsafe_mask = self._inter_sample_unsafe_mask(
                 chassis_states,
@@ -1826,13 +2115,14 @@ class SafeSAGEUnicycleMPC:
                 commands=clipped_commands,
                 configuration_space=configuration_space,
                 h_full=h_full,
+                stop_on_first_unsafe=require_feasible,
             )
+            if require_feasible and np.any(unsafe_mask):
+                return None
             samples = replace(
                 samples,
                 unsafe_configuration_mask=unsafe_mask,
             )
-        safety_values = self._time_adjusted_safety_values(samples)
-        margins = safety_values[1:] - self.config.dtcbf_decay * safety_values[:-1]
         return _TrajectoryEvaluation(
             commands=clipped_commands,
             chassis_states=chassis_states,
@@ -1840,7 +2130,31 @@ class SafeSAGEUnicycleMPC:
             samples=samples,
             safety_values=safety_values,
             margins=margins,
+            predictive_margins=predictive_margins,
+            predictive_gradients=predictive_gradients,
+            predictive_dense_safe=predictive_dense_safe,
         )
+
+    def _dense_chassis_queries(self, chassis_states, commands):
+        """Use the original dense-check integration epochs, including t=0."""
+        count = self.config.safety_substeps_per_interval
+        fractions = np.arange(1, count+1)/count
+        starts = chassis_states[:-1]
+        integration = self.config.integration_substeps_per_interval
+        if integration > 1:
+            dt = self.config.time_step/integration
+            headings = starts[:, 2, None] + commands[:, 1, None]*dt*np.arange(integration)
+            increments = commands[:, 0, None, None]*dt*np.stack((np.cos(headings), np.sin(headings)), axis=-1)
+            indices = np.rint(fractions*integration).astype(int)-1
+            positions = starts[:, None, :2]+np.cumsum(increments, axis=1)[:, indices]
+            yaws = starts[:, 2, None]+commands[:, 1, None]*self.config.time_step*fractions
+        else:
+            positions = starts[:, None, :2]+fractions[None, :, None]*(chassis_states[1:, None, :2]-starts[:, None, :2])
+            changes = (chassis_states[1:, 2]-starts[:, 2]+math.pi)%math.tau-math.pi
+            yaws = starts[:, 2, None]+changes[:, None]*fractions
+        states = np.concatenate((positions, ((yaws+math.pi)%math.tau-math.pi)[..., None]), axis=-1).reshape(-1, 3)
+        times = (np.arange(self.config.horizon_steps)[:, None]+fractions)*self.config.time_step
+        return np.vstack((chassis_states[0], states)), np.concatenate(([0.], times.ravel()))
 
     def _inter_sample_unsafe_mask(
         self,
@@ -1850,6 +2164,7 @@ class SafeSAGEUnicycleMPC:
         commands: np.ndarray,
         configuration_space: SafeSAGEConfigurationSpaceResult,
         h_full: SafeSAGEHFullResult,
+        stop_on_first_unsafe: bool = False,
     ) -> np.ndarray:
         """Mark intervals whose predicted motion enters an unsafe cell.
 
@@ -1911,16 +2226,25 @@ class SafeSAGEUnicycleMPC:
             np.asarray(safety_queries)[:, None, :]
             + scales.reshape(-1, 1, 1) * perturbations[None, :, :]
         )
-        try:
-            query_mask = self.paper_filter.unsafe_configuration_mask(
-                queries.reshape(-1, 3), configuration_space=configuration_space,
-                h_full=h_full,
-            ).reshape(self.config.horizon_steps, substeps, len(perturbations))
-        except ValueError:
-            # A padded future query outside the field is not safe evidence.
-            unsafe[1:] = True
-        else:
-            unsafe[1:] |= query_mask.any(axis=(1, 2))
+        queries = queries.reshape(self.config.horizon_steps, substeps, len(perturbations), 3)
+        # Recovery never uses an infeasible candidate for gradients. One
+        # actually unsafe query suffices to reject it; safe candidates still
+        # receive every original query before they can be selected.
+        chunk = 4 if stop_on_first_unsafe else self.config.horizon_steps
+        for lower in range(0, self.config.horizon_steps, chunk):
+            upper = min(self.config.horizon_steps, lower + chunk)
+            try:
+                query_mask = self.paper_filter.unsafe_configuration_mask(
+                    queries[lower:upper].reshape(-1, 3),
+                    configuration_space=configuration_space, h_full=h_full,
+                ).reshape(upper-lower, substeps, len(perturbations))
+            except ValueError:
+                # A padded query outside the field is never safe evidence.
+                unsafe[1:] = True
+            else:
+                unsafe[lower+1:upper+1] |= query_mask.any(axis=(1, 2))
+            if stop_on_first_unsafe and np.any(unsafe):
+                break
         return np.ascontiguousarray(unsafe, dtype=bool)
 
     def _trajectory_is_safe(
@@ -1933,6 +2257,9 @@ class SafeSAGEUnicycleMPC:
             np.isfinite(trajectory.margins).all()
             and not np.any(trajectory.samples.unsafe_configuration_mask)
             and float(np.min(trajectory.margins)) >= -self.config.constraint_tolerance
+            and np.isfinite(trajectory.predictive_margins).all()
+            and np.all(trajectory.predictive_margins >= -self.config.constraint_tolerance)
+            and trajectory.predictive_dense_safe
         )
 
     @staticmethod
@@ -1942,9 +2269,12 @@ class SafeSAGEUnicycleMPC:
         if (
             not np.isfinite(trajectory.margins).all()
             or np.any(trajectory.samples.unsafe_configuration_mask)
+            or not np.isfinite(trajectory.predictive_margins).all()
+            or not trajectory.predictive_dense_safe and np.all(trajectory.predictive_margins >= 0.)
         ):
             return math.inf
-        return max(0.0, -float(np.min(trajectory.margins)))
+        return max(0.0, -float(np.min(trajectory.margins)),
+            -float(np.min(trajectory.predictive_margins, initial=0.)))
 
     def _nominal_sequence(
         self,
@@ -2147,16 +2477,23 @@ class SafeSAGEUnicycleMPC:
             exact_gradients.append(evaluation.interpolant_gradient)
             temporal_terms.append(evaluation.scaled_temporal_safety_derivative)
             unsafe_configurations.append(evaluation.unsafe_reason is not None)
+        exact_gradient_array = np.asarray(exact_gradients, dtype=np.float64)
+        if self.config.use_consistent_temporal_jacobian:
+            from robot.safety.temporal_forecast_gradient import scaled_temporal_forecast_gradient
+            temporal_gradient = scaled_temporal_forecast_gradient(
+                self.paper_filter.config, safety_states,
+                configuration_space=configuration_space, h_full=h_full,
+                guidance_fields=guidance_fields,
+                temporal_safety_derivative=temporal_safety_derivative)
+            times = self.config.time_step * np.arange(len(safety_states))
+            exact_gradient_array += times[:, None] * temporal_gradient
         return _ReferenceSamples(
             safety_values=np.asarray(values, dtype=np.float64),
             guidance_normals=np.asarray(
                 guidance_normals,
                 dtype=np.float64,
             ),
-            exact_gradients=np.asarray(
-                exact_gradients,
-                dtype=np.float64,
-            ),
+            exact_gradients=exact_gradient_array,
             scaled_temporal_derivatives=np.asarray(
                 temporal_terms,
                 dtype=np.float64,
@@ -2297,6 +2634,8 @@ class SafeSAGEUnicycleMPC:
         status: str,
         sqp_iterations: int = 0,
         solver_iterations: int = 0,
+        tapered_rescue_seed: dict | None = None,
+        unfinished_qp_proposals: tuple[dict, ...] = (),
     ) -> SafeSAGEUnicycleMPCResult:
         """Return a deterministic fail-closed stop trajectory."""
 
@@ -2334,4 +2673,16 @@ class SafeSAGEUnicycleMPC:
             fallback_active=True,
             restoration_used=False,
             status=status,
+            predictive_geometry=self._predictive_diagnostic(),
+            tapered_rescue_seed=tapered_rescue_seed,
+            unfinished_qp_proposals=unfinished_qp_proposals,
         )
+
+    def _predictive_diagnostic(self, trajectory=None):
+        if self.predictive_geometry is None:
+            return None
+        return dict(**self.predictive_geometry.diagnostic(),
+            planning_source_age_seconds=self.predictive_source_age_seconds,
+            minimum_endpoint_margin_m=(None if trajectory is None or not trajectory.predictive_margins.size
+                else float(np.min(trajectory.predictive_margins))),
+            dense_geometry_passed=None if trajectory is None else trajectory.predictive_dense_safe)

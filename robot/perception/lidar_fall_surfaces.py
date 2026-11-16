@@ -37,8 +37,11 @@ class LidarFallSurfaceConfig:
     direction_count: int = 16
     height_uncertainty_m: float = 0.04
     confidence: float = 0.55
+    allow_equal_height_multiple_landings: bool = False
 
     def __post_init__(self) -> None:
+        if not isinstance(self.allow_equal_height_multiple_landings, bool):
+            raise TypeError("multiple landing opt-in must be boolean")
         positive = (
             "support_xy_margin_m",
             "support_maximum_gap_m",
@@ -81,6 +84,74 @@ class LidarFallSurfaceResult:
         return self.evidence is not None
 
 
+@dataclass(frozen=True)
+class LidarSupportSurfaceResult:
+    """Observed adjacent support, independent of whether a landing is visible."""
+
+    height_m: ScalarEstimate
+    point_count: int
+    rejection_reasons: tuple[str, ...]
+    candidate_heights_m: tuple[float, ...] = ()
+
+
+def estimate_lidar_support_surface(
+    scene_points_robot_xyz: np.ndarray,
+    object_points_robot_xyz: np.ndarray,
+    *,
+    timestamp_seconds: float,
+    config: LidarFallSurfaceConfig | None = None,
+) -> LidarSupportSurfaceResult:
+    """Expose the same support gate as the strict drop estimator.
+
+    This is an inferred support hypothesis, not contact/force sensing. A
+    missing landing must not erase a successfully observed supporting band.
+    """
+    settings = config or LidarFallSurfaceConfig()
+    if not isinstance(settings, LidarFallSurfaceConfig):
+        raise TypeError("config must be LidarFallSurfaceConfig")
+    scene = _points(scene_points_robot_xyz, "scene_points_robot_xyz")
+    item = _points(object_points_robot_xyz, "object_points_robot_xyz")
+    timestamp = float(timestamp_seconds)
+    if not math.isfinite(timestamp) or timestamp < 0:
+        raise ValueError("timestamp_seconds must be finite and nonnegative")
+    _, _, _, level, count, candidates = _local_support(scene, item, settings)
+    ambiguous = bool(candidates and max(candidates) - min(candidates) > 2 * settings.surface_band_tolerance_m + 1e-9)
+    if level is None or ambiguous:
+        reason = ("insufficient object points" if len(item) < settings.minimum_surface_points
+                  else "multiple plausible support heights; support association ambiguous" if ambiguous
+                  else "object-adjacent planar support was not localized within the allowed gap")
+        return LidarSupportSurfaceResult(
+            ScalarEstimate.unavailable(unit="m", source=LIDAR_SURFACE_SOURCE,
+                timestamp_seconds=timestamp, evidence=(reason,)), count, (reason,), candidates)
+    height = _surface_evidence(level, level, timestamp=timestamp, settings=settings,
+        support_count=count, landing_count=0,
+        detail="adjacent support only; no landing, drop, stability or contact-force claim").support_height_m
+    height = ScalarEstimate(height.value, height.lower_bound, height.upper_bound,
+        height.confidence, height.unit, height.source, height.timestamp_seconds,
+        height.status, height.evidence + (
+            f"visible lower-boundary gap={abs(float(np.quantile(item[:, 2], .10)) - level)} m; allowed={settings.support_maximum_gap_m} m",
+            f"support XY margin={settings.support_xy_margin_m} m; hidden base is not reconstructed",))
+    return LidarSupportSurfaceResult(height, count, (), candidates)
+
+
+def _local_support(scene, object_points, settings):
+    if len(object_points) < settings.minimum_surface_points:
+        return scene, None, None, None, 0, ()
+    scene = _exclude_object_returns(scene, object_points)
+    lower = np.quantile(object_points, 0.10, axis=0)
+    upper = np.quantile(object_points, 0.90, axis=0)
+    margin = settings.support_xy_margin_m
+    mask = (
+        (scene[:, 0] >= lower[0] - margin)
+        & (scene[:, 0] <= upper[0] + margin)
+        & (scene[:, 1] >= lower[1] - margin)
+        & (scene[:, 1] <= upper[1] + margin)
+        & (scene[:, 2] <= lower[2] + settings.support_maximum_gap_m)
+    )
+    level, count, candidates = _support_surface_level(scene[mask], lower, upper, settings)
+    return scene, lower, upper, level, count, candidates
+
+
 def estimate_lidar_fall_surfaces(
     scene_points_robot_xyz: np.ndarray,
     object_points_robot_xyz: np.ndarray,
@@ -99,22 +170,9 @@ def estimate_lidar_fall_surfaces(
         raise ValueError("timestamp_seconds must be finite and nonnegative")
     if object_points.shape[0] < settings.minimum_surface_points:
         return _unavailable("insufficient object points")
-    scene = _exclude_object_returns(scene, object_points)
-
-    lower_xyz = np.quantile(object_points, 0.10, axis=0)
-    upper_xyz = np.quantile(object_points, 0.90, axis=0)
+    scene, lower_xyz, upper_xyz, support_level, support_count, _ = _local_support(
+        scene, object_points, settings)
     center_xy = 0.5 * (lower_xyz[:2] + upper_xyz[:2])
-    margin = settings.support_xy_margin_m
-    support_mask = (
-        (scene[:, 0] >= lower_xyz[0] - margin)
-        & (scene[:, 0] <= upper_xyz[0] + margin)
-        & (scene[:, 1] >= lower_xyz[1] - margin)
-        & (scene[:, 1] <= upper_xyz[1] + margin)
-        & (scene[:, 2] <= lower_xyz[2] + settings.support_maximum_gap_m)
-    )
-    support_level, support_count = _support_surface_level(
-        scene[support_mask], lower_xyz, upper_xyz, settings,
-    )
     if support_level is None:
         return _unavailable(
             "object-adjacent planar support was not localized within the allowed gap",
@@ -199,11 +257,14 @@ def estimate_lidar_fall_surfaces(
         if abs(item[2] - landing_level) <= settings.surface_band_tolerance_m
     )
     strongest = compatible[0]
-    if any(
+    if settings.allow_equal_height_multiple_landings and len(compatible) != len(direction_results):
+        return _unavailable("candidate landing heights disagree", support_point_count=support_count)
+    opposite = any(
         float(strongest[3] @ item[3]) < -0.90
         and item[0] >= 0.5 * strongest[0]
         for item in compatible[1:]
-    ):
+    )
+    if opposite and not settings.allow_equal_height_multiple_landings:
         return _unavailable(
             "lower landing directions are geometrically ambiguous",
             support_point_count=support_count,
@@ -211,6 +272,13 @@ def estimate_lidar_fall_surfaces(
     landing_count = sum(item[0] for item in compatible)
     mean_direction = np.sum([item[3] * item[0] for item in compatible], axis=0)
     direction_norm = float(np.linalg.norm(mean_direction))
+    if settings.allow_equal_height_multiple_landings and (opposite or direction_norm <= 1e-9):
+        evidence = _surface_evidence(
+            support_level, landing_level, timestamp=timestamp, settings=settings,
+            support_count=support_count, landing_count=landing_count,
+            detail="multiple observed lower landing directions agree in height; exact impact direction/site unavailable",
+        )
+        return LidarFallSurfaceResult(evidence, None, (), support_count, landing_count)
     if direction_norm <= 1e-9:
         return _unavailable(
             "lower landing directions are geometrically ambiguous",
@@ -289,7 +357,7 @@ def _support_surface_level(points, lower_xyz, upper_xyz, settings):
     coverage as well as the existing footprint-overhang test.
     """
     if len(points) < settings.minimum_surface_points:
-        return None, 0
+        return None, 0, ()
     candidates = []
     seen_levels = set()
     for height in np.unique(points[:, 2]):
@@ -311,9 +379,9 @@ def _support_surface_level(points, lower_xyz, upper_xyz, settings):
             continue
         candidates.append((len(selected), -abs(level - float(lower_xyz[2])), level))
     if not candidates:
-        return None, 0
+        return None, 0, ()
     count, _, level = max(candidates)
-    return level, count
+    return level, count, tuple(sorted({candidate[2] for candidate in candidates}))
 
 
 def _surface_evidence(

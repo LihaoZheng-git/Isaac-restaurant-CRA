@@ -33,6 +33,52 @@ def make_calibration() -> FThetaCameraCalibration:
     )
 
 
+def test_audited_owl_calibration_keeps_original_pixel_scale_and_forward_ray_limit():
+    # Authored native Owl lens, read during the zero-wheel camera audit. The
+    # wider render is not permission to associate rearward LiDAR returns.
+    calibration = FThetaCameraCalibration(
+        nominal_width=1920, nominal_height=1200,
+        optical_center_x=943.99462890625, optical_center_y=602.3110961914062,
+        maximum_fov_degrees=235., output_width=640, output_height=400,
+        polynomial_coefficients=(.0002725422091316432, .0021866457536816597,
+            1.2340817079348199e-7, -1.079574096785052e-9, 5.997452426180494e-13))
+    angles = np.deg2rad([0., 70., 95.])
+    points = np.column_stack((np.sin(angles), np.zeros(3), -np.cos(angles)))
+    projected = project_fisheye_polynomial_points(points,
+        camera_from_source=np.eye(4), calibration=calibration)
+    np.testing.assert_array_equal(projected.source_indices, [0, 1])
+    np.testing.assert_allclose(projected.pixel_xy[0], [943.99462890625 / 3, 602.3110961914062 / 3])
+    assert 314 < projected.pixel_xy[1, 0] < 640
+    np.testing.assert_allclose(projected.camera_depths, [1., np.cos(angles[1])])
+
+
+def test_depth_visibility_is_mask_independent_and_preserves_original_source_indices():
+    from robot.perception.camera_lidar_fusion import ProjectedLidarPoints, depth_visible_projection
+
+    projection = ProjectedLidarPoints(np.array([2, 7, 9, 11]),
+                                      np.array([[20, 20], [21, 20], [22, 20], [50, 50]]),
+                                      np.array([[20, 20], [21, 20], [22, 20], [50, 50]]),
+                                      np.array([1, 4, 1.1, 5]))
+    visible = depth_visible_projection(projection)
+    assert visible.source_indices.tolist() == [2, 9, 11]
+    assert projection.source_indices.tolist() == [2, 7, 9, 11]
+    assert not visible.source_indices.flags.writeable
+
+
+def test_mask_foreground_layer_retains_nearby_competitors_and_does_not_modify_projection():
+    from robot.perception.camera_lidar_fusion import ProjectedLidarPoints, mask_foreground_hits
+
+    points = np.tile([[20, 20]], (11, 1))
+    projection = ProjectedLidarPoints(np.arange(11), points, points,
+                                      np.array([1, 1, 1, 1, 1, 1, 1, 1.1, 1.2, 4, 4.1]))
+    hits = mask_foreground_hits(projection, np.ones((30, 30), bool))
+    assert hits.tolist() == [True] * 9 + [False, False]
+    assert len(projection.source_indices) == 11
+    # An isolated near outlier cannot remove a well-observed farther object.
+    altered = ProjectedLidarPoints(np.arange(11), points, points, np.array([1] + [4] * 10))
+    assert mask_foreground_hits(altered, np.ones((30, 30), bool)).all()
+
+
 def make_track(track_id: int, point_count: int = 2) -> TrackedObstacle:
     return TrackedObstacle(
         track_id=track_id,

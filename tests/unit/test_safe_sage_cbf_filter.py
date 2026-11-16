@@ -1,4 +1,4 @@
-from dataclasses import replace
+from dataclasses import asdict, replace
 
 import numpy as np
 import pytest
@@ -701,6 +701,60 @@ def test_batch_rejects_malformed_replacement_field():
             h_full=h_full,
             guidance_fields=(malformed,) + guidance[1:],
         )
+
+
+@pytest.mark.parametrize("spatial_temporal", [False, True])
+def test_batch_random_fields_match_independent_scalar_reference(spatial_temporal):
+    rng = np.random.default_rng(854)
+    cs, h, fields = make_fields(yaw_slice_count=8)
+    masks = rng.random(h.shape) > 0.7
+    h = replace(
+        h, values=rng.normal(size=h.shape),
+        yaw_derivatives=rng.normal(size=h.shape),
+        dirichlet_boundary_masks=masks,
+    )
+    fields = tuple(replace(f, vectors_robot_xy=rng.normal(size=f.vectors_robot_xy.shape)) for f in fields)
+    temporal_values = rng.normal(size=h.shape)
+    temporal = SafeSAGETemporalDerivativeResult(
+        values=temporal_values, raw_values=temporal_values,
+        valid_mask=np.ones(h.shape, dtype=bool),
+        yaw_angles_radians=h.yaw_angles_radians, grid_config=cs.occupancy_grids[0].config,
+        time_delta_seconds=0.2, egomotion_translation_grid_xy=(0.0, 0.0), smoothing_factor=1.0,
+    ) if spatial_temporal else -0.37
+    filter_ = make_filter()
+    tol = filter_.config.numerical_tolerance
+    spacing = 2 * np.pi / h.yaw_slice_count
+    states = np.vstack((
+        np.column_stack((rng.uniform(-2, 2, (500, 2)), rng.uniform(-20 * np.pi, 20 * np.pi, 500))),
+        [[x, y, -np.pi + spacing * fraction] for x, y in ((-2, -2), (2, 2), (2, -2), (0.5, -0.5))
+         for fraction in (0, tol / 2, tol * 2, 0.5 - 2 * tol, 0.5, 0.5 + 2 * tol, 1, 8)],
+    ))
+    kwargs = dict(configuration_space=cs, h_full=h, guidance_fields=fields, temporal_safety_derivative=temporal)
+    expected = tuple(filter_.evaluate_constraint(query_position_grid_xy=s[:2], query_yaw_radians=float(s[2]), **kwargs) for s in states)
+    actual = filter_.evaluate_constraints(states, **kwargs)
+    for batch, scalar in zip(actual, expected, strict=True):
+        for key, value in asdict(scalar).items():
+            if key in ("query_cell", "lower_yaw_slice", "upper_yaw_slice", "unsafe_reason", "query_on_unsafe_boundary"):
+                assert getattr(batch, key) == value
+            else:
+                assert getattr(batch, key) == pytest.approx(value, abs=2e-13, rel=2e-13), key
+
+
+@pytest.mark.parametrize("guidance", [(0.0, 0.0), (1.0, 0.0)])
+def test_batch_zero_temporal_denominator_and_unsafe_priority(guidance):
+    cs, h, fields = make_fields(safety_value=0.0, guidance=guidance)
+    kwargs = dict(configuration_space=cs, h_full=h, guidance_fields=fields, temporal_safety_derivative=-0.4)
+    filter_ = make_filter()
+    assert filter_.evaluate_constraints(np.zeros((3, 3)), **kwargs) == tuple(
+        filter_.evaluate_constraint(query_position_grid_xy=np.zeros(2), query_yaw_radians=0.0, **kwargs) for _ in range(3)
+    )
+
+
+@pytest.mark.parametrize("temporal", [True, np.nan, "0"])
+def test_batch_rejects_invalid_temporal_input(temporal):
+    cs, h, fields = make_fields()
+    with pytest.raises((TypeError, ValueError)):
+        make_filter().evaluate_constraints(np.zeros((2, 3)), configuration_space=cs, h_full=h, guidance_fields=fields, temporal_safety_derivative=temporal)
 
 
 def test_vector_geometry_mask_matches_scalar_including_yaw_ties():

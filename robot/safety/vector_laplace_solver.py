@@ -54,8 +54,11 @@ class VectorLaplaceSolverConfig:
     maximum_iterations: int = 20_000
     residual_check_interval: int = 10
     relaxation_factor: float = 1.7
+    solver_backend: str = "sor"
 
     def __post_init__(self) -> None:
+        if self.solver_backend not in {"sor", "sparse_direct"}:
+            raise ValueError("unsupported vector Laplace solver backend")
         tolerance = _validated_real(
             self.convergence_tolerance,
             name="convergence_tolerance",
@@ -164,6 +167,26 @@ def solve_vector_laplace_dirichlet(
         )
 
     maximum_residual = math.inf
+    if solver_config.solver_backend == "sparse_direct":
+        from robot.safety.sparse_dirichlet import solve_five_point_dirichlet
+
+        vectors = solve_five_point_dirichlet(
+            vectors,
+            boundary_mask,
+            forcing=np.zeros(vectors.shape[:2]),
+            resolution=grid_resolution,
+        )
+        residual = _maximum_laplace_residual(
+            vectors, solution_mask=solution_mask, resolution=grid_resolution
+        )
+        if (
+            not np.isfinite(vectors).all()
+            or residual > solver_config.convergence_tolerance
+        ):
+            raise RuntimeError(
+                "direct vector Laplace solution failed the unchanged residual gate"
+            )
+        return _make_result(vectors, iteration_count=1, maximum_residual=residual)
     interior_solution_mask = solution_mask[1:-1, 1:-1]
     interior_rows, interior_columns = np.indices(
         interior_solution_mask.shape

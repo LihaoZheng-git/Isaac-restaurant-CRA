@@ -81,7 +81,9 @@ from robot.config import (
 from isaacsim import SimulationApp
 
 
-RTX_HISTORY_TRANSFORM_COUNT = 20
+RTX_HISTORY_TRANSFORM_COUNT = int(os.environ.get("ISAAC_RTX_HISTORY_TRANSFORM_COUNT", "20"))
+if not 2 <= RTX_HISTORY_TRANSFORM_COUNT <= 256:
+    raise ValueError("RTX history transform count must lie within [2, 256]")
 SIMULATION_HEADLESS = os.environ.get(
     "ISAAC_SIM_HEADLESS",
     "0",
@@ -92,6 +94,8 @@ simulation_app = SimulationApp(
         "headless": SIMULATION_HEADLESS,
         "enable_motion_bvh": True,
         "extra_args": [
+            *(["--enable", "omni.anim.behavior.core"]
+              if os.environ.get("CRA_NATIVE_HUMAN") == "1" else []),
             (
                 "--/rtx/scenedb/maxHistoryTransformCount="
                 f"{RTX_HISTORY_TRANSFORM_COUNT}"
