@@ -6,7 +6,7 @@ CRA combines camera and LiDAR observations to assess risk around the robot. The 
 
 ![CRA pipeline from sensor observations and physical risk factors to navigation control](project%20webpage/media/pipeline.png)
 
-The algorithm is in [robot/](robot/), including the [safety filter and MPC](robot/safety/). The restaurant mission and its configuration are in [experiment/](experiment/).
+The MPC and CBF filter are implemented in [robot/safety/](robot/safety/). The final restaurant mission demo is in [experiment/](experiment/).
 
 ## Environment setup
 
@@ -24,8 +24,6 @@ The algorithm is in [robot/](robot/), including the [safety filter and MPC](robo
    Get the [model weights](experiment/models/README.md) and follow the [experiment guide](experiment/README.md) to prepare the restaurant scene.
 
 ## Citation
-
-[Read the paper on arXiv](https://arxiv.org/abs/2611.22080).
 
 ```bibtex
 @misc{zheng2026cracontinuousriskassessment,
