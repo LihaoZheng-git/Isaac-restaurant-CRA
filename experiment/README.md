@@ -22,4 +22,4 @@ python -m experiment.run --scene-root $scene --isaac-python $isaac --check
 python -m experiment.run --scene-root $scene --isaac-python $isaac --output outputs/restaurant-service
 ```
 
-Use `--model-root` if your weights are in another folder. Each run saves camera recordings, sensor data, and results under `--output`. The [mission settings](configs/mission.json) and [original run record](recorded-run.json) describe the published demo.
+Use `--model-root` if your weights are in another folder. Each run saves camera recordings, sensor data, and results under `--output`.
