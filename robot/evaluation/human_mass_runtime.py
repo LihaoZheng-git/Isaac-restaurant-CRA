@@ -22,15 +22,27 @@ def apply_body_identity_mass_retention(memory, body_memory, tracking, packet, ob
             fresh[item.attributes.track_id] = ScalarEstimate(**cue)
     retained, audit = memory.update(tracking, body_memory, fresh,
         timestamp_seconds=packet.camera_timestamp_seconds, camera_frame_id=packet.camera_frame_id)
-    retained.update(fresh)
     rows = {r['track_id']: r for r in audit['rows']}
+    retained.update({key: fresh[key] for key, row in rows.items() if row['mode'] == 'fresh'})
     updated = []
     for item, frame in zip(objects, frames):
         key = item.attributes.track_id
-        if key not in retained:
+        mass = retained.get(key)
+        row = rows.get(key)
+        existing = item.attributes.mass.mass_kg
+        # The generic property cache cannot supply the adult prior when the
+        # current body-specific check withheld it.
+        if (mass is None and body_memory.retire_unresolved and existing.source == HUMAN_MASS_PRIOR_SOURCE
+                and existing.is_available):
+            if row is None:
+                row = dict(track_id=key, mode='unavailable', reason='no verified current body identity for adult mass')
+                audit['rows'].append(row)
+            mass = ScalarEstimate.unavailable(unit='kg', source=HUMAN_MASS_PRIOR_SOURCE,
+                timestamp_seconds=packet.camera_timestamp_seconds, evidence=(row['reason'],))
+        if mass is None:
             updated.append(item)
             continue
-        attributes = replace(item.attributes, mass=replace(item.attributes.mass, mass_kg=retained[key]))
+        attributes = replace(item.attributes, mass=replace(item.attributes.mass, mass_kg=mass))
         settings = replace(item.adapted.config, maximum_persistent_property_age_seconds=3.)
         physical = adapt_physical_factors(attributes, timestamp_seconds=packet.camera_timestamp_seconds,
             potential_interaction_likelihood=dict(item.adapted.potential.inputs)['harmful_fall_interaction'],
@@ -43,9 +55,9 @@ def apply_body_identity_mass_retention(memory, body_memory, tracking, packet, ob
             height_evidence=frame.get('height_evidence'),
             human_body_contact_prior=frame.get('human_body_contact_prior'), human_part_contact=frame.get('human_part_contact'))
         diagnostics = dict(item.diagnostics)
-        diagnostics['human_mass_identity_retention'] = dict(rows[key],
+        diagnostics['human_mass_identity_retention'] = dict(row,
             generic_property_result=diagnostics['property_evidence']['mass'])
-        diagnostics['property_evidence'] = dict(diagnostics['property_evidence'], mass=rows[key])
+        diagnostics['property_evidence'] = dict(diagnostics['property_evidence'], mass=row)
         diagnostics['factor_scores'] = details
         readiness = evaluate_perception_readiness(RestaurantScenario('persistent_object', 'potential',
             'body-identity adult mass prior with current physical evidence', runtime_factor_evidence_mode(adapted), 0), adapted)

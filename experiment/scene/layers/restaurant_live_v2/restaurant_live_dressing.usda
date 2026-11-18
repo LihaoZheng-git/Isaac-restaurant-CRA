@@ -1,0 +1,538 @@
+#usda 1.0
+
+over "World"
+{
+    def Xform "RestaurantLiveV1"
+    {
+        def Xform "Dressing"
+        {
+            def Xform "LowerAPlate" (
+                customData = {
+                    bool sceneAuthoringOnly = 1
+                }
+                prepend references = @{live}/restaurant_live_v1/assets/dinner_plate.usdc@
+            )
+            {
+                float xformOp:rotateZ = 0
+                float3 xformOp:scale = (1, 1, 1)
+                double3 xformOp:translate = (31.330000000000002, 6.62, 0.7466)
+                uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:rotateZ", "xformOp:scale"]
+            }
+
+            def Xform "LowerAFork" (
+                customData = {
+                    bool sceneAuthoringOnly = 1
+                }
+                prepend references = @{live}/restaurant_live_v1/assets/fork.usdc@
+            )
+            {
+                float xformOp:rotateZ = 90
+                float3 xformOp:scale = (0.9, 0.9, 0.9)
+                double3 xformOp:translate = (31.320000014710782, 6.439999997620855, 0.746600001467894)
+                uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:rotateZ", "xformOp:scale"]
+            }
+
+            def Xform "LowerAKnife" (
+                customData = {
+                    bool sceneAuthoringOnly = 1
+                }
+                prepend references = @{live}/restaurant_live_v1/assets/knife.usdc@
+            )
+            {
+                float xformOp:rotateZ = 90
+                float3 xformOp:scale = (0.9, 0.9, 0.9)
+                double3 xformOp:translate = (31.320000001830678, 6.8000000616560285, 0.7465999998410525)
+                uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:rotateZ", "xformOp:scale"]
+            }
+
+            def Xform "LowerBPlate" (
+                customData = {
+                    bool sceneAuthoringOnly = 1
+                }
+                prepend references = @{live}/restaurant_live_v1/assets/dinner_plate.usdc@
+            )
+            {
+                float xformOp:rotateZ = 0
+                float3 xformOp:scale = (1, 1, 1)
+                double3 xformOp:translate = (31.330000000000002, 7.340000000000001, 0.7466)
+                uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:rotateZ", "xformOp:scale"]
+            }
+
+            def Xform "LowerBFork" (
+                customData = {
+                    bool sceneAuthoringOnly = 1
+                }
+                prepend references = @{live}/restaurant_live_v1/assets/fork.usdc@
+            )
+            {
+                float xformOp:rotateZ = 90
+                float3 xformOp:scale = (0.9, 0.9, 0.9)
+                double3 xformOp:translate = (31.320000014710782, 7.159999997620855, 0.746600001467894)
+                uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:rotateZ", "xformOp:scale"]
+            }
+
+            def Xform "LowerBKnife" (
+                customData = {
+                    bool sceneAuthoringOnly = 1
+                }
+                prepend references = @{live}/restaurant_live_v1/assets/knife.usdc@
+            )
+            {
+                float xformOp:rotateZ = 90
+                float3 xformOp:scale = (0.9, 0.9, 0.9)
+                double3 xformOp:translate = (31.320000001830678, 7.520000061656029, 0.7465999998410525)
+                uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:rotateZ", "xformOp:scale"]
+            }
+
+            def Xform "LowerLatte" (
+                customData = {
+                    bool sceneAuthoringOnly = 1
+                }
+                prepend references = @{live}/restaurant_live_v1/assets/latte_saucer.usdc@
+            )
+            {
+                float xformOp:rotateZ = 15
+                float3 xformOp:scale = (1, 1, 1)
+                double3 xformOp:translate = (31.64, 7.5, 0.7466)
+                uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:rotateZ", "xformOp:scale"]
+            }
+
+            def Xform "MiddleAPlate" (
+                customData = {
+                    bool sceneAuthoringOnly = 1
+                }
+                prepend references = @{live}/restaurant_live_v1/assets/dinner_plate.usdc@
+            )
+            {
+                float xformOp:rotateZ = 0
+                float3 xformOp:scale = (1, 1, 1)
+                double3 xformOp:translate = (31.28, 9.08, 0.7466)
+                uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:rotateZ", "xformOp:scale"]
+            }
+
+            def Xform "MiddleAFork" (
+                customData = {
+                    bool sceneAuthoringOnly = 1
+                }
+                prepend references = @{live}/restaurant_live_v1/assets/fork.usdc@
+            )
+            {
+                float xformOp:rotateZ = 90
+                float3 xformOp:scale = (0.9, 0.9, 0.9)
+                double3 xformOp:translate = (31.27000001471078, 8.899999997620855, 0.746600001467894)
+                uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:rotateZ", "xformOp:scale"]
+            }
+
+            def Xform "MiddleAKnife" (
+                customData = {
+                    bool sceneAuthoringOnly = 1
+                }
+                prepend references = @{live}/restaurant_live_v1/assets/knife.usdc@
+            )
+            {
+                float xformOp:rotateZ = 90
+                float3 xformOp:scale = (0.9, 0.9, 0.9)
+                double3 xformOp:translate = (31.270000001830677, 9.26000006165603, 0.7465999998410525)
+                uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:rotateZ", "xformOp:scale"]
+            }
+
+            def Xform "MiddleBPlate" (
+                customData = {
+                    bool sceneAuthoringOnly = 1
+                }
+                prepend references = @{live}/restaurant_live_v1/assets/dinner_plate.usdc@
+            )
+            {
+                float xformOp:rotateZ = 0
+                float3 xformOp:scale = (1, 1, 1)
+                double3 xformOp:translate = (31.28, 9.799999999999999, 0.7466)
+                uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:rotateZ", "xformOp:scale"]
+            }
+
+            def Xform "MiddleBFork" (
+                customData = {
+                    bool sceneAuthoringOnly = 1
+                }
+                prepend references = @{live}/restaurant_live_v1/assets/fork.usdc@
+            )
+            {
+                float xformOp:rotateZ = 90
+                float3 xformOp:scale = (0.9, 0.9, 0.9)
+                double3 xformOp:translate = (31.27000001471078, 9.619999997620853, 0.746600001467894)
+                uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:rotateZ", "xformOp:scale"]
+            }
+
+            def Xform "MiddleBKnife" (
+                customData = {
+                    bool sceneAuthoringOnly = 1
+                }
+                prepend references = @{live}/restaurant_live_v1/assets/knife.usdc@
+            )
+            {
+                float xformOp:rotateZ = 90
+                float3 xformOp:scale = (0.9, 0.9, 0.9)
+                double3 xformOp:translate = (31.270000001830677, 9.980000061656028, 0.7465999998410525)
+                uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:rotateZ", "xformOp:scale"]
+            }
+
+            def Xform "MiddleLatte" (
+                customData = {
+                    bool sceneAuthoringOnly = 1
+                }
+                prepend references = @{live}/restaurant_live_v1/assets/latte_saucer.usdc@
+            )
+            {
+                float xformOp:rotateZ = 15
+                float3 xformOp:scale = (1, 1, 1)
+                double3 xformOp:translate = (31.59, 9.959999999999999, 0.7466)
+                uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:rotateZ", "xformOp:scale"]
+            }
+
+            def Xform "UpperAPlate" (
+                customData = {
+                    bool sceneAuthoringOnly = 1
+                }
+                prepend references = @{live}/restaurant_live_v1/assets/dinner_plate.usdc@
+            )
+            {
+                float xformOp:rotateZ = 0
+                float3 xformOp:scale = (1, 1, 1)
+                double3 xformOp:translate = (31.28, 11.57, 0.7466)
+                uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:rotateZ", "xformOp:scale"]
+            }
+
+            def Xform "UpperAFork" (
+                customData = {
+                    bool sceneAuthoringOnly = 1
+                }
+                prepend references = @{live}/restaurant_live_v1/assets/fork.usdc@
+            )
+            {
+                float xformOp:rotateZ = 90
+                float3 xformOp:scale = (0.9, 0.9, 0.9)
+                double3 xformOp:translate = (31.27000001471078, 11.389999997620855, 0.746600001467894)
+                uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:rotateZ", "xformOp:scale"]
+            }
+
+            def Xform "UpperAKnife" (
+                customData = {
+                    bool sceneAuthoringOnly = 1
+                }
+                prepend references = @{live}/restaurant_live_v1/assets/knife.usdc@
+            )
+            {
+                float xformOp:rotateZ = 90
+                float3 xformOp:scale = (0.9, 0.9, 0.9)
+                double3 xformOp:translate = (31.270000001830677, 11.75000006165603, 0.7465999998410525)
+                uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:rotateZ", "xformOp:scale"]
+            }
+
+            def Xform "UpperBPlate" (
+                customData = {
+                    bool sceneAuthoringOnly = 1
+                }
+                prepend references = @{live}/restaurant_live_v1/assets/dinner_plate.usdc@
+            )
+            {
+                float xformOp:rotateZ = 0
+                float3 xformOp:scale = (1, 1, 1)
+                double3 xformOp:translate = (31.28, 12.29, 0.7466)
+                uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:rotateZ", "xformOp:scale"]
+            }
+
+            def Xform "UpperBFork" (
+                customData = {
+                    bool sceneAuthoringOnly = 1
+                }
+                prepend references = @{live}/restaurant_live_v1/assets/fork.usdc@
+            )
+            {
+                float xformOp:rotateZ = 90
+                float3 xformOp:scale = (0.9, 0.9, 0.9)
+                double3 xformOp:translate = (31.27000001471078, 12.109999997620854, 0.746600001467894)
+                uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:rotateZ", "xformOp:scale"]
+            }
+
+            def Xform "UpperBKnife" (
+                customData = {
+                    bool sceneAuthoringOnly = 1
+                }
+                prepend references = @{live}/restaurant_live_v1/assets/knife.usdc@
+            )
+            {
+                float xformOp:rotateZ = 90
+                float3 xformOp:scale = (0.9, 0.9, 0.9)
+                double3 xformOp:translate = (31.270000001830677, 12.470000061656028, 0.7465999998410525)
+                uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:rotateZ", "xformOp:scale"]
+            }
+
+            def Xform "UpperLatte" (
+                customData = {
+                    bool sceneAuthoringOnly = 1
+                }
+                prepend references = @{live}/restaurant_live_v1/assets/latte_saucer.usdc@
+            )
+            {
+                float xformOp:rotateZ = 15
+                float3 xformOp:scale = (1, 1, 1)
+                double3 xformOp:translate = (31.59, 12.45, 0.7466)
+                uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:rotateZ", "xformOp:scale"]
+            }
+
+            def Xform "LowerSmallBowl" (
+                customData = {
+                    bool sceneAuthoringOnly = 1
+                }
+                prepend references = @{live}/restaurant_live_v1/assets/small_bowl.usdc@
+            )
+            {
+                float xformOp:rotateZ = 0
+                float3 xformOp:scale = (1, 1, 1)
+                double3 xformOp:translate = (31.68, 6.48, 0.7466)
+                uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:rotateZ", "xformOp:scale"]
+            }
+
+            def Xform "MiddleSidePlate" (
+                customData = {
+                    bool sceneAuthoringOnly = 1
+                }
+                prepend references = @{live}/restaurant_live_v1/assets/side_plate.usdc@
+            )
+            {
+                float xformOp:rotateZ = 0
+                float3 xformOp:scale = (1, 1, 1)
+                double3 xformOp:translate = (31.62, 8.91, 0.7466)
+                uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:rotateZ", "xformOp:scale"]
+            }
+
+            def Xform "UpperBowl" (
+                customData = {
+                    bool sceneAuthoringOnly = 1
+                }
+                prepend references = @{live}/restaurant_live_v1/assets/large_bowl.usdc@
+            )
+            {
+                float xformOp:rotateZ = 0
+                float3 xformOp:scale = (1, 1, 1)
+                double3 xformOp:translate = (31.65, 11.42, 0.7466)
+                uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:rotateZ", "xformOp:scale"]
+            }
+
+            def Xform "FrontDinnerPlate" (
+                customData = {
+                    bool sceneAuthoringOnly = 1
+                }
+                prepend references = @{live}/restaurant_live_v1/assets/dinner_plate.usdc@
+            )
+            {
+                float xformOp:rotateZ = 0
+                float3 xformOp:scale = (1, 1, 1)
+                double3 xformOp:translate = (13.15, 2.45, 0.7466)
+                uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:rotateZ", "xformOp:scale"]
+            }
+
+            def Xform "FrontLatte" (
+                customData = {
+                    bool sceneAuthoringOnly = 1
+                }
+                prepend references = @{live}/restaurant_live_v1/assets/latte_saucer.usdc@
+            )
+            {
+                float xformOp:rotateZ = -15
+                float3 xformOp:scale = (1, 1, 1)
+                double3 xformOp:translate = (13.75, 2.4, 0.7466)
+                uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:rotateZ", "xformOp:scale"]
+            }
+
+            def Xform "FrontSmallBowl" (
+                customData = {
+                    bool sceneAuthoringOnly = 1
+                }
+                prepend references = @{live}/restaurant_live_v1/assets/small_bowl.usdc@
+            )
+            {
+                float xformOp:rotateZ = 0
+                float3 xformOp:scale = (1, 1, 1)
+                double3 xformOp:translate = (13.3, 2.14, 0.7466)
+                uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:rotateZ", "xformOp:scale"]
+            }
+
+            def Xform "CounterBoard" (
+                customData = {
+                    bool sceneAuthoringOnly = 1
+                }
+                prepend references = @{live}/restaurant_live_v1/assets/wooden_board.usdc@
+            )
+            {
+                float xformOp:rotateZ = 90
+                float3 xformOp:scale = (0.7, 0.7, 0.7)
+                double3 xformOp:translate = (22.749999986939198, 6.09999999901182, 0.90000004062149)
+                uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:rotateZ", "xformOp:scale"]
+            }
+
+            def Xform "CounterPot" (
+                customData = {
+                    bool sceneAuthoringOnly = 1
+                }
+                prepend references = @{live}/restaurant_live_v1/assets/stock_pot.usdc@
+            )
+            {
+                float xformOp:rotateZ = 0
+                float3 xformOp:scale = (0.52, 0.52, 0.52)
+                double3 xformOp:translate = (24.5, 6.12, 0.8999999972464818)
+                uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:rotateZ", "xformOp:scale"]
+            }
+
+            def Xform "CounterSpoon" (
+                customData = {
+                    bool sceneAuthoringOnly = 1
+                }
+                prepend references = @{live}/restaurant_live_v1/assets/wooden_spoon.usdc@
+            )
+            {
+                float xformOp:rotateZ = 90
+                float3 xformOp:scale = (0.7, 0.7, 0.7)
+                double3 xformOp:translate = (22.780000005587862, 6.099999999935241, 0.9150479382002765)
+                uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:rotateZ", "xformOp:scale"]
+            }
+
+            def Xform "CounterBowl" (
+                customData = {
+                    bool sceneAuthoringOnly = 1
+                }
+                prepend references = @{live}/restaurant_live_v1/assets/large_bowl.usdc@
+            )
+            {
+                float xformOp:rotateZ = 0
+                float3 xformOp:scale = (1, 1, 1)
+                double3 xformOp:translate = (23.24, 6.14, 0.9)
+                uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:rotateZ", "xformOp:scale"]
+            }
+
+            def Xform "CounterPlateA" (
+                customData = {
+                    bool sceneAuthoringOnly = 1
+                }
+                prepend references = @{live}/restaurant_live_v1/assets/side_plate.usdc@
+            )
+            {
+                float xformOp:rotateZ = 0
+                float3 xformOp:scale = (1, 1, 1)
+                double3 xformOp:translate = (24.86, 5.97, 0.9)
+                uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:rotateZ", "xformOp:scale"]
+            }
+
+            def Xform "CounterPlateB" (
+                customData = {
+                    bool sceneAuthoringOnly = 1
+                }
+                prepend references = @{live}/restaurant_live_v1/assets/side_plate.usdc@
+            )
+            {
+                float xformOp:rotateZ = 0
+                float3 xformOp:scale = (1, 1, 1)
+                double3 xformOp:translate = (24.86, 6.23, 0.9)
+                uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:rotateZ", "xformOp:scale"]
+            }
+        }
+
+        def Xform "PinkPrepTrolley" (
+            customData = {
+                bool sceneAuthoringOnly = 1
+            }
+            prepend references = @{live}/restaurant_live_v1/assets/pink_trolley.usdc@
+        )
+        {
+            float xformOp:rotateZ = 90
+            float3 xformOp:scale = (1, 1, 1)
+            double3 xformOp:translate = (26.12, 7.5, 0)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:rotateZ", "xformOp:scale"]
+        }
+
+        def Xform "PlateTrolley" (
+            customData = {
+                bool sceneAuthoringOnly = 1
+            }
+            prepend references = @{live}/restaurant_live_v1/assets/plate_trolley.usdc@
+        )
+        {
+            float xformOp:rotateZ = 0
+            float3 xformOp:scale = (1, 1, 1)
+            double3 xformOp:translate = (29.40000004338595, 14.599999959152306, -6.497476274001622e-9)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:rotateZ", "xformOp:scale"]
+        }
+    }
+
+    over "CRAServiceDressing"
+    {
+        over "FrontPlate" (
+            active = false
+        )
+        {
+        }
+
+        over "FrontBread" (
+            active = false
+        )
+        {
+        }
+
+        over "FrontCup" (
+            active = false
+        )
+        {
+        }
+
+        over "CounterKnifeBlock" (
+            active = false
+        )
+        {
+        }
+
+        over "CounterPlate" (
+            active = false
+        )
+        {
+        }
+
+        over "CounterKnife" (
+            active = false
+        )
+        {
+        }
+
+        over "FoodBowl" (
+            active = false
+        )
+        {
+        }
+
+        over "FoodSpoon" (
+            active = false
+        )
+        {
+        }
+
+        over "SecondPlate" (
+            active = false
+        )
+        {
+        }
+
+        over "DestinationPlate" (
+            active = false
+        )
+        {
+        }
+    }
+
+    over "CRAServiceActors"
+    {
+        over "Server" (
+            active = false
+        )
+        {
+        }
+    }
+}
+

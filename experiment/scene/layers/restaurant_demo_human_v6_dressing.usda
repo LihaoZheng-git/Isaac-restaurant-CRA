@@ -1,0 +1,233 @@
+#usda 1.0
+
+over "World"
+{
+    def Xform "CRAServiceDemoV1"
+    {
+        def Xform "ClearingStation"
+        {
+            def Cube "Top" (
+                prepend apiSchemas = ["PhysicsCollisionAPI"]
+            )
+            {
+                color3f[] primvars:displayColor = [(0.3, 0.18, 0.1)]
+                float3 xformOp:scale = (0.4, 0.4, 0.03)
+                double3 xformOp:translate = (30.8, 5.45, 0.77)
+                uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:scale"]
+            }
+
+            def Cube "LegNN" (
+                prepend apiSchemas = ["PhysicsCollisionAPI"]
+            )
+            {
+                color3f[] primvars:displayColor = [(0.18, 0.18, 0.18)]
+                float3 xformOp:scale = (0.025, 0.025, 0.37)
+                double3 xformOp:translate = (30.48, 5.13, 0.37)
+                uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:scale"]
+            }
+
+            def Cube "LegNP" (
+                prepend apiSchemas = ["PhysicsCollisionAPI"]
+            )
+            {
+                color3f[] primvars:displayColor = [(0.18, 0.18, 0.18)]
+                float3 xformOp:scale = (0.025, 0.025, 0.37)
+                double3 xformOp:translate = (30.48, 5.7700000000000005, 0.37)
+                uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:scale"]
+            }
+
+            def Cube "LegPN" (
+                prepend apiSchemas = ["PhysicsCollisionAPI"]
+            )
+            {
+                color3f[] primvars:displayColor = [(0.18, 0.18, 0.18)]
+                float3 xformOp:scale = (0.025, 0.025, 0.37)
+                double3 xformOp:translate = (31.12, 5.13, 0.37)
+                uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:scale"]
+            }
+
+            def Cube "LegPP" (
+                prepend apiSchemas = ["PhysicsCollisionAPI"]
+            )
+            {
+                color3f[] primvars:displayColor = [(0.18, 0.18, 0.18)]
+                float3 xformOp:scale = (0.025, 0.025, 0.37)
+                double3 xformOp:translate = (31.12, 5.7700000000000005, 0.37)
+                uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:scale"]
+            }
+        }
+
+        def Xform "RoundedBin"
+        {
+            def Cylinder "Body" (
+                prepend apiSchemas = ["PhysicsCollisionAPI"]
+            )
+            {
+                uniform token axis = "Z"
+                double height = 0.58
+                color3f[] primvars:displayColor = [(0.19, 0.3, 0.31)]
+                double radius = 0.19
+                float3 xformOp:scale = (1, 1, 1)
+                double3 xformOp:translate = (30.65, 6.05, 0.29)
+                uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:scale"]
+            }
+
+            def Sphere "Lid" (
+                prepend apiSchemas = ["PhysicsCollisionAPI"]
+            )
+            {
+                color3f[] primvars:displayColor = [(0.28, 0.39, 0.4)]
+                double radius = 0.195
+                float3 xformOp:scale = (1, 1, 0.22)
+                double3 xformOp:translate = (30.65, 6.05, 0.58)
+                uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:scale"]
+            }
+        }
+
+        def Xform "ClosedCaddy"
+        {
+            def Cylinder "Holder" (
+                prepend apiSchemas = ["PhysicsCollisionAPI"]
+            )
+            {
+                uniform token axis = "Z"
+                double height = 0.13
+                color3f[] primvars:displayColor = [(0.65, 0.7, 0.7)]
+                double radius = 0.075
+                float3 xformOp:scale = (1, 1, 1)
+                double3 xformOp:translate = (30.5, 5.25, 0.865)
+                uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:scale"]
+            }
+
+            def Sphere "Lid" (
+                prepend apiSchemas = ["PhysicsCollisionAPI"]
+            )
+            {
+                color3f[] primvars:displayColor = [(0.7, 0.75, 0.75)]
+                double radius = 0.078
+                float3 xformOp:scale = (1, 1, 0.28)
+                double3 xformOp:translate = (30.5, 5.25, 0.93)
+                uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:scale"]
+            }
+        }
+
+        def Xform "UtensilCaddy"
+        {
+            def Cylinder "Holder" (
+                prepend apiSchemas = ["PhysicsCollisionAPI"]
+            )
+            {
+                uniform token axis = "Z"
+                double height = 0.13
+                color3f[] primvars:displayColor = [(0.65, 0.7, 0.7)]
+                double radius = 0.075
+                float3 xformOp:scale = (1, 1, 1)
+                double3 xformOp:translate = (30.5, 5.65, 0.865)
+                uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:scale"]
+            }
+
+            def Xform "Fork0" (
+                prepend references = @{assets}/restaurant/kenney_food_kit/usd/utensil-fork.usda@
+            )
+            {
+                float xformOp:rotateY = 90
+                float3 xformOp:scale = (0.48, 0.48, 0.48)
+                double3 xformOp:translate = (30.5, 5.615, 0.95)
+                uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:rotateY", "xformOp:scale"]
+            }
+
+            def Xform "Fork1" (
+                prepend references = @{assets}/restaurant/kenney_food_kit/usd/utensil-fork.usda@
+            )
+            {
+                float xformOp:rotateY = 90
+                float3 xformOp:scale = (0.48, 0.48, 0.48)
+                double3 xformOp:translate = (30.5, 5.65, 0.95)
+                uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:rotateY", "xformOp:scale"]
+            }
+
+            def Xform "Fork2" (
+                prepend references = @{assets}/restaurant/kenney_food_kit/usd/utensil-fork.usda@
+            )
+            {
+                float xformOp:rotateY = 90
+                float3 xformOp:scale = (0.48, 0.48, 0.48)
+                double3 xformOp:translate = (30.5, 5.6850000000000005, 0.95)
+                uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:rotateY", "xformOp:scale"]
+            }
+        }
+    }
+
+    over "Environment"
+    {
+        over "Restaurant"
+        {
+            over "assets_restaurant"
+            {
+                over "Assets_Banquettes_Right"
+                {
+                    over "Geo_TableSet_14"
+                    {
+                        over "Chair_Array"
+                        {
+                            matrix4d xformOp:transform = ( (0.03207227436186755, 0.9994855522804006, 0, 0), (-0.9994855522804006, 0.03207227436186755, 0, 0), (0, 0, 1.0000000000000002, 0), (81.71004332500377, -93.41805625554116, 2.842170943040402e-13, 1) )
+                            uniform token[] xformOpOrder = ["xformOp:transform"]
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    over "Robot"
+    {
+        def "chassis_link"
+        {
+            def Xform "DemoServingTray"
+            {
+                def Cube "Tray" (
+                    prepend apiSchemas = ["PhysicsCollisionAPI"]
+                )
+                {
+                    color3f[] primvars:displayColor = [(0.16, 0.12, 0.08)]
+                    float3 xformOp:scale = (0.12, 0.14, 0.008)
+                    double3 xformOp:translate = (-0.04, 0, 0.447)
+                    uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:scale"]
+                }
+
+                def Xform "plate_dinner" (
+                    prepend references = @{assets}/restaurant/kenney_food_kit/usd/plate-dinner.usda@
+                )
+                {
+                    float3 xformOp:scale = (0.20184486, 0.20184486, 0.20184486)
+                    double3 xformOp:translate = (-0.04, -0, 0.455)
+                    uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:scale"]
+
+                    over "Geometry" (
+                        prepend apiSchemas = ["PhysicsMeshCollisionAPI"]
+                    )
+                    {
+                        uniform token physics:approximation = "convexHull"
+                    }
+                }
+
+                def Xform "bread" (
+                    prepend references = @{assets}/restaurant/kenney_food_kit/usd/bread.usda@
+                )
+                {
+                    float3 xformOp:scale = (0.18086429, 0.18086429, 0.18086429)
+                    double3 xformOp:translate = (-0.04, -0, 0.48)
+                    uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:scale"]
+
+                    over "Geometry" (
+                        prepend apiSchemas = ["PhysicsMeshCollisionAPI"]
+                    )
+                    {
+                        uniform token physics:approximation = "convexHull"
+                    }
+                }
+            }
+        }
+    }
+}
+

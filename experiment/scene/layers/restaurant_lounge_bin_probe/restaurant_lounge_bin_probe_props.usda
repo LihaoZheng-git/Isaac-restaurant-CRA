@@ -1,0 +1,19 @@
+#usda 1.0
+
+over "World"
+{
+    over "CRAServiceDemoV1"
+    {
+        over "ServiceContainer"
+        {
+            double3 xformOp:translate = (27.199999958832958, 3.199999982356984, 0.000595831335196307)
+        }
+
+        over "BrokenCrate" (
+            active = false
+        )
+        {
+        }
+    }
+}
+

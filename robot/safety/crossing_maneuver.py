@@ -31,7 +31,9 @@ def apply_crossing_maneuver(mpc, result, initial, nominal, field, strategy, chec
     encounter_yield = getattr(field, 'crossing_yield_track_ids', None)
     if encounter_yield is not None:
         ids = tuple(k for k in ids if k in encounter_yield)
-    selected = bool(ids and field.motion_passing_reference_sides)
+    lidar_ids = tuple(getattr(field, "current_lidar_yield_track_ids", ()))
+    selected = bool(lidar_ids or ids and field.motion_passing_reference_sides)
+    ids = lidar_ids or ids
     detail = getattr(result, "guidance_tracking", None)
     reason = "no_current_crossing_selection"
     want_wait = selected and strategy == "yield-then-go"
@@ -50,11 +52,13 @@ def apply_crossing_maneuver(mpc, result, initial, nominal, field, strategy, chec
         sensor_timestamp_seconds=field.sensor_timestamp_seconds,
         sensor_frame_id=field.sensor_frame_id,
         selected_track_ids=ids,
-        original_selection_timestamp_seconds=field.motion_passing_reference_source_timestamp_seconds,
+        original_selection_timestamp_seconds=(field.sensor_timestamp_seconds if lidar_ids
+            else field.motion_passing_reference_source_timestamp_seconds),
         original_planner_status=result.status, original_command=result.first_command,
         checked_reference_selected_for_plan=bool(detail is not None and detail.active),
         wait_exact_checked=False, wait_analytical_checked=False,
         encounter_guidance_ablation=encounter_yield is not None,
+        selection_basis="current_lidar_crossing" if lidar_ids else "visual_person_crossing",
         scope="controller preference only; current positive identity and original expiry; no physical evidence, occupancy or clock renewal")
     if want_wait:
         commands = np.zeros((mpc.config.horizon_steps, 2))

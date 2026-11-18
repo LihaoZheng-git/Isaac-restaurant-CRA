@@ -179,19 +179,18 @@ class SamInstanceSegmenter:
         self.backend.set_image(rgb)
         self.image_encoder_wall_seconds = time.perf_counter() - start
 
-    def image_proposals(self, point_track_ids, projection):
-        """Image-first candidates plus observed extent prompts, NOT associations.
+    def image_proposals(self, point_track_ids, projection, *, lidar_guided_only=False):
+        """Propose masks before downstream multi-fragment ownership checks.
 
-        Separate stationary experiment only. Original pixel/quality gates apply;
-        multi-fragment ownership must be checked by the downstream adapter.
-        No retained mask is used as a new observation.
+        LiDAR-guided-only mode skips the automatic image grid. Both modes use
+        the same projected-track prompts, pixel/quality gates and proposal cap.
         """
         import cv2
         from robot.perception.visual_shape_contact import SilhouetteContactConfig
 
         if self.image_shape is None:
             raise RuntimeError("set_image is required for each camera frame")
-        batches = [("automatic_image_grid", *self.backend.generate())]
+        batches = [] if lidar_guided_only else [("automatic_image_grid", *self.backend.generate())]
         ids = np.asarray(point_track_ids)[projection.source_indices]
         # Bounded same-source extent prompts recover instances missed by the
         # automatic point grid (e.g. a bin whose decorative panel is salient).

@@ -36,12 +36,27 @@ class RestaurantHumanEpisode:
         background_service_walk=False,
         background_upper_departure=False,
         straight_service_walk=False,
+        left_outbound_service=False,
+        left_outbound_near_view=False,
+        left_outbound_lounge_walk=False,
+        left_outbound_west_diner=False,
     ):
         if straight_service_walk and (not long_service_parallel or background_service_walk or background_upper_departure):
             raise ValueError('one-way service walk requires a separate long parallel episode')
+        if left_outbound_lounge_walk and not straight_service_walk:
+            raise ValueError('the lounge continuation requires a straight service walk')
+        if left_outbound_west_diner and not (left_outbound_lounge_walk or left_outbound_near_view):
+            raise ValueError('the west diner requires the lounge continuation or parked near view')
         self.straight_service_walk = straight_service_walk
+        self.left_outbound_service = left_outbound_service
+        self.left_outbound_west_diner = left_outbound_west_diner
         from robot.scene.restaurant_straight_walk import StraightServiceWalk
-        self.straight_walk = StraightServiceWalk() if straight_service_walk else None
+        self.straight_walk = (
+            StraightServiceWalk(left_outbound_service=left_outbound_service,
+                                left_outbound_lounge_walk=left_outbound_lounge_walk,
+                                left_outbound_west_diner=left_outbound_west_diner)
+            if straight_service_walk else None
+        )
         if background_upper_departure and not background_service_walk:
             raise ValueError('upper departure requires the separate background service walk')
         if background_service_walk and not long_service_parallel:
@@ -109,13 +124,21 @@ class RestaurantHumanEpisode:
             self.setup = prepare_native_restaurant_human(stage, crossing_direction=crossing_direction,
                 crossing_extension_m=crossing_extension_m,crossing_y_m=crossing_y_m,
                 crossing_layout=crossing_layout, parallel_oncoming=self.parallel_oncoming,
-                upper_departure=background_upper_departure, straight_service_walk=straight_service_walk)
+                upper_departure=background_upper_departure, straight_service_walk=straight_service_walk,
+                left_outbound_service=left_outbound_service, left_outbound_near_view=left_outbound_near_view,
+                left_outbound_west_diner=left_outbound_west_diner)
+        if left_outbound_lounge_walk:
+            self.setup.update(actor_trigger_robot_world_y=self.straight_walk.trigger_y,
+                              actor_goal_world_xyz=self.straight_walk.guides[-1])
         self.goal = (29.8 if crossing_direction == "left-to-right" else 27.8, 8.9, 0.0)
         if self.departure is not None:
             self.goal = self.departure.goal
         if self.parallel_oncoming:
             from robot.scene.parallel_walk_encounter import PARALLEL_ACTOR_GOAL
             self.goal = PARALLEL_ACTOR_GOAL
+            if self.left_outbound_service:
+                from robot.scene.restaurant_straight_walk import LEFT_OUTBOUND_ACTOR_GOAL, LEFT_OUTBOUND_WEST_DINER_GOAL
+                self.goal = LEFT_OUTBOUND_WEST_DINER_GOAL if left_outbound_west_diner else LEFT_OUTBOUND_ACTOR_GOAL
         if straight_service_walk:
             self.goal = self.straight_walk.goal
         self.speed = speed_mps
@@ -218,9 +241,11 @@ class RestaurantHumanEpisode:
             prim.MakeMatrixXform().Set(
                 Gf.Matrix4d()
                 .SetLookAt(
+                    Gf.Vec3d(1.2, 8.6, 3.2) if self.left_outbound_service else
                     Gf.Vec3d(25.9, 6.7, 3.2) if self.parallel_oncoming else Gf.Vec3d(26.5, 7.7, 2.4)
                     if self.carry_setup is not None
                     else Gf.Vec3d(24.5, 5.5, 3.2) if self.open_layout else Gf.Vec3d(25.9, 6.7, 3.2),
+                    Gf.Vec3d(3.0, 11.6, .8) if self.left_outbound_service else
                     Gf.Vec3d(29., 8.7, .8) if self.parallel_oncoming else Gf.Vec3d(29.0, 9.5, 0.8)
                     if self.carry_setup is not None
                     else Gf.Vec3d(28.0, 7.0, 0.8) if self.open_layout else Gf.Vec3d(29.0, 8.2, 0.7),
@@ -244,6 +269,27 @@ class RestaurantHumanEpisode:
     def position(self):
         return np.array(list(self.agent.get_world_translation()), dtype=float)
 
+    def hold_departed_pose(self):
+        """Stop idle root motion after the left diner has completed her walk."""
+        if self.phase != "away_endpoint" or not self.task_succeeded:
+            raise RuntimeError("The diner must finish walking before holding her pose")
+        self.held_endpoint_xyz = self.position()
+        self.agent.set_enabled(False)
+        return self.departed_pose_readback()
+
+    def departed_pose_readback(self):
+        """Read the held native actor and its still-active physical collider."""
+        from isaacsim.core.experimental.utils.backend import use_backend
+
+        center = self.position()
+        with use_backend("tensor", raise_on_fallback=True):
+            collider = self.body.get_world_poses()[0].numpy()[0]
+        drift = float(np.linalg.norm(center - self.held_endpoint_xyz))
+        alignment = float(np.linalg.norm(collider - (center + [0., 0., .85])))
+        return dict(actor_xyz=center.tolist(), collider_xyz=collider.tolist(),
+                    drift_m=drift, collider_alignment_error_m=alignment,
+                    passed=not self.agent.is_enabled() and drift <= .02 and alignment <= .03)
+
     def update(self, now, robot_xy, command, layout, *, navigation=False):
         import carb
         import cv2
@@ -251,8 +297,7 @@ class RestaurantHumanEpisode:
         from isaacsim.core.experimental.utils.backend import use_backend
 
         # This controls the scripted actor only. No actor state enters CRA.
-        from robot.scene.restaurant_straight_walk import STRAIGHT_TRIGGER_X
-        actor_due = (robot_xy[0] >= STRAIGHT_TRIGGER_X if self.straight_service_walk else
+        actor_due = (self.straight_walk.ready_to_walk(robot_xy) if self.straight_walk is not None else
             self.background_walk is not None or crossing_due(now=now, robot_y=robot_xy[1], trigger_y=self.trigger_robot_y,
                 delay_seconds=self.crossing_delay_seconds,navigation_start=self.navigation_start_time))
         if (
@@ -337,6 +382,10 @@ class RestaurantHumanEpisode:
             "native_agent_enabled": bool(self.agent.is_enabled()),
             "background_service_walk": self.background_walk is not None,
             "straight_service_walk": self.straight_service_walk,
+            **({"left_outbound_service": True} if self.left_outbound_service else {}),
+            **({"left_outbound_lounge_walk": True}
+               if self.straight_walk is not None and self.straight_walk.left_outbound_lounge_walk else {}),
+            **({"left_outbound_west_diner": True} if self.left_outbound_west_diner else {}),
             "background_upper_departure": self.background_walk.upper_departure if self.background_walk is not None else False,
             "actor_xyz": xyz.tolist(),
             "left_foot_xyz": feet["L"],

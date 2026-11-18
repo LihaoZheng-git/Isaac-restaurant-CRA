@@ -10,10 +10,6 @@ from robot.perception.object_height import (
     ObjectHeightEvidence,
     estimate_object_height,
 )
-from robot.perception.fall_height_diagnostic import (
-    FallHeightDiagnosticReport as FallHeightDiagnosticReport,
-    evaluate_fall_height_diagnostic as evaluate_fall_height_diagnostic,
-)
 from robot.perception.contact_detection_adapter import (
     ContactPartAssociationConfig,
     ContactPartAssociationDiagnostics,
@@ -57,19 +53,6 @@ from robot.perception.hot_soup_detector import (
     HotSoupDetectorConfig,
     YoloHotSoupDetector,
     estimate_hot_soup_from_detections,
-)
-from robot.perception.hot_soup_evaluation import (
-    HotSoupClassMetrics,
-    HotSoupEvaluationReport,
-    HotSoupPrediction,
-    evaluate_hot_soup_predictions,
-    predictions_from_hot_soup_frame,
-)
-from robot.perception.hot_soup_training import (
-    HotSoupTrainingReadiness,
-    HotSoupTrainingReadinessConfig,
-    assess_hot_soup_training_readiness,
-    write_hot_soup_training_provenance,
 )
 from robot.perception.lidar_fall_surfaces import (
     LIDAR_SURFACE_SOURCE,
@@ -133,11 +116,6 @@ from robot.perception.motion_attributes import (
     RouteMotionContext,
     estimate_track_motion,
 )
-from robot.perception.motion_diagnostic import (
-    LIDAR_TRACK_VELOCITY_SOURCE,
-    MotionDiagnosticReport,
-    evaluate_motion_diagnostic,
-)
 from robot.perception.semantic_detection import (
     PixelBoundingBox,
     SemanticDetection,
@@ -148,13 +126,6 @@ from robot.perception.specialist_track_evidence import (
     SpecialistTrackDiagnostics,
     TrackSpecialistEvidence,
     build_track_specialist_evidence,
-)
-from robot.perception.visual_mass_evaluation import (
-    VisualMassClassEvaluation,
-    VisualMassDomainEvaluation,
-    VisualMassDomainEvaluationConfig,
-    VisualMassDomainPrediction,
-    evaluate_visual_mass_isaac_domain,
 )
 from robot.perception.yolo_detector import (
     YoloSegmentationConfig,
@@ -189,7 +160,6 @@ __all__ = [
     "ContextualThermalCueConfig",
     "ContextualThermalCueResult",
     "EstimateStatus",
-    "FallHeightDiagnosticReport",
     "GeometryAttributes",
     "GEOMETRY_SOURCE",
     "HOT_SOUP_SOURCE",
@@ -201,21 +171,14 @@ __all__ = [
     "HotSoupDetectionCueResult",
     "HotSoupDetectionFrame",
     "HotSoupDetectorConfig",
-    "HotSoupClassMetrics",
-    "HotSoupEvaluationReport",
-    "HotSoupPrediction",
-    "HotSoupTrainingReadiness",
-    "HotSoupTrainingReadinessConfig",
     "LidarGeometryConfig",
     "LIDAR_SURFACE_SOURCE",
-    "LIDAR_TRACK_VELOCITY_SOURCE",
     "LidarFallSurfaceConfig",
     "LidarFallSurfaceResult",
     "MassAttributes",
     "MOTION_SOURCE",
     "MotionAttributeConfig",
     "MotionAttributes",
-    "MotionDiagnosticReport",
     "PhysicalAttributes",
     "PLUME_FEATURE_SOURCE",
     "PLUME_SEGMENTATION_SOURCE",
@@ -236,10 +199,6 @@ __all__ = [
     "SpecialistTrackDiagnostics",
     "ThermalAttributes",
     "TrackSpecialistEvidence",
-    "VisualMassClassEvaluation",
-    "VisualMassDomainEvaluation",
-    "VisualMassDomainEvaluationConfig",
-    "VisualMassDomainPrediction",
     "VisualPlumeInstance",
     "YoloSegmentationConfig",
     "YoloSegmentationDetector",
@@ -247,7 +206,6 @@ __all__ = [
     "build_live_physical_attributes",
     "build_tracking_physical_attributes",
     "build_track_specialist_evidence",
-    "assess_hot_soup_training_readiness",
     "combine_estimate_statuses",
     "associate_contact_parts_to_objects",
     "adapt_plume_segmentations",
@@ -257,10 +215,6 @@ __all__ = [
     "estimate_continuous_thermal_score",
     "estimate_hot_soup_cues",
     "estimate_hot_soup_from_detections",
-    "evaluate_hot_soup_predictions",
-    "evaluate_fall_height_diagnostic",
-    "evaluate_motion_diagnostic",
-    "evaluate_visual_mass_isaac_domain",
     "estimate_mass_from_volume_density",
     "extract_continuous_plume_features",
     "estimate_lidar_fall_surfaces",
@@ -268,6 +222,4 @@ __all__ = [
     "estimate_track_mass",
     "estimate_track_motion",
     "fuse_mass_estimates",
-    "predictions_from_hot_soup_frame",
-    "write_hot_soup_training_provenance",
 ]

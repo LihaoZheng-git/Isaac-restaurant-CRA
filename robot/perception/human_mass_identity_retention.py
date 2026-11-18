@@ -44,6 +44,8 @@ class HumanMassIdentityRetention:
 
         ``fresh_mass`` must contain only same-frame accepted visual/SAM adult
         priors. The caller stages this memory with the complete physical field.
+        Observed-only identity retirement can withhold a mass prior on weak
+        support while the current field still uses the LiDAR geometry.
         """
         now = timestamp_seconds
         if (not isinstance(body_memory, HumanBodyEnvelope)
@@ -60,19 +62,30 @@ class HumanMassIdentityRetention:
             and r['evaluation_timestamp_seconds'] == tracking.timestamp_seconds
             and r['clearance_m'] > 0}
         excluded.update(r.track_id for r in body_memory.uncertainty_regions)
-        active_identities = {key: value for key, value in identities.items() if key not in excluded}
-        for key, identity in active_identities.items():
+        active_identities, unavailable = {}, {}
+        for key, identity in identities.items():
+            if key in excluded:
+                continue
             track = tracks.get(key)
             count = int(np.count_nonzero(tracking.point_track_ids == key))
-            if (track is None or count < 20 or identity['lidar_timestamp'] != tracking.timestamp_seconds
+            if (track is None or identity['lidar_timestamp'] != tracking.timestamp_seconds
                 or identity['observation_count'] != track.observation_count
                 or not np.allclose(identity['center'], track.centroid_world_xy, atol=1e-9, rtol=0)):
                 raise ValueError('adult mass retention requires current positively supported body identity')
-        if not set(fresh_mass) <= active_identities.keys():
-            raise ValueError('mass prior cannot transfer to an unverified body identity')
+            if count < 20:
+                if not body_memory.retire_unresolved:
+                    raise ValueError('adult mass retention requires current positively supported body identity')
+                unavailable[key] = 'current LiDAR support is below the adult-mass minimum'
+                continue
+            active_identities[key] = identity
+        for key in fresh_mass.keys() - active_identities.keys():
+            if not body_memory.retire_unresolved:
+                raise ValueError('mass prior cannot transfer to an unverified body identity')
+            unavailable.setdefault(key, 'current camera cue has no verified body identity')
         sources = {key: value for key, value in self.sources.items()
             if key in identities and 0 <= now-value[0].timestamp_seconds <= self.config.maximum_age_seconds+1e-9}
-        resolved, rows = {}, []
+        resolved = {}
+        rows = [dict(track_id=key, mode='unavailable', reason=reason) for key, reason in sorted(unavailable.items())]
         for key, identity in active_identities.items():
             fresh = fresh_mass.get(key)
             if fresh is not None:

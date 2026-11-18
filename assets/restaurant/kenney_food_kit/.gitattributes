@@ -1,3 +1,4 @@
 # Preserve original archive bytes so intake SHA-256 checks survive Windows Git.
 source/** -text
 License.txt -text
+usd/*.usda text eol=lf

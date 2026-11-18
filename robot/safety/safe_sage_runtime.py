@@ -277,6 +277,7 @@ class SafeSAGERuntimeField:
     person_relative_rear_reference: PersonRelativeRearReference | CurrentRearApproachReference | None = None
     predictive_human_geometry: object | None = None
     observed_motion_forecast: object | None = None
+    current_lidar_yield_track_ids: tuple[int, ...] = ()
 
     def __post_init__(self) -> None:
         frame_id = _nonnegative_integer(
@@ -345,6 +346,13 @@ class SafeSAGERuntimeField:
         elif source is not None:
             raise ValueError("selected tangent epoch requires explicit sides")
         object.__setattr__(self, "motion_passing_reference_sides", sides)
+        lidar_yield_ids = tuple(self.current_lidar_yield_track_ids)
+        if (len(lidar_yield_ids) > 1
+                or any(isinstance(k, bool) or not isinstance(k, int) or k not in current_ids
+                       for k in lidar_yield_ids)
+                or lidar_yield_ids and self.tracking_result.timestamp_seconds != sensor_time):
+            raise ValueError("LiDAR yield requires one current positive track at the field epoch")
+        object.__setattr__(self, "current_lidar_yield_track_ids", lidar_yield_ids)
         if self.crossing_yield_track_ids is not None:
             yield_ids = tuple(self.crossing_yield_track_ids)
             if (len(set(yield_ids)) != len(yield_ids) or any(isinstance(k, bool) or not isinstance(k, int)
@@ -1215,6 +1223,9 @@ class SafeSAGEControlRuntime:
         nominal_goal_grid_xy: Sequence[float] | np.ndarray | None = None,
         prediction_state_timestamp_seconds: float | None = None,
         planning_applied_command: Sequence[float] | np.ndarray | None = None,
+        active_guide_index: int | None = None,
+        route_goal_grid_xy: Sequence[float] | np.ndarray | None = None,
+        confirmed_committed_exit: tuple[int, int, float, str, str] | None = None,
     ) -> SafeSAGEUnicycleMPCResult:
         """Run predictive filtering against one accepted field snapshot."""
 
@@ -1231,6 +1242,21 @@ class SafeSAGEControlRuntime:
             mpc = LaplaceGuidanceTrackingMPC(mpc.paper_filter, mpc.config,
                 guidance_config=replace(mpc.guidance_config, tangent_velocity_fraction=0.))
         extra = {}
+        field_alignment = active_guide_index is not None or route_goal_grid_xy is not None
+        if field_alignment:
+            from robot.safety.field_alignment_mpc import FieldAlignmentMPC
+            if not isinstance(mpc, FieldAlignmentMPC) or not mpc.restaurant_mode:
+                raise ValueError("active route guides require restaurant field alignment")
+            if (isinstance(active_guide_index, bool) or not isinstance(active_guide_index, int)
+                    or active_guide_index < 0 or route_goal_grid_xy is None):
+                raise ValueError("restaurant field alignment requires a route guide index and goal")
+            extra.update(active_guide_index=active_guide_index, route_goal_grid_xy=_finite_vector(
+                route_goal_grid_xy, size=2, name="route_goal_grid_xy"))
+        if confirmed_committed_exit is not None:
+            from robot.safety.committed_aisle_mpc import CommittedAisleMPC, checked_exit_receipt
+            if not field_alignment or not isinstance(mpc, CommittedAisleMPC):
+                raise ValueError("exit receipts require the committed aisle controller and guide")
+            extra["confirmed_committed_exit"] = checked_exit_receipt(confirmed_committed_exit)
         if planning_applied_command is not None:
             from robot.safety.delay_robust_bypass import DelayRobustBypassMPC
             if not isinstance(mpc, DelayRobustBypassMPC):
@@ -1258,7 +1284,7 @@ class SafeSAGEControlRuntime:
             mpc.predictive_geometry = prediction
             mpc.predictive_source_age_seconds = _finite_real(prediction_state_timestamp_seconds,
                 name='actual prediction planning-state epoch')-field.sensor_timestamp_seconds
-        if (isinstance(mpc, LaplaceGuidanceTrackingMPC)
+        if field_alignment or (isinstance(mpc, LaplaceGuidanceTrackingMPC)
             and mpc.guidance_config.reference_tangent_basis == "selected_observed_obstacle"
             and mpc.guidance_config.tangent_velocity_fraction > 0):
             tracks = {t.track_id: t for t in field.tracking_result.tracked_obstacles}

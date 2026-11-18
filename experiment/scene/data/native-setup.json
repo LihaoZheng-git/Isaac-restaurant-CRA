@@ -1,0 +1,1522 @@
+{
+  "actors": [
+    {
+      "name": "LeftNearChair",
+      "character": {
+        "name": "LeftNearChair",
+        "source": "restaurant_live_v3/characters/official-pack/Assets/Characters/Reallusion/ActorCore/Party_M_0001/Actor/party-m-0001/party-m-0001.usd",
+        "sha256": "bdaa41b5798851d08e6bdf105681968c8fa1e33615cf45f135123ab5cbe9e9d8",
+        "source_url": "https://docs.omniverse.nvidia.com/usd/latest/usd_content_samples/downloadable_packs.html",
+        "source_metres_per_unit": 0.01,
+        "source_up_axis": "Z",
+        "reference_uniform_scale": 0.01,
+        "hidden_costume_meshes": [],
+        "appearance": null,
+        "retarget": {
+          "joint_count": 85,
+          "mapped_tag_count": 55,
+          "diagnostic_source_joints": {
+            "L_Foot": "RL_BoneRoot/Hip/Pelvis/L_Thigh/L_Calf/L_Foot",
+            "R_Foot": "RL_BoneRoot/Hip/Pelvis/R_Thigh/R_Calf/R_Foot",
+            "L_Hand": "RL_BoneRoot/Hip/Waist/Spine01/Spine02/L_Clavicle/L_Upperarm/L_Forearm/L_Hand",
+            "R_Hand": "RL_BoneRoot/Hip/Waist/Spine01/Spine02/R_Clavicle/R_Upperarm/R_Forearm/R_Hand",
+            "Hip": "RL_BoneRoot/Hip",
+            "Head": "RL_BoneRoot/Hip/Waist/Spine01/Spine02/NeckTwist01/NeckTwist02/Head"
+          }
+        },
+        "guide_envelope": {
+          "world_radius_m": 0.32,
+          "world_height_m": 1.7,
+          "uniform_world_scale": 0.009999999776482582,
+          "source_local_radius": 32.00000071525575,
+          "source_local_cylindrical_height": 106.00000236928469,
+          "scope": "Explicit authoring guide envelope; no physical-factor evidence"
+        }
+      },
+      "start": [
+        4.853412,
+        16.995522,
+        0.0
+      ],
+      "root_path": "/World/RestaurantLiveV1/Actors/LeftNearChair",
+      "appearance": null,
+      "seat": [
+        4.853412,
+        16.995522,
+        0.52
+      ],
+      "facing": [
+        -1.0,
+        0.0,
+        0.0
+      ],
+      "joints": {
+        "L_Foot": 5,
+        "R_Foot": 16,
+        "L_Hand": 42,
+        "R_Hand": 67,
+        "Hip": 1,
+        "Head": 26
+      },
+      "seat_path": "/World/RestaurantLiveV1/Seats/LeftNearChair"
+    },
+    {
+      "name": "LeftNearBooth",
+      "character": {
+        "name": "LeftNearBooth",
+        "source": "https://omniverse-content-production.s3-us-west-2.amazonaws.com/Assets/Isaac/6.0/Isaac/People/Characters/F_Business_02/F_Business_02.usd",
+        "sha256": "a1dceaae15e59e1cda4b4697a1e233c0cc570279178a418e544289b202c78201",
+        "source_url": "https://omniverse-content-production.s3-us-west-2.amazonaws.com/Assets/Isaac/6.0/Isaac/People/Characters/F_Business_02/F_Business_02.usd",
+        "source_metres_per_unit": 1.0,
+        "source_up_axis": "Z",
+        "reference_uniform_scale": 1.0,
+        "hidden_costume_meshes": [],
+        "appearance": {
+          "actor_root": "/World/RestaurantLiveV1/Actors/LeftNearBooth/Units/Visual",
+          "theme": "burgundy",
+          "changes": [
+            {
+              "part": "shirt",
+              "shader_path": "/World/RestaurantLiveV1/Actors/LeftNearBooth/Units/Visual/female_adult_business_02/Looks/opaque__fabric__shirt/Shader",
+              "property_path": "/World/RestaurantLiveV1/Actors/LeftNearBooth/Units/Visual/female_adult_business_02/Looks/opaque__fabric__shirt/Shader.inputs:diffuse_tint",
+              "previous_tint": [
+                0.273084431886673,
+                0.2814815044403076,
+                0.1959945410490036
+              ],
+              "applied_tint": [
+                0.550000011920929,
+                0.46000000834465027,
+                0.38999998569488525
+              ]
+            },
+            {
+              "part": "vest",
+              "shader_path": "/World/RestaurantLiveV1/Actors/LeftNearBooth/Units/Visual/female_adult_business_02/Looks/opaque__fabric__vest/Shader",
+              "property_path": "/World/RestaurantLiveV1/Actors/LeftNearBooth/Units/Visual/female_adult_business_02/Looks/opaque__fabric__vest/Shader.inputs:diffuse_tint",
+              "previous_tint": [
+                0.8615879416465759,
+                0.41849106550216675,
+                0.9740740656852722
+              ],
+              "applied_tint": [
+                0.28999999165534973,
+                0.03999999910593033,
+                0.05999999865889549
+              ]
+            }
+          ],
+          "changed_properties": [
+            "/World/RestaurantLiveV1/Actors/LeftNearBooth/Units/Visual/female_adult_business_02/Looks/opaque__fabric__shirt/Shader.inputs:diffuse_tint",
+            "/World/RestaurantLiveV1/Actors/LeftNearBooth/Units/Visual/female_adult_business_02/Looks/opaque__fabric__vest/Shader.inputs:diffuse_tint"
+          ],
+          "skin_hair_shoes_jeans_and_all_texture_inputs_unchanged": true,
+          "source_material_binding_preserved": true,
+          "edit_layer": "anon:000002694B5E65F0",
+          "scope": "visual clothing tints only; no source mesh, rig or physical-factor changes"
+        },
+        "retarget": {
+          "joint_count": 101,
+          "mapped_tag_count": 55,
+          "diagnostic_source_joints": {
+            "L_Foot": "RL_BoneRoot/Hip/Pelvis/L_Thigh/L_Calf/L_Foot",
+            "R_Foot": "RL_BoneRoot/Hip/Pelvis/R_Thigh/R_Calf/R_Foot",
+            "L_Hand": "RL_BoneRoot/Hip/Waist/Spine01/Spine02/L_Clavicle/L_Upperarm/L_Forearm/L_Hand",
+            "R_Hand": "RL_BoneRoot/Hip/Waist/Spine01/Spine02/R_Clavicle/R_Upperarm/R_Forearm/R_Hand",
+            "Hip": "RL_BoneRoot/Hip",
+            "Head": "RL_BoneRoot/Hip/Waist/Spine01/Spine02/NeckTwist01/NeckTwist02/Head"
+          }
+        },
+        "guide_envelope": {
+          "world_radius_m": 0.32,
+          "world_height_m": 1.7,
+          "uniform_world_scale": 1.0,
+          "source_local_radius": 0.32,
+          "source_local_cylindrical_height": 1.06,
+          "scope": "Explicit authoring guide envelope; no physical-factor evidence"
+        }
+      },
+      "start": [
+        3.683754,
+        16.995522,
+        0.0
+      ],
+      "root_path": "/World/RestaurantLiveV1/Actors/LeftNearBooth",
+      "appearance": {
+        "actor_root": "/World/RestaurantLiveV1/Actors/LeftNearBooth/Units/Visual",
+        "theme": "burgundy",
+        "changes": [
+          {
+            "part": "shirt",
+            "shader_path": "/World/RestaurantLiveV1/Actors/LeftNearBooth/Units/Visual/female_adult_business_02/Looks/opaque__fabric__shirt/Shader",
+            "property_path": "/World/RestaurantLiveV1/Actors/LeftNearBooth/Units/Visual/female_adult_business_02/Looks/opaque__fabric__shirt/Shader.inputs:diffuse_tint",
+            "previous_tint": [
+              0.273084431886673,
+              0.2814815044403076,
+              0.1959945410490036
+            ],
+            "applied_tint": [
+              0.550000011920929,
+              0.46000000834465027,
+              0.38999998569488525
+            ]
+          },
+          {
+            "part": "vest",
+            "shader_path": "/World/RestaurantLiveV1/Actors/LeftNearBooth/Units/Visual/female_adult_business_02/Looks/opaque__fabric__vest/Shader",
+            "property_path": "/World/RestaurantLiveV1/Actors/LeftNearBooth/Units/Visual/female_adult_business_02/Looks/opaque__fabric__vest/Shader.inputs:diffuse_tint",
+            "previous_tint": [
+              0.8615879416465759,
+              0.41849106550216675,
+              0.9740740656852722
+            ],
+            "applied_tint": [
+              0.28999999165534973,
+              0.03999999910593033,
+              0.05999999865889549
+            ]
+          }
+        ],
+        "changed_properties": [
+          "/World/RestaurantLiveV1/Actors/LeftNearBooth/Units/Visual/female_adult_business_02/Looks/opaque__fabric__shirt/Shader.inputs:diffuse_tint",
+          "/World/RestaurantLiveV1/Actors/LeftNearBooth/Units/Visual/female_adult_business_02/Looks/opaque__fabric__vest/Shader.inputs:diffuse_tint"
+        ],
+        "skin_hair_shoes_jeans_and_all_texture_inputs_unchanged": true,
+        "source_material_binding_preserved": true,
+        "edit_layer": "anon:000002694B5E65F0",
+        "scope": "visual clothing tints only; no source mesh, rig or physical-factor changes"
+      },
+      "seat": [
+        3.683754,
+        16.995522,
+        0.6
+      ],
+      "facing": [
+        1.0,
+        -0.0,
+        -0.0
+      ],
+      "joints": {
+        "L_Foot": 5,
+        "R_Foot": 21,
+        "L_Hand": 55,
+        "R_Hand": 83,
+        "Hip": 1,
+        "Head": 38
+      },
+      "seat_path": "/World/RestaurantLiveV1/Seats/LeftNearBooth"
+    },
+    {
+      "name": "LeftFarChair",
+      "character": {
+        "name": "LeftFarChair",
+        "source": "restaurant_live_v3/characters/official-native/construction05/male_adult_construction_05.usd",
+        "sha256": "18893a98258904620fb30b0f36d7d91b8349704e68788c24f7cd65a22af87e49",
+        "source_url": "https://omniverse-content-production.s3-us-west-2.amazonaws.com/Assets/Isaac/6.0/Isaac/People/Characters/original_male_adult_construction_05/male_adult_construction_05.usd",
+        "source_metres_per_unit": 1.0,
+        "source_up_axis": "Z",
+        "reference_uniform_scale": 1.0,
+        "hidden_costume_meshes": [
+          "/World/RestaurantLiveV1/Actors/LeftFarChair/Units/Visual/ManRoot/male_adult_construction_05/male_adult_construction_05/opaque__plastic__hardhat",
+          "/World/RestaurantLiveV1/Actors/LeftFarChair/Units/Visual/ManRoot/male_adult_construction_05/male_adult_construction_05/opaque__fabric__safetyvest",
+          "/World/RestaurantLiveV1/Actors/LeftFarChair/Units/Visual/ManRoot/male_adult_construction_05/male_adult_construction_05/retro__reflective__safetyvest"
+        ],
+        "appearance": null,
+        "retarget": {
+          "joint_count": 101,
+          "mapped_tag_count": 55,
+          "diagnostic_source_joints": {
+            "L_Foot": "RL_BoneRoot/Hip/Pelvis/L_Thigh/L_Calf/L_Foot",
+            "R_Foot": "RL_BoneRoot/Hip/Pelvis/R_Thigh/R_Calf/R_Foot",
+            "L_Hand": "RL_BoneRoot/Hip/Waist/Spine01/Spine02/L_Clavicle/L_Upperarm/L_Forearm/L_Hand",
+            "R_Hand": "RL_BoneRoot/Hip/Waist/Spine01/Spine02/R_Clavicle/R_Upperarm/R_Forearm/R_Hand",
+            "Hip": "RL_BoneRoot/Hip",
+            "Head": "RL_BoneRoot/Hip/Waist/Spine01/Spine02/NeckTwist01/NeckTwist02/Head"
+          }
+        },
+        "guide_envelope": {
+          "world_radius_m": 0.32,
+          "world_height_m": 1.7,
+          "uniform_world_scale": 1.0,
+          "source_local_radius": 0.32,
+          "source_local_cylindrical_height": 1.06,
+          "scope": "Explicit authoring guide envelope; no physical-factor evidence"
+        }
+      },
+      "start": [
+        4.813052,
+        20.245344,
+        0.0
+      ],
+      "root_path": "/World/RestaurantLiveV1/Actors/LeftFarChair",
+      "appearance": null,
+      "seat": [
+        4.813052,
+        20.245344,
+        0.52
+      ],
+      "facing": [
+        -1.0,
+        0.0,
+        0.0
+      ],
+      "joints": {
+        "L_Foot": 5,
+        "R_Foot": 21,
+        "L_Hand": 55,
+        "R_Hand": 83,
+        "Hip": 1,
+        "Head": 38
+      },
+      "seat_path": "/World/RestaurantLiveV1/Seats/LeftFarChair"
+    },
+    {
+      "name": "LeftFarBooth",
+      "character": {
+        "name": "LeftFarBooth",
+        "source": "https://omniverse-content-production.s3-us-west-2.amazonaws.com/Assets/Isaac/6.0/Isaac/People/Characters/F_Business_02/F_Business_02.usd",
+        "sha256": "a1dceaae15e59e1cda4b4697a1e233c0cc570279178a418e544289b202c78201",
+        "source_url": "https://omniverse-content-production.s3-us-west-2.amazonaws.com/Assets/Isaac/6.0/Isaac/People/Characters/F_Business_02/F_Business_02.usd",
+        "source_metres_per_unit": 1.0,
+        "source_up_axis": "Z",
+        "reference_uniform_scale": 1.0,
+        "hidden_costume_meshes": [],
+        "appearance": {
+          "actor_root": "/World/RestaurantLiveV1/Actors/LeftFarBooth/Units/Visual",
+          "theme": "olive",
+          "changes": [
+            {
+              "part": "shirt",
+              "shader_path": "/World/RestaurantLiveV1/Actors/LeftFarBooth/Units/Visual/female_adult_business_02/Looks/opaque__fabric__shirt/Shader",
+              "property_path": "/World/RestaurantLiveV1/Actors/LeftFarBooth/Units/Visual/female_adult_business_02/Looks/opaque__fabric__shirt/Shader.inputs:diffuse_tint",
+              "previous_tint": [
+                0.273084431886673,
+                0.2814815044403076,
+                0.1959945410490036
+              ],
+              "applied_tint": [
+                0.5799999833106995,
+                0.5099999904632568,
+                0.38999998569488525
+              ]
+            },
+            {
+              "part": "vest",
+              "shader_path": "/World/RestaurantLiveV1/Actors/LeftFarBooth/Units/Visual/female_adult_business_02/Looks/opaque__fabric__vest/Shader",
+              "property_path": "/World/RestaurantLiveV1/Actors/LeftFarBooth/Units/Visual/female_adult_business_02/Looks/opaque__fabric__vest/Shader.inputs:diffuse_tint",
+              "previous_tint": [
+                0.8615879416465759,
+                0.41849106550216675,
+                0.9740740656852722
+              ],
+              "applied_tint": [
+                0.15000000596046448,
+                0.1899999976158142,
+                0.07000000029802322
+              ]
+            }
+          ],
+          "changed_properties": [
+            "/World/RestaurantLiveV1/Actors/LeftFarBooth/Units/Visual/female_adult_business_02/Looks/opaque__fabric__shirt/Shader.inputs:diffuse_tint",
+            "/World/RestaurantLiveV1/Actors/LeftFarBooth/Units/Visual/female_adult_business_02/Looks/opaque__fabric__vest/Shader.inputs:diffuse_tint"
+          ],
+          "skin_hair_shoes_jeans_and_all_texture_inputs_unchanged": true,
+          "source_material_binding_preserved": true,
+          "edit_layer": "anon:000002694B5E65F0",
+          "scope": "visual clothing tints only; no source mesh, rig or physical-factor changes"
+        },
+        "retarget": {
+          "joint_count": 101,
+          "mapped_tag_count": 55,
+          "diagnostic_source_joints": {
+            "L_Foot": "RL_BoneRoot/Hip/Pelvis/L_Thigh/L_Calf/L_Foot",
+            "R_Foot": "RL_BoneRoot/Hip/Pelvis/R_Thigh/R_Calf/R_Foot",
+            "L_Hand": "RL_BoneRoot/Hip/Waist/Spine01/Spine02/L_Clavicle/L_Upperarm/L_Forearm/L_Hand",
+            "R_Hand": "RL_BoneRoot/Hip/Waist/Spine01/Spine02/R_Clavicle/R_Upperarm/R_Forearm/R_Hand",
+            "Hip": "RL_BoneRoot/Hip",
+            "Head": "RL_BoneRoot/Hip/Waist/Spine01/Spine02/NeckTwist01/NeckTwist02/Head"
+          }
+        },
+        "guide_envelope": {
+          "world_radius_m": 0.32,
+          "world_height_m": 1.7,
+          "uniform_world_scale": 1.0,
+          "source_local_radius": 0.32,
+          "source_local_cylindrical_height": 1.06,
+          "scope": "Explicit authoring guide envelope; no physical-factor evidence"
+        }
+      },
+      "start": [
+        3.683754,
+        20.245344,
+        0.0
+      ],
+      "root_path": "/World/RestaurantLiveV1/Actors/LeftFarBooth",
+      "appearance": {
+        "actor_root": "/World/RestaurantLiveV1/Actors/LeftFarBooth/Units/Visual",
+        "theme": "olive",
+        "changes": [
+          {
+            "part": "shirt",
+            "shader_path": "/World/RestaurantLiveV1/Actors/LeftFarBooth/Units/Visual/female_adult_business_02/Looks/opaque__fabric__shirt/Shader",
+            "property_path": "/World/RestaurantLiveV1/Actors/LeftFarBooth/Units/Visual/female_adult_business_02/Looks/opaque__fabric__shirt/Shader.inputs:diffuse_tint",
+            "previous_tint": [
+              0.273084431886673,
+              0.2814815044403076,
+              0.1959945410490036
+            ],
+            "applied_tint": [
+              0.5799999833106995,
+              0.5099999904632568,
+              0.38999998569488525
+            ]
+          },
+          {
+            "part": "vest",
+            "shader_path": "/World/RestaurantLiveV1/Actors/LeftFarBooth/Units/Visual/female_adult_business_02/Looks/opaque__fabric__vest/Shader",
+            "property_path": "/World/RestaurantLiveV1/Actors/LeftFarBooth/Units/Visual/female_adult_business_02/Looks/opaque__fabric__vest/Shader.inputs:diffuse_tint",
+            "previous_tint": [
+              0.8615879416465759,
+              0.41849106550216675,
+              0.9740740656852722
+            ],
+            "applied_tint": [
+              0.15000000596046448,
+              0.1899999976158142,
+              0.07000000029802322
+            ]
+          }
+        ],
+        "changed_properties": [
+          "/World/RestaurantLiveV1/Actors/LeftFarBooth/Units/Visual/female_adult_business_02/Looks/opaque__fabric__shirt/Shader.inputs:diffuse_tint",
+          "/World/RestaurantLiveV1/Actors/LeftFarBooth/Units/Visual/female_adult_business_02/Looks/opaque__fabric__vest/Shader.inputs:diffuse_tint"
+        ],
+        "skin_hair_shoes_jeans_and_all_texture_inputs_unchanged": true,
+        "source_material_binding_preserved": true,
+        "edit_layer": "anon:000002694B5E65F0",
+        "scope": "visual clothing tints only; no source mesh, rig or physical-factor changes"
+      },
+      "seat": [
+        3.683754,
+        20.245344,
+        0.6
+      ],
+      "facing": [
+        1.0,
+        -0.0,
+        -0.0
+      ],
+      "joints": {
+        "L_Foot": 5,
+        "R_Foot": 21,
+        "L_Hand": 55,
+        "R_Hand": 83,
+        "Hip": 1,
+        "Head": 38
+      },
+      "seat_path": "/World/RestaurantLiveV1/Seats/LeftFarBooth"
+    },
+    {
+      "name": "FrontChair",
+      "character": {
+        "name": "FrontChair",
+        "source": "https://omniverse-content-production.s3-us-west-2.amazonaws.com/Assets/Isaac/6.0/Isaac/People/Characters/F_Business_02/F_Business_02.usd",
+        "sha256": "a1dceaae15e59e1cda4b4697a1e233c0cc570279178a418e544289b202c78201",
+        "source_url": "https://omniverse-content-production.s3-us-west-2.amazonaws.com/Assets/Isaac/6.0/Isaac/People/Characters/F_Business_02/F_Business_02.usd",
+        "source_metres_per_unit": 1.0,
+        "source_up_axis": "Z",
+        "reference_uniform_scale": 1.0,
+        "hidden_costume_meshes": [],
+        "appearance": {
+          "actor_root": "/World/RestaurantLiveV1/Actors/FrontChair/Units/Visual",
+          "theme": "navy",
+          "changes": [
+            {
+              "part": "shirt",
+              "shader_path": "/World/RestaurantLiveV1/Actors/FrontChair/Units/Visual/female_adult_business_02/Looks/opaque__fabric__shirt/Shader",
+              "property_path": "/World/RestaurantLiveV1/Actors/FrontChair/Units/Visual/female_adult_business_02/Looks/opaque__fabric__shirt/Shader.inputs:diffuse_tint",
+              "previous_tint": [
+                0.273084431886673,
+                0.2814815044403076,
+                0.1959945410490036
+              ],
+              "applied_tint": [
+                0.5199999809265137,
+                0.5699999928474426,
+                0.5799999833106995
+              ]
+            },
+            {
+              "part": "vest",
+              "shader_path": "/World/RestaurantLiveV1/Actors/FrontChair/Units/Visual/female_adult_business_02/Looks/opaque__fabric__vest/Shader",
+              "property_path": "/World/RestaurantLiveV1/Actors/FrontChair/Units/Visual/female_adult_business_02/Looks/opaque__fabric__vest/Shader.inputs:diffuse_tint",
+              "previous_tint": [
+                0.8615879416465759,
+                0.41849106550216675,
+                0.9740740656852722
+              ],
+              "applied_tint": [
+                0.03500000014901161,
+                0.07000000029802322,
+                0.14000000059604645
+              ]
+            }
+          ],
+          "changed_properties": [
+            "/World/RestaurantLiveV1/Actors/FrontChair/Units/Visual/female_adult_business_02/Looks/opaque__fabric__shirt/Shader.inputs:diffuse_tint",
+            "/World/RestaurantLiveV1/Actors/FrontChair/Units/Visual/female_adult_business_02/Looks/opaque__fabric__vest/Shader.inputs:diffuse_tint"
+          ],
+          "skin_hair_shoes_jeans_and_all_texture_inputs_unchanged": true,
+          "source_material_binding_preserved": true,
+          "edit_layer": "anon:000002694B5E65F0",
+          "scope": "visual clothing tints only; no source mesh, rig or physical-factor changes"
+        },
+        "retarget": {
+          "joint_count": 101,
+          "mapped_tag_count": 55,
+          "diagnostic_source_joints": {
+            "L_Foot": "RL_BoneRoot/Hip/Pelvis/L_Thigh/L_Calf/L_Foot",
+            "R_Foot": "RL_BoneRoot/Hip/Pelvis/R_Thigh/R_Calf/R_Foot",
+            "L_Hand": "RL_BoneRoot/Hip/Waist/Spine01/Spine02/L_Clavicle/L_Upperarm/L_Forearm/L_Hand",
+            "R_Hand": "RL_BoneRoot/Hip/Waist/Spine01/Spine02/R_Clavicle/R_Upperarm/R_Forearm/R_Hand",
+            "Hip": "RL_BoneRoot/Hip",
+            "Head": "RL_BoneRoot/Hip/Waist/Spine01/Spine02/NeckTwist01/NeckTwist02/Head"
+          }
+        },
+        "guide_envelope": {
+          "world_radius_m": 0.32,
+          "world_height_m": 1.7,
+          "uniform_world_scale": 1.0,
+          "source_local_radius": 0.32,
+          "source_local_cylindrical_height": 1.06,
+          "scope": "Explicit authoring guide envelope; no physical-factor evidence"
+        }
+      },
+      "start": [
+        13.050903,
+        2.904934,
+        0.0
+      ],
+      "root_path": "/World/RestaurantLiveV1/Actors/FrontChair",
+      "appearance": {
+        "actor_root": "/World/RestaurantLiveV1/Actors/FrontChair/Units/Visual",
+        "theme": "navy",
+        "changes": [
+          {
+            "part": "shirt",
+            "shader_path": "/World/RestaurantLiveV1/Actors/FrontChair/Units/Visual/female_adult_business_02/Looks/opaque__fabric__shirt/Shader",
+            "property_path": "/World/RestaurantLiveV1/Actors/FrontChair/Units/Visual/female_adult_business_02/Looks/opaque__fabric__shirt/Shader.inputs:diffuse_tint",
+            "previous_tint": [
+              0.273084431886673,
+              0.2814815044403076,
+              0.1959945410490036
+            ],
+            "applied_tint": [
+              0.5199999809265137,
+              0.5699999928474426,
+              0.5799999833106995
+            ]
+          },
+          {
+            "part": "vest",
+            "shader_path": "/World/RestaurantLiveV1/Actors/FrontChair/Units/Visual/female_adult_business_02/Looks/opaque__fabric__vest/Shader",
+            "property_path": "/World/RestaurantLiveV1/Actors/FrontChair/Units/Visual/female_adult_business_02/Looks/opaque__fabric__vest/Shader.inputs:diffuse_tint",
+            "previous_tint": [
+              0.8615879416465759,
+              0.41849106550216675,
+              0.9740740656852722
+            ],
+            "applied_tint": [
+              0.03500000014901161,
+              0.07000000029802322,
+              0.14000000059604645
+            ]
+          }
+        ],
+        "changed_properties": [
+          "/World/RestaurantLiveV1/Actors/FrontChair/Units/Visual/female_adult_business_02/Looks/opaque__fabric__shirt/Shader.inputs:diffuse_tint",
+          "/World/RestaurantLiveV1/Actors/FrontChair/Units/Visual/female_adult_business_02/Looks/opaque__fabric__vest/Shader.inputs:diffuse_tint"
+        ],
+        "skin_hair_shoes_jeans_and_all_texture_inputs_unchanged": true,
+        "source_material_binding_preserved": true,
+        "edit_layer": "anon:000002694B5E65F0",
+        "scope": "visual clothing tints only; no source mesh, rig or physical-factor changes"
+      },
+      "seat": [
+        13.050903,
+        2.904934,
+        0.52
+      ],
+      "facing": [
+        0.0,
+        -1.0,
+        0.0
+      ],
+      "joints": {
+        "L_Foot": 5,
+        "R_Foot": 21,
+        "L_Hand": 55,
+        "R_Hand": 83,
+        "Hip": 1,
+        "Head": 38
+      },
+      "seat_path": "/World/RestaurantLiveV1/Seats/FrontChair"
+    },
+    {
+      "name": "FrontBooth",
+      "character": {
+        "name": "FrontBooth",
+        "source": "restaurant_live_v3/characters/official-pack/Assets/Characters/Reallusion/ActorCore/Party_M_0001/Actor/party-m-0001/party-m-0001.usd",
+        "sha256": "bdaa41b5798851d08e6bdf105681968c8fa1e33615cf45f135123ab5cbe9e9d8",
+        "source_url": "https://docs.omniverse.nvidia.com/usd/latest/usd_content_samples/downloadable_packs.html",
+        "source_metres_per_unit": 0.01,
+        "source_up_axis": "Z",
+        "reference_uniform_scale": 0.01,
+        "hidden_costume_meshes": [],
+        "appearance": null,
+        "retarget": {
+          "joint_count": 85,
+          "mapped_tag_count": 55,
+          "diagnostic_source_joints": {
+            "L_Foot": "RL_BoneRoot/Hip/Pelvis/L_Thigh/L_Calf/L_Foot",
+            "R_Foot": "RL_BoneRoot/Hip/Pelvis/R_Thigh/R_Calf/R_Foot",
+            "L_Hand": "RL_BoneRoot/Hip/Waist/Spine01/Spine02/L_Clavicle/L_Upperarm/L_Forearm/L_Hand",
+            "R_Hand": "RL_BoneRoot/Hip/Waist/Spine01/Spine02/R_Clavicle/R_Upperarm/R_Forearm/R_Hand",
+            "Hip": "RL_BoneRoot/Hip",
+            "Head": "RL_BoneRoot/Hip/Waist/Spine01/Spine02/NeckTwist01/NeckTwist02/Head"
+          }
+        },
+        "guide_envelope": {
+          "world_radius_m": 0.32,
+          "world_height_m": 1.7,
+          "uniform_world_scale": 0.009999999776482582,
+          "source_local_radius": 32.00000071525575,
+          "source_local_cylindrical_height": 106.00000236928469,
+          "scope": "Explicit authoring guide envelope; no physical-factor evidence"
+        }
+      },
+      "start": [
+        13.050903,
+        1.775635,
+        0.0
+      ],
+      "root_path": "/World/RestaurantLiveV1/Actors/FrontBooth",
+      "appearance": null,
+      "seat": [
+        13.050903,
+        1.775635,
+        0.6
+      ],
+      "facing": [
+        -0.0,
+        1.0,
+        -0.0
+      ],
+      "joints": {
+        "L_Foot": 5,
+        "R_Foot": 16,
+        "L_Hand": 42,
+        "R_Hand": 67,
+        "Hip": 1,
+        "Head": 26
+      },
+      "seat_path": "/World/RestaurantLiveV1/Seats/FrontBooth"
+    },
+    {
+      "name": "RightChair",
+      "character": {
+        "name": "RightChair",
+        "source": "restaurant_live_v3/characters/official-native/construction05/male_adult_construction_05.usd",
+        "sha256": "18893a98258904620fb30b0f36d7d91b8349704e68788c24f7cd65a22af87e49",
+        "source_url": "https://omniverse-content-production.s3-us-west-2.amazonaws.com/Assets/Isaac/6.0/Isaac/People/Characters/original_male_adult_construction_05/male_adult_construction_05.usd",
+        "source_metres_per_unit": 1.0,
+        "source_up_axis": "Z",
+        "reference_uniform_scale": 1.0,
+        "hidden_costume_meshes": [
+          "/World/RestaurantLiveV1/Actors/RightChair/Units/Visual/ManRoot/male_adult_construction_05/male_adult_construction_05/opaque__plastic__hardhat",
+          "/World/RestaurantLiveV1/Actors/RightChair/Units/Visual/ManRoot/male_adult_construction_05/male_adult_construction_05/opaque__fabric__safetyvest",
+          "/World/RestaurantLiveV1/Actors/RightChair/Units/Visual/ManRoot/male_adult_construction_05/male_adult_construction_05/retro__reflective__safetyvest"
+        ],
+        "appearance": null,
+        "retarget": {
+          "joint_count": 101,
+          "mapped_tag_count": 55,
+          "diagnostic_source_joints": {
+            "L_Foot": "RL_BoneRoot/Hip/Pelvis/L_Thigh/L_Calf/L_Foot",
+            "R_Foot": "RL_BoneRoot/Hip/Pelvis/R_Thigh/R_Calf/R_Foot",
+            "L_Hand": "RL_BoneRoot/Hip/Waist/Spine01/Spine02/L_Clavicle/L_Upperarm/L_Forearm/L_Hand",
+            "R_Hand": "RL_BoneRoot/Hip/Waist/Spine01/Spine02/R_Clavicle/R_Upperarm/R_Forearm/R_Hand",
+            "Hip": "RL_BoneRoot/Hip",
+            "Head": "RL_BoneRoot/Hip/Waist/Spine01/Spine02/NeckTwist01/NeckTwist02/Head"
+          }
+        },
+        "guide_envelope": {
+          "world_radius_m": 0.32,
+          "world_height_m": 1.7,
+          "uniform_world_scale": 1.0,
+          "source_local_radius": 0.32,
+          "source_local_cylindrical_height": 1.06,
+          "scope": "Explicit authoring guide envelope; no physical-factor evidence"
+        }
+      },
+      "start": [
+        30.825915,
+        9.85885,
+        0.0
+      ],
+      "root_path": "/World/RestaurantLiveV1/Actors/RightChair",
+      "appearance": null,
+      "seat": [
+        30.825915,
+        9.85885,
+        0.52
+      ],
+      "facing": [
+        1.0,
+        0.0,
+        0.0
+      ],
+      "joints": {
+        "L_Foot": 5,
+        "R_Foot": 21,
+        "L_Hand": 55,
+        "R_Hand": 83,
+        "Hip": 1,
+        "Head": 38
+      },
+      "seat_path": "/World/RestaurantLiveV1/Seats/RightChair"
+    },
+    {
+      "name": "RightBooth",
+      "character": {
+        "name": "RightBooth",
+        "source": "https://omniverse-content-production.s3-us-west-2.amazonaws.com/Assets/Isaac/6.0/Isaac/People/Characters/F_Business_02/F_Business_02.usd",
+        "sha256": "a1dceaae15e59e1cda4b4697a1e233c0cc570279178a418e544289b202c78201",
+        "source_url": "https://omniverse-content-production.s3-us-west-2.amazonaws.com/Assets/Isaac/6.0/Isaac/People/Characters/F_Business_02/F_Business_02.usd",
+        "source_metres_per_unit": 1.0,
+        "source_up_axis": "Z",
+        "reference_uniform_scale": 1.0,
+        "hidden_costume_meshes": [],
+        "appearance": {
+          "actor_root": "/World/RestaurantLiveV1/Actors/RightBooth/Units/Visual",
+          "theme": "burgundy",
+          "changes": [
+            {
+              "part": "shirt",
+              "shader_path": "/World/RestaurantLiveV1/Actors/RightBooth/Units/Visual/female_adult_business_02/Looks/opaque__fabric__shirt/Shader",
+              "property_path": "/World/RestaurantLiveV1/Actors/RightBooth/Units/Visual/female_adult_business_02/Looks/opaque__fabric__shirt/Shader.inputs:diffuse_tint",
+              "previous_tint": [
+                0.273084431886673,
+                0.2814815044403076,
+                0.1959945410490036
+              ],
+              "applied_tint": [
+                0.550000011920929,
+                0.46000000834465027,
+                0.38999998569488525
+              ]
+            },
+            {
+              "part": "vest",
+              "shader_path": "/World/RestaurantLiveV1/Actors/RightBooth/Units/Visual/female_adult_business_02/Looks/opaque__fabric__vest/Shader",
+              "property_path": "/World/RestaurantLiveV1/Actors/RightBooth/Units/Visual/female_adult_business_02/Looks/opaque__fabric__vest/Shader.inputs:diffuse_tint",
+              "previous_tint": [
+                0.8615879416465759,
+                0.41849106550216675,
+                0.9740740656852722
+              ],
+              "applied_tint": [
+                0.28999999165534973,
+                0.03999999910593033,
+                0.05999999865889549
+              ]
+            }
+          ],
+          "changed_properties": [
+            "/World/RestaurantLiveV1/Actors/RightBooth/Units/Visual/female_adult_business_02/Looks/opaque__fabric__shirt/Shader.inputs:diffuse_tint",
+            "/World/RestaurantLiveV1/Actors/RightBooth/Units/Visual/female_adult_business_02/Looks/opaque__fabric__vest/Shader.inputs:diffuse_tint"
+          ],
+          "skin_hair_shoes_jeans_and_all_texture_inputs_unchanged": true,
+          "source_material_binding_preserved": true,
+          "edit_layer": "anon:000002694B5E65F0",
+          "scope": "visual clothing tints only; no source mesh, rig or physical-factor changes"
+        },
+        "retarget": {
+          "joint_count": 101,
+          "mapped_tag_count": 55,
+          "diagnostic_source_joints": {
+            "L_Foot": "RL_BoneRoot/Hip/Pelvis/L_Thigh/L_Calf/L_Foot",
+            "R_Foot": "RL_BoneRoot/Hip/Pelvis/R_Thigh/R_Calf/R_Foot",
+            "L_Hand": "RL_BoneRoot/Hip/Waist/Spine01/Spine02/L_Clavicle/L_Upperarm/L_Forearm/L_Hand",
+            "R_Hand": "RL_BoneRoot/Hip/Waist/Spine01/Spine02/R_Clavicle/R_Upperarm/R_Forearm/R_Hand",
+            "Hip": "RL_BoneRoot/Hip",
+            "Head": "RL_BoneRoot/Hip/Waist/Spine01/Spine02/NeckTwist01/NeckTwist02/Head"
+          }
+        },
+        "guide_envelope": {
+          "world_radius_m": 0.32,
+          "world_height_m": 1.7,
+          "uniform_world_scale": 1.0,
+          "source_local_radius": 0.32,
+          "source_local_cylindrical_height": 1.06,
+          "scope": "Explicit authoring guide envelope; no physical-factor evidence"
+        }
+      },
+      "start": [
+        32.085573,
+        9.85885,
+        0.0
+      ],
+      "root_path": "/World/RestaurantLiveV1/Actors/RightBooth",
+      "appearance": {
+        "actor_root": "/World/RestaurantLiveV1/Actors/RightBooth/Units/Visual",
+        "theme": "burgundy",
+        "changes": [
+          {
+            "part": "shirt",
+            "shader_path": "/World/RestaurantLiveV1/Actors/RightBooth/Units/Visual/female_adult_business_02/Looks/opaque__fabric__shirt/Shader",
+            "property_path": "/World/RestaurantLiveV1/Actors/RightBooth/Units/Visual/female_adult_business_02/Looks/opaque__fabric__shirt/Shader.inputs:diffuse_tint",
+            "previous_tint": [
+              0.273084431886673,
+              0.2814815044403076,
+              0.1959945410490036
+            ],
+            "applied_tint": [
+              0.550000011920929,
+              0.46000000834465027,
+              0.38999998569488525
+            ]
+          },
+          {
+            "part": "vest",
+            "shader_path": "/World/RestaurantLiveV1/Actors/RightBooth/Units/Visual/female_adult_business_02/Looks/opaque__fabric__vest/Shader",
+            "property_path": "/World/RestaurantLiveV1/Actors/RightBooth/Units/Visual/female_adult_business_02/Looks/opaque__fabric__vest/Shader.inputs:diffuse_tint",
+            "previous_tint": [
+              0.8615879416465759,
+              0.41849106550216675,
+              0.9740740656852722
+            ],
+            "applied_tint": [
+              0.28999999165534973,
+              0.03999999910593033,
+              0.05999999865889549
+            ]
+          }
+        ],
+        "changed_properties": [
+          "/World/RestaurantLiveV1/Actors/RightBooth/Units/Visual/female_adult_business_02/Looks/opaque__fabric__shirt/Shader.inputs:diffuse_tint",
+          "/World/RestaurantLiveV1/Actors/RightBooth/Units/Visual/female_adult_business_02/Looks/opaque__fabric__vest/Shader.inputs:diffuse_tint"
+        ],
+        "skin_hair_shoes_jeans_and_all_texture_inputs_unchanged": true,
+        "source_material_binding_preserved": true,
+        "edit_layer": "anon:000002694B5E65F0",
+        "scope": "visual clothing tints only; no source mesh, rig or physical-factor changes"
+      },
+      "seat": [
+        32.085573,
+        9.85885,
+        0.6
+      ],
+      "facing": [
+        -1.0,
+        -0.0,
+        -0.0
+      ],
+      "joints": {
+        "L_Foot": 5,
+        "R_Foot": 21,
+        "L_Hand": 55,
+        "R_Hand": 83,
+        "Hip": 1,
+        "Head": 38
+      },
+      "seat_path": "/World/RestaurantLiveV1/Seats/RightBooth"
+    },
+    {
+      "name": "LeftOppositeChair",
+      "character": {
+        "name": "LeftOppositeChair",
+        "source": "restaurant_live_v3/characters/official-native/construction05/male_adult_construction_05.usd",
+        "sha256": "18893a98258904620fb30b0f36d7d91b8349704e68788c24f7cd65a22af87e49",
+        "source_url": "https://omniverse-content-production.s3-us-west-2.amazonaws.com/Assets/Isaac/6.0/Isaac/People/Characters/original_male_adult_construction_05/male_adult_construction_05.usd",
+        "source_metres_per_unit": 1.0,
+        "source_up_axis": "Z",
+        "reference_uniform_scale": 1.0,
+        "hidden_costume_meshes": [
+          "/World/RestaurantLiveV1/Actors/LeftOppositeChair/Units/Visual/ManRoot/male_adult_construction_05/male_adult_construction_05/opaque__plastic__hardhat",
+          "/World/RestaurantLiveV1/Actors/LeftOppositeChair/Units/Visual/ManRoot/male_adult_construction_05/male_adult_construction_05/opaque__fabric__safetyvest",
+          "/World/RestaurantLiveV1/Actors/LeftOppositeChair/Units/Visual/ManRoot/male_adult_construction_05/male_adult_construction_05/retro__reflective__safetyvest"
+        ],
+        "appearance": null,
+        "retarget": {
+          "joint_count": 101,
+          "mapped_tag_count": 55,
+          "diagnostic_source_joints": {
+            "L_Foot": "RL_BoneRoot/Hip/Pelvis/L_Thigh/L_Calf/L_Foot",
+            "R_Foot": "RL_BoneRoot/Hip/Pelvis/R_Thigh/R_Calf/R_Foot",
+            "L_Hand": "RL_BoneRoot/Hip/Waist/Spine01/Spine02/L_Clavicle/L_Upperarm/L_Forearm/L_Hand",
+            "R_Hand": "RL_BoneRoot/Hip/Waist/Spine01/Spine02/R_Clavicle/R_Upperarm/R_Forearm/R_Hand",
+            "Hip": "RL_BoneRoot/Hip",
+            "Head": "RL_BoneRoot/Hip/Waist/Spine01/Spine02/NeckTwist01/NeckTwist02/Head"
+          }
+        },
+        "guide_envelope": {
+          "world_radius_m": 0.32,
+          "world_height_m": 1.7,
+          "uniform_world_scale": 1.0,
+          "source_local_radius": 0.32,
+          "source_local_cylindrical_height": 1.06,
+          "scope": "Explicit authoring guide envelope; no physical-factor evidence"
+        }
+      },
+      "start": [
+        1.52158,
+        19.51042,
+        0.0
+      ],
+      "root_path": "/World/RestaurantLiveV1/Actors/LeftOppositeChair",
+      "appearance": null,
+      "seat": [
+        1.52158,
+        19.51042,
+        0.52
+      ],
+      "facing": [
+        1,
+        0,
+        0.0
+      ],
+      "joints": {
+        "L_Foot": 5,
+        "R_Foot": 21,
+        "L_Hand": 55,
+        "R_Hand": 83,
+        "Hip": 1,
+        "Head": 38
+      },
+      "seat_path": "/World/RestaurantLiveV1/Seats/LeftOppositeChair"
+    },
+    {
+      "name": "LeftOppositeBooth",
+      "character": {
+        "name": "LeftOppositeBooth",
+        "source": "https://omniverse-content-production.s3-us-west-2.amazonaws.com/Assets/Isaac/6.0/Isaac/People/Characters/F_Business_02/F_Business_02.usd",
+        "sha256": "a1dceaae15e59e1cda4b4697a1e233c0cc570279178a418e544289b202c78201",
+        "source_url": "https://omniverse-content-production.s3-us-west-2.amazonaws.com/Assets/Isaac/6.0/Isaac/People/Characters/F_Business_02/F_Business_02.usd",
+        "source_metres_per_unit": 1.0,
+        "source_up_axis": "Z",
+        "reference_uniform_scale": 1.0,
+        "hidden_costume_meshes": [],
+        "appearance": {
+          "actor_root": "/World/RestaurantLiveV1/Actors/LeftOppositeBooth/Units/Visual",
+          "theme": "navy",
+          "changes": [
+            {
+              "part": "shirt",
+              "shader_path": "/World/RestaurantLiveV1/Actors/LeftOppositeBooth/Units/Visual/female_adult_business_02/Looks/opaque__fabric__shirt/Shader",
+              "property_path": "/World/RestaurantLiveV1/Actors/LeftOppositeBooth/Units/Visual/female_adult_business_02/Looks/opaque__fabric__shirt/Shader.inputs:diffuse_tint",
+              "previous_tint": [
+                0.273084431886673,
+                0.2814815044403076,
+                0.1959945410490036
+              ],
+              "applied_tint": [
+                0.5199999809265137,
+                0.5699999928474426,
+                0.5799999833106995
+              ]
+            },
+            {
+              "part": "vest",
+              "shader_path": "/World/RestaurantLiveV1/Actors/LeftOppositeBooth/Units/Visual/female_adult_business_02/Looks/opaque__fabric__vest/Shader",
+              "property_path": "/World/RestaurantLiveV1/Actors/LeftOppositeBooth/Units/Visual/female_adult_business_02/Looks/opaque__fabric__vest/Shader.inputs:diffuse_tint",
+              "previous_tint": [
+                0.8615879416465759,
+                0.41849106550216675,
+                0.9740740656852722
+              ],
+              "applied_tint": [
+                0.03500000014901161,
+                0.07000000029802322,
+                0.14000000059604645
+              ]
+            }
+          ],
+          "changed_properties": [
+            "/World/RestaurantLiveV1/Actors/LeftOppositeBooth/Units/Visual/female_adult_business_02/Looks/opaque__fabric__shirt/Shader.inputs:diffuse_tint",
+            "/World/RestaurantLiveV1/Actors/LeftOppositeBooth/Units/Visual/female_adult_business_02/Looks/opaque__fabric__vest/Shader.inputs:diffuse_tint"
+          ],
+          "skin_hair_shoes_jeans_and_all_texture_inputs_unchanged": true,
+          "source_material_binding_preserved": true,
+          "edit_layer": "anon:000002694B5E65F0",
+          "scope": "visual clothing tints only; no source mesh, rig or physical-factor changes"
+        },
+        "retarget": {
+          "joint_count": 101,
+          "mapped_tag_count": 55,
+          "diagnostic_source_joints": {
+            "L_Foot": "RL_BoneRoot/Hip/Pelvis/L_Thigh/L_Calf/L_Foot",
+            "R_Foot": "RL_BoneRoot/Hip/Pelvis/R_Thigh/R_Calf/R_Foot",
+            "L_Hand": "RL_BoneRoot/Hip/Waist/Spine01/Spine02/L_Clavicle/L_Upperarm/L_Forearm/L_Hand",
+            "R_Hand": "RL_BoneRoot/Hip/Waist/Spine01/Spine02/R_Clavicle/R_Upperarm/R_Forearm/R_Hand",
+            "Hip": "RL_BoneRoot/Hip",
+            "Head": "RL_BoneRoot/Hip/Waist/Spine01/Spine02/NeckTwist01/NeckTwist02/Head"
+          }
+        },
+        "guide_envelope": {
+          "world_radius_m": 0.32,
+          "world_height_m": 1.7,
+          "uniform_world_scale": 1.0,
+          "source_local_radius": 0.32,
+          "source_local_cylindrical_height": 1.06,
+          "scope": "Explicit authoring guide envelope; no physical-factor evidence"
+        }
+      },
+      "start": [
+        2.65083,
+        19.51042,
+        0.0
+      ],
+      "root_path": "/World/RestaurantLiveV1/Actors/LeftOppositeBooth",
+      "appearance": {
+        "actor_root": "/World/RestaurantLiveV1/Actors/LeftOppositeBooth/Units/Visual",
+        "theme": "navy",
+        "changes": [
+          {
+            "part": "shirt",
+            "shader_path": "/World/RestaurantLiveV1/Actors/LeftOppositeBooth/Units/Visual/female_adult_business_02/Looks/opaque__fabric__shirt/Shader",
+            "property_path": "/World/RestaurantLiveV1/Actors/LeftOppositeBooth/Units/Visual/female_adult_business_02/Looks/opaque__fabric__shirt/Shader.inputs:diffuse_tint",
+            "previous_tint": [
+              0.273084431886673,
+              0.2814815044403076,
+              0.1959945410490036
+            ],
+            "applied_tint": [
+              0.5199999809265137,
+              0.5699999928474426,
+              0.5799999833106995
+            ]
+          },
+          {
+            "part": "vest",
+            "shader_path": "/World/RestaurantLiveV1/Actors/LeftOppositeBooth/Units/Visual/female_adult_business_02/Looks/opaque__fabric__vest/Shader",
+            "property_path": "/World/RestaurantLiveV1/Actors/LeftOppositeBooth/Units/Visual/female_adult_business_02/Looks/opaque__fabric__vest/Shader.inputs:diffuse_tint",
+            "previous_tint": [
+              0.8615879416465759,
+              0.41849106550216675,
+              0.9740740656852722
+            ],
+            "applied_tint": [
+              0.03500000014901161,
+              0.07000000029802322,
+              0.14000000059604645
+            ]
+          }
+        ],
+        "changed_properties": [
+          "/World/RestaurantLiveV1/Actors/LeftOppositeBooth/Units/Visual/female_adult_business_02/Looks/opaque__fabric__shirt/Shader.inputs:diffuse_tint",
+          "/World/RestaurantLiveV1/Actors/LeftOppositeBooth/Units/Visual/female_adult_business_02/Looks/opaque__fabric__vest/Shader.inputs:diffuse_tint"
+        ],
+        "skin_hair_shoes_jeans_and_all_texture_inputs_unchanged": true,
+        "source_material_binding_preserved": true,
+        "edit_layer": "anon:000002694B5E65F0",
+        "scope": "visual clothing tints only; no source mesh, rig or physical-factor changes"
+      },
+      "seat": [
+        2.65083,
+        19.51042,
+        0.6
+      ],
+      "facing": [
+        -1,
+        0,
+        0.0
+      ],
+      "joints": {
+        "L_Foot": 5,
+        "R_Foot": 21,
+        "L_Hand": 55,
+        "R_Hand": 83,
+        "Hip": 1,
+        "Head": 38
+      },
+      "seat_path": "/World/RestaurantLiveV1/Seats/LeftOppositeBooth"
+    },
+    {
+      "name": "RightOppositeChair",
+      "character": {
+        "name": "RightOppositeChair",
+        "source": "restaurant_live_v3/characters/official-pack/Assets/Characters/Reallusion/ActorCore/Party_M_0001/Actor/party-m-0001/party-m-0001.usd",
+        "sha256": "bdaa41b5798851d08e6bdf105681968c8fa1e33615cf45f135123ab5cbe9e9d8",
+        "source_url": "https://docs.omniverse.nvidia.com/usd/latest/usd_content_samples/downloadable_packs.html",
+        "source_metres_per_unit": 0.01,
+        "source_up_axis": "Z",
+        "reference_uniform_scale": 0.01,
+        "hidden_costume_meshes": [],
+        "appearance": null,
+        "retarget": {
+          "joint_count": 85,
+          "mapped_tag_count": 55,
+          "diagnostic_source_joints": {
+            "L_Foot": "RL_BoneRoot/Hip/Pelvis/L_Thigh/L_Calf/L_Foot",
+            "R_Foot": "RL_BoneRoot/Hip/Pelvis/R_Thigh/R_Calf/R_Foot",
+            "L_Hand": "RL_BoneRoot/Hip/Waist/Spine01/Spine02/L_Clavicle/L_Upperarm/L_Forearm/L_Hand",
+            "R_Hand": "RL_BoneRoot/Hip/Waist/Spine01/Spine02/R_Clavicle/R_Upperarm/R_Forearm/R_Hand",
+            "Hip": "RL_BoneRoot/Hip",
+            "Head": "RL_BoneRoot/Hip/Waist/Spine01/Spine02/NeckTwist01/NeckTwist02/Head"
+          }
+        },
+        "guide_envelope": {
+          "world_radius_m": 0.32,
+          "world_height_m": 1.7,
+          "uniform_world_scale": 0.009999999776482582,
+          "source_local_radius": 32.00000071525575,
+          "source_local_cylindrical_height": 106.00000236928469,
+          "scope": "Explicit authoring guide envelope; no physical-factor evidence"
+        }
+      },
+      "start": [
+        34.09814,
+        9.028805,
+        0.0
+      ],
+      "root_path": "/World/RestaurantLiveV1/Actors/RightOppositeChair",
+      "appearance": null,
+      "seat": [
+        34.09814,
+        9.028805,
+        0.52
+      ],
+      "facing": [
+        -1,
+        0,
+        0.0
+      ],
+      "joints": {
+        "L_Foot": 5,
+        "R_Foot": 16,
+        "L_Hand": 42,
+        "R_Hand": 67,
+        "Hip": 1,
+        "Head": 26
+      },
+      "seat_path": "/World/RestaurantLiveV1/Seats/RightOppositeChair"
+    },
+    {
+      "name": "RightOppositeBooth",
+      "character": {
+        "name": "RightOppositeBooth",
+        "source": "https://omniverse-content-production.s3-us-west-2.amazonaws.com/Assets/Isaac/6.0/Isaac/People/Characters/F_Business_02/F_Business_02.usd",
+        "sha256": "a1dceaae15e59e1cda4b4697a1e233c0cc570279178a418e544289b202c78201",
+        "source_url": "https://omniverse-content-production.s3-us-west-2.amazonaws.com/Assets/Isaac/6.0/Isaac/People/Characters/F_Business_02/F_Business_02.usd",
+        "source_metres_per_unit": 1.0,
+        "source_up_axis": "Z",
+        "reference_uniform_scale": 1.0,
+        "hidden_costume_meshes": [],
+        "appearance": {
+          "actor_root": "/World/RestaurantLiveV1/Actors/RightOppositeBooth/Units/Visual",
+          "theme": "olive",
+          "changes": [
+            {
+              "part": "shirt",
+              "shader_path": "/World/RestaurantLiveV1/Actors/RightOppositeBooth/Units/Visual/female_adult_business_02/Looks/opaque__fabric__shirt/Shader",
+              "property_path": "/World/RestaurantLiveV1/Actors/RightOppositeBooth/Units/Visual/female_adult_business_02/Looks/opaque__fabric__shirt/Shader.inputs:diffuse_tint",
+              "previous_tint": [
+                0.273084431886673,
+                0.2814815044403076,
+                0.1959945410490036
+              ],
+              "applied_tint": [
+                0.5799999833106995,
+                0.5099999904632568,
+                0.38999998569488525
+              ]
+            },
+            {
+              "part": "vest",
+              "shader_path": "/World/RestaurantLiveV1/Actors/RightOppositeBooth/Units/Visual/female_adult_business_02/Looks/opaque__fabric__vest/Shader",
+              "property_path": "/World/RestaurantLiveV1/Actors/RightOppositeBooth/Units/Visual/female_adult_business_02/Looks/opaque__fabric__vest/Shader.inputs:diffuse_tint",
+              "previous_tint": [
+                0.8615879416465759,
+                0.41849106550216675,
+                0.9740740656852722
+              ],
+              "applied_tint": [
+                0.15000000596046448,
+                0.1899999976158142,
+                0.07000000029802322
+              ]
+            }
+          ],
+          "changed_properties": [
+            "/World/RestaurantLiveV1/Actors/RightOppositeBooth/Units/Visual/female_adult_business_02/Looks/opaque__fabric__shirt/Shader.inputs:diffuse_tint",
+            "/World/RestaurantLiveV1/Actors/RightOppositeBooth/Units/Visual/female_adult_business_02/Looks/opaque__fabric__vest/Shader.inputs:diffuse_tint"
+          ],
+          "skin_hair_shoes_jeans_and_all_texture_inputs_unchanged": true,
+          "source_material_binding_preserved": true,
+          "edit_layer": "anon:000002694B5E65F0",
+          "scope": "visual clothing tints only; no source mesh, rig or physical-factor changes"
+        },
+        "retarget": {
+          "joint_count": 101,
+          "mapped_tag_count": 55,
+          "diagnostic_source_joints": {
+            "L_Foot": "RL_BoneRoot/Hip/Pelvis/L_Thigh/L_Calf/L_Foot",
+            "R_Foot": "RL_BoneRoot/Hip/Pelvis/R_Thigh/R_Calf/R_Foot",
+            "L_Hand": "RL_BoneRoot/Hip/Waist/Spine01/Spine02/L_Clavicle/L_Upperarm/L_Forearm/L_Hand",
+            "R_Hand": "RL_BoneRoot/Hip/Waist/Spine01/Spine02/R_Clavicle/R_Upperarm/R_Forearm/R_Hand",
+            "Hip": "RL_BoneRoot/Hip",
+            "Head": "RL_BoneRoot/Hip/Waist/Spine01/Spine02/NeckTwist01/NeckTwist02/Head"
+          }
+        },
+        "guide_envelope": {
+          "world_radius_m": 0.32,
+          "world_height_m": 1.7,
+          "uniform_world_scale": 1.0,
+          "source_local_radius": 0.32,
+          "source_local_cylindrical_height": 1.06,
+          "scope": "Explicit authoring guide envelope; no physical-factor evidence"
+        }
+      },
+      "start": [
+        32.9785,
+        9.028805,
+        0.0
+      ],
+      "root_path": "/World/RestaurantLiveV1/Actors/RightOppositeBooth",
+      "appearance": {
+        "actor_root": "/World/RestaurantLiveV1/Actors/RightOppositeBooth/Units/Visual",
+        "theme": "olive",
+        "changes": [
+          {
+            "part": "shirt",
+            "shader_path": "/World/RestaurantLiveV1/Actors/RightOppositeBooth/Units/Visual/female_adult_business_02/Looks/opaque__fabric__shirt/Shader",
+            "property_path": "/World/RestaurantLiveV1/Actors/RightOppositeBooth/Units/Visual/female_adult_business_02/Looks/opaque__fabric__shirt/Shader.inputs:diffuse_tint",
+            "previous_tint": [
+              0.273084431886673,
+              0.2814815044403076,
+              0.1959945410490036
+            ],
+            "applied_tint": [
+              0.5799999833106995,
+              0.5099999904632568,
+              0.38999998569488525
+            ]
+          },
+          {
+            "part": "vest",
+            "shader_path": "/World/RestaurantLiveV1/Actors/RightOppositeBooth/Units/Visual/female_adult_business_02/Looks/opaque__fabric__vest/Shader",
+            "property_path": "/World/RestaurantLiveV1/Actors/RightOppositeBooth/Units/Visual/female_adult_business_02/Looks/opaque__fabric__vest/Shader.inputs:diffuse_tint",
+            "previous_tint": [
+              0.8615879416465759,
+              0.41849106550216675,
+              0.9740740656852722
+            ],
+            "applied_tint": [
+              0.15000000596046448,
+              0.1899999976158142,
+              0.07000000029802322
+            ]
+          }
+        ],
+        "changed_properties": [
+          "/World/RestaurantLiveV1/Actors/RightOppositeBooth/Units/Visual/female_adult_business_02/Looks/opaque__fabric__shirt/Shader.inputs:diffuse_tint",
+          "/World/RestaurantLiveV1/Actors/RightOppositeBooth/Units/Visual/female_adult_business_02/Looks/opaque__fabric__vest/Shader.inputs:diffuse_tint"
+        ],
+        "skin_hair_shoes_jeans_and_all_texture_inputs_unchanged": true,
+        "source_material_binding_preserved": true,
+        "edit_layer": "anon:000002694B5E65F0",
+        "scope": "visual clothing tints only; no source mesh, rig or physical-factor changes"
+      },
+      "seat": [
+        32.9785,
+        9.028805,
+        0.6
+      ],
+      "facing": [
+        1,
+        0,
+        0.0
+      ],
+      "joints": {
+        "L_Foot": 5,
+        "R_Foot": 21,
+        "L_Hand": 55,
+        "R_Hand": 83,
+        "Hip": 1,
+        "Head": 38
+      },
+      "seat_path": "/World/RestaurantLiveV1/Seats/RightOppositeBooth"
+    },
+    {
+      "name": "FamilyFather",
+      "character": {
+        "name": "FamilyFather",
+        "source": "restaurant_live_v3/characters/official-pack/Assets/Characters/Reallusion/ActorCore/Party_M_0001/Actor/party-m-0001/party-m-0001.usd",
+        "sha256": "bdaa41b5798851d08e6bdf105681968c8fa1e33615cf45f135123ab5cbe9e9d8",
+        "source_url": "https://docs.omniverse.nvidia.com/usd/latest/usd_content_samples/downloadable_packs.html",
+        "source_metres_per_unit": 0.01,
+        "source_up_axis": "Z",
+        "reference_uniform_scale": 0.01,
+        "hidden_costume_meshes": [],
+        "appearance": null,
+        "retarget": {
+          "joint_count": 85,
+          "mapped_tag_count": 55,
+          "diagnostic_source_joints": {
+            "L_Foot": "RL_BoneRoot/Hip/Pelvis/L_Thigh/L_Calf/L_Foot",
+            "R_Foot": "RL_BoneRoot/Hip/Pelvis/R_Thigh/R_Calf/R_Foot",
+            "L_Hand": "RL_BoneRoot/Hip/Waist/Spine01/Spine02/L_Clavicle/L_Upperarm/L_Forearm/L_Hand",
+            "R_Hand": "RL_BoneRoot/Hip/Waist/Spine01/Spine02/R_Clavicle/R_Upperarm/R_Forearm/R_Hand",
+            "Hip": "RL_BoneRoot/Hip",
+            "Head": "RL_BoneRoot/Hip/Waist/Spine01/Spine02/NeckTwist01/NeckTwist02/Head"
+          }
+        },
+        "guide_envelope": {
+          "world_radius_m": 0.32,
+          "world_height_m": 1.7,
+          "uniform_world_scale": 0.009999999776482582,
+          "source_local_radius": 32.00000071525575,
+          "source_local_cylindrical_height": 106.00000236928469,
+          "scope": "Explicit authoring guide envelope; no physical-factor evidence"
+        }
+      },
+      "start": [
+        30.825915,
+        20.29285,
+        0.0
+      ],
+      "root_path": "/World/RestaurantLiveV1/Actors/FamilyFather",
+      "appearance": null,
+      "seat": [
+        30.825915,
+        20.29285,
+        0.52
+      ],
+      "facing": [
+        1,
+        0,
+        0.0
+      ],
+      "joints": {
+        "L_Foot": 5,
+        "R_Foot": 16,
+        "L_Hand": 42,
+        "R_Hand": 67,
+        "Hip": 1,
+        "Head": 26
+      },
+      "seat_path": "/World/RestaurantLiveV1/Seats/FamilyFather"
+    },
+    {
+      "name": "FamilyMother",
+      "character": {
+        "name": "FamilyMother",
+        "source": "https://omniverse-content-production.s3-us-west-2.amazonaws.com/Assets/Isaac/6.0/Isaac/People/Characters/F_Business_02/F_Business_02.usd",
+        "sha256": "a1dceaae15e59e1cda4b4697a1e233c0cc570279178a418e544289b202c78201",
+        "source_url": "https://omniverse-content-production.s3-us-west-2.amazonaws.com/Assets/Isaac/6.0/Isaac/People/Characters/F_Business_02/F_Business_02.usd",
+        "source_metres_per_unit": 1.0,
+        "source_up_axis": "Z",
+        "reference_uniform_scale": 1.0,
+        "hidden_costume_meshes": [],
+        "appearance": {
+          "actor_root": "/World/RestaurantLiveV1/Actors/FamilyMother/Units/Visual",
+          "theme": "burgundy",
+          "changes": [
+            {
+              "part": "shirt",
+              "shader_path": "/World/RestaurantLiveV1/Actors/FamilyMother/Units/Visual/female_adult_business_02/Looks/opaque__fabric__shirt/Shader",
+              "property_path": "/World/RestaurantLiveV1/Actors/FamilyMother/Units/Visual/female_adult_business_02/Looks/opaque__fabric__shirt/Shader.inputs:diffuse_tint",
+              "previous_tint": [
+                0.273084431886673,
+                0.2814815044403076,
+                0.1959945410490036
+              ],
+              "applied_tint": [
+                0.550000011920929,
+                0.46000000834465027,
+                0.38999998569488525
+              ]
+            },
+            {
+              "part": "vest",
+              "shader_path": "/World/RestaurantLiveV1/Actors/FamilyMother/Units/Visual/female_adult_business_02/Looks/opaque__fabric__vest/Shader",
+              "property_path": "/World/RestaurantLiveV1/Actors/FamilyMother/Units/Visual/female_adult_business_02/Looks/opaque__fabric__vest/Shader.inputs:diffuse_tint",
+              "previous_tint": [
+                0.8615879416465759,
+                0.41849106550216675,
+                0.9740740656852722
+              ],
+              "applied_tint": [
+                0.28999999165534973,
+                0.03999999910593033,
+                0.05999999865889549
+              ]
+            }
+          ],
+          "changed_properties": [
+            "/World/RestaurantLiveV1/Actors/FamilyMother/Units/Visual/female_adult_business_02/Looks/opaque__fabric__shirt/Shader.inputs:diffuse_tint",
+            "/World/RestaurantLiveV1/Actors/FamilyMother/Units/Visual/female_adult_business_02/Looks/opaque__fabric__vest/Shader.inputs:diffuse_tint"
+          ],
+          "skin_hair_shoes_jeans_and_all_texture_inputs_unchanged": true,
+          "source_material_binding_preserved": true,
+          "edit_layer": "anon:000002694B5E65F0",
+          "scope": "visual clothing tints only; no source mesh, rig or physical-factor changes"
+        },
+        "retarget": {
+          "joint_count": 101,
+          "mapped_tag_count": 55,
+          "diagnostic_source_joints": {
+            "L_Foot": "RL_BoneRoot/Hip/Pelvis/L_Thigh/L_Calf/L_Foot",
+            "R_Foot": "RL_BoneRoot/Hip/Pelvis/R_Thigh/R_Calf/R_Foot",
+            "L_Hand": "RL_BoneRoot/Hip/Waist/Spine01/Spine02/L_Clavicle/L_Upperarm/L_Forearm/L_Hand",
+            "R_Hand": "RL_BoneRoot/Hip/Waist/Spine01/Spine02/R_Clavicle/R_Upperarm/R_Forearm/R_Hand",
+            "Hip": "RL_BoneRoot/Hip",
+            "Head": "RL_BoneRoot/Hip/Waist/Spine01/Spine02/NeckTwist01/NeckTwist02/Head"
+          }
+        },
+        "guide_envelope": {
+          "world_radius_m": 0.32,
+          "world_height_m": 1.7,
+          "uniform_world_scale": 1.0,
+          "source_local_radius": 0.32,
+          "source_local_cylindrical_height": 1.06,
+          "scope": "Explicit authoring guide envelope; no physical-factor evidence"
+        }
+      },
+      "start": [
+        31.945573,
+        19.9,
+        0.0
+      ],
+      "root_path": "/World/RestaurantLiveV1/Actors/FamilyMother",
+      "appearance": {
+        "actor_root": "/World/RestaurantLiveV1/Actors/FamilyMother/Units/Visual",
+        "theme": "burgundy",
+        "changes": [
+          {
+            "part": "shirt",
+            "shader_path": "/World/RestaurantLiveV1/Actors/FamilyMother/Units/Visual/female_adult_business_02/Looks/opaque__fabric__shirt/Shader",
+            "property_path": "/World/RestaurantLiveV1/Actors/FamilyMother/Units/Visual/female_adult_business_02/Looks/opaque__fabric__shirt/Shader.inputs:diffuse_tint",
+            "previous_tint": [
+              0.273084431886673,
+              0.2814815044403076,
+              0.1959945410490036
+            ],
+            "applied_tint": [
+              0.550000011920929,
+              0.46000000834465027,
+              0.38999998569488525
+            ]
+          },
+          {
+            "part": "vest",
+            "shader_path": "/World/RestaurantLiveV1/Actors/FamilyMother/Units/Visual/female_adult_business_02/Looks/opaque__fabric__vest/Shader",
+            "property_path": "/World/RestaurantLiveV1/Actors/FamilyMother/Units/Visual/female_adult_business_02/Looks/opaque__fabric__vest/Shader.inputs:diffuse_tint",
+            "previous_tint": [
+              0.8615879416465759,
+              0.41849106550216675,
+              0.9740740656852722
+            ],
+            "applied_tint": [
+              0.28999999165534973,
+              0.03999999910593033,
+              0.05999999865889549
+            ]
+          }
+        ],
+        "changed_properties": [
+          "/World/RestaurantLiveV1/Actors/FamilyMother/Units/Visual/female_adult_business_02/Looks/opaque__fabric__shirt/Shader.inputs:diffuse_tint",
+          "/World/RestaurantLiveV1/Actors/FamilyMother/Units/Visual/female_adult_business_02/Looks/opaque__fabric__vest/Shader.inputs:diffuse_tint"
+        ],
+        "skin_hair_shoes_jeans_and_all_texture_inputs_unchanged": true,
+        "source_material_binding_preserved": true,
+        "edit_layer": "anon:000002694B5E65F0",
+        "scope": "visual clothing tints only; no source mesh, rig or physical-factor changes"
+      },
+      "seat": [
+        31.945573,
+        19.9,
+        0.6
+      ],
+      "facing": [
+        -1,
+        0,
+        0.0
+      ],
+      "joints": {
+        "L_Foot": 5,
+        "R_Foot": 21,
+        "L_Hand": 55,
+        "R_Hand": 83,
+        "Hip": 1,
+        "Head": 38
+      },
+      "seat_path": "/World/RestaurantLiveV1/Seats/FamilyMother"
+    },
+    {
+      "name": "SoloDiner",
+      "character": {
+        "name": "SoloDiner",
+        "source": "restaurant_live_v3/characters/official-native/construction05/male_adult_construction_05.usd",
+        "sha256": "18893a98258904620fb30b0f36d7d91b8349704e68788c24f7cd65a22af87e49",
+        "source_url": "https://omniverse-content-production.s3-us-west-2.amazonaws.com/Assets/Isaac/6.0/Isaac/People/Characters/original_male_adult_construction_05/male_adult_construction_05.usd",
+        "source_metres_per_unit": 1.0,
+        "source_up_axis": "Z",
+        "reference_uniform_scale": 1.0,
+        "hidden_costume_meshes": [
+          "/World/RestaurantLiveV1/Actors/SoloDiner/Units/Visual/ManRoot/male_adult_construction_05/male_adult_construction_05/opaque__plastic__hardhat",
+          "/World/RestaurantLiveV1/Actors/SoloDiner/Units/Visual/ManRoot/male_adult_construction_05/male_adult_construction_05/opaque__fabric__safetyvest",
+          "/World/RestaurantLiveV1/Actors/SoloDiner/Units/Visual/ManRoot/male_adult_construction_05/male_adult_construction_05/retro__reflective__safetyvest"
+        ],
+        "appearance": null,
+        "retarget": {
+          "joint_count": 101,
+          "mapped_tag_count": 55,
+          "diagnostic_source_joints": {
+            "L_Foot": "RL_BoneRoot/Hip/Pelvis/L_Thigh/L_Calf/L_Foot",
+            "R_Foot": "RL_BoneRoot/Hip/Pelvis/R_Thigh/R_Calf/R_Foot",
+            "L_Hand": "RL_BoneRoot/Hip/Waist/Spine01/Spine02/L_Clavicle/L_Upperarm/L_Forearm/L_Hand",
+            "R_Hand": "RL_BoneRoot/Hip/Waist/Spine01/Spine02/R_Clavicle/R_Upperarm/R_Forearm/R_Hand",
+            "Hip": "RL_BoneRoot/Hip",
+            "Head": "RL_BoneRoot/Hip/Waist/Spine01/Spine02/NeckTwist01/NeckTwist02/Head"
+          }
+        },
+        "guide_envelope": {
+          "world_radius_m": 0.32,
+          "world_height_m": 1.7,
+          "uniform_world_scale": 1.0,
+          "source_local_radius": 0.32,
+          "source_local_cylindrical_height": 1.06,
+          "scope": "Explicit authoring guide envelope; no physical-factor evidence"
+        }
+      },
+      "start": [
+        28.686977,
+        19.462805,
+        0.0
+      ],
+      "root_path": "/World/RestaurantLiveV1/Actors/SoloDiner",
+      "appearance": null,
+      "seat": [
+        28.686977,
+        19.462805,
+        0.52
+      ],
+      "facing": [
+        -1,
+        0,
+        0.0
+      ],
+      "joints": {
+        "L_Foot": 5,
+        "R_Foot": 21,
+        "L_Hand": 55,
+        "R_Hand": 83,
+        "Hip": 1,
+        "Head": 38
+      },
+      "seat_path": "/World/RestaurantLiveV1/Seats/SoloDiner"
+    }
+  ]
+}

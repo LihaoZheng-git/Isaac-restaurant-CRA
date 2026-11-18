@@ -44,15 +44,29 @@ def save_planner_replay(directory, control, request, result, *, source_window=No
     prediction_epoch = None
     if len(request) == 6:
         if isinstance(request[5], dict):
-            if set(request[5]) != {'planning_applied_command'}:
-                raise ValueError('replay planning options require only the applied command')
-            from robot.safety.delay_robust_bypass import DelayRobustBypassMPC
-            if not isinstance(control.mpc, DelayRobustBypassMPC):
-                raise ValueError('applied-command replay requires the explicit static ablation')
-            control.mpc._reserve(request[5]['planning_applied_command'])
-            if request[5]['planning_applied_command'] is None:
-                raise ValueError('replay applied command must be explicit')
-            planning_options['planning_applied_command'] = list(map(float, request[5]['planning_applied_command']))
+            guide_keys = {'active_guide_index', 'route_goal_grid_xy'}
+            if set(request[5]) in (guide_keys, guide_keys | {'confirmed_committed_exit'}):
+                from robot.safety.field_alignment_mpc import FieldAlignmentMPC
+                if not isinstance(control.mpc, FieldAlignmentMPC) or not control.mpc.restaurant_mode:
+                    raise ValueError('route-guide replay requires restaurant field alignment')
+                planning_options.update(active_guide_index=request[5]['active_guide_index'],
+                                        route_goal_grid_xy=list(map(float, request[5]['route_goal_grid_xy'])))
+                if 'confirmed_committed_exit' in request[5]:
+                    from robot.safety.committed_aisle_mpc import CommittedAisleMPC, checked_exit_receipt
+                    if not isinstance(control.mpc, CommittedAisleMPC):
+                        raise ValueError('exit receipt replay requires the committed aisle controller')
+                    planning_options['confirmed_committed_exit'] = list(
+                        checked_exit_receipt(request[5]['confirmed_committed_exit']))
+            elif set(request[5]) == {'planning_applied_command'}:
+                from robot.safety.delay_robust_bypass import DelayRobustBypassMPC
+                if not isinstance(control.mpc, DelayRobustBypassMPC):
+                    raise ValueError('applied-command replay requires the explicit static ablation')
+                control.mpc._reserve(request[5]['planning_applied_command'])
+                if request[5]['planning_applied_command'] is None:
+                    raise ValueError('replay applied command must be explicit')
+                planning_options['planning_applied_command'] = list(map(float, request[5]['planning_applied_command']))
+            else:
+                raise ValueError('unknown replay planning options')
         else:
             prediction_epoch = float(request[5])
             if not math.isfinite(prediction_epoch):

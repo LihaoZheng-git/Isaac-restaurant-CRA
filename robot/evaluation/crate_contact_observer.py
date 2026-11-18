@@ -10,7 +10,7 @@ def _under(path, root):
 
 class CrateContactObserver:
     def __init__(self, robot_root, crate_root, *, target_label="crate"):
-        if target_label not in ("crate", "bin"):
+        if target_label not in ("crate", "bin", "trolley", "boy", "server"):
             raise ValueError("unknown contact target label")
         self.target_label = target_label
         self.robot_root = str(robot_root).rstrip("/")

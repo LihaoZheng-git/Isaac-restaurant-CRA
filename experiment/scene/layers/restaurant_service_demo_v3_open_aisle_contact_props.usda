@@ -1,0 +1,131 @@
+#usda 1.0
+
+over "World"
+{
+    over "CRAServiceDemoV1"
+    {
+        over "RoundedBin" (
+            active = false
+        )
+        {
+        }
+
+        over "ClearingStation" (
+            active = false
+        )
+        {
+        }
+
+        over "ClosedCaddy" (
+            active = false
+        )
+        {
+        }
+
+        over "UtensilCaddy" (
+            active = false
+        )
+        {
+        }
+
+        def Xform "ServiceContainer"
+        {
+            float xformOp:rotateZ = -90
+            double3 xformOp:translate = (21.19999995883296, 3.199999982356986, 0.000595831335196307)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:rotateZ"]
+
+            def Xform "Orientation"
+            {
+                float xformOp:rotateX = 90
+                float3 xformOp:scale = (0.04933345, 0.04933345, 0.04933345)
+                uniform token[] xformOpOrder = ["xformOp:rotateX", "xformOp:scale"]
+
+                def "Asset" (
+                    prepend references = @{assets}/restaurant/sketchfab_contact_props/simple_trash_can/converted.usdc@
+                )
+                {
+                    over "node_6dd95b3447a409aba1837a075aa159c_fbx"
+                    {
+                        over "RootNode"
+                        {
+                            over "pCylinder3"
+                            {
+                                over "pCylinder3_trashcan_surface_0"
+                                {
+                                    over "pCylinder3_trashcan_surface_0" (
+                                        prepend apiSchemas = ["PhysicsCollisionAPI", "PhysicsMeshCollisionAPI"]
+                                    )
+                                    {
+                                        uniform token physics:approximation = "none"
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        def Xform "BrokenCrate"
+        {
+            float xformOp:rotateZ = -90
+            double3 xformOp:translate = (17.416739658835002, 2.8923221469522176, 0.001150404515808926)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:rotateZ"]
+
+            def Xform "Orientation"
+            {
+                float xformOp:rotateX = 90
+                float3 xformOp:scale = (0.65, 0.65, 0.65)
+                uniform token[] xformOpOrder = ["xformOp:rotateX", "xformOp:scale"]
+
+                def "Asset" (
+                    prepend references = @{assets}/restaurant/sketchfab_contact_props/crates/converted.usdc@
+                )
+                {
+                    over "node_18c1021f1704bc6a4ddc61ad48bf678_fbx"
+                    {
+                        over "RootNode"
+                        {
+                            over "Crate_02_GEO" (
+                                active = true
+                            )
+                            {
+                                over "Crate_02_GEO_Crate_2x_0"
+                                {
+                                    over "Crate_02_GEO_Crate_2x_0" (
+                                        prepend apiSchemas = ["PhysicsCollisionAPI", "PhysicsMeshCollisionAPI"]
+                                    )
+                                    {
+                                        uniform token physics:approximation = "none"
+                                    }
+                                }
+                            }
+
+                            over "Crate_01_GEO" (
+                                active = false
+                            )
+                            {
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    over "CRAServiceDressing"
+    {
+        over "SecondPot" (
+            active = false
+        )
+        {
+        }
+    }
+
+    over "CRAServiceDemoV2Steam" (
+        active = false
+    )
+    {
+    }
+}
+

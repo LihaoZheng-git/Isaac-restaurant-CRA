@@ -4,6 +4,7 @@ import copy
 from dataclasses import replace
 import json
 from pathlib import Path
+import time
 
 import numpy as np
 
@@ -101,11 +102,18 @@ def augment_image_objects(worker, packet, tracking, projection, world, objects,
         if worker.persistent_properties.frozen:
             static_matches, static_audit = static_memory.match(world, tracking.point_track_ids,
                 packet.camera_timestamp_seconds, excluded=excluded)
+    lidar_guided_only = getattr(worker, "prop_masks_lidar_guided_only", False)
     if not image_is_set:
         worker.segmenter.set_image(packet.rgb)
-    proposals = worker.segmenter.image_proposals(tracking.point_track_ids, projection)
+    proposal_started = time.perf_counter()
+    if lidar_guided_only:
+        proposals = worker.segmenter.image_proposals(tracking.point_track_ids, projection, lidar_guided_only=True)
+    else:
+        proposals = worker.segmenter.image_proposals(tracking.point_track_ids, projection)
+    association_started = time.perf_counter()
     candidates, audit = associate_image_objects(proposals, projection, tracking.point_track_ids,
                                                 packet.obstacle_xyz, config)
+    association_seconds = time.perf_counter() - association_started
     admitted = []
     for candidate in candidates:
         if np.any(candidate['selected'] & excluded):
@@ -144,7 +152,15 @@ def augment_image_objects(worker, packet, tracking, projection, world, objects,
     detail = {"scope": "stationary separated-prop image grouping hypothesis; no geometry creation or raw identity merge",
               "hold_overlapping_hypotheses": config.hold_overlapping_hypotheses,
               "source_frame": packet.sensor_frame_id, "source_time": packet.sensor_timestamp_seconds,
-              "candidates": audit, "accepted_object_ids": []}
+              "candidates": audit, "accepted_object_ids": [],
+              "proposal_search": dict(
+                  mode="lidar_guided_only" if lidar_guided_only else "full",
+                  shared_image_encoder_wall_seconds=getattr(worker.segmenter, "image_encoder_wall_seconds", None),
+                  proposal_wall_seconds=association_started - proposal_started,
+                  spatial_association_wall_seconds=association_seconds,
+                  proposals=len(proposals), spatial_groups_after_person_exclusions=len(candidates),
+                  temporally_confirmed_groups=len(verified),
+              )}
     if view is not None:
         detail.update(scope='bounded static-prop moving-view correspondence; inferred partial-surface identity, original raw geometry unchanged',
             ego_reference_source=packet.pose_source, ego_reference_status=packet.pose_status.value)

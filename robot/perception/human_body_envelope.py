@@ -78,7 +78,8 @@ class HumanBodyEnvelopeConfig:
 
 
 class HumanBodyEnvelope:
-    def __init__(self, config, *, recovery_config=None, planning_uncertainty=False):
+    def __init__(self, config, *, recovery_config=None, planning_uncertainty=False,
+                 retire_unresolved=False):
         if not isinstance(config, HumanBodyEnvelopeConfig):
             raise TypeError("config must be HumanBodyEnvelopeConfig")
         self.config = config
@@ -88,7 +89,12 @@ class HumanBodyEnvelope:
         self.recovery_config = recovery_config
         if not isinstance(planning_uncertainty, bool) or planning_uncertainty and recovery_config is None:
             raise ValueError("planning uncertainty requires explicit bounded recovery configuration")
+        if not isinstance(retire_unresolved, bool) or (
+            retire_unresolved and (recovery_config is not None or planning_uncertainty)
+        ):
+            raise ValueError("identity retirement requires a separate mode without recovery or planning uncertainty")
         self.planning_uncertainty = planning_uncertainty
+        self.retire_unresolved = retire_unresolved
         self.uncertainty_regions = ()
         self.geometry_policies = {}
         self.identities = {}
@@ -97,11 +103,13 @@ class HumanBodyEnvelope:
 
     def update(self, tracking, fresh_person_cues, *, camera_timestamp_seconds, robot_world_xy=None,
                positive_surfaces=None):
-        """Return circles, or block publication rather than erase an old body.
+        """Return body priors and record the disposition of unresolved identities.
 
         The caller works on a transaction copy. Legacy unresolved identities
         block publication; the explicit planning-uncertainty mode instead
         retains their reachable geometry without claiming a current identity.
+        Observed-only retirement discards unresolved visual identity and leaves
+        the source LiDAR geometry intact.
         No source time is renewed by LiDAR-only identity retention.
         """
         now = tracking.timestamp_seconds
@@ -116,6 +124,32 @@ class HumanBodyEnvelope:
         tracks = {t.track_id: t for t in tracking.tracked_obstacles}
         updated = dict(self.identities)
         result, recovery_audit, uncertain = [], [], []
+
+        def retire_identity(key, previous, reason):
+            if (not self.retire_unresolved or previous is None
+                or now <= previous['lidar_timestamp']
+                or camera_timestamp_seconds < previous['camera_timestamp']):
+                return False
+            cue = fresh_person_cues.get(key)
+            if cue is not None:
+                frame = cue['camera_frame_id']
+                if frame < previous['camera_frame'] or (
+                    frame > previous['camera_frame']
+                    and cue['camera_timestamp_seconds'] != camera_timestamp_seconds
+                ):
+                    return False
+            updated.pop(key)
+            recovery_audit.append(dict(
+                decision='retired_unresolved_person_identity', track_id=key, reason=reason,
+                original_person_camera_timestamp=previous['camera_timestamp'],
+                original_person_camera_frame_id=previous['camera_frame'],
+                original_lidar_timestamp_seconds=previous['lidar_timestamp'],
+                original_center_world_xy=previous['center'].tolist(),
+                evaluation_timestamp_seconds=now,
+                scope='observed-only identity retirement with current LiDAR geometry preserved',
+            ))
+            return True
+
         def retain_uncertainty(key, previous, reason):
             if not self.planning_uncertainty or previous is None:
                 return False
@@ -167,7 +201,8 @@ class HumanBodyEnvelope:
                 if sum(new in matches for matches in candidates.values()) == 1:
                     key, track, reassociated = new, tracks[new], True
             if track is None:
-                if retain_uncertainty(old_key, previous, "missing_positive_track"):
+                if (retain_uncertainty(old_key, previous, "missing_positive_track")
+                    or retire_identity(old_key, previous, "missing_positive_track")):
                     continue
                 if self.recovery_config is not None:
                     proof = self.recovery_config.missing_path_clearance(previous, now=now,
@@ -182,17 +217,17 @@ class HumanBodyEnvelope:
             count = int(np.count_nonzero(tracking.point_track_ids == key))
             center = np.asarray(track.centroid_world_xy, dtype=float)
             velocity = np.asarray(track.velocity_world_xy, dtype=float)
+            valid_geometry = (center.shape == (2,) and velocity.shape == (2,)
+                and np.isfinite(center).all() and np.isfinite(velocity).all())
             if (
                 count < self.config.minimum_points
                 or track.observation_count < 1
-                or center.shape != (2,)
-                or velocity.shape != (2,)
-                or not np.isfinite(center).all()
-                or not np.isfinite(velocity).all()
+                or not valid_geometry
             ):
-                if (center.shape == (2,) and velocity.shape == (2,) and np.isfinite(center).all()
-                    and np.isfinite(velocity).all()
-                    and retain_uncertainty(old_key, previous, "insufficient_current_support")):
+                if valid_geometry and (
+                    retain_uncertainty(old_key, previous, "insufficient_current_support")
+                    or retire_identity(old_key, previous, "insufficient_current_support")
+                ):
                     continue
                 raise ValueError(
                     f"human envelope {key}: insufficient current LiDAR support"
@@ -210,7 +245,8 @@ class HumanBodyEnvelope:
                 < self.config.competitor_distance_m
             ]
             if competitors:
-                if retain_uncertainty(old_key, previous, "ambiguous_current_association"):
+                if (retain_uncertainty(old_key, previous, "ambiguous_current_association")
+                    or retire_identity(old_key, previous, "ambiguous_current_association")):
                     continue
                 raise ValueError(
                     f"human envelope {key}: ambiguous competing tracks {competitors}"
@@ -253,12 +289,14 @@ class HumanBodyEnvelope:
                     or np.linalg.norm(previous['velocity']) > self.recovery_config.maximum_human_speed_mps):
                     failed_gates.append('recovery_motion_scope')
                 if failed_gates:
+                    reason = ','.join(failed_gates)
                     if ('recovery_motion_scope' not in failed_gates and age >= 0 and dt > 0
-                        and retain_uncertainty(old_key, previous, ','.join(failed_gates))):
+                        and (retain_uncertainty(old_key, previous, reason)
+                            or retire_identity(old_key, previous, reason))):
                         continue
                     raise ValueError(
                         f"human envelope {key}: original identity prior expired or continuity unresolved; "
-                        f"failed_gates={','.join(failed_gates)}; lidar_source_gap_seconds={dt:.9g}; "
+                        f"failed_gates={reason}; lidar_source_gap_seconds={dt:.9g}; "
                         f"original_identity_age_seconds={age:.9g}; centroid_prediction_residual_m={residual:.9g}"
                     )
                 source_time, source_frame = (

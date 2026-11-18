@@ -4,7 +4,7 @@ python_files = ["test_*.py"]
 addopts = "-ra"
 
 [tool.ruff]
-target-version = "py310"
+target-version = "py312"
 line-length = 88
 extend-exclude = [
     "outputs",
@@ -22,4 +22,5 @@ select = [
 [tool.ruff.lint.per-file-ignores]
 # Standalone Isaac scripts intentionally create SimulationApp before
 # importing other Isaac Sim and project runtime modules.
-"scripts/**/*.py" = ["E402"]
+"experiment/runtime/service_phase.py" = ["E402"]
+"experiment/runtime/isaac_session.py" = ["E402"]

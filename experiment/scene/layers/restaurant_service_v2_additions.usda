@@ -1,0 +1,118 @@
+#usda 1.0
+
+over "World"
+{
+    def Xform "CRAServiceDressing"
+    {
+        def Xform "FrontPlate" (
+            prepend references = @{assets}/restaurant/kenney_food_kit/usd/plate-dinner.usda@
+        )
+        {
+            float xformOp:rotateZ = 0
+            float3 xformOp:scale = (0.29155368, 0.29155368, 0.29155368)
+            double3 xformOp:translate = (13.35, 2.55, 0.7466)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:rotateZ", "xformOp:scale"]
+        }
+
+        def Xform "FrontBread" (
+            prepend references = @{assets}/restaurant/kenney_food_kit/usd/bread.usda@
+        )
+        {
+            float xformOp:rotateZ = 0
+            float3 xformOp:scale = (0.31651253, 0.31651253, 0.31651253)
+            double3 xformOp:translate = (13.35, 2.55, 0.769)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:rotateZ", "xformOp:scale"]
+        }
+
+        def Xform "FrontCup" (
+            prepend references = @{assets}/restaurant/kenney_food_kit/usd/cup-coffee.usda@
+        )
+        {
+            float xformOp:rotateZ = 0
+            float3 xformOp:scale = (0.5085769, 0.5085769, 0.5085769)
+            double3 xformOp:translate = (13.78, 2.5392820717145472, 0.7466)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:rotateZ", "xformOp:scale"]
+        }
+
+        def Xform "CounterKnifeBlock" (
+            prepend references = @{assets}/restaurant/kenney_food_kit/usd/knife-block.usda@
+        )
+        {
+            float xformOp:rotateZ = 90
+            float3 xformOp:scale = (0.2830584, 0.2830584, 0.2830584)
+            double3 xformOp:translate = (24.65, 6.039756145466703, 0.9)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:rotateZ", "xformOp:scale"]
+        }
+
+        def Xform "CounterPlate" (
+            prepend references = @{assets}/restaurant/kenney_food_kit/usd/plate-dinner.usda@
+        )
+        {
+            float xformOp:rotateZ = 0
+            float3 xformOp:scale = (0.29155368, 0.29155368, 0.29155368)
+            double3 xformOp:translate = (24.1, 6.05, 0.9)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:rotateZ", "xformOp:scale"]
+        }
+
+        def Xform "CounterKnife" (
+            prepend references = @{assets}/restaurant/kenney_food_kit/usd/utensil-knife.usda@
+        )
+        {
+            float xformOp:rotateZ = 20
+            float3 xformOp:scale = (0.38284317, 0.38284317, 0.38284317)
+            double3 xformOp:translate = (24.1, 6.05, 0.935)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:rotateZ", "xformOp:scale"]
+        }
+
+        def Xform "FoodBowl" (
+            prepend references = @{assets}/restaurant/kenney_food_kit/usd/bowl-soup.usda@
+        )
+        {
+            float xformOp:rotateZ = 0
+            float3 xformOp:scale = (0.5974275, 0.5974275, 0.5974275)
+            double3 xformOp:translate = (31.25, 7.4, 0.7466)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:rotateZ", "xformOp:scale"]
+        }
+
+        def Xform "FoodSpoon" (
+            prepend references = @{assets}/restaurant/kenney_food_kit/usd/utensil-spoon.usda@
+        )
+        {
+            float xformOp:rotateZ = 90
+            float3 xformOp:scale = (0.41702583, 0.41702583, 0.41702583)
+            double3 xformOp:translate = (31.68, 7.4, 0.7466)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:rotateZ", "xformOp:scale"]
+        }
+
+        def Xform "SecondPot" (
+            prepend references = @{assets}/restaurant/kenney_food_kit/usd/pot-stew.usda@
+        )
+        {
+            float xformOp:rotateZ = 0
+            float3 xformOp:scale = (0.51715004, 0.51715004, 0.51715004)
+            double3 xformOp:translate = (31.2, 12.25, 0.7466)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:rotateZ", "xformOp:scale"]
+        }
+
+        def Xform "SecondPlate" (
+            prepend references = @{assets}/restaurant/kenney_food_kit/usd/plate-dinner.usda@
+        )
+        {
+            float xformOp:rotateZ = 0
+            float3 xformOp:scale = (0.26912647, 0.26912647, 0.26912647)
+            double3 xformOp:translate = (31.64, 11.75, 0.7466)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:rotateZ", "xformOp:scale"]
+        }
+
+        def Xform "DestinationPlate" (
+            prepend references = @{assets}/restaurant/kenney_food_kit/usd/plate-dinner.usda@
+        )
+        {
+            float xformOp:rotateZ = 0
+            float3 xformOp:scale = (0.29155368, 0.29155368, 0.29155368)
+            double3 xformOp:translate = (31.46, 17.75, 0.7466)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:rotateZ", "xformOp:scale"]
+        }
+    }
+}
+

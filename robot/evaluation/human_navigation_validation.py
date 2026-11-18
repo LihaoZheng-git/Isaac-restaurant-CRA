@@ -53,10 +53,10 @@ def _current_contact_policy(obj):
     )
 
 
-def summarize_human_navigation(records, truth, *, mode, upper_continuation=False, crossing_direction="right-to-left", continuing_away=False, crossing_y_m=8.9, crossing_layout="legacy", straight_service_walk=False):
+def summarize_human_navigation(records, truth, *, mode, upper_continuation=False, crossing_direction="right-to-left", continuing_away=False, crossing_y_m=8.9, crossing_layout="legacy", straight_service_walk=False, left_outbound_service=False, left_outbound_lounge_walk=False, left_outbound_west_diner=False):
     if mode not in {"standing", "crossing", "continuous-crossing", "parallel"}:
         raise ValueError("unknown human navigation mode")
-    if straight_service_walk and mode != 'parallel':
+    if (straight_service_walk or left_outbound_service or left_outbound_west_diner) and mode != 'parallel':
         raise ValueError('one-way service evaluation requires parallel mode')
     if crossing_direction not in {"right-to-left", "left-to-right"}:
         raise ValueError("unsupported crossing evaluation direction")
@@ -239,7 +239,9 @@ def summarize_human_navigation(records, truth, *, mode, upper_continuation=False
             from robot.evaluation.parallel_walking_validation import validate_parallel_actor
             checks.pop('actual_crossing')
             checks['actual_parallel_walking'] = validate_parallel_actor(truth, parked_robot=False,
-                straight_service_walk=straight_service_walk)['passed']
+                straight_service_walk=straight_service_walk, left_outbound_service=left_outbound_service,
+                left_outbound_lounge_walk=left_outbound_lounge_walk,
+                left_outbound_west_diner=left_outbound_west_diner)['passed']
     else:
         checks["stationary_world_velocity_error"] = (
             bool(rows)

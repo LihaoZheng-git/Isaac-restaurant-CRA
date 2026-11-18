@@ -81,8 +81,13 @@ def author_relaxed_static_pose(stage, visual_prim):
     UsdSkel.BindingAPI.Apply(skeleton.GetPrim()).CreateAnimationSourceRel().SetTargets(
         [pose.GetPath()]
     )
+    return update_static_pose_bounds(visual_prim, UsdSkel.Root(roots[0]), skeleton)
+
+
+def update_static_pose_bounds(visual_prim, rig, skeleton):
+    """Update the rig's extent from the composed, skinned default pose."""
     cache = UsdSkel.Cache()
-    cache.Populate(UsdSkel.Root(roots[0]), Usd.PrimDefaultPredicate)
+    cache.Populate(rig, Usd.PrimDefaultPredicate)
     query = cache.GetSkelQuery(skeleton)
     skin = query.ComputeSkinningTransforms(Usd.TimeCode.Default())
     skel_world = UsdGeom.Xformable(skeleton).ComputeLocalToWorldTransform(
@@ -113,14 +118,14 @@ def author_relaxed_static_pose(stage, visual_prim):
     # A SkelRoot's declared extent must cover its actual posed surface, rather
     # than leaving the bind-pose T-pose extent as the independent monitor box.
     root_inverse = (
-        UsdGeom.Xformable(roots[0])
+        UsdGeom.Xformable(rig)
         .ComputeLocalToWorldTransform(Usd.TimeCode.Default())
         .GetInverse()
     )
     root_points = np.asarray(
         [tuple(root_inverse.Transform(Gf.Vec3d(*p))) for p in points]
     )
-    UsdGeom.Boundable(roots[0]).CreateExtentAttr(
+    UsdGeom.Boundable(rig).CreateExtentAttr(
         [Gf.Vec3f(*root_points.min(0)), Gf.Vec3f(*root_points.max(0))]
     )
     return low, high
