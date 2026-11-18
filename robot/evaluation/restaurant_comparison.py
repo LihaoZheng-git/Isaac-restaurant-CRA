@@ -38,6 +38,10 @@ def planner_result_diagnostic(result):
            if result is not None and getattr(result, "predictive_geometry", None) is not None else {}),
         **({"guidance_tracking_ablation": asdict(result.guidance_tracking)}
            if result is not None and hasattr(result, "guidance_tracking") else {}),
+        **({"field_alignment": result.field_alignment}
+           if result is not None and hasattr(result, "field_alignment") else {}),
+        **({"committed_bypass": result.committed_bypass}
+           if result is not None and hasattr(result, "committed_bypass") else {}),
         **({"crossing_maneuver_ablation": result.crossing_maneuver}
            if result is not None and hasattr(result, "crossing_maneuver") else {}),
         **({"rear_pass_reference_ablation": result.rear_pass_reference}

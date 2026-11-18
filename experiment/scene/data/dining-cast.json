@@ -1,0 +1,129 @@
+{
+  "actors": {
+    "LeftNearChair": {
+      "asset_path": "restaurant_live_v3/characters/official-pack/Assets/Characters/Reallusion/ActorCore/Party_M_0001/Actor/party-m-0001/party-m-0001.usd",
+      "sha256": "bdaa41b5798851d08e6bdf105681968c8fa1e33615cf45f135123ab5cbe9e9d8",
+      "source_url": "https://docs.omniverse.nvidia.com/usd/latest/usd_content_samples/downloadable_packs.html",
+      "model": "ActorCore Party_M_0001",
+      "role": "LeftNear dining pair, chair seat"
+    },
+    "LeftNearBooth": {
+      "asset_url": "https://omniverse-content-production.s3-us-west-2.amazonaws.com/Assets/Isaac/6.0/Isaac/People/Characters/F_Business_02/F_Business_02.usd",
+      "sha256": "a1dceaae15e59e1cda4b4697a1e233c0cc570279178a418e544289b202c78201",
+      "appearance": "burgundy",
+      "model": "Isaac F_Business_02",
+      "role": "LeftNear dining pair, booth seat"
+    },
+    "LeftFarChair": {
+      "asset_path": "restaurant_live_v3/characters/official-native/construction05/male_adult_construction_05.usd",
+      "sha256": "18893a98258904620fb30b0f36d7d91b8349704e68788c24f7cd65a22af87e49",
+      "source_url": "https://omniverse-content-production.s3-us-west-2.amazonaws.com/Assets/Isaac/6.0/Isaac/People/Characters/original_male_adult_construction_05/male_adult_construction_05.usd",
+      "model": "Isaac male_adult_construction_05",
+      "role": "LeftFar dining pair, chair seat",
+      "hide_paths": [
+        "ManRoot/male_adult_construction_05/male_adult_construction_05/opaque__plastic__hardhat",
+        "ManRoot/male_adult_construction_05/male_adult_construction_05/opaque__fabric__safetyvest",
+        "ManRoot/male_adult_construction_05/male_adult_construction_05/retro__reflective__safetyvest"
+      ]
+    },
+    "LeftFarBooth": {
+      "asset_url": "https://omniverse-content-production.s3-us-west-2.amazonaws.com/Assets/Isaac/6.0/Isaac/People/Characters/F_Business_02/F_Business_02.usd",
+      "sha256": "a1dceaae15e59e1cda4b4697a1e233c0cc570279178a418e544289b202c78201",
+      "appearance": "olive",
+      "model": "Isaac F_Business_02",
+      "role": "LeftFar dining pair, booth seat"
+    },
+    "FrontChair": {
+      "asset_url": "https://omniverse-content-production.s3-us-west-2.amazonaws.com/Assets/Isaac/6.0/Isaac/People/Characters/F_Business_02/F_Business_02.usd",
+      "sha256": "a1dceaae15e59e1cda4b4697a1e233c0cc570279178a418e544289b202c78201",
+      "appearance": "navy",
+      "model": "Isaac F_Business_02",
+      "role": "Front dining pair, chair seat"
+    },
+    "FrontBooth": {
+      "asset_path": "restaurant_live_v3/characters/official-pack/Assets/Characters/Reallusion/ActorCore/Party_M_0001/Actor/party-m-0001/party-m-0001.usd",
+      "sha256": "bdaa41b5798851d08e6bdf105681968c8fa1e33615cf45f135123ab5cbe9e9d8",
+      "source_url": "https://docs.omniverse.nvidia.com/usd/latest/usd_content_samples/downloadable_packs.html",
+      "model": "ActorCore Party_M_0001",
+      "role": "Front dining pair, booth seat"
+    },
+    "RightChair": {
+      "asset_path": "restaurant_live_v3/characters/official-native/construction05/male_adult_construction_05.usd",
+      "sha256": "18893a98258904620fb30b0f36d7d91b8349704e68788c24f7cd65a22af87e49",
+      "source_url": "https://omniverse-content-production.s3-us-west-2.amazonaws.com/Assets/Isaac/6.0/Isaac/People/Characters/original_male_adult_construction_05/male_adult_construction_05.usd",
+      "model": "Isaac male_adult_construction_05",
+      "role": "Right dining pair, chair seat",
+      "hide_paths": [
+        "ManRoot/male_adult_construction_05/male_adult_construction_05/opaque__plastic__hardhat",
+        "ManRoot/male_adult_construction_05/male_adult_construction_05/opaque__fabric__safetyvest",
+        "ManRoot/male_adult_construction_05/male_adult_construction_05/retro__reflective__safetyvest"
+      ]
+    },
+    "RightBooth": {
+      "asset_url": "https://omniverse-content-production.s3-us-west-2.amazonaws.com/Assets/Isaac/6.0/Isaac/People/Characters/F_Business_02/F_Business_02.usd",
+      "sha256": "a1dceaae15e59e1cda4b4697a1e233c0cc570279178a418e544289b202c78201",
+      "appearance": "burgundy",
+      "model": "Isaac F_Business_02",
+      "role": "Right dining pair, booth seat"
+    },
+    "LeftOppositeChair": {
+      "asset_path": "restaurant_live_v3/characters/official-native/construction05/male_adult_construction_05.usd",
+      "sha256": "18893a98258904620fb30b0f36d7d91b8349704e68788c24f7cd65a22af87e49",
+      "source_url": "https://omniverse-content-production.s3-us-west-2.amazonaws.com/Assets/Isaac/6.0/Isaac/People/Characters/original_male_adult_construction_05/male_adult_construction_05.usd",
+      "model": "Isaac male_adult_construction_05",
+      "role": "LeftOpposite dining pair, chair seat",
+      "hide_paths": [
+        "ManRoot/male_adult_construction_05/male_adult_construction_05/opaque__plastic__hardhat",
+        "ManRoot/male_adult_construction_05/male_adult_construction_05/opaque__fabric__safetyvest",
+        "ManRoot/male_adult_construction_05/male_adult_construction_05/retro__reflective__safetyvest"
+      ]
+    },
+    "LeftOppositeBooth": {
+      "asset_url": "https://omniverse-content-production.s3-us-west-2.amazonaws.com/Assets/Isaac/6.0/Isaac/People/Characters/F_Business_02/F_Business_02.usd",
+      "sha256": "a1dceaae15e59e1cda4b4697a1e233c0cc570279178a418e544289b202c78201",
+      "appearance": "navy",
+      "model": "Isaac F_Business_02",
+      "role": "LeftOpposite dining pair, booth seat"
+    },
+    "RightOppositeChair": {
+      "asset_path": "restaurant_live_v3/characters/official-pack/Assets/Characters/Reallusion/ActorCore/Party_M_0001/Actor/party-m-0001/party-m-0001.usd",
+      "sha256": "bdaa41b5798851d08e6bdf105681968c8fa1e33615cf45f135123ab5cbe9e9d8",
+      "source_url": "https://docs.omniverse.nvidia.com/usd/latest/usd_content_samples/downloadable_packs.html",
+      "model": "ActorCore Party_M_0001",
+      "role": "RightOpposite dining pair, chair seat"
+    },
+    "RightOppositeBooth": {
+      "asset_url": "https://omniverse-content-production.s3-us-west-2.amazonaws.com/Assets/Isaac/6.0/Isaac/People/Characters/F_Business_02/F_Business_02.usd",
+      "sha256": "a1dceaae15e59e1cda4b4697a1e233c0cc570279178a418e544289b202c78201",
+      "appearance": "olive",
+      "model": "Isaac F_Business_02",
+      "role": "RightOpposite dining pair, booth seat"
+    },
+    "FamilyFather": {
+      "asset_path": "restaurant_live_v3/characters/official-pack/Assets/Characters/Reallusion/ActorCore/Party_M_0001/Actor/party-m-0001/party-m-0001.usd",
+      "sha256": "bdaa41b5798851d08e6bdf105681968c8fa1e33615cf45f135123ab5cbe9e9d8",
+      "source_url": "https://docs.omniverse.nvidia.com/usd/latest/usd_content_samples/downloadable_packs.html",
+      "model": "ActorCore Party_M_0001",
+      "role": "father at family table"
+    },
+    "FamilyMother": {
+      "asset_url": "https://omniverse-content-production.s3-us-west-2.amazonaws.com/Assets/Isaac/6.0/Isaac/People/Characters/F_Business_02/F_Business_02.usd",
+      "sha256": "a1dceaae15e59e1cda4b4697a1e233c0cc570279178a418e544289b202c78201",
+      "appearance": "burgundy",
+      "model": "Isaac F_Business_02",
+      "role": "mother at family table"
+    },
+    "SoloDiner": {
+      "asset_path": "restaurant_live_v3/characters/official-native/construction05/male_adult_construction_05.usd",
+      "sha256": "18893a98258904620fb30b0f36d7d91b8349704e68788c24f7cd65a22af87e49",
+      "source_url": "https://omniverse-content-production.s3-us-west-2.amazonaws.com/Assets/Isaac/6.0/Isaac/People/Characters/original_male_adult_construction_05/male_adult_construction_05.usd",
+      "model": "Isaac male_adult_construction_05",
+      "role": "solo wall-side diner",
+      "hide_paths": [
+        "ManRoot/male_adult_construction_05/male_adult_construction_05/opaque__plastic__hardhat",
+        "ManRoot/male_adult_construction_05/male_adult_construction_05/opaque__fabric__safetyvest",
+        "ManRoot/male_adult_construction_05/male_adult_construction_05/retro__reflective__safetyvest"
+      ]
+    }
+  }
+}

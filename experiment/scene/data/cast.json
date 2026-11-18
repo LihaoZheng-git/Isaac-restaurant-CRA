@@ -1,0 +1,46 @@
+{
+  "schema": "restaurant-live-distinct-cast-v1",
+  "scope": "Five distinct source character models for a parked-robot presentation; native motion validation required",
+  "actors": {
+    "Server": {
+      "asset_path": "characters/official-pack/Assets/Characters/Reallusion/ActorCore/Uniform_F_0001/Actor/uniform_f_0001/uniform_f_0001.usd",
+      "sha256": "89c1145850bf65f5b29cc47f9b3ab656c5d5669910d256073256667323de3f00",
+      "source_url": "https://docs.omniverse.nvidia.com/usd/latest/usd_content_samples/downloadable_packs.html",
+      "model": "ActorCore Uniform_F_0001",
+      "role": "Red-polo restaurant server"
+    },
+    "Busboy": {
+      "asset_path": "characters/official-pack/Assets/Characters/Reallusion/ActorCore/Uniform_M_0001/Actor/uniform_m_0001/uniform_m_0001.usd",
+      "sha256": "9ec4fa2c538499f9351cdd8ca86d13c11a8ab1929d7af0dd71615c946bc525f0",
+      "source_url": "https://docs.omniverse.nvidia.com/usd/latest/usd_content_samples/downloadable_packs.html",
+      "model": "ActorCore Uniform_M_0001",
+      "role": "Blue-uniform clearing staff"
+    },
+    "DinerA": {
+      "asset_url": "https://omniverse-content-production.s3-us-west-2.amazonaws.com/Assets/Isaac/6.0/Isaac/People/Characters/F_Business_02/F_Business_02.usd",
+      "sha256": "a1dceaae15e59e1cda4b4697a1e233c0cc570279178a418e544289b202c78201",
+      "appearance": "burgundy",
+      "model": "Isaac F_Business_02",
+      "role": "Original woman retained once as diner"
+    },
+    "DinerB": {
+      "asset_path": "characters/official-pack/Assets/Characters/Reallusion/ActorCore/Party_M_0001/Actor/party-m-0001/party-m-0001.usd",
+      "sha256": "bdaa41b5798851d08e6bdf105681968c8fa1e33615cf45f135123ab5cbe9e9d8",
+      "source_url": "https://docs.omniverse.nvidia.com/usd/latest/usd_content_samples/downloadable_packs.html",
+      "model": "ActorCore Party_M_0001",
+      "role": "Casually dressed male diner"
+    },
+    "DinerC": {
+      "asset_path": "characters/official-native/construction05/male_adult_construction_05.usd",
+      "sha256": "18893a98258904620fb30b0f36d7d91b8349704e68788c24f7cd65a22af87e49",
+      "source_url": "https://omniverse-content-production.s3-us-west-2.amazonaws.com/Assets/Isaac/6.0/Isaac/People/Characters/original_male_adult_construction_05/male_adult_construction_05.usd",
+      "model": "Isaac male_adult_construction_05",
+      "role": "T-shirt and jeans male diner",
+      "hide_paths": [
+        "ManRoot/male_adult_construction_05/male_adult_construction_05/opaque__plastic__hardhat",
+        "ManRoot/male_adult_construction_05/male_adult_construction_05/opaque__fabric__safetyvest",
+        "ManRoot/male_adult_construction_05/male_adult_construction_05/retro__reflective__safetyvest"
+      ]
+    }
+  }
+}

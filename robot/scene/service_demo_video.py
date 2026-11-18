@@ -11,20 +11,25 @@ from pxr import Gf, Usd, UsdGeom
 class ServiceDemoVideo:
     """Rendering only. Frames/epochs never feed perception or control."""
 
-    def __init__(self, stage, output, *, follow_pose=None, risk_camera=False, risk_palette="legacy"):
+    camera_path = "/World/CRAServiceDemoOverview"
+    resolution = (600, 800)
+
+    def __init__(self, stage, output, *, follow_pose=None, risk_camera=False, risk_palette="legacy",
+                 resolution=(600, 800)):
         from isaacsim.sensors.experimental.rtx import CameraSensor, RtxCamera
 
         self.output, self.rows, self.last = output, [], -math.inf
+        self.resolution = resolution
         from robot.evaluation.risk_palette import palette_description
         self.risk_palette = palette_description(risk_palette)["name"]
         self.stage, self.follow_pose, self.pose_time = stage, follow_pose, None
         self.camera_pose_record = None
         self.risk_frame, self.risk_rows, self.risk_writer = None, [], None
         self.risk_rejections = []
+        self.phase = None
         with Usd.EditContext(stage, stage.GetSessionLayer()):
-            path = "/World/CRAServiceDemoOverview"
-            camera = RtxCamera.create(path, tick_rate=10)
-            prim = UsdGeom.Camera.Get(stage, path)
+            camera = RtxCamera.create(self.camera_path, tick_rate=10)
+            prim = UsdGeom.Camera.Get(stage, self.camera_path)
             self.transform = prim.MakeMatrixXform()
             self.transform.Set(Gf.Matrix4d().SetLookAt(
                 Gf.Vec3d(25.9, 6.7, 3.2), Gf.Vec3d(29., 8., .6),
@@ -32,7 +37,7 @@ class ServiceDemoVideo:
             prim.CreateFocalLengthAttr(18)
             prim.CreateHorizontalApertureAttr(36)
             prim.CreateVerticalApertureAttr(27)
-        self.camera = CameraSensor(camera, resolution=(600, 800), annotators=["rgb"])
+        self.camera = CameraSensor(camera, resolution=resolution, annotators=["rgb"])
         self.writer = cv2.VideoWriter(str(output/"service-navigation.mp4"),
                                       cv2.VideoWriter_fourcc(*"mp4v"), 10, (800, 600))
         if not self.writer.isOpened():
@@ -61,13 +66,20 @@ class ServiceDemoVideo:
         self.pose_time = now
         self.camera_pose_record = dict(source_time=float(now), eye=list(eye), target=list(target))
 
-    def record(self, now, command, world_xy):
+    def begin_phase(self, phase):
+        """Do not carry an admitted field across a fresh controller phase."""
+        self.phase = phase
+        self.risk_frame = None
+
+    def record(self, now, command, world_xy, *, world_yaw=None):
         if now-self.last < .1-1e-6:
             return
         rgb, _ = self.camera.get_data("rgb")
         rgb = np.array([]) if rgb is None else rgb.numpy()
-        if rgb.shape[:2] != (600, 800):
+        if rgb.shape[:2] != self.resolution:
             return
+        if self.resolution != (600, 800):
+            rgb = cv2.resize(rgb, (800, 600), interpolation=cv2.INTER_LINEAR)
         self.writer.write(np.ascontiguousarray(rgb[:, :, :3][:, :, ::-1]))
         if getattr(self, "risk_writer", None) is not None:
             from robot.evaluation.risk_camera_overlay import render_risk_panel
@@ -76,9 +88,11 @@ class ServiceDemoVideo:
             combined = np.concatenate((rgb[:, :, :3], panel), axis=1)
             self.risk_writer.write(np.ascontiguousarray(combined[:, :, ::-1]))
             self.risk_rows.append(dict(time=float(now), **metadata))
-        self.rows.append(dict(time=float(now), robot_command=list(command),
-                              robot_world_xy=list(world_xy),
-                              presentation_camera=getattr(self, "camera_pose_record", None)))
+        row = dict(time=float(now), robot_command=list(command), robot_world_xy=list(world_xy),
+                   presentation_camera=getattr(self, "camera_pose_record", None))
+        if world_yaw is not None:
+            row.update(robot_world_yaw=float(world_yaw), phase=self.phase)
+        self.rows.append(row)
         self.last = now
 
     def accept_risk_assessment(self, result):
@@ -122,5 +136,6 @@ class ServiceDemoVideo:
         self.writer = None
         (self.output/"service-video-epochs.json").write_text(json.dumps(dict(
             fps=10, frames=self.rows,
+            rendered_height_width=self.resolution,
             scope="native overview frame epochs; read-only presentation, not control evidence"),
             indent=2)+"\n", encoding="utf-8")

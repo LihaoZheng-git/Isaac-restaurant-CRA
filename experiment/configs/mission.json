@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "scope": "Continuous animated restaurant mission with the tested table-front right delivery and LiDAR-guided left prop assessment.",
+  "left_start": "preloaded_west",
+  "left_prop_mask_search": "lidar_guided_only",
+  "background_motion": true,
+  "phase_recipes": {
+    "left": {
+      "path": "experiment/configs/left.json",
+      "case": "long-parallel"
+    },
+    "return": {
+      "path": "experiment/configs/return.json",
+      "case": "return"
+    },
+    "right": {
+      "path": "experiment/configs/right.json",
+      "case": "delivery"
+    }
+  }
+}

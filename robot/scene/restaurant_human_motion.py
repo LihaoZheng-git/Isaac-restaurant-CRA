@@ -18,10 +18,15 @@ HUMAN_MOTION_LIBRARY_PRIM = "/World/CRAServiceActors/HumanMotionLibrary"
 HUMAN_WALK_GOAL = (29.8, 12.5, 0.0)
 
 
-def human_navmesh_extent(*, open_layout=False, parallel_oncoming=False, upper_departure=False, straight_service_walk=False):
+def human_navmesh_extent(*, open_layout=False, parallel_oncoming=False, upper_departure=False,
+                         straight_service_walk=False, left_outbound_service=False):
     """Actor authoring domain only; no robot planner or geometry input."""
     if (upper_departure or straight_service_walk) and not parallel_oncoming:
         raise ValueError('upper actor NavMesh requires the parallel encounter')
+    if left_outbound_service:
+        if open_layout or not parallel_oncoming or upper_departure:
+            raise ValueError('left outbound requires its own parallel actor region')
+        return (0., 7.5, -.2), (8., 15.8, 2.5)
     low = (25., 6., -.2) if open_layout or parallel_oncoming else (27., 7., -.2)
     return low, (31., 25. if upper_departure or straight_service_walk else 14., 2.5)
 
@@ -81,7 +86,17 @@ def attach_moving_human_collider(stage, rig, *, radius=0.4, height=1.7):
 
 def prepare_native_restaurant_human(stage, *, crossing_direction="right-to-left",
                                     crossing_extension_m=0., crossing_y_m=8.9, crossing_layout="legacy", parallel_oncoming=False,
-                                    upper_departure=False, straight_service_walk=False):
+                                    upper_departure=False, straight_service_walk=False,
+                                    left_outbound_service=False, left_outbound_near_view=False,
+                                    left_outbound_west_diner=False):
+    if left_outbound_west_diner and not left_outbound_service:
+        raise ValueError('west diner staging requires the left outbound actor')
+    if left_outbound_near_view and not left_outbound_service:
+        raise ValueError('left near view requires the left outbound actor')
+    if left_outbound_service and left_outbound_near_view == straight_service_walk:
+        raise ValueError('left outbound uses its full straight walk or near-view staging')
+    if left_outbound_service and (not parallel_oncoming or upper_departure):
+        raise ValueError('left outbound requires the independent parallel actor profile')
     import omni.client
     import omni.kit.commands
     from pxr import NavSchema, Sdf, Usd
@@ -115,12 +130,18 @@ def prepare_native_restaurant_human(stage, *, crossing_direction="right-to-left"
         from robot.scene.parallel_walk_encounter import validate_parallel_scope, PARALLEL_ACTOR_START
         validate_parallel_scope(direction=crossing_direction, extension=crossing_extension_m,
             crossing_y=crossing_y_m, layout=crossing_layout)
-        server.GetAttribute('xformOp:translate').Set(Gf.Vec3d(*PARALLEL_ACTOR_START))
-    if straight_service_walk:
+        if not left_outbound_service and not straight_service_walk:
+            server.GetAttribute('xformOp:translate').Set(Gf.Vec3d(*PARALLEL_ACTOR_START))
+    if straight_service_walk and not left_outbound_service:
         if not parallel_oncoming or upper_departure:
             raise ValueError('one-way service walk requires its separate parallel setup')
         from robot.scene.restaurant_straight_walk import STRAIGHT_START
         server.GetAttribute('xformOp:translate').Set(Gf.Vec3d(*STRAIGHT_START))
+    if left_outbound_service:
+        from robot.scene.restaurant_straight_walk import left_outbound_actor_start
+        start = left_outbound_actor_start(near_view=left_outbound_near_view,
+                                         west_diner=left_outbound_west_diner)
+        server.GetAttribute('xformOp:translate').Set(Gf.Vec3d(*start))
     rigs = [p for p in Usd.PrimRange(server) if p.IsA(UsdSkel.Root)]
     skeletons = [p for p in Usd.PrimRange(server) if p.IsA(UsdSkel.Skeleton)]
     if len(rigs) != 1 or len(skeletons) != 1:
@@ -148,7 +169,8 @@ def prepare_native_restaurant_human(stage, *, crossing_direction="right-to-left"
     )
     volume.CreateNavVolumeTypeAttr("Include")
     extent = human_navmesh_extent(open_layout=open_layout, parallel_oncoming=parallel_oncoming,
-        upper_departure=upper_departure, straight_service_walk=straight_service_walk)
+        upper_departure=upper_departure, straight_service_walk=straight_service_walk,
+        left_outbound_service=left_outbound_service)
     volume.CreateExtentAttr([Gf.Vec3f(*corner) for corner in extent])
     settings = configure_human_navmesh(stage)
     return {
@@ -165,4 +187,7 @@ def prepare_native_restaurant_human(stage, *, crossing_direction="right-to-left"
         "authored_crossing_layout": crossing_layout,
         "authored_parallel_oncoming": parallel_oncoming,
         "straight_service_walk": straight_service_walk,
+        **({"left_outbound_service": True, "left_outbound_near_view": left_outbound_near_view}
+           if left_outbound_service else {}),
+        **({"left_outbound_west_diner": True} if left_outbound_west_diner else {}),
     }

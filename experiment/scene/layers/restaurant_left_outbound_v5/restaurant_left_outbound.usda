@@ -1,0 +1,14 @@
+#usda 1.0
+(
+    endTimeCode = 1000000
+    framesPerSecond = 60
+    metersPerUnit = 1
+    startTimeCode = 0
+    subLayers = [
+        @left-outbound-props.usda@,
+        @../restaurant_lounge_bin_driven_probe/restaurant_lounge_bin_full_probe.usda@
+    ]
+    timeCodesPerSecond = 60
+    upAxis = "Z"
+)
+

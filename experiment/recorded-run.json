@@ -1,0 +1,63 @@
+{
+  "native_run_id": "20261114-183941-749",
+  "source_revision": "c5052395b825b71dd3b866d8bef634eb9983c49f",
+  "archive_revision": "83abdbebfd3ca613192cd7ebc055b3560db7b04f",
+  "phase_recipe_sha256_at_recording": {
+    "configs/restaurant_left_outbound_lidar_full_delivery.json": "ae2bea7f99d68c71be294a917bdef17727b50aaa3811ce6b59c419460f1ef16e",
+    "configs/restaurant_return_to_pickup.json": "e582e247590817e89d5d4d800e60653a3a0f5aeb235995ba56e51aabdff96acf",
+    "configs/restaurant_right_table_front.json": "d992097e093acb748487518c865eec6b600b6a1ff8b2c32c0114b6dd920688b9"
+  },
+  "models_sha256": {
+    "sam": "7402e0d864fa82708a20fbd15bc84245c2f26dff0eb43a4b5b93452deb34be69",
+    "mass": "92d437580efb283071e0ac0cd7c16de77f76ef3017a243329e4bf826e0e5a31e",
+    "contact": "4c5b7b6b60067c0339d21694c861db5dac6f41457f9075bd937dfefe61dc8949",
+    "person": "55ed65c56c91713d23e8402371c6c49a6fd84f257f7dce452e8d70e41dcbe152"
+  },
+  "phases": [
+    {
+      "case": "left",
+      "passed": true,
+      "reason": "goal_reached",
+      "start_simulation_seconds": 1.2500000000000004,
+      "end_simulation_seconds": 166.0333333333576,
+      "end_world_xy_yaw": [
+        4.431166648864746,
+        14.933104515075684,
+        0.770234941884377
+      ]
+    },
+    {
+      "case": "return",
+      "passed": true,
+      "reason": "goal_reached",
+      "start_simulation_seconds": 166.0333333333576,
+      "end_simulation_seconds": 364.316666666664,
+      "end_world_xy_yaw": [
+        25.962425231933594,
+        4.297839164733887,
+        0.05036577535990718
+      ]
+    },
+    {
+      "case": "right",
+      "passed": true,
+      "reason": "goal_reached",
+      "start_simulation_seconds": 364.316666666664,
+      "end_simulation_seconds": 462.11666666657504,
+      "end_world_xy_yaw": [
+        30.20934295654297,
+        18.526248931884766,
+        0.7652061144443826
+      ]
+    }
+  ],
+  "native_full_video_sha256": "4c3312784d41d076bad4cb59f5b3daf3e3264bfe28ba867ac2ee3e6697291904",
+  "native_video_duration_s": 460.8,
+  "web_video": {
+    "file": "project webpage/demo result/restaurant.mp4",
+    "sha256": "fc921e4f4e226053fb409b959547c9b92f3daf821646361d4c5d6d6edac09a62",
+    "duration_s": 153.6,
+    "fps": 30,
+    "playback_speed": 3.0
+  }
+}

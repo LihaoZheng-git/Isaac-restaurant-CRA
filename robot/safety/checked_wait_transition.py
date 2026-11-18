@@ -12,9 +12,10 @@ import numpy as np
 
 def assess_checked_wait_transition(mpc, initial, field, check_stop):
     """Require full exact/dense/future-analytical stopped-horizon acceptance."""
-    ids = tuple(field.crossing_yield_track_ids or ())
+    lidar_ids = tuple(getattr(field, "current_lidar_yield_track_ids", ()))
+    ids = lidar_ids or tuple(field.crossing_yield_track_ids or ())
     source = field.sensor_timestamp_seconds
-    selected = field.motion_passing_reference_source_timestamp_seconds
+    selected = source if lidar_ids else field.motion_passing_reference_source_timestamp_seconds
     audit = dict(
         accepted=False,
         reason="no_unique_current_crossing",
@@ -34,7 +35,7 @@ def assess_checked_wait_transition(mpc, initial, field, check_stop):
         or not math.isfinite(source)
         or not math.isfinite(selected)
         or not 0 <= source - selected <= 8.0 + 1e-9
-        or ids[0] not in field.motion_passing_reference_track_ids
+        or not lidar_ids and ids[0] not in field.motion_passing_reference_track_ids
         or field.tracking_result.timestamp_seconds != source
     ):
         raise ValueError("current crossing and original source/selection pair required")

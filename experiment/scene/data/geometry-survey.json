@@ -1,0 +1,23 @@
+{
+  "basis": "authored geometry / oracle abort survey; NOT RGB/LiDAR evidence or navigation acceptance",
+  "source_sha256": {
+    "restaurant_base.usda": "18c5e658e4b3a01f8acaf2aca9e7729edcb73fff3ea1796aeae5ad4c39d42870",
+    "restaurant_robot.usda": "16043dba5a04ed228aff42b0026ead2979ab8b72c8d9899170874d5e1c9d9524"
+  },
+  "source_files_unchanged": true,
+  "units_m_per_unit": 1.0,
+  "vertical_projection_slab_m": [
+    0.1,
+    1.8
+  ],
+  "raster_limits_xmin_xmax_ymin_ymax": [
+    -2.0,
+    42.0,
+    -2.0,
+    32.0
+  ],
+  "raster_resolution_m": 0.025,
+  "mask_sha256": "d9730c5dd3e0138c0c5b791d566af3de88b429e122732a8bafd5abd18d3e2962",
+  "projected_faces": 5555775,
+  "projected_meshes": 2598
+}

@@ -850,6 +850,26 @@ def assess_all_objects(worker, packet):
             key: value.safety_parameters for key, value in applied_guidance.items()
         },
     )
+    lidar_occupancy_audit = None
+    if envelope_memory is not None and envelope_memory.retire_unresolved:
+        # Compare the planner's source grid with the actual scan placements
+        # before any memory or body geometry was considered.
+        scan = current_placement[2]
+        in_bounds = np.all((scan >= [grid_config.minimum_x, grid_config.minimum_y])
+                           & (scan < [grid_config.maximum_x, grid_config.maximum_y]), axis=1)
+        scan_cells = np.floor(
+            (scan[in_bounds] - [grid_config.minimum_x, grid_config.minimum_y])
+            / grid_config.resolution
+        ).astype(np.int64)
+        occupied = np.zeros(grid_config.shape, dtype=bool)
+        occupied[scan_cells[:, 1], scan_cells[:, 0]] = True
+        if len(points) != len(scan) or not np.array_equal(grid.occupied_mask, occupied):
+            raise ValueError("current LiDAR-only source grid differs from the scan")
+        lidar_occupancy_audit = dict(
+            passed=True, source_frame=packet.sensor_frame_id,
+            source_time=packet.sensor_timestamp_seconds,
+            obstacle_returns=len(packet.obstacle_xyz), occupied_cells=int(occupied.sum()),
+        )
     if unknown_snapshot is not None:
         unknown_checks = [unknown_snapshot.coverage(r.original.track_id, r.original.source_time,
             r.original.center, grid, worker.anchor, worker.anchor_yaw) for r in unknown_snapshot.regions]
@@ -866,6 +886,16 @@ def assess_all_objects(worker, packet):
         from robot.safety.observed_motion_reference import ObservedHumanMotionReference
         motion_reference = ObservedHumanMotionReference.from_current(tracking, envelope_audit,
             tuple(sorted(normal_sides)), frame=packet.sensor_frame_id)
+    lidar_crossing = copy.deepcopy(getattr(worker, "right_lidar_crossing", None))
+    lidar_crossing_audit = None
+    lidar_yield_ids = ()
+    if lidar_crossing is not None:
+        lidar_crossing_audit = lidar_crossing.update(
+            tracking, world[:, :2], robot_xy=packet.robot_position_world_xy,
+            current_visual_yield_ids=yield_ids or (),
+        )
+        lidar_yield_ids = tuple(lidar_crossing_audit["yield_track_ids"])
+
     def build_candidate(guidance_parameters):
         pipeline = build_safe_sage_field_pipeline(
             grid,
@@ -954,6 +984,7 @@ def assess_all_objects(worker, packet):
             motion_passing_reference_sides=tuple(sides[k].value for k in sorted(sides)) if passing is not None else (),
             motion_passing_reference_source_timestamp_seconds=reference_selection_time,
             crossing_yield_track_ids=yield_ids,
+            current_lidar_yield_track_ids=lidar_yield_ids,
             rear_pass_reference_track_ids=rear_ids,
             rear_pass_route_direction_grid_xy=rear_route,
             rear_pass_policy_motion=rear_policy_motion,
@@ -966,22 +997,23 @@ def assess_all_objects(worker, packet):
     field, recovery = build_candidate(applied_guidance)
     transition_audit = None
     checked_control = getattr(worker, "checked_wait_control", None)
-    if checked_control is not None and yield_ids:
+    if checked_control is not None and (yield_ids or lidar_yield_ids):
         from robot.evaluation.live_checked_wait import check_wait, packet_state_in_field
 
         transition_audit = check_wait(checked_control, packet_state_in_field(packet, field), field)
         transition_audit["previous_accepted_source_timestamp_seconds"] = (
             worker.previous.sensor_timestamp_seconds if worker.previous is not None else None)
         transition_audit["temporal_recovery"] = recovery
-        transition_audit["candidate_track_ids"] = yield_ids
+        transition_audit["candidate_track_ids"] = lidar_yield_ids or yield_ids
+        transition_audit["selection_basis"] = "current_lidar_crossing" if lidar_yield_ids else "visual_person_crossing"
         if transition_audit["accepted"]:
             transition_audit["selected_policy"] = "checked_zero_bias_wait_field"
         else:
             # A real rebuild from the same accepted source pair, never the
             # rejected candidate or its smoothed temporal derivative.
-            field, recovery = build_candidate(normal_guidance)
-            field = replace(field, crossing_yield_track_ids=())
+            lidar_yield_ids = ()
             yield_ids = ()
+            field, recovery = build_candidate(normal_guidance)
             for row in baseline_audit:
                 cue = row["encounter_guidance_ablation"]
                 row["lambda"] = normal_guidance[row["track_or_group_id"]].tangential_strength
@@ -1011,6 +1043,8 @@ def assess_all_objects(worker, packet):
         worker.passing_visual_selection_evidence = passing_visual_evidence
     if encounter is not None:
         worker.encounter_motion = encounter
+    if lidar_crossing is not None:
+        worker.right_lidar_crossing = lidar_crossing
     if motion_estimate is not None:
         worker.rear_encounter_motion_estimate = motion_estimate
     if person_relative_memory is not None:
@@ -1054,6 +1088,8 @@ def assess_all_objects(worker, packet):
         "rear_policy_motion_estimates": [m.diagnostic() for m in rear_policy_motion],
         "person_relative_rear": None if person_relative_memory is None else person_relative_memory.diagnostic(),
         "crossing_yield_track_ids": yield_ids,
+        **({"current_lidar_crossing_yield": lidar_crossing_audit,
+            "admitted_lidar_yield_track_ids": lidar_yield_ids} if lidar_crossing_audit is not None else {}),
         "rear_pass_reference_track_ids": rear_ids,
         "rear_pass_route_direction_grid_xy": rear_route,
         "checked_wait_transition": transition_audit,
@@ -1128,6 +1164,7 @@ def assess_all_objects(worker, packet):
         "field_cell_representative_count": len(first),
         "field_discarded_cell_representatives": grid.discarded_point_count,
         "controller_numeric_policy_ready": True,
+        **({"current_lidar_occupancy": lidar_occupancy_audit} if lidar_occupancy_audit is not None else {}),
         "sensor_perception_ready": all(item.readiness.ready for item in objects),
     }
     risk_camera_frame = None
@@ -1135,6 +1172,12 @@ def assess_all_objects(worker, packet):
         from robot.evaluation.risk_camera_overlay import capture_risk_camera_frame
         risk_camera_frame = capture_risk_camera_frame(packet, objects, frames, policies,
             current_ownership_only=bool(calibration_config is not None and calibration_config.enabled))
+    lidar_risk_source = None
+    if lidar_occupancy_audit is not None and getattr(worker, "capture_current_lidar_risk", False):
+        lidar_risk_source = (
+            world[:, :2].copy(), current_placement[3][:len(world)].copy(),
+            in_bounds[:len(world)].copy(), tracking.point_track_ids.copy(),
+        )
     return LiveObjectResult(
         field,
         primary.attributes,
@@ -1150,4 +1193,5 @@ def assess_all_objects(worker, packet):
         uncertainty_snapshot,
         risk_camera_frame,
         unknown_snapshot,
+        lidar_risk_source,
     )

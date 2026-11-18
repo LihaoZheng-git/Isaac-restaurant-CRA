@@ -1,0 +1,3 @@
+# Keep the recorded USD exporter line endings and trailing empty lines intact.
+layers/** -text whitespace=cr-at-eol,-blank-at-eof
+data/** -text

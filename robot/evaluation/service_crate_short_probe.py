@@ -6,7 +6,10 @@ import math
 START_WORLD_XY_YAW = (15.65, 4.05, 0.0)
 ROUTE_LOCAL_XY = ((4.0, 0.0),)
 MAXIMUM_SECONDS = 45.0
-REFERENCE_RECIPE = "configs/restaurant_service_risk_calibration_witnesses.json"
+LOUNGE_BIN_SCENE = "restaurant_lounge_bin_full_probe.usda"
+LOUNGE_BIN_START_WORLD_XY_YAW = (25.35, 4.05, 0.)
+LOUNGE_BIN_ROUTE_LOCAL_XY = ((3.05, 0.),)
+REFERENCE_RECIPE = "experiment/configs/left_policy_reference.json"
 SCOPE = (
     "4 m crate-only route using full service controller, perception and uncertainty settings; "
     "fresh observation history, not a full restaurant or human-encounter acceptance"
@@ -29,6 +32,35 @@ def validate_service_crate_short_probe(args, reference_args):
                 controller_perception_uncertainty_arguments_match=True,
                 changed_argument_names=sorted(key for key in actual if actual[key] != expected.get(key)),
                 human_prerequisites="unchanged fresh component, near-view and idle-actor gates")
+
+
+def validate_service_lounge_bin_probe(args, reference_args, reference_case):
+    """Require the full V5 policy, with a different scene and evaluation route."""
+    near_view = reference_case == "long-parallel-near"
+    if (not args.service_lounge_bin_probe or args.service_crate_short_probe
+        or not args.restaurant_scene or args.restaurant_scene.name != LOUNGE_BIN_SCENE
+        or (near_view and args.motion) or (not near_view and args.maximum_seconds != MAXIMUM_SECONDS)):
+        raise ValueError("lounge bin probe requires its separate scene and either parked near view or a 45 s drive bound")
+    allowed = {"output", "motion", "long_service_human_gates",
+               "service_lounge_bin_probe", "restaurant_scene", "restaurant_layout_survey"}
+    if not near_view:
+        allowed.add("maximum_seconds")
+    actual, expected = vars(args), vars(reference_args)
+    changed = sorted(key for key in actual.keys() | expected.keys()
+                     if key not in allowed and actual.get(key) != expected.get(key))
+    if changed:
+        raise ValueError("lounge bin probe differs from full calibrated service settings: " + ", ".join(changed))
+    if near_view:
+        return dict(passed=True, reference_recipe=REFERENCE_RECIPE, reference_case=reference_case,
+                    scope="stationary near-human prerequisite using its original pose and thresholds",
+                    controller_perception_uncertainty_arguments_match=True)
+    return dict(passed=True, reference_recipe=REFERENCE_RECIPE, reference_case=reference_case,
+                target="ServiceContainer",
+                start_world_xy_yaw=LOUNGE_BIN_START_WORLD_XY_YAW,
+                nominal_route_local_xy=LOUNGE_BIN_ROUTE_LOCAL_XY, maximum_seconds=MAXIMUM_SECONDS,
+                controller_perception_uncertainty_arguments_match=True,
+                changed_argument_names=sorted(key for key in actual if actual[key] != expected.get(key)),
+                scope="bounded lounge bin only; native legacy performer stays held; human exercise verified post-run")
 
 
 def summarize_unexercised_human_scope(records, truth):

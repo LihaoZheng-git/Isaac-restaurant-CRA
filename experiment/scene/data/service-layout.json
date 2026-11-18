@@ -1,0 +1,167 @@
+{
+  "schema": "restaurant-left-outbound-v1",
+  "scene": "scenes/generated/restaurant_left_outbound_west_lounge/restaurant_left_outbound_lounge_bin.usda",
+  "additions": "scenes/generated/restaurant_left_outbound_west_lounge/left-outbound-props.usda",
+  "base_scene": "scenes/generated/restaurant_left_outbound_v5/restaurant_left_outbound.usda",
+  "bin_center_world_xy": [
+    9.25,
+    4.700000000000001
+  ],
+  "bin_bounds_minimum": [
+    9.101999581597333,
+    4.551999633997638,
+    -1.0842021724878213e-19
+  ],
+  "bin_bounds_maximum": [
+    9.398000418402665,
+    4.848000366002363,
+    0.5000000041135916
+  ],
+  "nominal_start": [
+    25.8,
+    6.25,
+    -1.5707963267948966
+  ],
+  "nominal_guides": [
+    [
+      25.85,
+      4.3
+    ],
+    [
+      24.45,
+      4.05
+    ],
+    [
+      5.8,
+      4.2
+    ],
+    [
+      2.65,
+      7.15
+    ],
+    [
+      2.35,
+      8.2
+    ],
+    [
+      2.35,
+      13.4
+    ],
+    [
+      3.8,
+      14.6
+    ],
+    [
+      5.55,
+      15.95
+    ]
+  ],
+  "bin_view_world_xy_yaw": [
+    11.1,
+    4.16,
+    3.141592653589793
+  ],
+  "bar_cast_manifest": "scenes/generated/restaurant_live_v3/cast.json",
+  "geometry_audit": {
+    "legs": [
+      {
+        "start_xy": [
+          25.8,
+          6.25
+        ],
+        "end_xy": [
+          25.85,
+          4.3
+        ],
+        "minimum_turn_m": 0.4261288293803618,
+        "minimum_straight_m": 0.39216563333023013
+      },
+      {
+        "start_xy": [
+          25.85,
+          4.3
+        ],
+        "end_xy": [
+          24.45,
+          4.05
+        ],
+        "minimum_turn_m": 0.5888640303013412,
+        "minimum_straight_m": 0.5237055937598755
+      },
+      {
+        "start_xy": [
+          24.45,
+          4.05
+        ],
+        "end_xy": [
+          5.8,
+          4.2
+        ],
+        "minimum_turn_m": 0.5237055937598755,
+        "minimum_straight_m": 0.05717416625979125
+      },
+      {
+        "start_xy": [
+          5.8,
+          4.2
+        ],
+        "end_xy": [
+          2.65,
+          7.15
+        ],
+        "minimum_turn_m": 0.6499009345615219,
+        "minimum_straight_m": 0.4596368568963828
+      },
+      {
+        "start_xy": [
+          2.65,
+          7.15
+        ],
+        "end_xy": [
+          2.35,
+          8.2
+        ],
+        "minimum_turn_m": 0.9592229924377145,
+        "minimum_straight_m": 1.125783645846135
+      },
+      {
+        "start_xy": [
+          2.35,
+          8.2
+        ],
+        "end_xy": [
+          2.35,
+          13.4
+        ],
+        "minimum_turn_m": 1.1670105779926523,
+        "minimum_straight_m": 1.2055446609406728
+      },
+      {
+        "start_xy": [
+          2.35,
+          13.4
+        ],
+        "end_xy": [
+          3.8,
+          14.6
+        ],
+        "minimum_turn_m": 1.7521088928359032,
+        "minimum_straight_m": 0.652791954698567
+      },
+      {
+        "start_xy": [
+          3.8,
+          14.6
+        ],
+        "end_xy": [
+          5.55,
+          15.95
+        ],
+        "minimum_turn_m": 0.6519842119429056,
+        "minimum_straight_m": 0.5062027343300045
+      }
+    ],
+    "bin_view_clearance_m": 0.42054466094067033,
+    "scope": "Sampled room raster and bin bounds for setup/evaluation; not a planned or accepted drive"
+  }
+}

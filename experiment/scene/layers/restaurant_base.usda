@@ -1,0 +1,653 @@
+#usda 1.0
+(
+    customLayerData = {
+        dictionary omni_layer = {
+            dictionary locked = {
+            }
+            dictionary muteness = {
+            }
+        }
+    }
+    defaultPrim = "World"
+    endTimeCode = 1000000
+    kilogramsPerUnit = 1
+    metersPerUnit = 1
+    startTimeCode = 0
+    timeCodesPerSecond = 60
+    upAxis = "Z"
+)
+
+def "Render" (
+    hide_in_stage_window = true
+    no_delete = true
+)
+{
+    def "OmniverseKit"
+    {
+        def "HydraTextures" (
+            hide_in_stage_window = true
+            no_delete = true
+        )
+        {
+            def RenderProduct "omni_kit_widget_viewport_ViewportTexture_0" (
+                prepend apiSchemas = ["OmniRtxSettingsCommonAdvancedAPI_1", "OmniRtxSettingsRtAdvancedAPI_1", "OmniRtxSettingsPtAdvancedAPI_1", "OmniRtxPostColorGradingAPI_1", "OmniRtxPostChromaticAberrationAPI_1", "OmniRtxPostBloomPhysicalAPI_1", "OmniRtxPostMatteObjectAPI_1", "OmniRtxPostCompositingAPI_1", "OmniRtxPostDofAPI_1", "OmniRtxPostMotionBlurAPI_1", "OmniRtxPostTvNoiseAPI_1", "OmniRtxPostTonemapIrayReinhardAPI_1", "OmniRtxPostDebugSettingsAPI_1", "OmniRtxDebugSettingsAPI_1"]
+                hide_in_stage_window = true
+                no_delete = true
+            )
+            {
+                rel camera = </OmniverseKit_Persp>
+                token omni:rtx:ambientOcclusion:denoiserMode = "none"
+                token omni:rtx:background:source:texture:textureMode = "repeatMirrored"
+                token omni:rtx:background:source:type = "domeLight"
+                bool omni:rtx:debug:view:pixelDebug:enableFixedTextPos = 1
+                token omni:rtx:directLighting:sampledLighting:denoisingTechnique = "None"
+                bool omni:rtx:dlss:frameGeneration = 0
+                float3 omni:rtx:domeLight:rotationAxis = (0, 0, 1)
+                bool omni:rtx:indirectDiffuse:denoiser:enabled = 0
+                bool omni:rtx:material:db:syncLoads = 1
+                token omni:rtx:post:dlss:execMode = "performance"
+                bool omni:rtx:post:registeredCompositing:invertColorCorrection = 1
+                bool omni:rtx:post:registeredCompositing:invertToneMap = 1
+                bool omni:rtx:pt:adaptiveSampling:filterError = 0
+                uint omni:rtx:pt:adaptiveSampling:fixedSppIterations = 2
+                int omni:rtx:pt:clampSpp = 64
+                uint omni:rtx:pt:limits:maxBounces = 3
+                uint omni:rtx:pt:limits:maxGlossyBounces = 3
+                uint omni:rtx:pt:maxSamplesPerLaunch = 2073600
+                uint omni:rtx:pt:mgpu:maxPixelsPerRegionExponent = 12
+                int omni:rtx:pt:samplesPerIteration = 64
+                uint omni:rtx:pt:samplesPerPixel = 64
+                bool omni:rtx:reflections:denoiser:enabled = 0
+                token omni:rtx:rendermode = "RealTimePathTracing"
+                color3f omni:rtx:rt:ambientLight:color = (0.1, 0.1, 0.1)
+                bool omni:rtx:rt:demoire = 0
+                bool omni:rtx:rt:lightcache:spatialCache:dontResolveConflicts = 1
+                int omni:rtx:rt:sss:samples = 1
+                uint omni:rtx:rtpt:maxVolumeBounces = 15
+                float omni:rtx:rtpt:modulatingRoughnessThreshold = 0.08
+                bool omni:rtx:scene:hydra:materialSyncLoads = 1
+                bool omni:rtx:scene:hydra:mdlMaterialWarmup = 1
+                rel orderedVars = </Render/Vars/LdrColor>
+                custom bool overrideClipRange = 0
+                uniform int2 resolution = (1280, 720)
+            }
+        }
+    }
+
+    def RenderSettings "OmniverseGlobalRenderSettings" (
+        prepend apiSchemas = ["OmniRtxSettingsGlobalRtAdvancedAPI_1", "OmniRtxSettingsGlobalPtAdvancedAPI_1"]
+        no_delete = true
+    )
+    {
+        rel products = </Render/OmniverseKit/HydraTextures/omni_kit_widget_viewport_ViewportTexture_0>
+    }
+
+    def "Vars"
+    {
+        def RenderVar "LdrColor" (
+            hide_in_stage_window = true
+            no_delete = true
+        )
+        {
+            uniform string sourceName = "LdrColor"
+            uniform token sourceType = "raw"
+        }
+    }
+}
+
+over "OmniverseKit_Persp"
+{
+    float exposure:fStop = 5
+    float exposure:responsivity = 1.1026709
+    float exposure:time = 0.02
+}
+
+def Xform "World"
+{
+    def Xform "Environment"
+    {
+        def Xform "BuildingShell" (
+            prepend references = @{restaurant}/Demos/AEC/TowerDemo/RestaurantDemopack/Assemblies/assembly_BaseBuildingL0.usd@
+        )
+        {
+            double3 xformOp:scale:unitsResolve = (0.01, 0.01, 0.01)
+            uniform token[] xformOpOrder = ["xformOp:scale:unitsResolve"]
+        }
+
+        def Xform "Restaurant" (
+            prepend references = @{restaurant}/Demos/AEC/TowerDemo/RestaurantDemopack/Assemblies/assembly_Restaurant.usd@
+        )
+        {
+            double3 xformOp:scale:unitsResolve = (0.01, 0.01, 0.01)
+            uniform token[] xformOpOrder = ["xformOp:scale:unitsResolve"]
+
+            over "assets_restaurant_pendants"
+            {
+                over "Pendant_03"
+                {
+                    over "PendantGlass"
+                    {
+                        over "PendantGlassLight"
+                        {
+                            float inputs:exposure = 2
+                        }
+                    }
+                }
+
+                over "Pendant_06"
+                {
+                    over "PendantGlass"
+                    {
+                        over "PendantGlassLight"
+                        {
+                            float inputs:exposure = 2
+                        }
+                    }
+                }
+
+                over "Pendant_09"
+                {
+                    over "PendantGlass"
+                    {
+                        over "PendantGlassLight"
+                        {
+                            float inputs:exposure = 2
+                        }
+                    }
+                }
+
+                over "Pendant_04"
+                {
+                    over "PendantGlass"
+                    {
+                        over "PendantGlassLight"
+                        {
+                            float inputs:exposure = 2
+                        }
+                    }
+                }
+
+                over "Pendant_05"
+                {
+                    over "PendantGlass"
+                    {
+                        over "PendantGlassLight"
+                        {
+                            float inputs:exposure = 2
+                        }
+                    }
+                }
+
+                over "Pendant_07"
+                {
+                    over "PendantGlass"
+                    {
+                        over "PendantGlassLight"
+                        {
+                            float inputs:exposure = 2
+                        }
+                    }
+                }
+
+                over "Pendant_08"
+                {
+                    over "PendantGlass"
+                    {
+                        over "PendantGlassLight"
+                        {
+                            float inputs:exposure = 2
+                        }
+                    }
+                }
+
+                over "Pendant_10"
+                {
+                    over "PendantGlass"
+                    {
+                        over "PendantGlassLight"
+                        {
+                            float inputs:exposure = 2
+                        }
+                    }
+                }
+
+                over "Pendant_02"
+                {
+                    over "PendantGlass"
+                    {
+                        over "PendantGlassLight"
+                        {
+                            float inputs:exposure = 2
+                        }
+                    }
+                }
+
+                over "Pendant_11"
+                {
+                    over "PendantGlass"
+                    {
+                        over "PendantGlassLight"
+                        {
+                            float inputs:exposure = 2
+                        }
+                    }
+                }
+
+                over "Pendant_12"
+                {
+                    over "PendantGlass"
+                    {
+                        over "PendantGlassLight"
+                        {
+                            float inputs:exposure = 2
+                        }
+                    }
+                }
+
+                over "Pendant_13"
+                {
+                    over "PendantGlass"
+                    {
+                        over "PendantGlassLight"
+                        {
+                            float inputs:exposure = 2
+                        }
+                    }
+                }
+
+                over "Pendant_14"
+                {
+                    over "PendantGlass"
+                    {
+                        over "PendantGlassLight"
+                        {
+                            float inputs:exposure = 2
+                        }
+                    }
+                }
+
+                over "Pendant_15"
+                {
+                    over "PendantGlass"
+                    {
+                        over "PendantGlassLight"
+                        {
+                            float inputs:exposure = 2
+                        }
+                    }
+                }
+            }
+
+            over "assets_restaurant_lights"
+            {
+                over "ClgLights_Front"
+                {
+                    over "RectLight_07"
+                    {
+                        float inputs:exposure = 3
+                    }
+
+                    over "RectLight_08"
+                    {
+                        float inputs:exposure = 3
+                    }
+
+                    over "RectLight_09"
+                    {
+                        float inputs:exposure = 3
+                    }
+
+                    over "RectLight_10"
+                    {
+                        float inputs:exposure = 3
+                    }
+
+                    over "RectLight_11"
+                    {
+                        float inputs:exposure = 3
+                    }
+
+                    over "RectLight_12"
+                    {
+                        float inputs:exposure = 3
+                    }
+
+                    over "RectLight_13"
+                    {
+                        float inputs:exposure = 3
+                    }
+
+                    over "RectLight_14"
+                    {
+                        float inputs:exposure = 3
+                    }
+
+                    over "RectLight_15"
+                    {
+                        float inputs:exposure = 3
+                    }
+
+                    over "RectLight_16"
+                    {
+                        float inputs:exposure = 3
+                    }
+
+                    over "RectLight_17"
+                    {
+                        float inputs:exposure = 3
+                    }
+
+                    over "RectLight_18"
+                    {
+                        float inputs:exposure = 3
+                    }
+
+                    over "RectLight_19"
+                    {
+                        float inputs:exposure = 3
+                    }
+
+                    over "RectLight_20"
+                    {
+                        float inputs:exposure = 3
+                    }
+
+                    over "RectLight_36"
+                    {
+                        float inputs:exposure = 3
+                    }
+
+                    over "RectLight_37"
+                    {
+                        float inputs:exposure = 3
+                    }
+
+                    over "RectLight_38"
+                    {
+                        float inputs:exposure = 3
+                    }
+
+                    over "RectLight_39"
+                    {
+                        float inputs:exposure = 3
+                    }
+
+                    over "RectLight_40"
+                    {
+                        float inputs:exposure = 3
+                    }
+
+                    over "RectLight_41"
+                    {
+                        float inputs:exposure = 3
+                    }
+
+                    over "RectLight_42"
+                    {
+                        float inputs:exposure = 3
+                    }
+
+                    over "RectLight_44"
+                    {
+                        float inputs:exposure = 3
+                    }
+
+                    over "RectLight_45"
+                    {
+                        float inputs:exposure = 3
+                    }
+
+                    over "RectLight_46"
+                    {
+                        float inputs:exposure = 3
+                    }
+
+                    over "RectLight_47"
+                    {
+                        float inputs:exposure = 3
+                    }
+
+                    over "RectLight_48"
+                    {
+                        float inputs:exposure = 3
+                    }
+
+                    over "RectLight_49"
+                    {
+                        float inputs:exposure = 3
+                    }
+
+                    over "RectLight_50"
+                    {
+                        float inputs:exposure = 3
+                    }
+
+                    over "RectLight_51"
+                    {
+                        float inputs:exposure = 3
+                    }
+
+                    over "RectLight_52"
+                    {
+                        float inputs:exposure = 3
+                    }
+
+                    over "RectLight_53"
+                    {
+                        float inputs:exposure = 3
+                    }
+                }
+
+                over "ClgLights_Back"
+                {
+                    over "RectLight_21"
+                    {
+                        float inputs:exposure = 3
+                    }
+
+                    over "RectLight_22"
+                    {
+                        float inputs:exposure = 3
+                    }
+
+                    over "RectLight_23"
+                    {
+                        float inputs:exposure = 3
+                    }
+
+                    over "RectLight_24"
+                    {
+                        float inputs:exposure = 3
+                    }
+
+                    over "RectLight_25"
+                    {
+                        float inputs:exposure = 3
+                    }
+
+                    over "RectLight_26"
+                    {
+                        float inputs:exposure = 3
+                    }
+
+                    over "RectLight_27"
+                    {
+                        float inputs:exposure = 3
+                    }
+
+                    over "RectLight_28"
+                    {
+                        float inputs:exposure = 3
+                    }
+
+                    over "RectLight_29"
+                    {
+                        float inputs:exposure = 3
+                    }
+
+                    over "RectLight_30"
+                    {
+                        float inputs:exposure = 3
+                    }
+
+                    over "RectLight_31"
+                    {
+                        float inputs:exposure = 3
+                    }
+
+                    over "RectLight_32"
+                    {
+                        float inputs:exposure = 3
+                    }
+
+                    over "RectLight_33"
+                    {
+                        float inputs:exposure = 3
+                    }
+
+                    over "RectLight_43"
+                    {
+                        float inputs:exposure = 3
+                    }
+
+                    over "RectLight_44"
+                    {
+                        float inputs:exposure = 3
+                    }
+
+                    over "RectLight_45"
+                    {
+                        float inputs:exposure = 3
+                    }
+                }
+            }
+        }
+    }
+
+    def Xform "Lighting"
+    {
+        def DomeLight "AmbientLight"
+        {
+            color3f inputs:color = (1, 0.97, 0.92)
+            float inputs:intensity = 350
+        }
+
+        def DistantLight "FillLight"
+        {
+            float inputs:angle = 1
+            color3f inputs:color = (1, 0.95, 0.88)
+            float inputs:intensity = 500
+            float3 xformOp:rotateXYZ = (-45, 0, 30)
+            uniform token[] xformOpOrder = ["xformOp:rotateXYZ"]
+        }
+
+        def Xform "DarkZoneFillLights"
+        {
+            def Xform "DarkZone1"
+            {
+                def RectLight "FillLight_01"
+                {
+                    color3f inputs:color = (1, 1, 1)
+                    bool inputs:enableColorTemperature = 0
+                    float inputs:exposure = 15
+                    float inputs:height = 1
+                    float inputs:intensity = 1
+                    bool inputs:normalize = 0
+                    float inputs:width = 1
+                    double3 xformOp:translate = (29.62, 16.18, 5)
+                    uniform token[] xformOpOrder = ["xformOp:translate"]
+                }
+
+                def RectLight "FillLight_02"
+                {
+                    color3f inputs:color = (1, 1, 1)
+                    bool inputs:enableColorTemperature = 0
+                    float inputs:exposure = 15
+                    float inputs:height = 1
+                    float inputs:intensity = 1
+                    bool inputs:normalize = 0
+                    float inputs:width = 1
+                    double3 xformOp:translate = (31.81, 18.55, 5)
+                    uniform token[] xformOpOrder = ["xformOp:translate"]
+                }
+
+                def RectLight "FillLight_03"
+                {
+                    color3f inputs:color = (1, 1, 1)
+                    bool inputs:enableColorTemperature = 0
+                    float inputs:exposure = 15
+                    float inputs:height = 1
+                    float inputs:intensity = 1
+                    bool inputs:normalize = 0
+                    float inputs:width = 1
+                    double3 xformOp:translate = (34, 20.92, 4.95)
+                    uniform token[] xformOpOrder = ["xformOp:translate"]
+                }
+            }
+
+            def Xform "DarkZone2"
+            {
+                def RectLight "FillLight_01"
+                {
+                    color3f inputs:color = (1, 1, 1)
+                    bool inputs:enableColorTemperature = 0
+                    float inputs:exposure = 15
+                    float inputs:height = 1
+                    float inputs:intensity = 1
+                    bool inputs:normalize = 0
+                    float inputs:width = 1
+                    double3 xformOp:translate = (7.08, 20.2, 5)
+                    uniform token[] xformOpOrder = ["xformOp:translate"]
+                }
+
+                def RectLight "FillLight_02"
+                {
+                    color3f inputs:color = (1, 1, 1)
+                    bool inputs:enableColorTemperature = 0
+                    float inputs:exposure = 15
+                    float inputs:height = 1
+                    float inputs:intensity = 1
+                    bool inputs:normalize = 0
+                    float inputs:width = 1
+                    double3 xformOp:translate = (1.87, 16, 5)
+                    uniform token[] xformOpOrder = ["xformOp:translate"]
+                }
+
+                def RectLight "FillLight_03"
+                {
+                    color3f inputs:color = (1, 1, 1)
+                    bool inputs:enableColorTemperature = 0
+                    float inputs:exposure = 15
+                    float inputs:height = 1
+                    float inputs:intensity = 1
+                    bool inputs:normalize = 0
+                    float inputs:width = 1
+                    double3 xformOp:translate = (3.45, 19.48, 5)
+                    uniform token[] xformOpOrder = ["xformOp:translate"]
+                }
+
+                def RectLight "FillLight_04"
+                {
+                    color3f inputs:color = (1, 1, 1)
+                    bool inputs:enableColorTemperature = 0
+                    float inputs:exposure = 15
+                    float inputs:height = 1
+                    float inputs:intensity = 1
+                    bool inputs:normalize = 0
+                    float inputs:width = 1
+                    double3 xformOp:translate = (4.85, 21.63, 5)
+                    uniform token[] xformOpOrder = ["xformOp:translate"]
+                }
+            }
+        }
+    }
+
+    def PhysicsScene "PhysicsScene" (
+        prepend apiSchemas = ["NewtonSceneAPI", "PhysxSceneAPI"]
+    )
+    {
+        vector3f physics:gravityDirection = (0, 0, -1)
+        float physics:gravityMagnitude = 9.81
+    }
+}
+

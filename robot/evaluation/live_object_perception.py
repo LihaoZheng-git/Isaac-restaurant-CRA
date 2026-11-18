@@ -219,6 +219,7 @@ class LiveObjectResult:
     tracking_uncertainty_snapshot: object | None = None
     risk_camera_frame: object | None = None
     unknown_obstacle_snapshot: object | None = None
+    lidar_risk_source: tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray] | None = None
 
 
 class LiveObjectPerception:
@@ -264,6 +265,7 @@ class LiveObjectPerception:
         human_tracking_uncertainty=False,
         human_fragment_coverage_config=None,
         human_observed_occupancy_only=False,
+        human_retire_unresolved=False,
         human_boundary_flux=None,
         human_visual_fragment_association=False,
         human_fragment_mask_boundary_pixels=0,
@@ -343,9 +345,14 @@ class LiveObjectPerception:
             raise ValueError("human envelope requires standalone live person/object-map mode, without static memory")
         if human_track_recovery_config is not None and human_body_envelope_config is None:
             raise ValueError('track recovery requires explicit human body geometry')
+        if not isinstance(human_retire_unresolved, bool) or (
+            human_retire_unresolved and (not human_observed_occupancy_only or human_body_envelope_config is None)
+        ):
+            raise ValueError('identity retirement requires observed-only occupancy and explicit human identity')
         self.human_body_envelope = HumanBodyEnvelope(human_body_envelope_config,
             recovery_config=human_track_recovery_config,
-            planning_uncertainty=human_tracking_uncertainty) if human_body_envelope_config is not None else None
+            planning_uncertainty=human_tracking_uncertainty,
+            retire_unresolved=human_retire_unresolved) if human_body_envelope_config is not None else None
         if human_tracking_uncertainty and self.human_body_envelope is None:
             raise ValueError("tracking uncertainty requires current human geometry initialization")
         from robot.perception.human_mass_identity_retention import HumanMassIdentityRetention
@@ -518,6 +525,7 @@ class LiveObjectPerception:
         ):
             raise ValueError("component prompt radius must lie within [.005, .1] m")
         self.component_prompt_radius_m = component_prompt_radius_m
+        self.parked_observed_point_retry = False
         self.rectify_plume = rectify_plume
         if (
             not math.isfinite(occupancy_retention_seconds)
@@ -1030,6 +1038,30 @@ class LiveObjectPerception:
                         "candidates": proposal.candidate_diagnostics,
                     }
                 )
+            if (
+                getattr(self, "parked_observed_point_retry", False)
+                and proposal.detection is None
+                and proposal.rejection_reasons
+                == ("no mask passes quality, boundary and LiDAR association gates",)
+            ):
+                owned_mask = tracking.point_track_ids[projection.source_indices] == target.track_id
+                pixels = projection.pixel_indices_xy[owned_mask]
+                if len(pixels):
+                    target_pixel = np.array([np.quantile(pixels[:, 0], .25), np.median(pixels[:, 1])])
+                    seed_index = int(np.argmin(np.sum((pixels - target_pixel) ** 2, axis=1)))
+                    seed = int(projection.source_indices[owned_mask][seed_index])
+                    tried = {tuple(row["prompt_xy"]) for row in sam_candidates if row["prompt_xy"] is not None}
+                    if tuple(pixels[seed_index]) not in tried:
+                        proposal = self.segmenter.propose(
+                            tracking.point_track_ids, projection, track_id=target.track_id,
+                            prompt_source_index=seed,
+                        )
+                        prompt_basis = "observed_track_left_quartile_point_retry"
+                        sam_candidates.append({
+                            "prompt_basis": prompt_basis,
+                            "prompt_xy": proposal.prompt_xy,
+                            "candidates": proposal.candidate_diagnostics,
+                        })
             reasons.extend(proposal.rejection_reasons)
             sam_quality = proposal.model_quality
             if proposal.detection is not None:

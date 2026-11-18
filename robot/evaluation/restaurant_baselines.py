@@ -38,7 +38,7 @@ def crossing_due(*, now, robot_y, trigger_y, delay_seconds, navigation_start):
 def fixed_class_comparison_policy():
     # The legacy runtime guidance defaults have a different 1..6 flux scale.
     # Never inherit that scale into the .5..1.7 CRA comparison.
-    path = Path(__file__).resolve().parents[2] / "configs/safe_sage_paper_baseline.json"
+    path = Path(__file__).resolve().parents[1] / "safety/configs/safe_sage_paper_baseline.json"
     policy = SafeSAGEGuidancePolicy.from_json(path)
     mapping = policy.risk_flux_mapping
     if not (mapping.minimum_magnitude == .5 and mapping.maximum_magnitude == 1.7):
