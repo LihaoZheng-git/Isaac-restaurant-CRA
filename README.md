@@ -21,7 +21,7 @@ The algorithm is in [robot/](robot/), including the [safety filter and MPC](robo
    python -m pip install -r experiment/requirements.txt
    ```
 
-   The [experiment guide](experiment/README.md) lists the scene assets and model checkpoints used by the restaurant mission.
+   Get the [model weights](experiment/models/README.md) and follow the [experiment guide](experiment/README.md) to prepare the restaurant scene.
 
 ## Citation
 

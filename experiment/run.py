@@ -1,7 +1,6 @@
 """Launch the three-phase restaurant service experiment with the v2 settings."""
 
 import argparse
-import hashlib
 import json
 import os
 from pathlib import Path
@@ -10,31 +9,18 @@ import sys
 import time
 
 from experiment.mission import PHASE_ORDER, ROOT, read_recipe, save
+from experiment.models import MODEL_DIR, MODEL_FILES, digest
 
 
 CONFIG = ROOT / "experiment/configs/mission.json"
-# Public checkpoint names can also be supplied through the environment, so
-# the two project-trained models need not be copied into the repository.
-WEIGHTS = {
-    "SAM2_CHECKPOINT": "sam2.1_t.pt",
-    "VISUAL_MASS_CHECKPOINT": "visual-mass.pt",
-    "CONTACT_SEGMENTATION_CHECKPOINT": "contact-segmentation.pt",
-    "PERSON_SEGMENTATION_CHECKPOINT": "yolo11n-seg.pt",
-}
-
 V2_NATIVE_REVISION = "c5052395b825b71dd3b866d8bef634eb9983c49f"
-
-
-def digest(path):
-    with path.open("rb") as stream:
-        return hashlib.file_digest(stream, "sha256").hexdigest()
 
 
 def prepare_inputs(scene_root, model_root):
     commands, recipe_hashes = read_recipe(CONFIG, scene_root)
     model_paths = {}
     files = set()
-    for variable, name in WEIGHTS.items():
+    for variable, name in MODEL_FILES.values():
         model_paths[variable] = Path(
             os.environ.get(variable, model_root / name)
         ).resolve()
@@ -55,7 +41,10 @@ def prepare_inputs(scene_root, model_root):
     files.update((manifest_path, survey.parent / "authored-height-column-mask.png"))
     missing = sorted(str(path) for path in files if not path.is_file())
     if missing:
-        raise ValueError("Missing experiment inputs:\n  " + "\n  ".join(missing))
+        message = "Missing experiment inputs:\n  " + "\n  ".join(missing)
+        if any(not path.is_file() for path in model_paths.values()):
+            message += "\nFor checkpoint setup, see experiment/models/README.md."
+        raise ValueError(message)
 
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     files.add((scene_root / manifest["additions"]).resolve())
@@ -84,8 +73,8 @@ def main():
     parser.add_argument(
         "--model-root",
         type=Path,
-        required=True,
-        help="directory holding the four perception checkpoints",
+        default=MODEL_DIR,
+        help="directory holding the four perception checkpoints (default: experiment/models)",
     )
     parser.add_argument(
         "--isaac-python",
