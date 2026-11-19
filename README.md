@@ -21,7 +21,13 @@ The MPC and CBF filter are implemented in [robot/safety/](robot/safety/). The fi
    python -m pip install -r experiment/requirements.txt
    ```
 
-   Get the [model weights](experiment/models/README.md) and follow the [experiment guide](experiment/README.md) to prepare the restaurant scene.
+4. Prepare the [restaurant scene](experiment/scene/README.md) from the repository root:
+
+   ```powershell
+   python -m experiment.scene.prepare
+   ```
+
+   To run the delivery, get the [model weights](experiment/models/README.md) and follow the [experiment guide](experiment/README.md).
 
 ## Citation
 

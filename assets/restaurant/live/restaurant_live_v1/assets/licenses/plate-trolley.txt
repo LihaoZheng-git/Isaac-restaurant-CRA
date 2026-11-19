@@ -1,0 +1,11 @@
+Model Information:
+* title:	Plate trolley
+* source:	https://sketchfab.com/3d-models/plate-trolley-a7bfc7169ef94faca7ba4419b7fcae98
+* author:	FractDesign - Huguet Rémi (https://sketchfab.com/blendercreation)
+
+Model License:
+* license type:	CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
+* requirements:	Author must be credited. Commercial use is allowed.
+
+If you use this 3D model in your project be sure to copy paste this credit wherever you share it:
+This work is based on "Plate trolley" (https://sketchfab.com/3d-models/plate-trolley-a7bfc7169ef94faca7ba4419b7fcae98) by FractDesign - Huguet Rémi (https://sketchfab.com/blendercreation) licensed under CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)

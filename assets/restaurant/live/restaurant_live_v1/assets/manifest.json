@@ -1,0 +1,695 @@
+{
+  "schema_version": 1,
+  "blender_version": "4.5.15 LTS",
+  "scope": "Restaurant presentation assets only; source geometry/material conversion is not physical, sensor, risk, navigation or controller validation",
+  "sources_unchanged": true,
+  "sources": {
+    "dinnerware": {
+      "file": "Inge Dinnerware Set.blend",
+      "author": "abradburywallad",
+      "license": "CC0",
+      "url": "https://blendswap.com/blend/30224",
+      "sha256": "3a0b37545190c632493d121a1e2f7a50c0da3fd707229600eed9ccff8682260f"
+    },
+    "kitchen": {
+      "file": "Kitchen Asset Library-Pack photoreal Vol.1.blend",
+      "author": "Davilion",
+      "license": "CC0",
+      "url": "https://blendswap.com/blend/25903",
+      "sha256": "0f967b0e68f888a48e92730f2697584da2106b4f7baae7ecf4bbf304ae02cfaf"
+    },
+    "plate_trolley": {
+      "file": "plate_trolley.zip",
+      "author": "FractDesign - Huguet Remi",
+      "license": "CC BY 4.0",
+      "url": "https://sketchfab.com/3d-models/plate-trolley-a7bfc7169ef94faca7ba4419b7fcae98",
+      "sha256": "6011bf83599983d8b4b487e98aed65498a86a510389cdbac79ef7b3248f341e4"
+    },
+    "pink_trolley": {
+      "file": "ikea_raskog_pink_utility_trolley.zip",
+      "author": "W1NT3R",
+      "license": "CC BY 4.0",
+      "url": "https://sketchfab.com/3d-models/ikea-raskog-pink-utility-trolley-32cf0f02bbdd47d491ea7287945cfaad",
+      "sha256": "60ebe1f65353d7fd0603f269913299c476dbe717e4c20aa11840c06f60824734"
+    }
+  },
+  "assets": {
+    "dinner_plate": {
+      "file": "dinner_plate.usdc",
+      "default_prim": "/Asset",
+      "dimensions_m": [
+        0.260116845369339,
+        0.260116845369339,
+        0.020703373476862907
+      ],
+      "bounds_min": [
+        -0.1300584226846695,
+        -0.1300584226846695,
+        0.0
+      ],
+      "bounds_max": [
+        0.1300584226846695,
+        0.1300584226846695,
+        0.020703373476862907
+      ],
+      "mesh_objects": [
+        "Inge Dinnerware - 10.5\" Plate.004"
+      ],
+      "materials": [
+        "Inge Dinnerware - Ceramic"
+      ],
+      "sha256": "4c545bd8670b2a9f1620cf288f574ebe4ae2e75a777d3f5930a58099ae1c4930",
+      "source_key": "dinnerware",
+      "source_objects": [
+        "Inge Dinnerware - 10.5\" Plate"
+      ],
+      "uniform_scale": 1.0,
+      "normalization": "XY bounding-box centered; minimum Z at zero; utensils laid flat",
+      "material_conversion": "Blender USDPreviewSurface conversion; image textures exported. Cycles procedural bump/noise/displacement are not baked and may differ from the studio preview.",
+      "bakes": []
+    },
+    "side_plate": {
+      "file": "side_plate.usdc",
+      "default_prim": "/Asset",
+      "dimensions_m": [
+        0.19047100841999054,
+        0.19047099351882935,
+        0.02070339024066925
+      ],
+      "bounds_min": [
+        -0.09523550420999527,
+        -0.09523549675941467,
+        0.0
+      ],
+      "bounds_max": [
+        0.09523550420999527,
+        0.09523549675941467,
+        0.02070339024066925
+      ],
+      "mesh_objects": [
+        "Inge Dinnerware - 7.5\" Plate.002"
+      ],
+      "materials": [
+        "Inge Dinnerware - Ceramic"
+      ],
+      "sha256": "5734efe3b6f1f89addf354b3270c9dc098377a36439dc0fd1fdf9e96c1bb0c12",
+      "source_key": "dinnerware",
+      "source_objects": [
+        "Inge Dinnerware - 7.5\" Plate"
+      ],
+      "uniform_scale": 1.0,
+      "normalization": "XY bounding-box centered; minimum Z at zero; utensils laid flat",
+      "material_conversion": "Blender USDPreviewSurface conversion; image textures exported. Cycles procedural bump/noise/displacement are not baked and may differ from the studio preview.",
+      "bakes": []
+    },
+    "large_bowl": {
+      "file": "large_bowl.usdc",
+      "default_prim": "/Asset",
+      "dimensions_m": [
+        0.1352059543132782,
+        0.1352059543132782,
+        0.06979843974113464
+      ],
+      "bounds_min": [
+        -0.0676029771566391,
+        -0.0676029771566391,
+        0.0
+      ],
+      "bounds_max": [
+        0.0676029771566391,
+        0.0676029771566391,
+        0.06979843974113464
+      ],
+      "mesh_objects": [
+        "Inge Dinnerware - 5.5\" Bowl.004"
+      ],
+      "materials": [
+        "Inge Dinnerware - Ceramic"
+      ],
+      "sha256": "da3a25477311a2406e9586b3aa0f9be89ab8973c94246c293d60d97ee4582ca9",
+      "source_key": "dinnerware",
+      "source_objects": [
+        "Inge Dinnerware - 5.5\" Bowl"
+      ],
+      "uniform_scale": 1.0,
+      "normalization": "XY bounding-box centered; minimum Z at zero; utensils laid flat",
+      "material_conversion": "Blender USDPreviewSurface conversion; image textures exported. Cycles procedural bump/noise/displacement are not baked and may differ from the studio preview.",
+      "bakes": []
+    },
+    "small_bowl": {
+      "file": "small_bowl.usdc",
+      "default_prim": "/Asset",
+      "dimensions_m": [
+        0.09807269275188446,
+        0.09807269275188446,
+        0.050748445093631744
+      ],
+      "bounds_min": [
+        -0.04903634637594223,
+        -0.04903634637594223,
+        0.0
+      ],
+      "bounds_max": [
+        0.04903634637594223,
+        0.04903634637594223,
+        0.050748445093631744
+      ],
+      "mesh_objects": [
+        "Inge Dinnerware - 4\" Bowl.004"
+      ],
+      "materials": [
+        "Inge Dinnerware - Ceramic"
+      ],
+      "sha256": "84b76f6544c34cf0b84b7edeb3089023ebd768fc962f7b0aee3d5d3dd6a92d0e",
+      "source_key": "dinnerware",
+      "source_objects": [
+        "Inge Dinnerware - 4\" Bowl"
+      ],
+      "uniform_scale": 1.0,
+      "normalization": "XY bounding-box centered; minimum Z at zero; utensils laid flat",
+      "material_conversion": "Blender USDPreviewSurface conversion; image textures exported. Cycles procedural bump/noise/displacement are not baked and may differ from the studio preview.",
+      "bakes": []
+    },
+    "latte_saucer": {
+      "file": "latte_saucer.usdc",
+      "default_prim": "/Asset",
+      "dimensions_m": [
+        0.1434735506772995,
+        0.1434735506772995,
+        0.051383454352617264
+      ],
+      "bounds_min": [
+        -0.07173677533864975,
+        -0.07173677533864975,
+        0.0
+      ],
+      "bounds_max": [
+        0.07173677533864975,
+        0.07173677533864975,
+        0.051383454352617264
+      ],
+      "mesh_objects": [
+        "Inge Dinnerware - Latte Mug - 3.5 x 2\".001",
+        "Inge Dinnerware - Latte Mug - Handle.001",
+        "Inge Dinnerware - Latte Mug - Coffee.002",
+        "Inge Dinnerware - Saucer.003"
+      ],
+      "materials": [
+        "Latte",
+        "Latte Mug"
+      ],
+      "sha256": "4af1916d8029b85fd81bc6b6593b639aad60000c630d2c964378b53d2aac0379",
+      "source_key": "dinnerware",
+      "source_objects": [
+        "Inge Dinnerware - Latte Mug - 3.5 x 2\"",
+        "Inge Dinnerware - Latte Mug - Handle",
+        "Inge Dinnerware - Latte Mug - Coffee",
+        "Inge Dinnerware - Saucer"
+      ],
+      "uniform_scale": 1.0,
+      "normalization": "XY bounding-box centered; minimum Z at zero; utensils laid flat",
+      "material_conversion": "Blender USDPreviewSurface conversion; image textures exported. Cycles procedural bump/noise/displacement are not baked and may differ from the studio preview.",
+      "bakes": []
+    },
+    "wooden_board": {
+      "file": "wooden_board.usdc",
+      "default_prim": "/Asset",
+      "dimensions_m": [
+        0.43777212500572205,
+        0.7172588109970093,
+        0.021497052162885666
+      ],
+      "bounds_min": [
+        -0.21888606250286102,
+        -0.358629435300827,
+        -5.774199962615967e-08
+      ],
+      "bounds_max": [
+        0.21888606250286102,
+        0.35862940549850464,
+        0.02149699442088604
+      ],
+      "mesh_objects": [
+        "Wooden-Cutting-Board.001"
+      ],
+      "materials": [
+        "RestaurantBaked_wooden_board_0"
+      ],
+      "sha256": "e233aca0af9d30f847c6185214421f2e2ad56cf0bba599ea7982eb82085eb7d4",
+      "source_key": "kitchen",
+      "source_objects": [
+        "Wooden-Cutting-Board"
+      ],
+      "uniform_scale": 1.0,
+      "normalization": "XY bounding-box centered; minimum Z at zero; utensils laid flat",
+      "material_conversion": "Cycles source base color, roughness, metallic and tangent normal baked to 1024px PNG and exported through USDPreviewSurface. Geometry displacement is not baked beyond evaluated source mesh.",
+      "bakes": [
+        {
+          "object": "Wooden-Cutting-Board.001",
+          "resolution": [
+            1024,
+            1024
+          ],
+          "channels": [
+            "base_color",
+            "roughness",
+            "metallic",
+            "normal"
+          ],
+          "uv": "RestaurantBakeUV",
+          "source_shader": [
+            "Wooden-Spooncutting_borad.001"
+          ]
+        }
+      ]
+    },
+    "wooden_spoon": {
+      "file": "wooden_spoon.usdc",
+      "default_prim": "/Asset",
+      "dimensions_m": [
+        0.13312609493732452,
+        0.6168705821037292,
+        0.033956702798604965
+      ],
+      "bounds_min": [
+        -0.06656304746866226,
+        -0.3084352910518646,
+        -2.215674754779684e-09
+      ],
+      "bounds_max": [
+        0.06656304746866226,
+        0.3084352910518646,
+        0.03395669907331467
+      ],
+      "mesh_objects": [
+        "Wooden-Spoon-Cooking-Large.003"
+      ],
+      "materials": [
+        "RestaurantBaked_wooden_spoon_0"
+      ],
+      "sha256": "3aa3646e17cf70a63f4f4e1c0680bdb7388c7534d1629ead74801600b0915425",
+      "source_key": "kitchen",
+      "source_objects": [
+        "Wooden-Spoon-Cooking-Large"
+      ],
+      "uniform_scale": 1.0,
+      "normalization": "XY bounding-box centered; minimum Z at zero; utensils laid flat",
+      "material_conversion": "Cycles source base color, roughness, metallic and tangent normal baked to 1024px PNG and exported through USDPreviewSurface. Geometry displacement is not baked beyond evaluated source mesh.",
+      "bakes": [
+        {
+          "object": "Wooden-Spoon-Cooking-Large.003",
+          "resolution": [
+            1024,
+            1024
+          ],
+          "channels": [
+            "base_color",
+            "roughness",
+            "metallic",
+            "normal"
+          ],
+          "uv": "RestaurantBakeUV",
+          "source_shader": [
+            "Wooden-Spoon-Cooking-Large.001"
+          ]
+        }
+      ]
+    },
+    "fork": {
+      "file": "fork.usdc",
+      "default_prim": "/Asset",
+      "dimensions_m": [
+        0.0336313396692276,
+        0.28187140822410583,
+        0.01676001213490963
+      ],
+      "bounds_min": [
+        -0.01681566797196865,
+        -0.14093568921089172,
+        -1.6362307064810011e-09
+      ],
+      "bounds_max": [
+        0.01681567169725895,
+        0.1409357190132141,
+        0.01676001027226448
+      ],
+      "mesh_objects": [
+        "Simple-Fork.001"
+      ],
+      "materials": [
+        "metall_Knife"
+      ],
+      "sha256": "0396f55dc7909234bff6306600a47c810d2a831ee8f70828f2af857ac489b2d1",
+      "source_key": "kitchen",
+      "source_objects": [
+        "Simple-Fork"
+      ],
+      "uniform_scale": 1.0,
+      "normalization": "XY bounding-box centered; minimum Z at zero; utensils laid flat",
+      "material_conversion": "Blender USDPreviewSurface conversion; image textures exported. Cycles procedural bump/noise/displacement are not baked and may differ from the studio preview.",
+      "bakes": []
+    },
+    "knife": {
+      "file": "knife.usdc",
+      "default_prim": "/Asset",
+      "dimensions_m": [
+        0.02259954810142517,
+        0.3395442068576813,
+        0.010758493095636368
+      ],
+      "bounds_min": [
+        -0.011299842037260532,
+        -0.16977210342884064,
+        3.445830287773788e-10
+      ],
+      "bounds_max": [
+        0.011299705132842064,
+        0.16977210342884064,
+        0.010758493095636368
+      ],
+      "mesh_objects": [
+        "Simple-Knife.001"
+      ],
+      "materials": [
+        "metall_Knife"
+      ],
+      "sha256": "3c93971b682baa44a2eeb391257e6af833f66523d6bbc43be1a2dd2ee3062f8a",
+      "source_key": "kitchen",
+      "source_objects": [
+        "Simple-Knife"
+      ],
+      "uniform_scale": 1.0,
+      "normalization": "XY bounding-box centered; minimum Z at zero; utensils laid flat",
+      "material_conversion": "Blender USDPreviewSurface conversion; image textures exported. Cycles procedural bump/noise/displacement are not baked and may differ from the studio preview.",
+      "bakes": []
+    },
+    "stock_pot": {
+      "file": "stock_pot.usdc",
+      "default_prim": "/Asset",
+      "dimensions_m": [
+        0.7110182642936707,
+        0.5380693674087524,
+        0.4450854957103729
+      ],
+      "bounds_min": [
+        -0.3555091321468353,
+        -0.2690346837043762,
+        5.296897143125534e-09
+      ],
+      "bounds_max": [
+        0.3555091321468353,
+        0.2690346837043762,
+        0.4450854957103729
+      ],
+      "mesh_objects": [
+        "Pot-Big.001",
+        "Pot-Big_Lid.001",
+        "Pot-Big-Lid-Handle.001"
+      ],
+      "materials": [
+        "RestaurantBaked_stock_pot_0",
+        "RestaurantBaked_stock_pot_1",
+        "RestaurantBaked_stock_pot_2"
+      ],
+      "sha256": "3c3cf3c9a9c949be00e66de86b8eda2337320e6e6612636ceeb19ca160ae3518",
+      "source_key": "kitchen",
+      "source_objects": [
+        "Pot-Big",
+        "Pot-Big_Lid",
+        "Pot-Big-Lid-Handle"
+      ],
+      "uniform_scale": 1.0,
+      "normalization": "XY bounding-box centered; minimum Z at zero; utensils laid flat",
+      "material_conversion": "Cycles source base color, roughness, metallic and tangent normal baked to 1024px PNG and exported through USDPreviewSurface. Geometry displacement is not baked beyond evaluated source mesh.",
+      "bakes": [
+        {
+          "object": "Pot-Big.001",
+          "resolution": [
+            1024,
+            1024
+          ],
+          "channels": [
+            "base_color",
+            "roughness",
+            "metallic",
+            "normal"
+          ],
+          "uv": "RestaurantBakeUV",
+          "source_shader": [
+            "Metal_Pot_Main.001",
+            "Metal_Pot_Lid.001",
+            "Metal_Pot_handle.001"
+          ]
+        },
+        {
+          "object": "Pot-Big_Lid.001",
+          "resolution": [
+            1024,
+            1024
+          ],
+          "channels": [
+            "base_color",
+            "roughness",
+            "metallic",
+            "normal"
+          ],
+          "uv": "RestaurantBakeUV",
+          "source_shader": [
+            "Metal_Pot_Main.002",
+            "Metal_Pot_Lid.002",
+            "Metal_Pot_handle.002"
+          ]
+        },
+        {
+          "object": "Pot-Big-Lid-Handle.001",
+          "resolution": [
+            1024,
+            1024
+          ],
+          "channels": [
+            "base_color",
+            "roughness",
+            "metallic",
+            "normal"
+          ],
+          "uv": "RestaurantBakeUV",
+          "source_shader": [
+            "Metal_Pot_Main.003",
+            "Metal_Pot_Lid.003",
+            "Metal_Pot_handle.003"
+          ]
+        }
+      ]
+    },
+    "pot_with_handles": {
+      "file": "pot_with_handles.usdc",
+      "default_prim": "/Asset",
+      "dimensions_m": [
+        0.7019093036651611,
+        0.5578511357307434,
+        0.3630799949169159
+      ],
+      "bounds_min": [
+        -0.35095465183258057,
+        -0.2789255678653717,
+        -2.0809238776564598e-08
+      ],
+      "bounds_max": [
+        0.35095465183258057,
+        0.2789255678653717,
+        0.3630799651145935
+      ],
+      "mesh_objects": [
+        "Pot_with_handles.001",
+        "LID_Pot-With-Handles.001"
+      ],
+      "materials": [
+        "RestaurantBaked_pot_with_handles_0",
+        "RestaurantBaked_pot_with_handles_1"
+      ],
+      "sha256": "2f576e29f08ecf04ad9bbc22c4458bf9b1500d0ee40a74a51c32317beae2aff6",
+      "source_key": "kitchen",
+      "source_objects": [
+        "Pot_with_handles",
+        "LID_Pot-With-Handles"
+      ],
+      "uniform_scale": 1.0,
+      "normalization": "XY bounding-box centered; minimum Z at zero; utensils laid flat",
+      "material_conversion": "Cycles source base color, roughness, metallic and tangent normal baked to 1024px PNG and exported through USDPreviewSurface. Geometry displacement is not baked beyond evaluated source mesh.",
+      "bakes": [
+        {
+          "object": "Pot_with_handles.001",
+          "resolution": [
+            1024,
+            1024
+          ],
+          "channels": [
+            "base_color",
+            "roughness",
+            "metallic",
+            "normal"
+          ],
+          "uv": "RestaurantBakeUV",
+          "source_shader": [
+            "Metal_Pot_with_Handles_Main.001",
+            "Metal_Pot_Lid.004",
+            "Metal_Pot_handle.004"
+          ]
+        },
+        {
+          "object": "LID_Pot-With-Handles.001",
+          "resolution": [
+            1024,
+            1024
+          ],
+          "channels": [
+            "base_color",
+            "roughness",
+            "metallic",
+            "normal"
+          ],
+          "uv": "RestaurantBakeUV",
+          "source_shader": [
+            "Metal_Pot_Lid.005"
+          ]
+        }
+      ]
+    },
+    "plate_trolley": {
+      "file": "plate_trolley.usdc",
+      "default_prim": "/Asset",
+      "dimensions_m": [
+        0.977663516998291,
+        0.34723758697509766,
+        0.8999999165534973
+      ],
+      "bounds_min": [
+        -0.4888317584991455,
+        -0.17361865937709808,
+        -9.926628408152283e-09
+      ],
+      "bounds_max": [
+        0.4888317286968231,
+        0.17361894249916077,
+        0.8999999165534973
+      ],
+      "mesh_objects": [
+        "Object_4",
+        "Object_6",
+        "Object_8",
+        "Object_10",
+        "Object_12",
+        "Object_14",
+        "Object_16",
+        "Object_18",
+        "Object_20",
+        "Object_22",
+        "Object_24",
+        "Object_26",
+        "Object_28",
+        "Object_30",
+        "Object_32",
+        "Object_34",
+        "Object_36",
+        "Object_38",
+        "Object_40"
+      ],
+      "materials": [
+        "Material.001",
+        "PoigneeColor",
+        "WheelColor",
+        "WheelSupport",
+        "material_0",
+        "metal"
+      ],
+      "sha256": "ae60c558112943ade4a4d668fbfb34493995d335602355b5582a96ca68a8a580",
+      "source_key": "plate_trolley",
+      "original_dimensions_m": [
+        6.031515121459961,
+        2.142218589782715,
+        5.552384376525879
+      ],
+      "uniform_scale": 0.16209252439456093,
+      "scale_basis": "Authoring choice: 0.90 m overall height; not a measured physical specification",
+      "normalization": "XY bounding-box centered; minimum Z at zero; imported hierarchy preserved",
+      "material_conversion": "Imported glTF PBR materials converted to USDPreviewSurface; image textures copied into output"
+    },
+    "pink_trolley": {
+      "file": "pink_trolley.usdc",
+      "default_prim": "/Asset",
+      "dimensions_m": [
+        0.47663232684135437,
+        0.35259687900543213,
+        0.7805437445640564
+      ],
+      "bounds_min": [
+        -0.23831616342067719,
+        -0.1762983649969101,
+        -2.9721691774398096e-08
+      ],
+      "bounds_max": [
+        0.23831616342067719,
+        0.17629849910736084,
+        0.7805437445640564
+      ],
+      "mesh_objects": [
+        "Object_4",
+        "Object_6"
+      ],
+      "materials": [
+        "SimplygonCastMaterial",
+        "SimplygonCastMaterial_6"
+      ],
+      "sha256": "0d659f1f2b9f84c68b9f1230c1e7fd3624ed363c8d00e480660fd7247a3f35db",
+      "source_key": "pink_trolley",
+      "original_dimensions_m": [
+        0.47663232684135437,
+        0.35259678959846497,
+        0.7805438041687012
+      ],
+      "uniform_scale": 1.0,
+      "scale_basis": "Unchanged glTF metric scale; not independently measured",
+      "normalization": "XY bounding-box centered; minimum Z at zero; imported hierarchy preserved",
+      "material_conversion": "Imported glTF PBR materials converted to USDPreviewSurface; image textures copied into output"
+    }
+  },
+  "textures": {
+    "textures/Latte - Bump.png": "41029dcc67eb48ade7b2cf0002454179c5db2e1d15f5995089959c20aa92f3ab",
+    "textures/Latte - Diffuse.png": "60030b5955f627b8da3cbb2d10bc321dca0bf87c175dacaac5c60c3f17075dab",
+    "textures/Latte - Roughness.png": "d1ef225319be433f2583b98c623bc38ac397bb02fbebbe2accf78e1758cb9582",
+    "textures/Plate Set - Normal.tif": "c89376b70c2045078c391d6eb1d6d7916286411ea779c171f2f25d07b5c4e54d",
+    "textures/Plate Set - Roughness.tif": "6a5e0f2786f081fa64becff8e758bdf021b1e5b871c504143131f6f83018111b",
+    "textures/pot_with_handles_0_base_color.png": "9f61de1a3cd6a21cabd4b3b335c55608049317d7f9c54aaabc6e4db04188f538",
+    "textures/pot_with_handles_0_metallic.png": "88773012c39579b32977a8598ccc44883dc08d102bbbdb1df4187debc0b8eab3",
+    "textures/pot_with_handles_0_normal.png": "57f2682c242643cf2dc2e1edb16926c6cc87a5aeb5c3da413d88c6220c099fa9",
+    "textures/pot_with_handles_0_roughness.png": "3abe9e804d908b0d1e2e514c5e90e00ff6afe6cc335b5b9b595bebcc1a5dfea1",
+    "textures/pot_with_handles_1_base_color.png": "51c5e6eebeb216e6c613c973011ea5cd64f91bfc8aa35262897f8f9ba4f3d9b7",
+    "textures/pot_with_handles_1_metallic.png": "11c8c222ce1cf21409e2799faf661d4b6b54176070658e11f8c276da60a23b95",
+    "textures/pot_with_handles_1_normal.png": "ea93f6165a2727f5f1234c9ea2819c5ec359b0353cc9342f16619d24fb526feb",
+    "textures/pot_with_handles_1_roughness.png": "642b28530aa217fe40785245f1ec1d2a46047eaf9a2bf6836aa03a2f2ef0db81",
+    "textures/SimplygonCastMaterial_6_baseColor.png": "7ff77ceedaa28f1570e369f6f37d1c38cc1397c184e59331b1f92d317628e367",
+    "textures/SimplygonCastMaterial_6_metallicRoughness.png": "8d51750a0929ef6d3501ea8de4c73c85d486bd4323c9cb8965404d32d63f629b",
+    "textures/SimplygonCastMaterial_baseColor.jpeg": "58665633f9a2325ab9a4d71ff130e6922b8815949d12cd37c842482ed77abbdd",
+    "textures/SimplygonCastMaterial_metallicRoughness.png": "294e84f23d9926871caf15a124f1b20aed556ed74dc272ec5fadb4f872bb9a4c",
+    "textures/stock_pot_0_base_color.png": "409dd7cd12524269adeba6ecba79d486b49b650da46f8515e7958a2c8f6af32a",
+    "textures/stock_pot_0_metallic.png": "114419659fe54fdfe623e1d73eaee8c558834072e8122695832092e890347a76",
+    "textures/stock_pot_0_normal.png": "63a5b3b21bded04e7f7baf8c472a43367478c667ee4b861d727cf8aa9538b144",
+    "textures/stock_pot_0_roughness.png": "5af21546580f43932a9af06dd95569a1314403aa45a77a3f64ab929349eb3fba",
+    "textures/stock_pot_1_base_color.png": "6033e3c16ec5683975326ee7653ee19730f7b8a079895e502fa713af4bd133a3",
+    "textures/stock_pot_1_metallic.png": "9f59ca2ea671b8344f44f473ea12ba1a4c08dfbc62885e9df4157809a4d3f141",
+    "textures/stock_pot_1_normal.png": "d16ff024d0f33284e598ea91a1089cbb442877c56b7d1d754936d340b814ecc9",
+    "textures/stock_pot_1_roughness.png": "511107bbf8573a7532af795149e9189261652124618ceb0005f5bbc03da77de2",
+    "textures/stock_pot_2_base_color.png": "6dc277ac7171be615c76ca0ffe7a721b2f0692c07b51120a0e28824da4c685ad",
+    "textures/stock_pot_2_metallic.png": "7421085bfe60befcb8f39756933dc3120f022ddcc630eb933cd71a6e579e1003",
+    "textures/stock_pot_2_normal.png": "682977848f32c087b8bfcf1aaef56160274bbe759d77519a14ad40a4aa335dd9",
+    "textures/stock_pot_2_roughness.png": "fad038fc8cee7d662c1502b71a170ee5ff611f17984063ec7235c8d8847ff0ca",
+    "textures/wooden_board_0_base_color.png": "5f48bda78a1b73fc046aa795d3f4bcb84312d84e1c9ad989c3d88a1b732ddaf2",
+    "textures/wooden_board_0_metallic.png": "6dc277ac7171be615c76ca0ffe7a721b2f0692c07b51120a0e28824da4c685ad",
+    "textures/wooden_board_0_normal.png": "7cbba9a8cd7219e6d9801f748d6a9029f1fe4a61dd81e81df65cba7e28f47ea0",
+    "textures/wooden_board_0_roughness.png": "fd61a1f55e4a2930cc58cd876309632e9291bde3d1aeadb84043a7287016c63c",
+    "textures/wooden_spoon_0_base_color.png": "e10a03c53c57aa257b07548b8488436dcc4b3e4c623b139146181d794fff8e34",
+    "textures/wooden_spoon_0_metallic.png": "6dc277ac7171be615c76ca0ffe7a721b2f0692c07b51120a0e28824da4c685ad",
+    "textures/wooden_spoon_0_normal.png": "36cb1919dc0984a56924b08f0328f6e5efdee2cc70bc789e1a917d215ed3f6eb",
+    "textures/wooden_spoon_0_roughness.png": "f93cddf5d2124ef3af2cc24ae640e218df147ddb967fff045e9c473e806d7632"
+  }
+}

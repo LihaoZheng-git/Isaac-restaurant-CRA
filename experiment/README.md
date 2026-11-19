@@ -6,9 +6,9 @@ Carter starts with the first meal, delivers it to the left table, returns to the
 
 ## Inputs
 
-1. Follow the [environment setup](../README.md) and activate the Python environment with the vision models.
-2. Prepare the [restaurant scene](scene/README.md). The commands below use `experiment/scene/prepared`.
-3. Get the [four model weights](models/README.md). The launcher reads them from `experiment/models/` by default.
+1. Follow the [environment setup](../README.md) and activate the Python environment.
+2. Run `python -m experiment.scene.prepare` from the repository root to prepare the [restaurant scene](scene/README.md).
+3. For a robot run, download the two public weights with `python -m experiment.models` and obtain the two CRA weights listed in the [model guide](models/README.md). Viewing the prepared scene in Isaac Sim does not require these weights.
 
 ## Run
 

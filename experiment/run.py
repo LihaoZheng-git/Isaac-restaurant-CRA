@@ -9,7 +9,9 @@ import sys
 import time
 
 from experiment.mission import PHASE_ORDER, ROOT, read_recipe, save
-from experiment.models import MODEL_DIR, MODEL_FILES, digest
+from experiment.models import (
+    MODEL_DIR, MODEL_FILES, checkpoint_path, digest, recorded_model_hashes,
+)
 
 
 CONFIG = ROOT / "experiment/configs/mission.json"
@@ -20,10 +22,8 @@ def prepare_inputs(scene_root, model_root):
     commands, recipe_hashes = read_recipe(CONFIG, scene_root)
     model_paths = {}
     files = set()
-    for variable, name in MODEL_FILES.values():
-        model_paths[variable] = Path(
-            os.environ.get(variable, model_root / name)
-        ).resolve()
+    for key, (variable, _) in MODEL_FILES.items():
+        model_paths[variable] = checkpoint_path(model_root, key)
         files.add(model_paths[variable])
     for command in commands.values():
         for flag in (
@@ -58,6 +58,14 @@ def prepare_inputs(scene_root, model_root):
         if fingerprints[str(path)] != value:
             raise ValueError(
                 f"Scene input differs from its construction manifest: {path}"
+            )
+    for key, value in recorded_model_hashes().items():
+        variable, _ = MODEL_FILES[key]
+        path = model_paths[variable]
+        if fingerprints[str(path)] != value:
+            raise ValueError(
+                f"Checkpoint differs from the recorded demo: {path}. "
+                "See experiment/models/README.md."
             )
     return recipe_hashes, model_paths, fingerprints
 
