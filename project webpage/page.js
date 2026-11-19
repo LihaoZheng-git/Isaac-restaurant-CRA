@@ -3,7 +3,7 @@
   const base = window.CRA_CONTENT;
   const fields = {
     title: "Paper title",
-    repository: "GitHub notice",
+    repository: "GitHub link text",
     results: "Experiment Results heading",
     restaurant: "Restaurant section",
     restaurantNote: "Restaurant video caption",
