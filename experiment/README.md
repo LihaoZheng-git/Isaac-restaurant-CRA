@@ -1,7 +1,5 @@
 # Restaurant service experiment
 
-[Watch the full restaurant demo](../project%20webpage/demo%20result/restaurant.mp4)
-
 Carter starts with the first meal, delivers it to the left table, returns to the service bar, and takes the second meal to the right table. All three phases share one Isaac Sim session. The bin and walking diner appear on the left delivery. The running child and the server pushing a trolley cross the right delivery route.
 
 ## Inputs
