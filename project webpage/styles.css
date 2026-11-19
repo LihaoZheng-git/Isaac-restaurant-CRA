@@ -51,11 +51,44 @@ main.wrap { padding-bottom: clamp(3rem, 7vw, 6rem); }
 }
 
 .repository-link {
-  display: inline-block;
-  margin: 1.25rem 0 0;
-  color: #c3d9d0;
+  display: inline-flex;
+  align-items: center;
+  gap: .65rem;
+  max-width: 100%;
+  min-height: 2.875rem;
+  margin-top: 1.4rem;
+  padding: .65rem 1.05rem;
+  color: #102f27;
+  background: linear-gradient(120deg, #effbf3, #a6e6cc);
+  border: 1px solid #daffec;
+  border-radius: 999px;
+  box-shadow: inset 0 1px 0 #ffffffa6, 0 3px 0 #4c796a, 0 6px 16px #08151555;
   font-size: .9rem;
-  line-height: 1.5;
+  font-weight: 700;
+  line-height: 1.25;
+  text-decoration: none;
+  overflow-wrap: anywhere;
+}
+
+.repository-link svg { flex: none; }
+.repository-arrow { margin-left: .2rem; }
+.repository-link:focus-visible { outline: 2px solid #fff; outline-offset: 5px; }
+
+@media (hover: hover) {
+  .repository-link:hover {
+    background: linear-gradient(120deg, #fff, #baf5d9);
+    transform: translateY(-1px);
+  }
+  .repository-link:hover .repository-arrow { transform: translate(2px, -2px); }
+}
+
+.repository-link:active {
+  transform: translateY(2px);
+  box-shadow: inset 0 1px 0 #ffffffa6, 0 1px 0 #4c796a;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .repository-link, .repository-arrow { transition: transform .16s ease; }
 }
 
 .media {
