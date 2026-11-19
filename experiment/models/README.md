@@ -4,7 +4,7 @@ The full restaurant mission uses four checkpoints. You can prepare and open the 
 
 1. From the repository root, download the two public checkpoints into this folder.
 
-   ```powershell
+   ```sh
    python -m experiment.models
    ```
 
@@ -14,7 +14,7 @@ The full restaurant mission uses four checkpoints. You can prepare and open the 
 
 3. Verify all four files against the [recorded demo hashes](../recorded-run.json) before starting Isaac Sim.
 
-   ```powershell
+   ```sh
    python -m experiment.models --check
    ```
 

@@ -2,7 +2,7 @@
 
 From the repository root, run this command with Python 3.12:
 
-```powershell
+```sh
 python -m experiment.scene.prepare
 ```
 
@@ -12,9 +12,9 @@ Setup prints the path to the prepared USD stage. You can open that file in Isaac
 
 ### Cache and existing downloads
 
-The default cache is `~/.cache/isaac-restaurant-cra/v2`. Use `--cache-dir "D:/CRA"` to choose another drive or a shorter path on Windows. Keep the cache and checkout in place while using the prepared stage.
+The default cache is `~/.cache/isaac-restaurant-cra/v2`. Use `--cache-dir` to choose where the downloads are stored. Keep the cache and checkout in place while using the prepared stage.
 
-If you already extracted the NVIDIA restaurant pack, pass `--restaurant-pack "D:/data/Isaac_restaurant"` (the folder containing `Demos/`). If you already have the complete original live assets, pass their `scenes/generated` directory with `--live-generated`. To prepare a second copy or change locations, choose a new directory with `--output`.
+If you already extracted the NVIDIA restaurant pack, use `--restaurant-pack` to point to the folder containing `Demos/`. If you already have the complete original live assets, pass their `scenes/generated` directory with `--live-generated`. To prepare a second copy or change locations, choose a new directory with `--output`.
 
 ### Asset credits
 

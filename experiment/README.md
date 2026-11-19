@@ -10,14 +10,11 @@ Carter starts with the first meal, delivers it to the left table, returns to the
 
 ## Run
 
-From the repository root in PowerShell, set `$isaac` to your Isaac Sim launcher. Use `--check` to verify the inputs or `--output` to run the headless DirectX 12 experiment.
+Run these commands from the repository root. Replace `path/to/isaac-sim` with your Isaac Sim installation folder. The first command checks the inputs. The second starts the headless delivery.
 
-```powershell
-$scene = 'experiment/scene/prepared'
-$isaac = 'C:/isaacsim/python.bat'
-
-python -m experiment.run --scene-root $scene --isaac-python $isaac --check
-python -m experiment.run --scene-root $scene --isaac-python $isaac --output outputs/restaurant-service
+```sh
+python -m experiment.run --isaac-root "path/to/isaac-sim" --check
+python -m experiment.run --isaac-root "path/to/isaac-sim" --output outputs/restaurant-service
 ```
 
-Use `--model-root` if your weights are in another folder. Each run saves camera recordings, sensor data, and results under `--output`.
+Use `--scene-root` or `--model-root` if you saved the prepared scene or weights elsewhere. Each run saves camera recordings, sensor data, and results under `--output`.

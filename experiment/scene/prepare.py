@@ -64,8 +64,8 @@ def install_live_assets(cache, expected):
 
 
 def prepare(output, restaurant, live):
-    output = output.resolve()
-    locations = {"restaurant": restaurant.resolve(), "live": live.resolve(), "assets": ASSETS}
+    output = output.expanduser().resolve()
+    locations = {"restaurant": restaurant.expanduser().resolve(), "live": live.expanduser().resolve(), "assets": ASSETS}
     for path in locations.values():
         if "@" in path.as_posix():
             raise ValueError(f"USD asset paths must not contain the @ delimiter: {path}")
@@ -146,8 +146,9 @@ def main():
     parser.add_argument("--output", default=HERE / "prepared", type=Path, help="Prepared scene directory (default: experiment/scene/prepared)")
     args = parser.parse_args()
     try:
-        restaurant = args.restaurant_pack or vendor.restaurant_pack(args.cache_dir)
-        live = args.live_generated or install_live_assets(args.cache_dir, load("inputs.json")["live"])
+        cache = args.cache_dir.expanduser()
+        restaurant = args.restaurant_pack or vendor.restaurant_pack(cache)
+        live = args.live_generated or install_live_assets(cache, load("inputs.json")["live"])
         output = prepare(args.output, restaurant, live)
     except (OSError, ValueError, URLError, BadZipFile) as error:
         parser.exit(1, f"Scene setup failed: {error}\n")
