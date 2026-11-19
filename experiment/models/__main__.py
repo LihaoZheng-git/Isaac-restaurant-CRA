@@ -1,14 +1,15 @@
-"""Download the two public checkpoints used in the recorded CRA demo."""
+"""Download public checkpoints or check the four models used in the restaurant demo."""
 
 import argparse
 from http.client import HTTPException
-import json
 from pathlib import Path
 import shutil
 from tempfile import NamedTemporaryFile
 from urllib.request import urlopen
 
-from experiment.models import MODEL_DIR, MODEL_FILES, digest
+from experiment.models import (
+    MODEL_DIR, MODEL_FILES, checkpoint_path, digest, recorded_model_hashes,
+)
 
 
 SOURCES = {
@@ -41,16 +42,37 @@ def download(url, target, expected):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--model-root", type=Path, default=MODEL_DIR, help="destination (default: experiment/models)")
+    parser.add_argument("--check", action="store_true", help="verify all four local checkpoints without downloading")
     args = parser.parse_args()
-    expected = json.loads((MODEL_DIR.parent / "recorded-run.json").read_text(encoding="utf-8"))["models_sha256"]
+    expected = recorded_model_hashes()
     try:
-        args.model_root.mkdir(parents=True, exist_ok=True)
-        for key, url in SOURCES.items():
-            _, name = MODEL_FILES[key]
-            download(url, args.model_root / name, expected[key])
+        if not args.check:
+            args.model_root.mkdir(parents=True, exist_ok=True)
+            for key, url in SOURCES.items():
+                _, name = MODEL_FILES[key]
+                target = args.model_root / name
+                if checkpoint_path(args.model_root, key) == target.resolve():
+                    download(url, target, expected[key])
+        missing = []
+        mismatches = []
+        for key in MODEL_FILES:
+            target = checkpoint_path(args.model_root, key)
+            if not target.is_file():
+                missing.append(str(target))
+            elif digest(target) != expected[key]:
+                mismatches.append(str(target))
+        if mismatches:
+            raise ValueError("SHA-256 differs from the recorded demo:\n  " + "\n  ".join(mismatches))
+        if missing:
+            message = "Still needed for the full mission:\n  " + "\n  ".join(missing)
+            message += "\nSee experiment/models/README.md for checkpoint sources."
+            if args.check:
+                parser.exit(1, message + "\n")
+            print(message)
+        else:
+            print("All four restaurant mission checkpoints match the recorded demo.")
     except (OSError, ValueError, HTTPException) as error:
         parser.exit(1, f"Checkpoint setup failed: {error}\n")
-    print("For the two CRA-trained checkpoints, see experiment/models/README.md.")
 
 
 if __name__ == "__main__":

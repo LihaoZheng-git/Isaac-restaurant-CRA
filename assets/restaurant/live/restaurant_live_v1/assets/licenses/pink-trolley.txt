@@ -1,0 +1,11 @@
+Model Information:
+* title:	IKEA RASKOG Pink utility trolley
+* source:	https://sketchfab.com/3d-models/ikea-raskog-pink-utility-trolley-32cf0f02bbdd47d491ea7287945cfaad
+* author:	W1NT3R (https://sketchfab.com/fwinterbine)
+
+Model License:
+* license type:	CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
+* requirements:	Author must be credited. Commercial use is allowed.
+
+If you use this 3D model in your project be sure to copy paste this credit wherever you share it:
+This work is based on "IKEA RASKOG Pink utility trolley" (https://sketchfab.com/3d-models/ikea-raskog-pink-utility-trolley-32cf0f02bbdd47d491ea7287945cfaad) by W1NT3R (https://sketchfab.com/fwinterbine) licensed under CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)

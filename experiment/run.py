@@ -9,7 +9,9 @@ import sys
 import time
 
 from experiment.mission import PHASE_ORDER, ROOT, read_recipe, save
-from experiment.models import MODEL_DIR, MODEL_FILES, digest
+from experiment.models import (
+    MODEL_DIR, MODEL_FILES, checkpoint_path, digest, recorded_model_hashes,
+)
 
 
 CONFIG = ROOT / "experiment/configs/mission.json"
@@ -20,10 +22,8 @@ def prepare_inputs(scene_root, model_root):
     commands, recipe_hashes = read_recipe(CONFIG, scene_root)
     model_paths = {}
     files = set()
-    for variable, name in MODEL_FILES.values():
-        model_paths[variable] = Path(
-            os.environ.get(variable, model_root / name)
-        ).resolve()
+    for key, (variable, _) in MODEL_FILES.items():
+        model_paths[variable] = checkpoint_path(model_root, key)
         files.add(model_paths[variable])
     for command in commands.values():
         for flag in (
@@ -59,6 +59,14 @@ def prepare_inputs(scene_root, model_root):
             raise ValueError(
                 f"Scene input differs from its construction manifest: {path}"
             )
+    for key, value in recorded_model_hashes().items():
+        variable, _ = MODEL_FILES[key]
+        path = model_paths[variable]
+        if fingerprints[str(path)] != value:
+            raise ValueError(
+                f"Checkpoint differs from the recorded demo: {path}. "
+                "See experiment/models/README.md."
+            )
     return recipe_hashes, model_paths, fingerprints
 
 
@@ -67,8 +75,8 @@ def main():
     parser.add_argument(
         "--scene-root",
         type=Path,
-        required=True,
-        help="prepared restaurant scene bundle",
+        default=ROOT / "experiment/scene/prepared",
+        help="prepared restaurant scene bundle (default: experiment/scene/prepared)",
     )
     parser.add_argument(
         "--model-root",
@@ -76,11 +84,16 @@ def main():
         default=MODEL_DIR,
         help="directory holding the four perception checkpoints (default: experiment/models)",
     )
-    parser.add_argument(
+    isaac = parser.add_mutually_exclusive_group(required=True)
+    isaac.add_argument(
+        "--isaac-root",
+        type=Path,
+        help="Isaac Sim workstation installation directory",
+    )
+    isaac.add_argument(
         "--isaac-python",
         type=Path,
-        required=True,
-        help="Windows standalone Isaac Sim python.bat",
+        help="path to the Isaac Sim launcher (python.sh or python.bat)",
     )
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument(
@@ -94,11 +107,17 @@ def main():
         help="new directory for the native recording and run receipts",
     )
     args = parser.parse_args()
-    scene_root, model_root, isaac_python = (
-        p.resolve() for p in (args.scene_root, args.model_root, args.isaac_python)
-    )
+    windows = sys.platform == "win32"
+    launcher = args.isaac_python
+    if args.isaac_root is not None:
+        launcher = args.isaac_root / ("python.bat" if windows else "python.sh")
+    isaac_python = launcher.expanduser().resolve()
+    scene_root = args.scene_root.expanduser().resolve()
+    model_root = args.model_root.expanduser().resolve()
     if not isaac_python.is_file():
         parser.error(f"Isaac Sim launcher missing: {isaac_python}")
+    if not windows and not os.access(isaac_python, os.X_OK):
+        parser.error(f"Isaac Sim launcher is not executable: {isaac_python}")
     try:
         recipes, models, files = prepare_inputs(scene_root, model_root)
     except (ValueError, KeyError, OSError) as error:
@@ -109,7 +128,7 @@ def main():
         )
         return 0
 
-    output = args.output.resolve()
+    output = args.output.expanduser().resolve()
     if output.exists():
         parser.error(f"Choose a new output directory: {output}")
     command = [
@@ -125,10 +144,10 @@ def main():
     # Use the interpreter with the vision packages inside the Isaac environment.
     env.update({key: str(path) for key, path in models.items()})
     env.update(
-        PYTHONEXE=f'"{sys.executable}"',
+        PYTHONEXE=f'"{sys.executable}"' if windows else sys.executable,
         CRA_SCENE_ROOT=str(scene_root),
         ISAAC_SIM_HEADLESS="1",
-        ISAAC_SIM_USE_D3D12="1",
+        ISAAC_SIM_USE_D3D12="1" if windows else "0",
         ISAAC_RTX_HISTORY_TRANSFORM_COUNT="128",
         CRA_NATIVE_HUMAN="1",
         OPENBLAS_NUM_THREADS="16",

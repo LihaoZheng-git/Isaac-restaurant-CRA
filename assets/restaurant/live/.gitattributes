@@ -1,0 +1,4 @@
+# Retain the exact bytes of the recorded scene inputs and upstream licenses.
+restaurant_live_v1/** -text
+restaurant_live_v5/** -text
+restaurant_live_v1/assets/manifest.json whitespace=cr-at-eol

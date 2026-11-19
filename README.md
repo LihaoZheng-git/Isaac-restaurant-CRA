@@ -11,17 +11,23 @@ The MPC and CBF filter are implemented in [robot/safety/](robot/safety/). The fi
 ## Environment setup
 
 1. Check your GPU, available VRAM, and driver against [NVIDIA's Isaac Sim 6.0 system requirements](https://docs.isaacsim.omniverse.nvidia.com/6.0.0/installation/requirements.html#system-requirements).
-2. Install the [Isaac Sim 6.0 workstation distribution](https://docs.isaacsim.omniverse.nvidia.com/6.0.0/installation/install_workstation.html). The restaurant experiment uses Windows, DirectX 12, and Python 3.12.
+2. Install the [Isaac Sim 6.0 workstation distribution for your operating system](https://docs.isaacsim.omniverse.nvidia.com/6.0.0/installation/install_workstation.html).
 3. From the repository root, set up Python and the perception dependencies.
 
-   ```powershell
+   ```sh
    conda create -n cra python=3.12 -y
    conda activate cra
    python -m pip install torch==2.11.0 torchvision==0.26.0 --index-url https://download.pytorch.org/whl/cu130
    python -m pip install -r experiment/requirements.txt
    ```
 
-   Get the [model weights](experiment/models/README.md) and follow the [experiment guide](experiment/README.md) to prepare the restaurant scene.
+4. Prepare the [restaurant scene](experiment/scene/README.md) from the repository root:
+
+   ```sh
+   python -m experiment.scene.prepare
+   ```
+
+   To run the delivery, get the [model weights](experiment/models/README.md) and follow the [experiment guide](experiment/README.md).
 
 ## Citation
 
